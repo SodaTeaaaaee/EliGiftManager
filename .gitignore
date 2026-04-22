@@ -1,0 +1,25 @@
+.wails-scaffold/
+.vue-scaffold/
+.cache/
+build/bin/
+.env
+.env.local
+.env.*.local
+frontend/.vite/
+frontend/dist/*
+!frontend/dist/.gitkeep
+frontend/node_modules/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/package.json.md5
+*.log
+.vscode/
+.idea/
+
+# Go
+*.test
+coverage.out
+
+# Editors and OS
+.DS_Store
+Thumbs.db
