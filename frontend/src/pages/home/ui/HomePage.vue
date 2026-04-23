@@ -1,65 +1,62 @@
 <script setup lang="ts">
-import { dashboardCommands } from '@/features/dashboard/model/commands'
-import CommandList from '@/features/dashboard/ui/CommandList.vue'
-import StatusPanel from '@/features/dashboard/ui/StatusPanel.vue'
-import { useBootstrapState } from '@/shared/lib/wails/bootstrap'
-import InfoCard from '@/shared/ui/InfoCard.vue'
+import { createDiscreteApi, NButton } from 'naive-ui'
+import { ref } from 'vue'
+import { WAILS_PREVIEW_MESSAGE, isWailsRuntimeAvailable, pingDatabase } from '@/shared/lib/wails/app'
 
-const { payload, status } = useBootstrapState()
+const isPinging = ref(false)
+const { message } = createDiscreteApi(['message'])
+
+async function handlePingDB() {
+  if (!isWailsRuntimeAvailable()) {
+    message.warning(WAILS_PREVIEW_MESSAGE)
+    return
+  }
+
+  isPinging.value = true
+
+  try {
+    const result = await pingDatabase()
+
+    if (result.startsWith('SQLite 读写成功')) {
+      message.success(result)
+      return
+    }
+
+    message.error(result)
+  } catch (error) {
+    console.error('调用 PingDB 失败', error)
+    message.error('调用 PingDB 失败，请查看控制台日志')
+  } finally {
+    isPinging.value = false
+  }
+}
 </script>
 
 <template>
-  <div class="app-shell">
-    <div class="app-shell__content">
-      <section class="hero">
-        <div class="hero__panel">
-          <div class="hero__eyebrow">
-            Desktop Gift Workspace
-          </div>
-          <h1 class="hero__title">
-            {{ payload.name }}
-          </h1>
-          <p class="hero__subtitle">
-            {{ payload.description }}
-          </p>
-          <ul class="hero__highlights">
-            <li
-              v-for="highlight in payload.highlights"
-              :key="highlight"
-            >
-              {{ highlight }}
-            </li>
-          </ul>
-        </div>
+  <div class="app-viewport flex items-center justify-center bg-stone-950 px-6 py-12">
+    <section
+      class="w-full max-w-lg rounded-3xl border border-amber-200/10 bg-stone-900/90 p-10 text-center shadow-2xl shadow-black/30"
+    >
+      <p class="text-sm font-medium uppercase tracking-[0.35em] text-amber-300/80">
+        EliGiftManager
+      </p>
+      <h1 class="mt-4 text-4xl font-semibold tracking-tight text-stone-50">
+        SQLite 联调测试
+      </h1>
+      <p class="mt-4 text-base leading-7 text-stone-300">
+        点击下方按钮，前端将通过统一的 Wails 适配层调用 <code>pingDatabase()</code>，
+        由 Go 后端完成一次最小化的 SQLite 写入与读取测试。
+      </p>
 
-        <StatusPanel
-          :payload="payload"
-          :status="status"
-        />
-      </section>
-
-      <section
-        class="dashboard-grid"
-        aria-label="Project overview"
+      <NButton
+        class="mt-8 w-full"
+        type="primary"
+        size="large"
+        :loading="isPinging"
+        @click="handlePingDB"
       >
-        <InfoCard
-          title="Go Runtime"
-          :value="payload.runtime"
-          detail="Backend entrypoint stays thin; reusable logic belongs in internal packages."
-        />
-        <InfoCard
-          title="Frontend Runtime"
-          :value="payload.frontend"
-          detail="Vue 3 SFCs are compiled by Vite under Deno, without requiring a local Node.js installation."
-        />
-        <InfoCard
-          title="Wails Shell"
-          value="v2.12.0"
-          detail="Wails binds the Go backend, manages the desktop window lifecycle, and packages the final binary."
-        />
-      </section>
-
-      <CommandList :commands="dashboardCommands" />
-    </div>
+        测试数据库连通性
+      </NButton>
+    </section>
   </div>
 </template>

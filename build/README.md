@@ -1,40 +1,31 @@
 # Build Directory
 
-The build directory houses packaging assets and generated binaries for the desktop application.
+The `build` directory contains Wails packaging assets and generated desktop binaries.
 
-Repository convention:
+## Repository Convention
 
-- `build/windows` and `build/darwin` are source-controlled because they affect packaging metadata.
-- `build/bin` is generated output and is ignored by git.
+- `build/windows` and `build/darwin` stay under version control because they affect installer metadata and runtime packaging.
+- `build/bin` is generated output and stays ignored by git.
+- Generated binaries are useful for local verification, but they do not imply that the current UI is stable. The desktop UI is still in a prototype stage and is expected to change significantly.
 
-The structure is:
+## Structure
 
-* bin - Output directory
-* darwin - macOS specific files
-* windows - Windows specific files
+- `bin`: packaged output directory
+- `darwin`: macOS-specific metadata
+- `windows`: Windows-specific metadata and installer assets
 
-## Mac
+## macOS
 
-The `darwin` directory holds files specific to Mac builds.
-These may be customised and used as part of the build. To return these files to the default state, simply delete them
-and
-build with `wails build`.
+The `darwin` directory holds files used during macOS builds. If you want to restore the default generated state, delete the customized files and run `wails build` again.
 
-The directory contains the following files:
-
-- `Info.plist` - the main plist file used for Mac builds. It is used when building using `wails build`.
-- `Info.dev.plist` - same as the main plist file but used when building using `wails dev`.
+- `Info.plist`: main plist used by `wails build`
+- `Info.dev.plist`: development plist used by `wails dev`
 
 ## Windows
 
-The `windows` directory contains the manifest and rc files used when building with `wails build`.
-These may be customised for your application. To return these files to the default state, simply delete them and
-build with `wails build`.
+The `windows` directory contains the manifest, icon, and installer resources used during `wails build`. These files are committed because they affect the packaged application.
 
-- `icon.ico` - The icon used for the application. This is used when building using `wails build`. If you wish to
-  use a different icon, simply replace this file with your own. If it is missing, a new `icon.ico` file
-  will be created using the `appicon.png` file in the build directory.
-- `installer/*` - The files used to create the Windows installer. These are used when building using `wails build`.
-- `info.json` - Application details used for Windows builds. The data here will be used by the Windows installer,
-  as well as the application itself (right click the exe -> properties -> details)
-- `wails.exe.manifest` - The main application manifest file.
+- `icon.ico`: application icon used by `wails build`
+- `installer/*`: NSIS installer resources
+- `info.json`: application metadata surfaced by the Windows installer and executable properties
+- `wails.exe.manifest`: main application manifest

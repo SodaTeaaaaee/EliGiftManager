@@ -1,7 +1,7 @@
 import { onMounted, ref } from 'vue'
 
-import { Bootstrap } from '../../../../wailsjs/go/main/App'
 import type { BootstrapPayload } from '@/shared/types/app'
+import { bootstrapApp, isWailsRuntimeAvailable } from '@/shared/lib/wails/app'
 
 const fallbackBootstrapPayload: BootstrapPayload = {
   name: 'EliGiftManager',
@@ -22,17 +22,13 @@ export function useBootstrapState() {
   const status = ref('Loading desktop bridge...')
 
   onMounted(async () => {
-    const wailsWindow = window as Window & {
-      go?: unknown
-    }
-
-    if (!wailsWindow.go) {
+    if (!isWailsRuntimeAvailable()) {
       status.value = 'Running in browser preview mode'
       return
     }
 
     try {
-      payload.value = await Bootstrap()
+      payload.value = await bootstrapApp()
       status.value = 'Connected to Wails backend'
     } catch {
       status.value = 'Running in browser preview mode'

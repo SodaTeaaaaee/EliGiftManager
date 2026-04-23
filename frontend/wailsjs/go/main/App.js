@@ -5,3 +5,11 @@
 export function Bootstrap() {
   return window['go']['main']['App']['Bootstrap']();
 }
+
+export function PingDB() {
+  return window['go']['main']['App']['PingDB']();
+}
+
+export function ValidateBatch(arg1) {
+  return window['go']['main']['App']['ValidateBatch'](arg1);
+}
