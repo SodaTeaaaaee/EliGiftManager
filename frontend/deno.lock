@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "npm:@types/node@^24.12.2": "24.12.2",
+    "npm:@vicons/ionicons5@0.13": "0.13.0",
     "npm:@vitejs/plugin-vue@^6.0.6": "6.0.6_vite@8.0.9__@types+node@24.12.2_vue@3.5.33__typescript@6.0.3_@types+node@24.12.2_typescript@6.0.3",
     "npm:@vue/tsconfig@~0.9.1": "0.9.1_typescript@6.0.3_vue@3.5.33__typescript@6.0.3",
     "npm:autoprefixer@^10.4.21": "10.5.0_postcss@8.5.10",
@@ -229,6 +230,9 @@
       "dependencies": [
         "undici-types"
       ]
+    },
+    "@vicons/ionicons5@0.13.0": {
+      "integrity": "sha512-zvZKBPjEXKN7AXNo2Na2uy+nvuv6SP4KAMQxpKL2vfHMj0fSvuw7JZcOPCjQC3e7ayssKnaoFVAhbYcW6v41qQ=="
     },
     "@vitejs/plugin-vue@6.0.6_vite@8.0.9__@types+node@24.12.2_vue@3.5.33__typescript@6.0.3_@types+node@24.12.2_typescript@6.0.3": {
       "integrity": "sha512-u9HHgfrq3AjXlysn0eINFnWQOJQLO9WN6VprZ8FXl7A2bYisv3Hui9Ij+7QZ41F/WYWarHjwBbXtD7dKg3uxbg==",
@@ -1115,6 +1119,7 @@
     "packageJson": {
       "dependencies": [
         "npm:@types/node@^24.12.2",
+        "npm:@vicons/ionicons5@0.13",
         "npm:@vitejs/plugin-vue@^6.0.6",
         "npm:@vue/tsconfig@~0.9.1",
         "npm:autoprefixer@^10.4.21",

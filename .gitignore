@@ -6,6 +6,7 @@ build/bin/
 .env.local
 .env.*.local
 frontend/.vite/
+frontend/node_modules/.tmp/
 frontend/dist/*
 !frontend/dist/.gitkeep
 frontend/node_modules/

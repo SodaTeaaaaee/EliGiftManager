@@ -1,7 +1,66 @@
 <script setup lang="ts">
+import { computed, watchEffect } from 'vue'
+import { NConfigProvider, NGlobalStyle, darkTheme, useOsTheme, type GlobalThemeOverrides } from 'naive-ui'
 import { RouterView } from 'vue-router'
+import { useThemeStore } from '@/shared/model/theme'
+
+const lightThemeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: '#2563eb',
+    primaryColorHover: '#3b82f6',
+    primaryColorPressed: '#1d4ed8',
+    primaryColorSuppl: '#3b82f6',
+    infoColor: '#2563eb',
+    successColor: '#16a34a',
+    warningColor: '#d97706',
+    errorColor: '#dc2626',
+    fontFamily: "'Aptos', 'Segoe UI', 'Helvetica Neue', sans-serif",
+  },
+}
+
+const darkThemeOverrides: GlobalThemeOverrides = {
+  common: {
+    primaryColor: '#60a5fa',
+    primaryColorHover: '#93c5fd',
+    primaryColorPressed: '#3b82f6',
+    primaryColorSuppl: '#60a5fa',
+    infoColor: '#60a5fa',
+    successColor: '#4ade80',
+    warningColor: '#fbbf24',
+    errorColor: '#f87171',
+    fontFamily: "'Aptos', 'Segoe UI', 'Helvetica Neue', sans-serif",
+  },
+}
+
+const themeStore = useThemeStore()
+themeStore.hydrate()
+
+const osTheme = useOsTheme()
+
+const resolvedTheme = computed<'light' | 'dark'>(() => {
+  if (themeStore.preference === 'system') {
+    return osTheme.value === 'dark' ? 'dark' : 'light'
+  }
+
+  return themeStore.preference
+})
+
+const naiveTheme = computed(() => (resolvedTheme.value === 'dark' ? darkTheme : null))
+const themeOverrides = computed(() => (resolvedTheme.value === 'dark' ? darkThemeOverrides : lightThemeOverrides))
+
+watchEffect(() => {
+  if (typeof document === 'undefined') {
+    return
+  }
+
+  document.documentElement.dataset.theme = resolvedTheme.value
+  document.documentElement.style.colorScheme = resolvedTheme.value
+})
 </script>
 
 <template>
-  <RouterView />
+  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
+    <NGlobalStyle />
+    <RouterView />
+  </NConfigProvider>
 </template>

@@ -25,13 +25,13 @@ The backend is already moving toward a real data model, even though the business
 - `frontend/deno.json`: Deno task runner entrypoint
 - `frontend/postcss.config.js` / `frontend/tailwind.config.js`: Tailwind build pipeline
 - `frontend/vite.config.ts`: Vite configuration and aliases
-- `frontend/src/app`: app shell, layout, and router
+- `frontend/src/app`: app shell, Naive UI based layout, and router
 - `frontend/src/pages`: route-level pages such as dashboard, orders, members, products, templates, and settings
 - `frontend/src/shared`: reusable UI, shared types, and Wails integration wrappers
 - `frontend/src/shared/lib/wails/app.ts`: the only place where application code should talk to generated Wails bindings
 - `frontend/wailsjs`: generated Wails bridge files imported by the wrapper layer
 
-The current frontend routes intentionally separate `templates` and `settings`, but the visual design and exact interaction model are expected to change substantially.
+The current frontend routes intentionally separate `templates` and `settings`, but the visual design and exact interaction model are expected to change substantially. For now the UI stays close to standard Naive UI layout and data-display components so later product rewrites can replace content without first removing a large custom design layer.
 
 ## Generated vs Authored
 
