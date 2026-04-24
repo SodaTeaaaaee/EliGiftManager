@@ -5,6 +5,16 @@ import {model} from '../models';
 
 export function Bootstrap():Promise<main.BootstrapPayload>;
 
+export function GetDashboard():Promise<main.DashboardPayload>;
+
+export function ListDispatchRecords():Promise<Array<main.DispatchRecordItem>>;
+
+export function ListMembers():Promise<Array<main.MemberItem>>;
+
+export function ListProducts():Promise<Array<main.ProductItem>>;
+
+export function ListTemplates():Promise<Array<main.TemplateItem>>;
+
 export function PingDB():Promise<string>;
 
 export function ValidateBatch(arg1:string):Promise<model.BatchValidationResult>;

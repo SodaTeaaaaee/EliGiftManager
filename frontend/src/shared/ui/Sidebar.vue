@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
   AnalyticsOutline,
   GiftOutline,
@@ -20,7 +20,7 @@ interface SidebarItem {
 const mainItems: SidebarItem[] = [
   { name: 'dashboard', label: '工作台', icon: AnalyticsOutline },
   { name: 'orders', label: '派发中心', icon: TicketOutline },
-  { name: 'members', label: '粉丝与地址库', icon: PeopleOutline },
+  { name: 'members', label: '会员与地址库', icon: PeopleOutline },
   { name: 'products', label: '礼物商品库', icon: GiftOutline },
   { name: 'templates', label: '模板', icon: LayersOutline },
 ]
@@ -32,10 +32,7 @@ const settingsItem: SidebarItem = {
 }
 
 function renderIcon(icon: Component) {
-  return () =>
-    h(NIcon, { size: 18 }, {
-      default: () => h(icon),
-    })
+  return () => h(NIcon, { size: 18 }, { default: () => h(icon) })
 }
 
 function createMenuOption(item: SidebarItem): MenuOption {
@@ -64,7 +61,7 @@ function handleNavigate(key: string | number) {
     <div class="px-3 pt-1">
       <NText strong>EliGiftManager</NText>
       <div class="mt-1">
-        <NText depth="3">Desktop Console</NText>
+        <NText depth="3">Gift Ops Console</NText>
       </div>
     </div>
 

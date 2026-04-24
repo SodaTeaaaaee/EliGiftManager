@@ -6,6 +6,26 @@ export function Bootstrap() {
   return window['go']['main']['App']['Bootstrap']();
 }
 
+export function GetDashboard() {
+  return window['go']['main']['App']['GetDashboard']();
+}
+
+export function ListDispatchRecords() {
+  return window['go']['main']['App']['ListDispatchRecords']();
+}
+
+export function ListMembers() {
+  return window['go']['main']['App']['ListMembers']();
+}
+
+export function ListProducts() {
+  return window['go']['main']['App']['ListProducts']();
+}
+
+export function ListTemplates() {
+  return window['go']['main']['App']['ListTemplates']();
+}
+
 export function PingDB() {
   return window['go']['main']['App']['PingDB']();
 }
