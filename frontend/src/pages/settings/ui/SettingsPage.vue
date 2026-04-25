@@ -1,138 +1,45 @@
 ﻿<script setup lang="ts">
-import { ColorPaletteOutline, ServerOutline, DesktopOutline, MoonOutline, SunnyOutline } from '@vicons/ionicons5'
-import { computed, onMounted, ref, type Component } from 'vue'
-import { NButton, NCard, NDescriptions, NDescriptionsItem, NIcon, NRadioButton, NRadioGroup, NTag, useOsTheme } from 'naive-ui'
-import { bootstrapApp, getDashboard, isWailsRuntimeAvailable, pingDatabase, WAILS_PREVIEW_MESSAGE, type DashboardPayload } from '@/shared/lib/wails/app'
+import { AlertCircleOutline, CloudDownloadOutline, CloudUploadOutline } from '@vicons/ionicons5'
+import { onMounted, ref } from 'vue'
+import { NAlert, NButton, NCard, NIcon, NRadioButton, NRadioGroup, useDialog, useMessage } from 'naive-ui'
+import { backupDatabase, bootstrapApp, getDashboard, isWailsRuntimeAvailable, pingDatabase, restoreDatabase, WAILS_PREVIEW_MESSAGE, type DashboardPayload } from '@/shared/lib/wails/app'
 import { themePreferenceOptions, useThemeStore, type ThemePreference } from '@/shared/model/theme'
-import type { BootstrapPayload } from '@/shared/types/app'
 
+const message = useMessage()
+const dialog = useDialog()
 const themeStore = useThemeStore()
-const osTheme = useOsTheme()
-const bootstrap = ref<BootstrapPayload | null>(null)
 const dashboard = ref<DashboardPayload | null>(null)
-const dbPingResult = ref('')
-const isLoading = ref(false)
-const isPinging = ref(false)
+const dbStatus = ref('等待检测')
+const errorMessage = ref('')
 
-const themeIcons: Record<ThemePreference, Component> = {
-  light: SunnyOutline,
-  dark: MoonOutline,
-  system: DesktopOutline,
+function handleThemeChange(value: string | number | boolean) {
+  themeStore.setPreference(value as ThemePreference)
 }
-
-const themePreference = computed({
-  get: () => themeStore.preference,
-  set: (value: ThemePreference) => themeStore.setPreference(value),
-})
-
-const resolvedThemeLabel = computed(() => {
-  if (themeStore.preference === 'system') {
-    return osTheme.value === 'dark' ? '跟随系统：深色' : '跟随系统：浅色'
-  }
-  return themeStore.preference === 'dark' ? '当前固定为深色主题' : '当前固定为浅色主题'
-})
-
-async function loadRuntimeInfo() {
-  if (!isWailsRuntimeAvailable()) {
-    dbPingResult.value = WAILS_PREVIEW_MESSAGE
-    return
-  }
-
-  isLoading.value = true
-  try {
-    const [bootstrapPayload, dashboardPayload] = await Promise.all([bootstrapApp(), getDashboard()])
-    bootstrap.value = bootstrapPayload
-    dashboard.value = dashboardPayload
-  } finally {
-    isLoading.value = false
-  }
+async function loadSettings() {
+  if (!isWailsRuntimeAvailable()) { errorMessage.value = WAILS_PREVIEW_MESSAGE; return }
+  try { await bootstrapApp(); dashboard.value = await getDashboard(); dbStatus.value = await pingDatabase() } catch (error) { console.error(error); errorMessage.value = '加载设置失败。' }
 }
+async function handleBackup() { try { const path = await backupDatabase(); message.success(`备份完成：${path}`) } catch (error) { message.error(String(error)) } }
+function handleRestore() { dialog.warning({ title: '危险操作确认', content: '恢复数据库会覆盖当前数据，系统会先自动保存一份灾备副本。是否继续？', positiveText: '确认恢复', negativeText: '取消', onPositiveClick: async () => { try { await restoreDatabase(); message.success('数据库已恢复，请重启应用以刷新所有连接状态。'); await loadSettings() } catch (error) { message.error(String(error)) } } }) }
 
-async function handlePingDB() {
-  if (!isWailsRuntimeAvailable()) {
-    dbPingResult.value = WAILS_PREVIEW_MESSAGE
-    return
-  }
-
-  isPinging.value = true
-  try {
-    dbPingResult.value = await pingDatabase()
-  } finally {
-    isPinging.value = false
-  }
-}
-
-onMounted(loadRuntimeInfo)
+onMounted(loadSettings)
 </script>
-
 <template>
   <section class="space-y-5">
-    <header class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
-      <div>
-        <p class="app-kicker">Settings</p>
-        <h1 class="app-title mt-2">设置</h1>
-        <p class="app-copy mt-2">管理主题偏好，并查看当前 Wails 运行环境与 SQLite 数据库状态。</p>
-      </div>
-      <NButton :loading="isLoading" secondary strong @click="loadRuntimeInfo">刷新运行信息</NButton>
-    </header>
-
-    <NCard size="medium">
-      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div class="flex max-w-2xl items-start gap-3">
-          <NIcon :size="20"><ColorPaletteOutline /></NIcon>
-          <div>
-            <h2 class="app-heading-md">主题偏好</h2>
-            <p class="app-copy mt-2">提供浅色、深色和跟随系统三种模式，偏好会保存在本地。</p>
-          </div>
-        </div>
-
-        <div class="flex flex-col items-start gap-3">
-          <NRadioGroup v-model:value="themePreference" name="theme-preference">
-            <NRadioButton v-for="option in themePreferenceOptions" :key="option.value" :value="option.value">
-              <span class="inline-flex items-center gap-2">
-                <NIcon :size="16"><component :is="themeIcons[option.value]" /></NIcon>
-                {{ option.label }}
-              </span>
-            </NRadioButton>
-          </NRadioGroup>
-          <NTag type="info" round>{{ resolvedThemeLabel }}</NTag>
-        </div>
-      </div>
-    </NCard>
-
+    <header><p class="app-kicker">Settings</p><h1 class="app-title mt-2">系统设置</h1><p class="app-copy mt-2">管理界面主题、SQLite 数据文件和运行时信息。</p></header>
+    <NAlert v-if="errorMessage" type="warning" :show-icon="false">{{ errorMessage }}</NAlert>
     <div class="grid gap-4 xl:grid-cols-2">
-      <NCard size="medium">
-        <template #header>
-          <div class="flex items-center gap-2"><NIcon><ServerOutline /></NIcon><span>SQLite 数据库</span></div>
-        </template>
-        <template #header-extra>
-          <NButton size="small" :loading="isPinging" @click="handlePingDB">读写测试</NButton>
-        </template>
-
-        <NDescriptions :column="1" bordered size="small">
-          <NDescriptionsItem label="数据库文件">{{ dashboard?.databasePath ?? '等待后端连接' }}</NDescriptionsItem>
-          <NDescriptionsItem label="会员 / 商品 / 派发">
-            {{ dashboard?.memberCount ?? 0 }} / {{ dashboard?.productCount ?? 0 }} / {{ dashboard?.dispatchCount ?? 0 }}
-          </NDescriptionsItem>
-          <NDescriptionsItem label="模板配置">{{ dashboard?.templateCount ?? 0 }}</NDescriptionsItem>
-        </NDescriptions>
-
-        <NTag v-if="dbPingResult" class="mt-4" :type="dbPingResult.includes('成功') ? 'success' : 'warning'" round>
-          {{ dbPingResult }}
-        </NTag>
+      <NCard title="界面主题" size="medium">
+        <p class="app-copy mb-3">选择浅色、深色，或跟随操作系统。</p>
+        <NRadioGroup :value="themeStore.preference" @update:value="handleThemeChange">
+          <NRadioButton v-for="option in themePreferenceOptions" :key="option.value" :value="option.value">{{ option.label }}</NRadioButton>
+        </NRadioGroup>
       </NCard>
-
-      <NCard size="medium">
-        <template #header>应用运行信息</template>
-        <NDescriptions :column="1" bordered size="small">
-          <NDescriptionsItem label="应用名">{{ bootstrap?.name ?? 'EliGiftManager' }}</NDescriptionsItem>
-          <NDescriptionsItem label="版本">{{ bootstrap?.version ?? '-' }}</NDescriptionsItem>
-          <NDescriptionsItem label="Go Runtime">{{ bootstrap?.runtime ?? '-' }}</NDescriptionsItem>
-          <NDescriptionsItem label="前端运行时">{{ bootstrap?.frontend ?? '-' }}</NDescriptionsItem>
-          <NDescriptionsItem label="模块">{{ bootstrap?.module ?? '-' }}</NDescriptionsItem>
-        </NDescriptions>
+      <NCard title="数据库状态" size="medium"><p class="app-copy">{{ dbStatus }}</p><p class="app-copy mt-3 break-all">{{ dashboard?.databasePath ?? '等待连接' }}</p></NCard>
+      <NCard title="数据安全" size="medium" class="xl:col-span-2">
+        <div class="grid gap-3 md:grid-cols-2"><NButton size="large" type="primary" @click="handleBackup"><template #icon><NIcon><CloudDownloadOutline /></NIcon></template>导出数据备份 (.db)</NButton><NButton size="large" type="error" ghost @click="handleRestore"><template #icon><NIcon><CloudUploadOutline /></NIcon></template>从备份恢复数据</NButton></div>
+        <NAlert class="mt-4" type="warning" :show-icon="false"><span class="inline-flex items-center gap-2"><NIcon><AlertCircleOutline /></NIcon>恢复前会自动生成带时间戳的防灾副本。</span></NAlert>
       </NCard>
     </div>
   </section>
 </template>
-

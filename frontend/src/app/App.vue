@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, watchEffect } from 'vue'
-import { NConfigProvider, NGlobalStyle, darkTheme, useOsTheme, type GlobalThemeOverrides } from 'naive-ui'
+import { NConfigProvider, NDialogProvider, NGlobalStyle, NMessageProvider, darkTheme, useOsTheme, type GlobalThemeOverrides } from 'naive-ui'
 import { RouterView } from 'vue-router'
 import { useThemeStore } from '@/shared/model/theme'
 
@@ -61,6 +61,10 @@ watchEffect(() => {
 <template>
   <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
     <NGlobalStyle />
-    <RouterView />
+    <NMessageProvider>
+      <NDialogProvider>
+        <RouterView />
+      </NDialogProvider>
+    </NMessageProvider>
   </NConfigProvider>
 </template>

@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export type ThemePreference = 'system' | 'light' | 'dark'
@@ -50,3 +50,4 @@ export const useThemeStore = defineStore('theme', () => {
     setPreference,
   }
 })
+

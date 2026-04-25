@@ -11,7 +11,7 @@ import (
 // GetActiveAddress 返回指定会员最新一条且未被删除的地址记录。
 func GetActiveAddress(db *gorm.DB, memberID uint) (*model.MemberAddress, error) {
 	if db == nil {
-		return nil, fmt.Errorf("获取会员有效地址失败: 数据库连接不能为空")
+		return nil, fmt.Errorf("get active address failed: database connection is required")
 	}
 
 	var address model.MemberAddress
@@ -25,7 +25,7 @@ func GetActiveAddress(db *gorm.DB, memberID uint) (*model.MemberAddress, error) 
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("获取会员 %d 的有效地址失败: %w", memberID, err)
+		return nil, fmt.Errorf("get active address for member %d failed: %w", memberID, err)
 	}
 
 	return &address, nil
@@ -43,7 +43,7 @@ func getLatestMemberNickname(db *gorm.DB, memberID uint) (*model.MemberNickname,
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("查询会员 %d 的最新昵称失败: %w", memberID, err)
+		return nil, fmt.Errorf("get latest nickname for member %d failed: %w", memberID, err)
 	}
 
 	return &nickname, nil

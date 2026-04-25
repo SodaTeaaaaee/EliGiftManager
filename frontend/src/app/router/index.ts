@@ -14,9 +14,9 @@ export const router = createRouter({
           component: () => import('@/pages/dashboard/ui/DashboardPage.vue'),
         },
         {
-          path: 'orders',
-          name: 'orders',
-          component: () => import('@/pages/orders/ui/OrderCenterPage.vue'),
+          path: 'waves',
+          name: 'waves',
+          component: () => import('@/pages/waves/ui/DispatchTaskPage.vue'),
         },
         {
           path: 'members',
@@ -42,3 +42,4 @@ export const router = createRouter({
     },
   ],
 })
+

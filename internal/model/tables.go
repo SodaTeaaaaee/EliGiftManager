@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Member 表示统一标准库中的会员主数据，仅保存稳定的外部平台标识。
+// Member represents the normalized platform member record.
 type Member struct {
 	ID          uint             `gorm:"primaryKey" json:"id"`
 	Platform    string           `gorm:"size:100;not null;uniqueIndex:idx_members_platform_uid" json:"platform"`
@@ -14,7 +14,7 @@ type Member struct {
 	Addresses   []MemberAddress  `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"addresses"`
 }
 
-// MemberNickname 表示会员昵称的历史记录。
+// MemberNickname stores nickname history for a member.
 type MemberNickname struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	MemberID  uint      `gorm:"not null;index" json:"memberId"`
@@ -23,34 +23,47 @@ type MemberNickname struct {
 	Member    Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"member"`
 }
 
-// MemberAddress 表示会员地址的历史记录，由人工维护并支持软删除标记。
+// MemberAddress stores member shipping address history.
 type MemberAddress struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
 	MemberID      uint      `gorm:"not null;index" json:"memberId"`
 	RecipientName string    `gorm:"size:255;not null" json:"recipientName"`
 	Phone         string    `gorm:"size:64;not null" json:"phone"`
 	Address       string    `gorm:"type:text;not null" json:"address"`
+	IsDefault     bool      `gorm:"not null;default:false;index" json:"isDefault"`
 	IsDeleted     bool      `gorm:"not null;default:false;index" json:"isDeleted"`
 	CreatedAt     time.Time `json:"createdAt"`
 	Member        Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"member"`
 }
 
-// Product 表示统一标准库中的工厂商品主数据。
+// Product represents the normalized product/gift record.
 type Product struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
-	Factory    string    `gorm:"size:100;not null;uniqueIndex:idx_products_factory_sku" json:"factory"`
-	FactorySKU string    `gorm:"size:255;not null;uniqueIndex:idx_products_factory_sku" json:"factorySku"`
+	Platform   string    `gorm:"size:100;not null;index" json:"platform"`
+	Factory    string    `gorm:"size:100;not null" json:"factory"`
+	FactorySKU string    `gorm:"size:255;not null" json:"factorySku"`
 	Name       string    `gorm:"size:255;not null" json:"name"`
-	ImagePath  string    `gorm:"type:text" json:"imagePath"`
+	CoverImage string    `gorm:"type:text" json:"coverImage"`
 	ExtraData  string    `gorm:"type:text;not null;default:'{}'" json:"extraData"`
 	CreatedAt  time.Time `json:"createdAt"`
 	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
-// DispatchRecord 表示批次发货过程中会员与商品的分发记录。
+// Wave 表示一次按特定规则聚合的发货波次（UI 层面称为发货任务）。
+type Wave struct {
+	ID        uint             `gorm:"primaryKey" json:"id"`
+	WaveNo    string           `gorm:"size:64;not null;uniqueIndex" json:"waveNo"`
+	Name      string           `gorm:"size:255;not null" json:"name"`
+	Status    string           `gorm:"size:64;not null;default:'draft'" json:"status"`
+	CreatedAt time.Time        `json:"createdAt"`
+	UpdatedAt time.Time        `json:"updatedAt"`
+	Records   []DispatchRecord `gorm:"foreignKey:WaveID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"records"`
+}
+
+// DispatchRecord represents a member/product allocation under a wave.
 type DispatchRecord struct {
 	ID              uint           `gorm:"primaryKey" json:"id"`
-	BatchName       string         `gorm:"size:255;not null;index" json:"batchName"`
+	WaveID          uint           `gorm:"not null;index" json:"waveId"`
 	MemberID        uint           `gorm:"not null;index" json:"memberId"`
 	ProductID       uint           `gorm:"not null;index" json:"productId"`
 	MemberAddressID *uint          `gorm:"index" json:"memberAddressId"`
@@ -58,14 +71,16 @@ type DispatchRecord struct {
 	Status          string         `gorm:"size:64;not null;index" json:"status"`
 	CreatedAt       time.Time      `json:"createdAt"`
 	UpdatedAt       time.Time      `json:"updatedAt"`
+	Wave            Wave           `gorm:"foreignKey:WaveID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"wave"`
 	Member          Member         `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"member"`
 	Product         Product        `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"product"`
 	MemberAddress   *MemberAddress `gorm:"foreignKey:MemberAddressID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"memberAddress"`
 }
 
-// TemplateConfig 表示导入导出模板的动态映射配置。
+// TemplateConfig stores dynamic import/export/allocation template mappings.
 type TemplateConfig struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
+	Platform     string    `gorm:"size:100;not null;index" json:"platform"`
 	Type         string    `gorm:"size:100;not null;index" json:"type"`
 	Name         string    `gorm:"size:255;not null" json:"name"`
 	MappingRules string    `gorm:"type:text;not null;default:'{}'" json:"mappingRules"`
@@ -73,32 +88,10 @@ type TemplateConfig struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
-// TableName 返回会员标准表名。
-func (Member) TableName() string {
-	return "members"
-}
-
-// TableName 返回会员昵称历史表名。
-func (MemberNickname) TableName() string {
-	return "member_nicknames"
-}
-
-// TableName 返回会员地址历史表名。
-func (MemberAddress) TableName() string {
-	return "member_addresses"
-}
-
-// TableName 返回商品标准表名。
-func (Product) TableName() string {
-	return "products"
-}
-
-// TableName 返回分发记录标准表名。
-func (DispatchRecord) TableName() string {
-	return "dispatch_records"
-}
-
-// TableName 返回模板配置表名。
-func (TemplateConfig) TableName() string {
-	return "template_configs"
-}
+func (Member) TableName() string         { return "members" }
+func (MemberNickname) TableName() string { return "member_nicknames" }
+func (MemberAddress) TableName() string  { return "member_addresses" }
+func (Product) TableName() string        { return "products" }
+func (Wave) TableName() string           { return "waves" }
+func (DispatchRecord) TableName() string { return "dispatch_records" }
+func (TemplateConfig) TableName() string { return "template_configs" }

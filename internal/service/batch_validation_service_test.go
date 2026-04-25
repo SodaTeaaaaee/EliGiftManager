@@ -8,84 +8,40 @@ import (
 
 func TestValidateBatchBindsActiveAddressAndMarksMissingMembers(t *testing.T) {
 	t.Parallel()
-
 	db := newServiceTestDB(t)
-
-	memberWithAddress := model.Member{
-		Platform:    "抖音",
-		PlatformUID: "uid-with-address",
-		ExtraData:   "{}",
-	}
-	memberWithoutAddress := model.Member{
-		Platform:    "快手",
-		PlatformUID: "uid-without-address",
-		ExtraData:   "{}",
-	}
-	product := model.Product{
-		Factory:    "华东工厂",
-		FactorySKU: "sku-001",
-		Name:       "礼盒",
-		ExtraData:  "{}",
-	}
-
-	for _, record := range []interface{}{&memberWithAddress, &memberWithoutAddress, &product} {
+	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "test dispatch task", Status: "draft"}
+	memberWithAddress := model.Member{Platform: "douyin", PlatformUID: "uid-with-address", ExtraData: "{}"}
+	memberWithoutAddress := model.Member{Platform: "kuaishou", PlatformUID: "uid-without-address", ExtraData: "{}"}
+	product := model.Product{Platform: "douyin", Factory: "factory", FactorySKU: "sku-001", Name: "gift", ExtraData: "{}"}
+	for _, record := range []any{&wave, &memberWithAddress, &memberWithoutAddress, &product} {
 		if err := db.Create(record).Error; err != nil {
 			t.Fatalf("failed to seed test record: %v", err)
 		}
 	}
-
-	if err := db.Create(&model.MemberNickname{MemberID: memberWithAddress.ID, Nickname: "有地址会员"}).Error; err != nil {
+	if err := db.Create(&model.MemberNickname{MemberID: memberWithAddress.ID, Nickname: "has-address"}).Error; err != nil {
 		t.Fatalf("failed to seed nickname history: %v", err)
 	}
-	if err := db.Create(&model.MemberNickname{MemberID: memberWithoutAddress.ID, Nickname: "缺地址会员"}).Error; err != nil {
+	if err := db.Create(&model.MemberNickname{MemberID: memberWithoutAddress.ID, Nickname: "missing-address"}).Error; err != nil {
 		t.Fatalf("failed to seed nickname history: %v", err)
 	}
-
-	activeAddress := model.MemberAddress{
-		MemberID:      memberWithAddress.ID,
-		RecipientName: "张三",
-		Phone:         "13800000000",
-		Address:       "上海市浦东新区",
-		IsDeleted:     false,
-	}
+	activeAddress := model.MemberAddress{MemberID: memberWithAddress.ID, RecipientName: "Alice", Phone: "13800000000", Address: "Shanghai", IsDeleted: false}
 	if err := db.Create(&activeAddress).Error; err != nil {
 		t.Fatalf("failed to seed active address: %v", err)
 	}
-
 	dispatchRecords := []model.DispatchRecord{
-		{
-			BatchName: "batch-validate",
-			MemberID:  memberWithAddress.ID,
-			ProductID: product.ID,
-			Quantity:  1,
-			Status:    model.DispatchStatusPendingAddress,
-		},
-		{
-			BatchName: "batch-validate",
-			MemberID:  memberWithoutAddress.ID,
-			ProductID: product.ID,
-			Quantity:  2,
-			Status:    model.DispatchStatusPending,
-		},
-		{
-			BatchName: "batch-validate",
-			MemberID:  memberWithoutAddress.ID,
-			ProductID: product.ID,
-			Quantity:  1,
-			Status:    model.DispatchStatusPending,
-		},
+		{WaveID: wave.ID, MemberID: memberWithAddress.ID, ProductID: product.ID, Quantity: 1, Status: model.DispatchStatusPendingAddress},
+		{WaveID: wave.ID, MemberID: memberWithoutAddress.ID, ProductID: product.ID, Quantity: 2, Status: model.DispatchStatusPending},
+		{WaveID: wave.ID, MemberID: memberWithoutAddress.ID, ProductID: product.ID, Quantity: 1, Status: model.DispatchStatusPending},
 	}
 	for _, record := range dispatchRecords {
 		if err := db.Create(&record).Error; err != nil {
 			t.Fatalf("failed to seed dispatch record: %v", err)
 		}
 	}
-
-	result, err := ValidateBatch(db, "batch-validate")
+	result, err := ValidateBatch(db, wave.WaveNo)
 	if err != nil {
 		t.Fatalf("ValidateBatch returned unexpected error: %v", err)
 	}
-
 	if result.TotalRecords != 3 {
 		t.Fatalf("expected TotalRecords to be 3, got %d", result.TotalRecords)
 	}
@@ -98,20 +54,17 @@ func TestValidateBatchBindsActiveAddressAndMarksMissingMembers(t *testing.T) {
 	if len(result.MissingMembers) != 1 {
 		t.Fatalf("expected 1 unique missing member, got %d", len(result.MissingMembers))
 	}
-
 	missingMember := result.MissingMembers[0]
 	if missingMember.MemberID != memberWithoutAddress.ID {
 		t.Fatalf("expected missing member id to be %d, got %d", memberWithoutAddress.ID, missingMember.MemberID)
 	}
-	if missingMember.LatestNickname != "缺地址会员" {
-		t.Fatalf("expected missing member nickname to be 缺地址会员, got %q", missingMember.LatestNickname)
+	if missingMember.LatestNickname != "missing-address" {
+		t.Fatalf("expected missing member nickname, got %q", missingMember.LatestNickname)
 	}
-
 	var updatedRecords []model.DispatchRecord
-	if err := db.Where("batch_name = ?", "batch-validate").Order("id ASC").Find(&updatedRecords).Error; err != nil {
+	if err := db.Where("wave_id = ?", wave.ID).Order("id ASC").Find(&updatedRecords).Error; err != nil {
 		t.Fatalf("failed to query updated dispatch records: %v", err)
 	}
-
 	if updatedRecords[0].MemberAddressID == nil || *updatedRecords[0].MemberAddressID != activeAddress.ID {
 		t.Fatalf("expected first record to bind active address %d, got %+v", activeAddress.ID, updatedRecords[0].MemberAddressID)
 	}

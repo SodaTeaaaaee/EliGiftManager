@@ -19,7 +19,7 @@ interface SidebarItem {
 
 const mainItems: SidebarItem[] = [
   { name: 'dashboard', label: '工作台', icon: AnalyticsOutline },
-  { name: 'orders', label: '派发中心', icon: TicketOutline },
+  { name: 'waves', label: '发货任务', icon: TicketOutline },
   { name: 'members', label: '会员与地址库', icon: PeopleOutline },
   { name: 'products', label: '礼物商品库', icon: GiftOutline },
   { name: 'templates', label: '模板', icon: LayersOutline },
@@ -73,3 +73,4 @@ function handleNavigate(key: string | number) {
     </div>
   </NSpace>
 </template>
+

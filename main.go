@@ -2,7 +2,8 @@ package main
 
 import (
 	"embed"
-	"log"
+	"log/slog"
+	"os"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
 	"github.com/wailsapp/wails/v2"
@@ -28,11 +29,12 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 20, G: 18, B: 16, A: 1},
 		OnStartup:        app.startup,
-		Bind: []interface{}{
+		Bind: []any{
 			app,
 		},
 	})
 	if err != nil {
-		log.Fatalf("run wails application: %v", err)
+		slog.New(slog.NewTextHandler(os.Stderr, nil)).Error("run wails application", "error", err)
+		os.Exit(1)
 	}
 }

@@ -3,18 +3,38 @@
 import {main} from '../models';
 import {model} from '../models';
 
+export function AutoAllocateWave(arg1:number,arg2:number):Promise<void>;
+
+export function BackupDatabase():Promise<string>;
+
 export function Bootstrap():Promise<main.BootstrapPayload>;
+
+export function CreateTemplate(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.TemplateItem>;
+
+export function CreateWave(arg1:string):Promise<model.Wave>;
+
+export function DeleteWave(arg1:number):Promise<void>;
+
+export function ExportWaveByPlatform(arg1:number,arg2:string,arg3:number):Promise<string>;
 
 export function GetDashboard():Promise<main.DashboardPayload>;
 
-export function ListDispatchRecords():Promise<Array<main.DispatchRecordItem>>;
+export function ImportToWave(arg1:number,arg2:string,arg3:number):Promise<void>;
 
-export function ListMembers():Promise<Array<main.MemberItem>>;
+export function ListDispatchRecords(arg1:number):Promise<Array<main.DispatchRecordItem>>;
 
-export function ListProducts():Promise<Array<main.ProductItem>>;
+export function ListMembers(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.MemberListPayload>;
+
+export function ListProducts(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.ProductListPayload>;
 
 export function ListTemplates():Promise<Array<main.TemplateItem>>;
 
+export function ListWaves():Promise<Array<main.WaveItem>>;
+
 export function PingDB():Promise<string>;
 
-export function ValidateBatch(arg1:string):Promise<model.BatchValidationResult>;
+export function RestoreDatabase():Promise<void>;
+
+export function SetDefaultAddress(arg1:number,arg2:number):Promise<void>;
+
+export function UpdateProduct(arg1:model.Product):Promise<void>;

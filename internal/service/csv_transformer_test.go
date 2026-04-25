@@ -125,7 +125,7 @@ func TestParseMemberCSVRejectsLegacyAddressFieldMapping(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "不支持的会员标准字段") {
+	if !strings.Contains(err.Error(), "unsupported member standard field") {
 		t.Fatalf("expected unsupported field error, got %v", err)
 	}
 }
@@ -149,7 +149,7 @@ func TestParseMemberCSVRejectsInvalidTemplateType(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "不适用于会员导入") {
+	if !strings.Contains(err.Error(), "not applicable to member import") {
 		t.Fatalf("expected invalid template type error, got %v", err)
 	}
 }
@@ -173,7 +173,7 @@ func TestParseMemberCSVMissingRequiredField(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "缺少必填字段 Nickname") {
+	if !strings.Contains(err.Error(), "missing required field Nickname") {
 		t.Fatalf("expected missing nickname error, got %v", err)
 	}
 }
@@ -197,7 +197,7 @@ func TestParseMemberCSVRejectsMissingMappedHeader(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	if !strings.Contains(err.Error(), "外部表头") {
+	if !strings.Contains(err.Error(), "external header") {
 		t.Fatalf("expected missing header error, got %v", err)
 	}
 }

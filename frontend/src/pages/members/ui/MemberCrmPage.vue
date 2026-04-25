@@ -1,23 +1,42 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { SearchOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, ref } from 'vue'
-import { NAvatar, NButton, NCard, NDataTable, NEmpty, NIcon, NInput, NTag, type DataTableColumns } from 'naive-ui'
-import { WAILS_PREVIEW_MESSAGE, isWailsRuntimeAvailable, listMembers, type MemberItem } from '@/shared/lib/wails/app'
+import {
+  NAvatar,
+  NButton,
+  NCard,
+  NDataTable,
+  NDrawer,
+  NDrawerContent,
+  NEmpty,
+  NIcon,
+  NInput,
+  NPagination,
+  NSelect,
+  NTag,
+  NTimeline,
+  NTimelineItem,
+  useMessage,
+  type DataTableColumns,
+} from 'naive-ui'
+import { isWailsRuntimeAvailable, listMembers, setDefaultAddress, WAILS_PREVIEW_MESSAGE, type MemberItem } from '@/shared/lib/wails/app'
 
+const message = useMessage()
 const members = ref<MemberItem[]>([])
 const keyword = ref('')
+const platform = ref('')
+const page = ref(1)
+const pageSize = ref(12)
+const total = ref(0)
+const selectedMember = ref<MemberItem | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
 
-const filteredMembers = computed(() => {
-  const text = keyword.value.trim().toLowerCase()
-  if (!text) return members.value
-  return members.value.filter((member) =>
-    [member.latestNickname, member.platform, member.platformUid, member.latestRecipient, member.latestPhone, member.latestAddress]
-      .some((value) => value.toLowerCase().includes(text)),
-  )
-})
+const platformCatalog = ref<string[]>([])
 
+const platformOptions = computed(() =>
+  platformCatalog.value.map((value) => ({ label: value, value })),
+)
 const completedCount = computed(() => members.value.filter((member) => member.activeAddressCount > 0).length)
 const missingCount = computed(() => members.value.length - completedCount.value)
 
@@ -25,39 +44,108 @@ const columns: DataTableColumns<MemberItem> = [
   {
     title: '会员',
     key: 'latestNickname',
-    minWidth: 180,
-    render: (row) => h('div', { class: 'flex items-center gap-3' }, [
-      h(NAvatar, { size: 34, color: 'var(--accent-surface)', style: { color: 'var(--accent)', fontWeight: '700' } }, { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() }),
-      h('div', [h('div', { class: 'font-semibold' }, row.latestNickname || row.platformUid), h('div', { class: 'app-copy' }, `${row.platform} / ${row.platformUid}`)]),
-    ]),
+    minWidth: 200,
+    render: (row) =>
+      h('div', { class: 'flex items-center gap-3' }, [
+        h(
+          NAvatar,
+          {
+            size: 34,
+            color: 'var(--accent-surface)',
+            style: { color: 'var(--accent)', fontWeight: '700' },
+          },
+          { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() },
+        ),
+        h('div', [
+          h('div', { class: 'font-semibold' }, row.latestNickname || row.platformUid),
+          h('div', { class: 'app-copy' }, `${row.platform} / ${row.platformUid}`),
+        ]),
+      ]),
   },
   {
     title: '地址状态',
     key: 'activeAddressCount',
     width: 120,
-    render: (row) => h(NTag, { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true }, { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') }),
+    render: (row) =>
+      h(
+        NTag,
+        { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
+        { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') },
+      ),
   },
-  { title: '收件人', key: 'latestRecipient', minWidth: 120, render: (row) => row.latestRecipient || '-' },
+  { title: '默认收件人', key: 'latestRecipient', minWidth: 130, render: (row) => row.latestRecipient || '-' },
   { title: '手机', key: 'latestPhone', minWidth: 130, render: (row) => row.latestPhone || '-' },
   { title: '地址', key: 'latestAddress', minWidth: 260, ellipsis: { tooltip: true }, render: (row) => row.latestAddress || '-' },
-  { title: '派发次数', key: 'dispatchCount', width: 100 },
 ]
 
 async function loadMembers() {
   if (!isWailsRuntimeAvailable()) {
+    members.value = []
+    total.value = 0
+    platformCatalog.value = []
     errorMessage.value = WAILS_PREVIEW_MESSAGE
     return
   }
 
   isLoading.value = true
   errorMessage.value = ''
+
   try {
-    members.value = await listMembers()
+    const selectedMemberID = selectedMember.value?.id
+    const payload = await listMembers(page.value, pageSize.value, keyword.value, platform.value)
+    members.value = payload.items
+    total.value = payload.total
+    platformCatalog.value = payload.platforms
+    if (selectedMemberID) {
+      selectedMember.value = payload.items.find((member) => member.id === selectedMemberID) ?? null
+    }
   } catch (error) {
-    console.error('加载会员失败', error)
-    errorMessage.value = '加载会员数据库失败，请查看后端日志。'
+    console.error(error)
+    errorMessage.value = '加载会员数据库失败。'
   } finally {
     isLoading.value = false
+  }
+}
+
+function searchMembers() {
+  page.value = 1
+  void loadMembers()
+}
+
+function handlePageChange(nextPage: number) {
+  if (nextPage === page.value) return
+  page.value = nextPage
+  void loadMembers()
+}
+
+function handlePageSizeChange(nextPageSize: number) {
+  if (nextPageSize === pageSize.value) return
+  pageSize.value = nextPageSize
+  page.value = 1
+  void loadMembers()
+}
+
+function closeMemberDetail() {
+  selectedMember.value = null
+}
+
+function handleDrawerVisibility(show: boolean) {
+  if (!show) {
+    closeMemberDetail()
+  }
+}
+
+async function handleDefault(addressId: number) {
+  if (!selectedMember.value) return
+
+  try {
+    const memberId = selectedMember.value.id
+    await setDefaultAddress(memberId, addressId)
+    message.success('默认地址已更新')
+    await loadMembers()
+    selectedMember.value = members.value.find((member) => member.id === memberId) ?? null
+  } catch (error) {
+    message.error(String(error))
   }
 }
 
@@ -69,29 +157,103 @@ onMounted(loadMembers)
     <header class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
       <div>
         <p class="app-kicker">Member CRM</p>
-        <h1 class="app-title mt-2">会员与地址库</h1>
-        <p class="app-copy mt-2">读取 members、member_nicknames 和 member_addresses，定位缺地址会员。</p>
+        <h1 class="app-title mt-2">会员管理</h1>
+        <p class="app-copy mt-2">按平台隔离检索会员，维护默认地址与昵称历史。</p>
       </div>
       <NButton :loading="isLoading" secondary strong @click="loadMembers">刷新会员</NButton>
     </header>
 
-    <NCard size="medium">
-      <div class="grid gap-4 md:grid-cols-3">
-        <div><p class="app-copy">会员总数</p><p class="mt-1 text-2xl font-semibold">{{ members.length }}</p></div>
-        <div><p class="app-copy">地址已完善</p><p class="mt-1 text-2xl font-semibold text-green-600">{{ completedCount }}</p></div>
-        <div><p class="app-copy">缺少地址</p><p class="mt-1 text-2xl font-semibold text-amber-600">{{ missingCount }}</p></div>
+    <div class="grid gap-4 md:grid-cols-3">
+      <NCard>
+        <p class="app-copy">会员总数</p>
+        <p class="mt-1 text-2xl font-semibold">{{ total }}</p>
+      </NCard>
+      <NCard>
+        <p class="app-copy">当前页地址已完善</p>
+        <p class="mt-1 text-2xl font-semibold text-green-600">{{ completedCount }}</p>
+      </NCard>
+      <NCard>
+        <p class="app-copy">当前页缺少地址</p>
+        <p class="mt-1 text-2xl font-semibold text-amber-600">{{ missingCount }}</p>
+      </NCard>
+    </div>
+
+    <NCard title="会员列表" size="medium">
+      <template #header-extra>
+        <div class="flex gap-2">
+          <NInput v-model:value="keyword" clearable placeholder="搜索昵称 / UID" style="width: 240px" @keyup.enter="searchMembers">
+            <template #prefix>
+              <NIcon><SearchOutline /></NIcon>
+            </template>
+          </NInput>
+          <NSelect v-model:value="platform" clearable :options="platformOptions" placeholder="平台" style="width: 150px" @update:value="searchMembers" />
+          <NButton @click="searchMembers">搜索</NButton>
+        </div>
+      </template>
+
+      <NEmpty v-if="errorMessage" :description="errorMessage" />
+      <div v-else class="space-y-4">
+        <NDataTable
+          :columns="columns"
+          :data="members"
+          :loading="isLoading"
+          :bordered="false"
+          :scroll-x="900"
+          :pagination="false"
+          :row-props="(row) => ({ class: 'cursor-pointer', onClick: () => (selectedMember = row) })"
+        />
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p class="app-copy">共 {{ total }} 条记录</p>
+          <NPagination
+            :page="page"
+            :page-size="pageSize"
+            :item-count="total"
+            :page-sizes="[12, 24, 48]"
+            show-size-picker
+            @update:page="handlePageChange"
+            @update:page-size="handlePageSizeChange"
+          />
+        </div>
       </div>
     </NCard>
 
-    <NCard size="medium">
-      <template #header>会员列表</template>
-      <template #header-extra>
-        <NInput v-model:value="keyword" clearable placeholder="搜索昵称、平台 UID、手机或地址" style="width: 280px">
-          <template #prefix><NIcon><SearchOutline /></NIcon></template>
-        </NInput>
-      </template>
-      <NEmpty v-if="errorMessage" :description="errorMessage" />
-      <NDataTable v-else :columns="columns" :data="filteredMembers" :loading="isLoading" :bordered="false" :scroll-x="900" :pagination="{ pageSize: 12 }" />
-    </NCard>
+    <NDrawer :show="!!selectedMember" :width="460" @update:show="handleDrawerVisibility">
+      <NDrawerContent :title="selectedMember?.latestNickname || selectedMember?.platformUid" closable>
+        <div class="space-y-5">
+          <NCard title="历史地址" size="small">
+            <div v-if="selectedMember?.addresses?.length" class="space-y-3">
+              <div
+                v-for="address in selectedMember.addresses.filter((item) => !item.isDeleted)"
+                :key="address.id"
+                class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"
+              >
+                <div class="flex items-center justify-between">
+                  <strong>{{ address.recipientName }}</strong>
+                  <NTag v-if="address.isDefault" type="success" size="small" round>默认</NTag>
+                </div>
+                <p class="app-copy mt-1">{{ address.phone }}</p>
+                <p class="app-copy mt-1">{{ address.address }}</p>
+                <NButton v-if="!address.isDefault" class="mt-2" size="small" secondary @click="handleDefault(address.id)">
+                  设为默认
+                </NButton>
+              </div>
+            </div>
+            <NEmpty v-else description="暂无地址" />
+          </NCard>
+
+          <NCard title="昵称历史" size="small">
+            <NTimeline>
+              <NTimelineItem
+                v-for="nickname in selectedMember?.nicknames ?? []"
+                :key="nickname.id"
+                type="info"
+                :title="nickname.nickname"
+                :content="new Date(nickname.createdAt).toLocaleString()"
+              />
+            </NTimeline>
+          </NCard>
+        </div>
+      </NDrawerContent>
+    </NDrawer>
   </section>
 </template>

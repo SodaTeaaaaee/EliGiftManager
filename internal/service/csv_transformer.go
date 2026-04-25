@@ -66,7 +66,7 @@ func ParseMemberCSV(csvFile string, template model.TemplateConfig) ([]model.Memb
 // ImportMembersFromCSV 解析并落库会员数据，同时维护昵称历史记录。
 func ImportMembersFromCSV(db *gorm.DB, csvFile string, template model.TemplateConfig) ([]model.Member, error) {
 	if db == nil {
-		return nil, fmt.Errorf("导入会员 CSV 失败: 数据库连接不能为空")
+		return nil, fmt.Errorf("import member CSV failed: database connection is required")
 	}
 
 	rows, err := parseMemberCSVRows(csvFile, template)
@@ -79,11 +79,11 @@ func ImportMembersFromCSV(db *gorm.DB, csvFile string, template model.TemplateCo
 		for _, row := range rows {
 			member, upsertErr := upsertMember(tx, row.Member)
 			if upsertErr != nil {
-				return fmt.Errorf("保存会员 %s/%s 失败: %w", row.Member.Platform, row.Member.PlatformUID, upsertErr)
+				return fmt.Errorf("save member %s/%s failed: %w", row.Member.Platform, row.Member.PlatformUID, upsertErr)
 			}
 
 			if err := ensureLatestNickname(tx, member.ID, row.Nickname); err != nil {
-				return fmt.Errorf("维护会员 %d 的昵称历史失败: %w", member.ID, err)
+				return fmt.Errorf("maintain nickname history for member %d failed: %w", member.ID, err)
 			}
 
 			importedMembers = append(importedMembers, member)
@@ -91,7 +91,7 @@ func ImportMembersFromCSV(db *gorm.DB, csvFile string, template model.TemplateCo
 
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("导入会员 CSV 失败: %w", err)
+		return nil, fmt.Errorf("import member CSV failed: %w", err)
 	}
 
 	return importedMembers, nil
@@ -99,21 +99,21 @@ func ImportMembersFromCSV(db *gorm.DB, csvFile string, template model.TemplateCo
 
 func parseMemberCSVRows(csvFile string, template model.TemplateConfig) ([]parsedMemberCSVRow, error) {
 	if strings.TrimSpace(csvFile) == "" {
-		return nil, fmt.Errorf("解析会员 CSV 失败: CSV 文件路径不能为空")
+		return nil, fmt.Errorf("parse member CSV failed: CSV path is required")
 	}
 
-	if err := ensureTemplateType(template, model.TemplateTypeImportMember, "会员导入"); err != nil {
-		return nil, fmt.Errorf("解析会员 CSV 失败: %w", err)
+	if err := ensureTemplateType(template, model.TemplateTypeImportMember, "member import"); err != nil {
+		return nil, fmt.Errorf("parse member CSV failed: %w", err)
 	}
 
 	mappingRules, err := parseTemplateMappingRules(template.MappingRules, normalizeMemberFieldName)
 	if err != nil {
-		return nil, fmt.Errorf("解析会员 CSV 失败: %w", err)
+		return nil, fmt.Errorf("parse member CSV failed: %w", err)
 	}
 
 	file, err := os.Open(csvFile)
 	if err != nil {
-		return nil, fmt.Errorf("解析会员 CSV 失败: 打开文件 %q 失败: %w", csvFile, err)
+		return nil, fmt.Errorf("parse member CSV failed: open %q failed: %w", csvFile, err)
 	}
 	defer func() {
 		_ = file.Close()
@@ -126,20 +126,20 @@ func parseMemberCSVRows(csvFile string, template model.TemplateConfig) ([]parsed
 	headers, err := reader.Read()
 	if err != nil {
 		if err == io.EOF {
-			return nil, fmt.Errorf("解析会员 CSV 失败: CSV 文件为空")
+			return nil, fmt.Errorf("parse member CSV failed: CSV is empty")
 		}
 
-		return nil, fmt.Errorf("解析会员 CSV 失败: 读取表头失败: %w", err)
+		return nil, fmt.Errorf("parse member CSV failed: read header failed: %w", err)
 	}
 
 	headerIndex, normalizedHeaders, err := buildHeaderIndex(headers)
 	if err != nil {
-		return nil, fmt.Errorf("解析会员 CSV 失败: %w", err)
+		return nil, fmt.Errorf("parse member CSV failed: %w", err)
 	}
 
 	fieldColumns, consumedColumns, err := resolveFieldColumns(mappingRules, headerIndex)
 	if err != nil {
-		return nil, fmt.Errorf("解析会员 CSV 失败: %w", err)
+		return nil, fmt.Errorf("parse member CSV failed: %w", err)
 	}
 
 	rows := make([]parsedMemberCSVRow, 0)
@@ -149,7 +149,7 @@ func parseMemberCSVRows(csvFile string, template model.TemplateConfig) ([]parsed
 			break
 		}
 		if readErr != nil {
-			return nil, fmt.Errorf("解析会员 CSV 失败: 读取第 %d 行失败: %w", rowNumber, readErr)
+			return nil, fmt.Errorf("parse member CSV failed: read row %d failed: %w", rowNumber, readErr)
 		}
 
 		if isEmptyRecord(record) {
@@ -173,17 +173,17 @@ func parseMemberCSVRows(csvFile string, template model.TemplateConfig) ([]parsed
 			case "nickname":
 				row.Nickname = value
 			default:
-				return nil, fmt.Errorf("解析会员 CSV 失败: 第 %d 行存在未支持的标准字段 %q", rowNumber, fieldName)
+				return nil, fmt.Errorf("parse member CSV failed: row %d has unsupported field %q", rowNumber, fieldName)
 			}
 		}
 
 		if err := validateMemberRecord(row, rowNumber); err != nil {
-			return nil, fmt.Errorf("解析会员 CSV 失败: %w", err)
+			return nil, fmt.Errorf("parse member CSV failed: %w", err)
 		}
 
 		extraDataJSON, err := buildExtraDataJSON(normalizedHeaders, record, consumedColumns)
 		if err != nil {
-			return nil, fmt.Errorf("解析会员 CSV 失败: 第 %d 行构建扩展数据失败: %w", rowNumber, err)
+			return nil, fmt.Errorf("parse member CSV failed: row %d build ExtraData failed: %w", rowNumber, err)
 		}
 		row.Member.ExtraData = extraDataJSON
 
@@ -198,18 +198,18 @@ func upsertMember(db *gorm.DB, candidate model.Member) (model.Member, error) {
 	err := db.Where("platform = ? AND platform_uid = ?", candidate.Platform, candidate.PlatformUID).First(&existing).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		if createErr := db.Create(&candidate).Error; createErr != nil {
-			return model.Member{}, fmt.Errorf("创建会员失败: %w", createErr)
+			return model.Member{}, fmt.Errorf("create member failed: %w", createErr)
 		}
 
 		return candidate, nil
 	}
 	if err != nil {
-		return model.Member{}, fmt.Errorf("查询会员失败: %w", err)
+		return model.Member{}, fmt.Errorf("query member failed: %w", err)
 	}
 
 	existing.ExtraData = candidate.ExtraData
 	if saveErr := db.Save(&existing).Error; saveErr != nil {
-		return model.Member{}, fmt.Errorf("更新会员失败: %w", saveErr)
+		return model.Member{}, fmt.Errorf("update member failed: %w", saveErr)
 	}
 
 	return existing, nil
@@ -217,12 +217,12 @@ func upsertMember(db *gorm.DB, candidate model.Member) (model.Member, error) {
 
 func ensureLatestNickname(db *gorm.DB, memberID uint, nickname string) error {
 	if strings.TrimSpace(nickname) == "" {
-		return fmt.Errorf("昵称不能为空")
+		return fmt.Errorf("nickname is required")
 	}
 
 	latestNickname, err := getLatestMemberNickname(db, memberID)
 	if err != nil {
-		return fmt.Errorf("查询最新昵称失败: %w", err)
+		return fmt.Errorf("query latest nickname failed: %w", err)
 	}
 
 	if latestNickname != nil && latestNickname.Nickname == nickname {
@@ -235,7 +235,7 @@ func ensureLatestNickname(db *gorm.DB, memberID uint, nickname string) error {
 	}
 
 	if err := db.Create(&record).Error; err != nil {
-		return fmt.Errorf("创建昵称历史记录失败: %w", err)
+		return fmt.Errorf("create nickname history record failed: %w", err)
 	}
 
 	return nil
@@ -243,7 +243,7 @@ func ensureLatestNickname(db *gorm.DB, memberID uint, nickname string) error {
 
 func ensureTemplateType(template model.TemplateConfig, expectedType string, scene string) error {
 	if template.Type != "" && template.Type != expectedType {
-		return fmt.Errorf("模板类型 %q 不适用于%s", template.Type, scene)
+		return fmt.Errorf("template type %q is not applicable to %s", template.Type, scene)
 	}
 
 	return nil
@@ -251,16 +251,16 @@ func ensureTemplateType(template model.TemplateConfig, expectedType string, scen
 
 func parseTemplateMappingRules(raw string, normalizeFieldName func(string) (string, error)) (map[string]string, error) {
 	if strings.TrimSpace(raw) == "" {
-		return nil, fmt.Errorf("模板映射规则不能为空")
+		return nil, fmt.Errorf("template mapping rules is required")
 	}
 
 	var mappingRules map[string]string
 	if err := json.Unmarshal([]byte(raw), &mappingRules); err != nil {
-		return nil, fmt.Errorf("解析模板映射规则 JSON 失败: %w", err)
+		return nil, fmt.Errorf("parse template mapping rules JSON failed: %w", err)
 	}
 
 	if len(mappingRules) == 0 {
-		return nil, fmt.Errorf("模板映射规则不能为空对象")
+		return nil, fmt.Errorf("template mapping rules cannot be empty")
 	}
 
 	normalizedRules := make(map[string]string, len(mappingRules))
@@ -272,7 +272,7 @@ func parseTemplateMappingRules(raw string, normalizeFieldName func(string) (stri
 
 		trimmedHeader := strings.TrimSpace(externalHeader)
 		if trimmedHeader == "" {
-			return nil, fmt.Errorf("标准字段 %q 对应的外部表头不能为空", internalField)
+			return nil, fmt.Errorf("external header for standard field %q cannot be empty", internalField)
 		}
 
 		normalizedRules[normalizedField] = trimmedHeader
@@ -293,7 +293,7 @@ func normalizeMemberFieldName(field string) (string, error) {
 	case "nickname", "nick", "昵称":
 		return "nickname", nil
 	default:
-		return "", fmt.Errorf("不支持的会员标准字段 %q", field)
+		return "", fmt.Errorf("unsupported member standard field %q", field)
 	}
 }
 
@@ -304,12 +304,12 @@ func buildHeaderIndex(headers []string) (map[string]int, []string, error) {
 	for index, header := range headers {
 		trimmedHeader := strings.TrimSpace(strings.TrimPrefix(header, "\ufeff"))
 		if trimmedHeader == "" {
-			return nil, nil, fmt.Errorf("第 %d 列表头为空，无法建立映射", index+1)
+			return nil, nil, fmt.Errorf("column %d header is empty, cannot build mapping", index+1)
 		}
 
 		normalizedHeader := normalizeHeaderName(trimmedHeader)
 		if _, exists := headerIndex[normalizedHeader]; exists {
-			return nil, nil, fmt.Errorf("检测到重复表头 %q，无法唯一确定映射关系", trimmedHeader)
+			return nil, nil, fmt.Errorf("duplicate header %q detected, cannot uniquely determine mapping", trimmedHeader)
 		}
 
 		headerIndex[normalizedHeader] = index
@@ -326,7 +326,7 @@ func resolveFieldColumns(mappingRules map[string]string, headerIndex map[string]
 	for fieldName, externalHeader := range mappingRules {
 		columnIndex, exists := headerIndex[normalizeHeaderName(externalHeader)]
 		if !exists {
-			return nil, nil, fmt.Errorf("模板字段 %q 对应的外部表头 %q 在 CSV 中不存在", fieldName, externalHeader)
+			return nil, nil, fmt.Errorf("external header %q mapped to template field %q not found in CSV", externalHeader, fieldName)
 		}
 
 		fieldColumns[fieldName] = columnIndex
@@ -365,15 +365,15 @@ func isEmptyRecord(record []string) bool {
 
 func validateMemberRecord(row parsedMemberCSVRow, rowNumber int) error {
 	if row.Member.Platform == "" {
-		return fmt.Errorf("第 %d 行缺少必填字段 Platform", rowNumber)
+		return fmt.Errorf("row %d missing required field Platform", rowNumber)
 	}
 
 	if row.Member.PlatformUID == "" {
-		return fmt.Errorf("第 %d 行缺少必填字段 PlatformUID", rowNumber)
+		return fmt.Errorf("row %d missing required field PlatformUID", rowNumber)
 	}
 
 	if row.Nickname == "" {
-		return fmt.Errorf("第 %d 行缺少必填字段 Nickname", rowNumber)
+		return fmt.Errorf("row %d missing required field Nickname", rowNumber)
 	}
 
 	return nil
@@ -401,7 +401,7 @@ func buildExtraDataJSON(normalizedHeaders []string, record []string, consumedCol
 
 	encoded, err := json.Marshal(extraData)
 	if err != nil {
-		return "", fmt.Errorf("序列化 ExtraData 失败: %w", err)
+		return "", fmt.Errorf("serialize ExtraData failed: %w", err)
 	}
 
 	return string(encoded), nil
