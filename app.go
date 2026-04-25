@@ -880,15 +880,21 @@ func (a *App) openDatabase() (*gorm.DB, func(), error) {
 	return db, func() { _ = sqlDB.Close() }, nil
 }
 func (a *App) resolveDatabasePath() (string, error) {
-	configDir, err := os.UserConfigDir()
+	execPath, err := os.Executable()
 	if err == nil {
-		return filepath.Join(configDir, a.cfg.Name, "data", "eligiftmanager.db"), nil
+		execDir := filepath.Dir(execPath)
+		// When running via wails dev the binary is compiled to a temp
+		// directory. Fall back to the working directory (project root) so
+		// the database persists across dev restarts.
+		if !strings.HasPrefix(execDir, os.TempDir()) {
+			return filepath.Join(execDir, "data", "eligiftmanager.db"), nil
+		}
 	}
 	workDir, workDirErr := os.Getwd()
 	if workDirErr != nil {
 		return "", fmt.Errorf("resolve database path failed: %w", workDirErr)
 	}
-	return filepath.Join(workDir, ".local", "data", "eligiftmanager.db"), nil
+	return filepath.Join(workDir, "data", "eligiftmanager.db"), nil
 }
 func copyFile(source, target string) error {
 	sameFile, err := sameFilePath(source, target)

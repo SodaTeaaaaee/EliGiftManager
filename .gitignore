@@ -2,6 +2,7 @@
 .vue-scaffold/
 .cache/
 build/bin/
+data/
 .env
 .env.local
 .env.*.local
@@ -25,6 +26,12 @@ frontend/yarn.lock
 # Go
 *.test
 coverage.out
+
+# Claude Code
+.claude/
+
+# Wails
+wailsdev.log
 
 # Editors and OS
 .DS_Store
