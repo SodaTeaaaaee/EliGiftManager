@@ -11,6 +11,14 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+var defaultDB *gorm.DB
+
+// SetDefaultDB stores the app-wide DB instance for controllers.
+func SetDefaultDB(db *gorm.DB) { defaultDB = db }
+
+// GetDB returns the app-wide DB instance; nil before SetDefaultDB is called.
+func GetDB() *gorm.DB { return defaultDB }
+
 func InitDB(dbPath string) (*gorm.DB, error) {
 	if dbPath == "" {
 		return nil, fmt.Errorf("initialize SQLite database failed: database path is required")
@@ -35,6 +43,9 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: ping failed: %w", err)
 	}
+	// WAL mode + reduced sync for better concurrent read/write performance.
+	db.Exec("PRAGMA journal_mode = WAL;")
+	db.Exec("PRAGMA synchronous = NORMAL;")
 	if err := autoMigrateTables(db); err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: %w", err)
 	}

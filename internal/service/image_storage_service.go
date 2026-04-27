@@ -16,25 +16,6 @@ import (
 
 var suffixPattern = regexp.MustCompile(`#\d+`)
 
-// ResolveAssetsDir returns the absolute path to data/assets/, using the same
-// dev/production fallback logic as resolveDatabasePath() in app.go.
-// During wails dev the binary runs from a temp directory, so we fall back to
-// the working directory (project root).
-func ResolveAssetsDir() (string, error) {
-	execPath, err := os.Executable()
-	if err == nil {
-		execDir := filepath.Dir(execPath)
-		if !strings.HasPrefix(execDir, os.TempDir()) {
-			return filepath.Join(execDir, "data", "assets"), nil
-		}
-	}
-	workDir, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve assets dir failed: %w", err)
-	}
-	return filepath.Join(workDir, "data", "assets"), nil
-}
-
 // hashFile computes the SHA-256 hash of the file at path and returns its hex
 // encoding.
 func hashFile(path string) (string, error) {

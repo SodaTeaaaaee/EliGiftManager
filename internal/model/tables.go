@@ -18,7 +18,7 @@ type Member struct {
 type MemberNickname struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	MemberID  uint      `gorm:"not null;index" json:"memberId"`
-	Nickname  string    `gorm:"size:255;not null" json:"nickname"`
+	Nickname  string    `gorm:"size:255;not null;index" json:"nickname"`
 	CreatedAt time.Time `json:"createdAt"`
 	Member    Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"member"`
 }
@@ -41,7 +41,7 @@ type Product struct {
 	ID         uint         `gorm:"primaryKey" json:"id"`
 	Platform   string       `gorm:"size:100;not null;index" json:"platform"`
 	Factory    string       `gorm:"size:100;not null" json:"factory"`
-	FactorySKU string       `gorm:"size:255;not null" json:"factorySku"`
+	FactorySKU string       `gorm:"size:255;not null;index" json:"factorySku"`
 	Name       string       `gorm:"size:255;not null" json:"name"`
 	CoverImage string       `gorm:"type:text" json:"coverImage"`
 	WaveID     *uint        `gorm:"index" json:"waveId"`
