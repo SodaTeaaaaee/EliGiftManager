@@ -209,13 +209,13 @@ func (a *App) DeleteWave(waveID uint) error {
 	}
 	return nil
 }
-func (a *App) ListWaves() ([]WaveItem, error) {
+func (a *App) ListWaves(status string) ([]WaveItem, error) {
 	db, closeDB, err := a.openDatabase()
 	if err != nil {
 		return nil, fmt.Errorf("list waves failed: %w", err)
 	}
 	defer closeDB()
-	return queryWaves(db, 100)
+	return queryWaves(db, 100, status)
 }
 
 func (a *App) ImportToWave(waveID uint, csvPath string, templateID uint) error {
@@ -856,7 +856,7 @@ func (a *App) GetDashboard() (DashboardPayload, error) {
 	if err := db.Model(&model.Member{}).Where("id NOT IN (?)", active).Count(&payload.MissingAddresses).Error; err != nil {
 		return payload, err
 	}
-	payload.RecentWaves, err = queryWaves(db, 8)
+	payload.RecentWaves, err = queryWaves(db, 8, "")
 	if err != nil {
 		return payload, err
 	}
@@ -868,15 +868,19 @@ func (a *App) GetDashboard() (DashboardPayload, error) {
 	return payload, nil
 }
 
-func queryWaves(db *gorm.DB, limit int) ([]WaveItem, error) {
+func queryWaves(db *gorm.DB, limit int, status string) ([]WaveItem, error) {
 	var waves []model.Wave
-	if err := db.Order("updated_at DESC").Limit(limit).Find(&waves).Error; err != nil {
+	q := db
+	if status != "" {
+		q = q.Where("status = ?", status)
+	}
+	if err := q.Order("updated_at DESC").Limit(limit).Find(&waves).Error; err != nil {
 		return nil, err
 	}
 	items := make([]WaveItem, 0, len(waves))
 	for _, wave := range waves {
 		item := WaveItem{ID: wave.ID, WaveNo: wave.WaveNo, Name: wave.Name, Status: wave.Status, UpdatedAt: wave.UpdatedAt}
-		if err := db.Model(&model.DispatchRecord{}).Where("wave_id = ?", wave.ID).Select("COUNT(*) AS total_records, COALESCE(SUM(quantity), 0) AS total_quantity, SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS pending_address_records", model.DispatchStatusPendingAddress).Row().Scan(&item.TotalRecords, &item.TotalQuantity, &item.PendingAddressRecords); err != nil {
+		if err := db.Model(&model.DispatchRecord{}).Where("wave_id = ?", wave.ID).Select("COUNT(*) AS total_records, COALESCE(SUM(quantity), 0) AS total_quantity, COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS pending_address_records", model.DispatchStatusPendingAddress).Row().Scan(&item.TotalRecords, &item.TotalQuantity, &item.PendingAddressRecords); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
