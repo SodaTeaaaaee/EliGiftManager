@@ -143,7 +143,9 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 		// and to match the Wails asset URL convention.
 		relativePath := hash[:2] + "/" + hash + ext
 
-		productName := stripSuffix(filepath.Base(path))
+			parentDir := filepath.Base(filepath.Dir(path))
+
+			productName := stripSuffix(filepath.Base(path))
 		if productName == "" {
 			return nil
 		}
@@ -164,7 +166,7 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 				Select("COALESCE(MAX(sort_order), -1)").Scan(&maxOrder)
 			nextOrder := maxOrder + 1
 
-			pi := model.ProductImage{ProductID: p.ID, Path: relativePath}
+			pi := model.ProductImage{ProductID: p.ID, Path: relativePath, SourceDir: parentDir}
 			db.Where("product_id = ? AND path = ?", p.ID, relativePath).
 				Attrs(model.ProductImage{SortOrder: nextOrder}).
 				FirstOrCreate(&pi)

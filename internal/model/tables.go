@@ -58,6 +58,7 @@ type ProductImage struct {
 	ProductID uint      `gorm:"not null;index" json:"productId"`
 	Path      string    `gorm:"type:text;not null" json:"path"`
 	SortOrder int       `gorm:"not null;default:0" json:"sortOrder"`
+	SourceDir string    `gorm:"size:100;not null;default:''" json:"sourceDir"`
 	CreatedAt time.Time `json:"createdAt"`
 	Product   Product   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
 }

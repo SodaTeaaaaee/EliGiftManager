@@ -17,8 +17,11 @@ const errorMessage = ref('')
 const platformCatalog = ref<string[]>([])
 
 const detailProduct = ref<ProductItem | null>(null)
-const detailImages = ref<{ id: number; path: string; sortOrder: number }[]>([])
+const detailImages = ref<{ id: number; path: string; sortOrder: number; sourceDir: string }[]>([])
 const showDetail = ref(false)
+
+const mainImages = computed(() => detailImages.value.filter(img => img.sourceDir === '主图'))
+const detailOnlyImages = computed(() => detailImages.value.filter(img => img.sourceDir !== '主图'))
 
 const platformOptions = computed(() =>
   platformCatalog.value.map((value) => ({ label: value, value })),
@@ -164,12 +167,12 @@ onMounted(loadProducts)
       <NDrawerContent title="商品详情" closable>
         <template v-if="detailProduct">
           <!-- 主图轮播 -->
-          <NCarousel v-if="detailImages.length" autoplay show-arrow>
-            <div v-for="img in detailImages" :key="img.id" class="flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden" style="height: 360px">
-              <img :src="'/local-images/' + img.path" class="h-full w-full object-contain" />
+          <NCarousel v-if="mainImages.length" autoplay show-arrow>
+            <div v-for="img in mainImages" :key="img.id" class="flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden">
+              <img :src="'/local-images/' + img.path" style="width: 100%; max-height: 480px; object-fit: contain;" />
             </div>
           </NCarousel>
-          <NEmpty v-else description="暂无商品图片" class="py-6" />
+          <NEmpty v-if="!mainImages.length && !detailOnlyImages.length" description="暂无商品图片" class="py-6" />
 
           <!-- 商品信息 -->
           <div class="mt-4 space-y-2">
@@ -182,10 +185,10 @@ onMounted(loadProducts)
           </div>
 
           <!-- 详情图片 -->
-          <template v-if="detailImages.length">
+          <template v-if="detailOnlyImages.length">
             <NDivider>详情图片</NDivider>
             <div class="space-y-3">
-              <img v-for="img in detailImages" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
+              <img v-for="img in detailOnlyImages" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
             </div>
           </template>
         </template>

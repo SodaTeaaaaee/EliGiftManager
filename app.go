@@ -268,7 +268,7 @@ func (a *App) ImportToWave(waveID uint, csvPath string, templateID uint) error {
 					return nil
 				})
 				if err == nil {
-					_, err = service.ProcessCoverImages(db, extractDir, templateMeta.ImageDir)
+					_, err = service.ProcessCoverImages(db, extractDir, "")
 				}
 			}
 		} else {
