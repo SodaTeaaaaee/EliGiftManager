@@ -41,7 +41,9 @@ export function ListProductsWithTags(arg1:number,arg2:string,arg3:number,arg4:nu
 
 export function ListTemplates():Promise<Array<main.TemplateItem>>;
 
-export function ListWaves():Promise<Array<main.WaveItem>>;
+export function ListWaves(arg1:string):Promise<Array<main.WaveItem>>;
+
+export function ListDefaultTemplates():Promise<Array<main.TemplateItem>>;
 
 export function PickCSVFile():Promise<string>;
 

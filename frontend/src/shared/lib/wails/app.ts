@@ -11,6 +11,7 @@ import {
   GetDashboard as getDashboardBinding,
   ImportDispatchWave as importDispatchWaveBinding,
   ImportToWave as importToWaveBinding,
+  ListDefaultTemplates as listDefaultTemplatesBinding,
   ListDispatchRecords as listDispatchRecordsBinding,
   ListMembers as listMembersBinding,
   ListProductTags as listProductTagsBinding,
@@ -50,7 +51,7 @@ export function importDispatchWave(waveId: number, csvPath: string, importTempla
 }
 export function allocateByTags(waveId: number): Promise<number> { assertWailsRuntime(); return allocateByTagsBinding(waveId) }
 export function listProductTags(platform: string): Promise<string[]> { assertWailsRuntime(); return listProductTagsBinding(platform) }
-export function listProductsWithTags(waveId: number, platform = '', page = 1, pageSize = 50): Promise<main.ProductListPayload> { assertWailsRuntime(); return listProductsWithTagsBinding(waveId, platform, page, pageSize) }
+export function listProductsWithTags(waveId: number, platform = '', page = 1, pageSize = 50): Promise<main.ProductListWithTagsPayload> { assertWailsRuntime(); return listProductsWithTagsBinding(waveId, platform, page, pageSize) }
 export function assignProductTag(productId: number, platform: string, tagName: string): Promise<void> { assertWailsRuntime(); return assignProductTagBinding(productId, platform, tagName) }
 export function removeProductTag(productId: number, platform: string, tagName: string): Promise<void> { assertWailsRuntime(); return removeProductTagBinding(productId, platform, tagName) }
 export function listMembers(page = 1, pageSize = 50, keyword = '', platform = ''): Promise<main.MemberListPayload> { assertWailsRuntime(); return listMembersBinding(page, pageSize, keyword, platform) }
@@ -58,6 +59,10 @@ export function listProducts(page = 1, pageSize = 50, keyword = '', platform = '
 export function listDispatchRecords(waveId = 0): Promise<main.DispatchRecordItem[]> { assertWailsRuntime(); return listDispatchRecordsBinding(waveId) }
 export function createTemplate(platform: string, templateType: string, name: string, mappingRules: string): Promise<main.TemplateItem> { assertWailsRuntime(); return createTemplateBinding(platform, templateType, name, mappingRules) }
 export function listTemplates(): Promise<main.TemplateItem[]> { assertWailsRuntime(); return listTemplatesBinding() }
+export function listDefaultTemplates(): Promise<main.TemplateItem[]> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve([])
+  return listDefaultTemplatesBinding()
+}
 export function setDefaultAddress(memberId: number, addressId: number): Promise<void> { assertWailsRuntime(); return setDefaultAddressBinding(memberId, addressId) }
 export type ProductUpdateInput = {
   id: number

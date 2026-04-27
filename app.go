@@ -597,6 +597,46 @@ func (a *App) PickZIPFile() (string, error) {
 	return "", fmt.Errorf("pick ZIP file: context not available")
 }
 
+// ListDefaultTemplates returns the hardcoded preset templates that users can
+// choose to add to their database. Does not write to the database.
+func (a *App) ListDefaultTemplates() ([]TemplateItem, error) {
+	presets := []struct {
+		Platform     string
+		Type         string
+		Name         string
+		MappingRules string
+	}{
+		{
+			Platform:     "柔造",
+			Type:         model.TemplateTypeImportProduct,
+			Name:         "柔造 商品导入",
+			MappingRules: `{"format":"zip","csvPattern":"*.csv","imageDir":"主图","mapping":{"name":"商品名称","factorySku":"商家编码"}}`,
+		},
+		{
+			Platform:     "BILIBILI",
+			Type:         model.TemplateTypeImportDispatchRecord,
+			Name:         "BILIBILI 会员导入",
+			MappingRules: `{"hasHeader":false,"mapping":{"giftName":{"columnIndex":0},"platformUid":{"columnIndex":1,"required":true},"nickname":{"columnIndex":2}}}`,
+		},
+		{
+			Platform:     "柔造",
+			Type:         model.TemplateTypeExportOrder,
+			Name:         "柔造 工厂导出",
+			MappingRules: `{"headers":["第三方订单号","收件人","联系电话","收件地址","商家编码","下单数量"],"prefix":"ROUZAO-"}`,
+		},
+	}
+	items := make([]TemplateItem, 0, len(presets))
+	for _, p := range presets {
+		items = append(items, TemplateItem{
+			Platform:     p.Platform,
+			Type:         p.Type,
+			Name:         p.Name,
+			MappingRules: p.MappingRules,
+		})
+	}
+	return items, nil
+}
+
 func (a *App) ListProductTags(platform string) ([]string, error) {
 	db, closeDB, err := a.openDatabase()
 	if err != nil {

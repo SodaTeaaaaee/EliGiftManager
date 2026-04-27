@@ -78,8 +78,12 @@ export function ListTemplates() {
   return window['go']['main']['App']['ListTemplates']();
 }
 
-export function ListWaves() {
-  return window['go']['main']['App']['ListWaves']();
+export function ListWaves(arg1) {
+  return window['go']['main']['App']['ListWaves'](arg1);
+}
+
+export function ListDefaultTemplates() {
+  return window['go']['main']['App']['ListDefaultTemplates']();
 }
 
 export function PickCSVFile() {
