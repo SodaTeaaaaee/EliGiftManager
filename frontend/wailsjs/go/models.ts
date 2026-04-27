@@ -513,6 +513,7 @@ export namespace model {
 	    productId: number;
 	    path: string;
 	    sortOrder: number;
+	    sourceDir: string;
 	    // Go type: time
 	    createdAt: any;
 	    product: Product;
@@ -527,6 +528,7 @@ export namespace model {
 	        this.productId = source["productId"];
 	        this.path = source["path"];
 	        this.sortOrder = source["sortOrder"];
+	        this.sourceDir = source["sourceDir"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.product = this.convertValues(source["product"], Product);
 	    }

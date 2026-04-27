@@ -167,15 +167,13 @@ onMounted(loadProducts)
       <NDrawerContent title="商品详情" closable>
         <template v-if="detailProduct">
           <!-- 主图轮播 -->
-          <NCarousel v-if="mainImages.length" autoplay show-arrow>
-            <div v-for="img in mainImages" :key="img.id" class="flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden">
-              <img :src="'/local-images/' + img.path" style="width: 100%; max-height: 480px; object-fit: contain;" />
-            </div>
+          <NCarousel v-if="mainImages.length" autoplay dot-placement="inside" :interval="4000" style="--n-arrow-size: 28px;">
+            <img v-for="img in mainImages" :key="img.id" :src="'/local-images/' + img.path" class="w-full" style="max-height: 480px; object-fit: contain;" />
           </NCarousel>
           <NEmpty v-if="!mainImages.length && !detailOnlyImages.length" description="暂无商品图片" class="py-6" />
 
           <!-- 商品信息 -->
-          <div class="mt-4 space-y-2">
+          <div class="mt-1 space-y-1">
             <h2 class="text-xl font-semibold">{{ detailProduct.name }}</h2>
             <div class="flex flex-wrap items-center gap-2">
               <span class="app-copy">{{ detailProduct.factory }} / {{ detailProduct.factorySku }}</span>

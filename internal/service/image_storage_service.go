@@ -91,13 +91,14 @@ func copyAssetFile(src, dst string) error {
 	return out.Sync()
 }
 
-// ProcessCoverImages scans zipExtractDir (or its imageDir subdirectory) for
-// image files, copies them into the content-addressable data/assets/ tree, and
-// inserts matching ProductImage rows. If a product has no CoverImage yet, the
-// first matched image becomes its cover.
+// ProcessCoverImages scans zipExtractDir for image files, copies them into
+// the content-addressable data/assets/ tree, and inserts matching ProductImage
+// rows. If a product has no CoverImage yet, the first matched image becomes its
+// cover.
 //
-// imageDir comes from the template MappingRules; when empty, the extract root
-// is scanned directly.
+// When imageDir is non-empty only that subdirectory of zipExtractDir is
+// scanned; otherwise the entire tree is walked recursively.  Set imageDir to
+// "" to cover all subdirectories such as 主图/ and 详情图/.
 //
 // Returns the total number of product-image associations created.
 func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error) {
@@ -143,9 +144,9 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 		// and to match the Wails asset URL convention.
 		relativePath := hash[:2] + "/" + hash + ext
 
-			parentDir := filepath.Base(filepath.Dir(path))
+		parentDir := filepath.Base(filepath.Dir(path))
 
-			productName := stripSuffix(filepath.Base(path))
+		productName := stripSuffix(filepath.Base(path))
 		if productName == "" {
 			return nil
 		}
