@@ -13,6 +13,7 @@ import (
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"gorm.io/gorm"
 )
@@ -202,18 +203,11 @@ func (a *App) PickZIPFile() (string, error) {
 }
 
 func (a *App) resolveDatabasePath() (string, error) {
-	execPath, err := os.Executable()
-	if err == nil {
-		execDir := filepath.Dir(execPath)
-		if !strings.HasPrefix(execDir, os.TempDir()) {
-			return filepath.Join(execDir, "data", "eligiftmanager.db"), nil
-		}
+	dataDir, err := service.ResolveDataDir()
+	if err != nil {
+		return "", err
 	}
-	workDir, workDirErr := os.Getwd()
-	if workDirErr != nil {
-		return "", fmt.Errorf("resolve database path failed: %w", workDirErr)
-	}
-	return filepath.Join(workDir, "data", "eligiftmanager.db"), nil
+	return filepath.Join(dataDir, "eligiftmanager.db"), nil
 }
 
 // ---- shared helpers (used by controllers) ----
