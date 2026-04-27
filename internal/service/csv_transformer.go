@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -119,7 +120,7 @@ func parseMemberCSVRows(csvFile string, template model.TemplateConfig) ([]parsed
 		_ = file.Close()
 	}()
 
-	reader := csv.NewReader(file)
+	reader := csv.NewReader(stripBOM(file))
 	reader.FieldsPerRecord = -1
 	reader.TrimLeadingSpace = true
 
@@ -137,7 +138,7 @@ func parseMemberCSVRows(csvFile string, template model.TemplateConfig) ([]parsed
 		return nil, fmt.Errorf("parse member CSV failed: %w", err)
 	}
 
-	fieldColumns, consumedColumns, err := resolveFieldColumns(mappingRules, headerIndex)
+	fieldColumns, consumedColumns, err := resolveFieldColumns(anyMapFromStringMap(mappingRules), headerIndex)
 	if err != nil {
 		return nil, fmt.Errorf("parse member CSV failed: %w", err)
 	}
@@ -250,35 +251,86 @@ func ensureTemplateType(template model.TemplateConfig, expectedType string, scen
 }
 
 func parseTemplateMappingRules(raw string, normalizeFieldName func(string) (string, error)) (map[string]string, error) {
+	v2Result, err := parseTemplateMappingRulesV2(raw, normalizeFieldName)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]string, len(v2Result))
+	for field, val := range v2Result {
+		switch v := val.(type) {
+		case string:
+			result[field] = v
+		case map[string]interface{}:
+			if sc, ok := v["sourceColumn"]; ok {
+				result[field] = strings.TrimSpace(fmt.Sprint(sc))
+			} else {
+				return nil, fmt.Errorf("template field %q in new format must specify sourceColumn for header-based CSV import", field)
+			}
+		default:
+			return nil, fmt.Errorf("template field %q has unsupported mapping type %T", field, val)
+		}
+	}
+	return result, nil
+}
+
+// parseTemplateMappingRulesV2 解析模板映射规则 JSON，向后兼容旧格式并支持 richer 新格式。
+//
+// 旧格式（向后兼容）：
+//
+//	{"field": "列名"}
+//	→ 返回 map[string]any，每个 value 是 string（列名）
+//
+// 新格式：
+//
+//	{"hasHeader": true, "mapping": {"field": {"sourceColumn": "列名", "required": true}, ...}}
+//	→ 返回 map[string]any，每个 value 是 map[string]interface{}（含 sourceColumn/columnIndex/required/transform）
+func parseTemplateMappingRulesV2(raw string, normalizeFieldName func(string) (string, error)) (map[string]any, error) {
 	if strings.TrimSpace(raw) == "" {
 		return nil, fmt.Errorf("template mapping rules is required")
 	}
 
-	var mappingRules map[string]string
-	if err := json.Unmarshal([]byte(raw), &mappingRules); err != nil {
+	// 先尝试旧格式：扁平 map[string]string
+	var flatRules map[string]string
+	if err := json.Unmarshal([]byte(raw), &flatRules); err == nil {
+		if len(flatRules) == 0 {
+			return nil, fmt.Errorf("template mapping rules cannot be empty")
+		}
+		result := make(map[string]any, len(flatRules))
+		for internalField, externalHeader := range flatRules {
+			normalizedField, err := normalizeFieldName(internalField)
+			if err != nil {
+				return nil, err
+			}
+			trimmedHeader := strings.TrimSpace(externalHeader)
+			if trimmedHeader == "" {
+				return nil, fmt.Errorf("external header for standard field %q cannot be empty", internalField)
+			}
+			result[normalizedField] = trimmedHeader
+		}
+		return result, nil
+	}
+
+	// 尝试新格式：{"hasHeader": ..., "mapping": {...}}
+	var newRules struct {
+		HasHeader *bool                  `json:"hasHeader"`
+		Mapping   map[string]interface{} `json:"mapping"`
+	}
+	if err := json.Unmarshal([]byte(raw), &newRules); err != nil {
 		return nil, fmt.Errorf("parse template mapping rules JSON failed: %w", err)
 	}
-
-	if len(mappingRules) == 0 {
+	if newRules.Mapping == nil || len(newRules.Mapping) == 0 {
 		return nil, fmt.Errorf("template mapping rules cannot be empty")
 	}
-
-	normalizedRules := make(map[string]string, len(mappingRules))
-	for internalField, externalHeader := range mappingRules {
+	result := make(map[string]any, len(newRules.Mapping))
+	for internalField, meta := range newRules.Mapping {
 		normalizedField, err := normalizeFieldName(internalField)
 		if err != nil {
 			return nil, err
 		}
-
-		trimmedHeader := strings.TrimSpace(externalHeader)
-		if trimmedHeader == "" {
-			return nil, fmt.Errorf("external header for standard field %q cannot be empty", internalField)
-		}
-
-		normalizedRules[normalizedField] = trimmedHeader
+		result[normalizedField] = meta
 	}
-
-	return normalizedRules, nil
+	return result, nil
 }
 
 func normalizeMemberFieldName(field string) (string, error) {
@@ -319,14 +371,33 @@ func buildHeaderIndex(headers []string) (map[string]int, []string, error) {
 	return headerIndex, normalizedHeaders, nil
 }
 
-func resolveFieldColumns(mappingRules map[string]string, headerIndex map[string]int) (map[string]int, map[int]struct{}, error) {
+func resolveFieldColumns(mappingRules map[string]any, headerIndex map[string]int) (map[string]int, map[int]struct{}, error) {
 	fieldColumns := make(map[string]int, len(mappingRules))
 	consumedColumns := make(map[int]struct{}, len(mappingRules))
 
-	for fieldName, externalHeader := range mappingRules {
-		columnIndex, exists := headerIndex[normalizeHeaderName(externalHeader)]
+	for fieldName, ruleVal := range mappingRules {
+		var externalHeader string
+		switch v := ruleVal.(type) {
+		case string:
+			externalHeader = v
+		case map[string]interface{}:
+			if sc, ok := v["sourceColumn"]; ok {
+				externalHeader = fmt.Sprint(sc)
+			} else {
+				return nil, nil, fmt.Errorf("template field %q in new format must specify sourceColumn", fieldName)
+			}
+		default:
+			return nil, nil, fmt.Errorf("template field %q has unsupported mapping type %T", fieldName, ruleVal)
+		}
+
+		trimmedHeader := strings.TrimSpace(externalHeader)
+		if trimmedHeader == "" {
+			return nil, nil, fmt.Errorf("external header for template field %q cannot be empty", fieldName)
+		}
+
+		columnIndex, exists := headerIndex[normalizeHeaderName(trimmedHeader)]
 		if !exists {
-			return nil, nil, fmt.Errorf("external header %q mapped to template field %q not found in CSV", externalHeader, fieldName)
+			return nil, nil, fmt.Errorf("external header %q mapped to template field %q not found in CSV", trimmedHeader, fieldName)
 		}
 
 		fieldColumns[fieldName] = columnIndex
@@ -336,6 +407,15 @@ func resolveFieldColumns(mappingRules map[string]string, headerIndex map[string]
 	return fieldColumns, consumedColumns, nil
 }
 
+// anyMapFromStringMap 将 map[string]string 转换为 map[string]any，供 resolveFieldColumns 使用。
+func anyMapFromStringMap(m map[string]string) map[string]any {
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		result[k] = v
+	}
+	return result
+}
+
 func normalizeHeaderName(header string) string {
 	normalized := strings.TrimSpace(header)
 	normalized = strings.TrimPrefix(normalized, "\ufeff")
@@ -343,6 +423,16 @@ func normalizeHeaderName(header string) string {
 	normalized = strings.NewReplacer("_", "", "-", "", " ", "").Replace(normalized)
 
 	return normalized
+}
+
+func stripBOM(r io.Reader) io.Reader {
+	br := bufio.NewReader(r)
+	bom := []byte{0xEF, 0xBB, 0xBF}
+	peek, _ := br.Peek(3)
+	if len(peek) >= 3 && peek[0] == bom[0] && peek[1] == bom[1] && peek[2] == bom[2] {
+		_, _ = br.Discard(3)
+	}
+	return br
 }
 
 func readCSVCell(record []string, index int) string {

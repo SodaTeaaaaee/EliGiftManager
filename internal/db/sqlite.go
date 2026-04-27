@@ -8,6 +8,7 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func InitDB(dbPath string) (*gorm.DB, error) {
@@ -20,7 +21,9 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("initialize SQLite database failed: %w", err)
 	}
 
-	db, err := gorm.Open(sqlite.Open(cleanedPath), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(cleanedPath), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Warn),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: open %q failed: %w", cleanedPath, err)
 	}
@@ -56,6 +59,8 @@ func autoMigrateTables(db *gorm.DB) error {
 		&model.MemberNickname{},
 		&model.MemberAddress{},
 		&model.Product{},
+		&model.ProductTag{},
+		&model.ProductImage{},
 		&model.Wave{},
 		&model.DispatchRecord{},
 		&model.TemplateConfig{},

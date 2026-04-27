@@ -38,15 +38,39 @@ type MemberAddress struct {
 
 // Product represents the normalized product/gift record.
 type Product struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	Platform   string    `gorm:"size:100;not null;index" json:"platform"`
-	Factory    string    `gorm:"size:100;not null" json:"factory"`
-	FactorySKU string    `gorm:"size:255;not null" json:"factorySku"`
-	Name       string    `gorm:"size:255;not null" json:"name"`
-	CoverImage string    `gorm:"type:text" json:"coverImage"`
-	ExtraData  string    `gorm:"type:text;not null;default:'{}'" json:"extraData"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID         uint         `gorm:"primaryKey" json:"id"`
+	Platform   string       `gorm:"size:100;not null;index" json:"platform"`
+	Factory    string       `gorm:"size:100;not null" json:"factory"`
+	FactorySKU string       `gorm:"size:255;not null" json:"factorySku"`
+	Name       string       `gorm:"size:255;not null" json:"name"`
+	CoverImage string       `gorm:"type:text" json:"coverImage"`
+	WaveID     *uint        `gorm:"index" json:"waveId"`
+	ExtraData  string       `gorm:"type:text;not null;default:'{}'" json:"extraData"`
+	CreatedAt  time.Time    `json:"createdAt"`
+	UpdatedAt  time.Time    `json:"updatedAt"`
+	Tags       []ProductTag   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"tags"`
+	Images     []ProductImage `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"images"`
+}
+
+// ProductImage stores multi-image associations for a product.
+type ProductImage struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	ProductID uint      `gorm:"not null;index" json:"productId"`
+	Path      string    `gorm:"type:text;not null" json:"path"`
+	SortOrder int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt time.Time `json:"createdAt"`
+	Product   Product   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
+}
+
+// ProductTag stores platform-level classification tags attached to a product.
+// TagName captures the gift tier/level name (e.g. "舰长", "提督").
+type ProductTag struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	ProductID uint      `gorm:"not null;uniqueIndex:idx_prod_platform_tag" json:"productId"`
+	Platform  string    `gorm:"size:100;not null;uniqueIndex:idx_prod_platform_tag" json:"platform"`
+	TagName   string    `gorm:"size:255;not null;uniqueIndex:idx_prod_platform_tag" json:"tagName"`
+	CreatedAt time.Time `json:"createdAt"`
+	Product   Product   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
 }
 
 // Wave 表示一次按特定规则聚合的发货波次（UI 层面称为发货任务）。
@@ -55,6 +79,7 @@ type Wave struct {
 	WaveNo    string           `gorm:"size:64;not null;uniqueIndex" json:"waveNo"`
 	Name      string           `gorm:"size:255;not null" json:"name"`
 	Status    string           `gorm:"size:64;not null;default:'draft'" json:"status"`
+	LevelTags string           `gorm:"type:text;not null;default:'[]'" json:"levelTags"`
 	CreatedAt time.Time        `json:"createdAt"`
 	UpdatedAt time.Time        `json:"updatedAt"`
 	Records   []DispatchRecord `gorm:"foreignKey:WaveID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"records"`
@@ -94,4 +119,6 @@ func (MemberAddress) TableName() string  { return "member_addresses" }
 func (Product) TableName() string        { return "products" }
 func (Wave) TableName() string           { return "waves" }
 func (DispatchRecord) TableName() string { return "dispatch_records" }
+func (ProductTag) TableName() string    { return "product_tags" }
 func (TemplateConfig) TableName() string { return "template_configs" }
+func (ProductImage) TableName() string  { return "product_images" }

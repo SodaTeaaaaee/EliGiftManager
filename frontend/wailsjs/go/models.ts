@@ -344,6 +344,53 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ProductItemWithTags {
+	    id: number;
+	    platform: string;
+	    factory: string;
+	    factorySku: string;
+	    name: string;
+	    coverImage: string;
+	    extraData: string;
+	    tags: string[];
+	    // Go type: time
+	    updatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductItemWithTags(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.platform = source["platform"];
+	        this.factory = source["factory"];
+	        this.factorySku = source["factorySku"];
+	        this.name = source["name"];
+	        this.coverImage = source["coverImage"];
+	        this.extraData = source["extraData"];
+	        this.tags = source["tags"];
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ProductListPayload {
 	    items: ProductItem[];
 	    total: number;
@@ -356,6 +403,40 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.items = this.convertValues(source["items"], ProductItem);
+	        this.total = source["total"];
+	        this.platforms = source["platforms"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ProductListWithTagsPayload {
+	    items: ProductItemWithTags[];
+	    total: number;
+	    platforms: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductListWithTagsPayload(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], ProductItemWithTags);
 	        this.total = source["total"];
 	        this.platforms = source["platforms"];
 	    }
@@ -427,6 +508,88 @@ export namespace main {
 
 export namespace model {
 	
+	export class ProductImage {
+	    id: number;
+	    productId: number;
+	    path: string;
+	    sortOrder: number;
+	    // Go type: time
+	    createdAt: any;
+	    product: Product;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductImage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.productId = source["productId"];
+	        this.path = source["path"];
+	        this.sortOrder = source["sortOrder"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.product = this.convertValues(source["product"], Product);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ProductTag {
+	    id: number;
+	    productId: number;
+	    platform: string;
+	    tagName: string;
+	    // Go type: time
+	    createdAt: any;
+	    product: Product;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductTag(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.productId = source["productId"];
+	        this.platform = source["platform"];
+	        this.tagName = source["tagName"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.product = this.convertValues(source["product"], Product);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Product {
 	    id: number;
 	    platform: string;
@@ -434,11 +597,14 @@ export namespace model {
 	    factorySku: string;
 	    name: string;
 	    coverImage: string;
+	    waveId?: number;
 	    extraData: string;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
 	    updatedAt: any;
+	    tags: ProductTag[];
+	    images: ProductImage[];
 	
 	    static createFrom(source: any = {}) {
 	        return new Product(source);
@@ -452,9 +618,12 @@ export namespace model {
 	        this.factorySku = source["factorySku"];
 	        this.name = source["name"];
 	        this.coverImage = source["coverImage"];
+	        this.waveId = source["waveId"];
 	        this.extraData = source["extraData"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
+	        this.tags = this.convertValues(source["tags"], ProductTag);
+	        this.images = this.convertValues(source["images"], ProductImage);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -612,6 +781,7 @@ export namespace model {
 	    waveNo: string;
 	    name: string;
 	    status: string;
+	    levelTags: string;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -628,6 +798,7 @@ export namespace model {
 	        this.waveNo = source["waveNo"];
 	        this.name = source["name"];
 	        this.status = source["status"];
+	        this.levelTags = source["levelTags"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	        this.records = this.convertValues(source["records"], DispatchRecord);
@@ -707,6 +878,8 @@ export namespace model {
 		    return a;
 		}
 	}
+	
+	
 	
 	
 	

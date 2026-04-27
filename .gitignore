@@ -3,6 +3,7 @@
 .cache/
 build/bin/
 data/
+SampleData/
 .env
 .env.local
 .env.*.local
@@ -29,6 +30,7 @@ coverage.out
 
 # Claude Code
 .claude/
+.agents/
 
 # Wails
 wailsdev.log

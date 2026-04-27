@@ -147,7 +147,7 @@ onMounted(loadProducts)
       <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <NCard v-for="product in products" :key="product.id" size="small" hoverable>
           <div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
-            <img v-if="product.coverImage" :src="product.coverImage" class="h-full w-full object-cover" />
+            <img v-if="product.coverImage" :src="'/local-images/' + product.coverImage" class="h-full w-full object-cover" />
             <div v-else class="flex h-full items-center justify-center">
               <NIcon size="42" depth="3"><ImageOutline /></NIcon>
             </div>

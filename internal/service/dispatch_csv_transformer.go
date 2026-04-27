@@ -41,7 +41,7 @@ func ParseDispatchRecordCSV(csvFile string, template model.TemplateConfig) ([]mo
 	if err != nil {
 		return nil, fmt.Errorf("parse dispatch record CSV failed: %w", err)
 	}
-	fieldColumns, _, err := resolveFieldColumns(mappingRules, headerIndex)
+	fieldColumns, _, err := resolveFieldColumns(anyMapFromStringMap(mappingRules), headerIndex)
 	if err != nil {
 		return nil, fmt.Errorf("parse dispatch record CSV failed: %w", err)
 	}

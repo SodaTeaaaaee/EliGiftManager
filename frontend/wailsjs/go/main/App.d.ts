@@ -3,9 +3,13 @@
 import {main} from '../models';
 import {model} from '../models';
 
-export function AutoAllocateWave(arg1:number,arg2:number):Promise<void>;
+export function AllocateByTags(arg1:number):Promise<number>;
+
+export function AssignProductTag(arg1:number,arg2:string,arg3:string):Promise<void>;
 
 export function BackupDatabase():Promise<string>;
+
+export function BindDefaultAddresses(arg1:number):Promise<Record<string, number>>;
 
 export function Bootstrap():Promise<main.BootstrapPayload>;
 
@@ -15,9 +19,13 @@ export function CreateWave(arg1:string):Promise<model.Wave>;
 
 export function DeleteWave(arg1:number):Promise<void>;
 
-export function ExportWaveByPlatform(arg1:number,arg2:string,arg3:number):Promise<string>;
+export function ExportOrderCSV(arg1:number,arg2:number):Promise<string>;
 
 export function GetDashboard():Promise<main.DashboardPayload>;
+
+export function GetProductImages(arg1:number):Promise<Array<model.ProductImage>>;
+
+export function ImportDispatchWave(arg1:number,arg2:string,arg3:number):Promise<void>;
 
 export function ImportToWave(arg1:number,arg2:string,arg3:number):Promise<void>;
 
@@ -25,13 +33,25 @@ export function ListDispatchRecords(arg1:number):Promise<Array<main.DispatchReco
 
 export function ListMembers(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.MemberListPayload>;
 
+export function ListProductTags(arg1:string):Promise<Array<string>>;
+
 export function ListProducts(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.ProductListPayload>;
+
+export function ListProductsWithTags(arg1:number,arg2:string,arg3:number,arg4:number):Promise<main.ProductListWithTagsPayload>;
 
 export function ListTemplates():Promise<Array<main.TemplateItem>>;
 
 export function ListWaves():Promise<Array<main.WaveItem>>;
 
+export function PickCSVFile():Promise<string>;
+
+export function PickZIPFile():Promise<string>;
+
 export function PingDB():Promise<string>;
+
+export function PreviewExport(arg1:number):Promise<Record<string, number>>;
+
+export function RemoveProductTag(arg1:number,arg2:string,arg3:string):Promise<void>;
 
 export function RestoreDatabase():Promise<void>;
 

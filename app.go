@@ -3,14 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	goruntime "runtime"
-	"strconv"
 	"strings"
 	"time"
 
@@ -101,6 +99,22 @@ type ProductListPayload struct {
 	Items     []ProductItem `json:"items"`
 	Total     int64         `json:"total"`
 	Platforms []string      `json:"platforms"`
+}
+type ProductItemWithTags struct {
+	ID         uint      `json:"id"`
+	Platform   string    `json:"platform"`
+	Factory    string    `json:"factory"`
+	FactorySKU string    `json:"factorySku"`
+	Name       string    `json:"name"`
+	CoverImage string    `json:"coverImage"`
+	ExtraData  string    `json:"extraData"`
+	Tags       []string  `json:"tags"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+type ProductListWithTagsPayload struct {
+	Items     []ProductItemWithTags `json:"items"`
+	Total     int64                 `json:"total"`
+	Platforms []string              `json:"platforms"`
 }
 type DispatchRecordItem struct {
 	ID              uint      `json:"id"`
@@ -222,21 +236,63 @@ func (a *App) ImportToWave(waveID uint, csvPath string, templateID uint) error {
 	case model.TemplateTypeImportMember:
 		_, err = service.ImportMembersFromCSV(db, csvPath, template)
 	case model.TemplateTypeImportProduct:
+		var templateMeta struct {
+			Format   string `json:"format"`
+			ImageDir string `json:"imageDir"`
+		}
+		json.Unmarshal([]byte(template.MappingRules), &templateMeta)
+
 		var products []model.Product
-		products, err = service.ParseProductCSV(csvPath, template)
-		if err == nil {
-			err = db.Transaction(func(tx *gorm.DB) error {
-				for i := range products {
-					products[i].Platform = template.Platform
-					if products[i].ExtraData == "" {
-						products[i].ExtraData = "{}"
+		if templateMeta.Format == "zip" {
+			var extractDir string
+			products, extractDir, err = service.ParseProductZIP(csvPath, template)
+			if extractDir != "" {
+				defer os.RemoveAll(extractDir)
+			}
+			if err == nil {
+				err = db.Transaction(func(tx *gorm.DB) error {
+					for i := range products {
+						if products[i].ExtraData == "" {
+							products[i].ExtraData = "{}"
+						}
+						products[i].WaveID = &wave.ID
+						if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
+							return delErr
+						}
 					}
-					if err := tx.Create(&products[i]).Error; err != nil {
-						return err
+					if len(products) > 0 {
+						if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
+							return createErr
+						}
 					}
+					return nil
+				})
+				if err == nil {
+					_, err = service.ProcessCoverImages(db, extractDir, templateMeta.ImageDir)
 				}
-				return nil
-			})
+			}
+		} else {
+			products, err = service.ParseProductCSV(csvPath, template)
+			if err == nil {
+				err = db.Transaction(func(tx *gorm.DB) error {
+					for i := range products {
+						products[i].Platform = template.Platform
+						if products[i].ExtraData == "" {
+							products[i].ExtraData = "{}"
+						}
+						products[i].WaveID = &wave.ID
+						if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
+							return delErr
+						}
+					}
+					if len(products) > 0 {
+						if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
+							return createErr
+						}
+					}
+					return nil
+				})
+			}
 		}
 	case model.TemplateTypeImportDispatchRecord:
 		var records []model.DispatchRecord
@@ -260,80 +316,22 @@ func (a *App) ImportToWave(waveID uint, csvPath string, templateID uint) error {
 	}
 	return nil
 }
-func (a *App) AutoAllocateWave(waveID uint, ruleTemplateID uint) error {
+
+func (a *App) ImportDispatchWave(waveID uint, csvPath string, importTemplateID uint) error {
 	db, closeDB, err := a.openDatabase()
 	if err != nil {
-		return fmt.Errorf("auto allocate failed: %w", err)
-	}
-	defer closeDB()
-	var wave model.Wave
-	if err := db.First(&wave, waveID).Error; err != nil {
-		return fmt.Errorf("auto allocate failed: wave not found: %w", err)
-	}
-	var template model.TemplateConfig
-	if err := db.First(&template, ruleTemplateID).Error; err != nil {
-		return fmt.Errorf("auto allocate failed: template not found: %w", err)
-	}
-	if template.Type != model.TemplateTypeAllocation {
-		return fmt.Errorf("auto allocate failed: template is not allocation type")
-	}
-	productIDs, err := parseAllocationProductIDs(template.MappingRules)
-	if err != nil {
-		return fmt.Errorf("auto allocate failed: %w", err)
-	}
-	return db.Transaction(func(tx *gorm.DB) error {
-		var members []model.Member
-		if err := tx.Where("platform = ?", template.Platform).Order("updated_at DESC").Find(&members).Error; err != nil {
-			return err
-		}
-		for i, member := range members {
-			productID := productIDs[i%len(productIDs)]
-			if err := ensureProductPlatform(tx, productID, template.Platform); err != nil {
-				return err
-			}
-			addressID, status := defaultAddressForMember(tx, member.ID)
-			record := model.DispatchRecord{WaveID: wave.ID, MemberID: member.ID, ProductID: productID, MemberAddressID: addressID, Quantity: 1, Status: status}
-			if err := tx.Create(&record).Error; err != nil {
-				return err
-			}
-		}
-		return tx.Model(&wave).Update("status", "allocating").Error
-	})
-}
-func (a *App) ExportWaveByPlatform(waveID uint, platform string, exportTemplateID uint) (string, error) {
-	db, closeDB, err := a.openDatabase()
-	if err != nil {
-		return "", fmt.Errorf("export failed: %w", err)
+		return fmt.Errorf("import dispatch wave failed: %w", err)
 	}
 	defer closeDB()
 	var template model.TemplateConfig
-	if err := db.First(&template, exportTemplateID).Error; err != nil {
-		return "", fmt.Errorf("export failed: template not found: %w", err)
+	if err := db.First(&template, importTemplateID).Error; err != nil {
+		return fmt.Errorf("import dispatch wave failed: template not found: %w", err)
 	}
-	if template.Type != model.TemplateTypeExportOrder {
-		return "", fmt.Errorf("export failed: template is not export type")
+	_, err = service.ImportDispatchWave(db, waveID, csvPath, template)
+	if err != nil {
+		return fmt.Errorf("import dispatch wave failed: %w", err)
 	}
-	if template.Platform != "" && template.Platform != platform {
-		return "", fmt.Errorf("export failed: platform mismatch")
-	}
-	path := filepath.Join(os.TempDir(), fmt.Sprintf("eligift-task-%d-%s.csv", waveID, time.Now().Format("20060102150405")))
-	if a.ctx != nil {
-		selected, dialogErr := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{DefaultFilename: filepath.Base(path)})
-		if dialogErr != nil {
-			return "", fmt.Errorf("export failed: %w", dialogErr)
-		}
-		if selected == "" {
-			return "", fmt.Errorf("export canceled")
-		}
-		path = selected
-	}
-	if err := writeWavePlatformCSV(db, waveID, platform, path); err != nil {
-		return "", fmt.Errorf("export failed: %w", err)
-	}
-	if err := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("status", "exported").Error; err != nil {
-		return path, fmt.Errorf("export failed: %w", err)
-	}
-	return path, nil
+	return nil
 }
 
 func (a *App) ListMembers(page, pageSize int, keyword, platform string) (MemberListPayload, error) {
@@ -417,6 +415,70 @@ func (a *App) ListProducts(page, pageSize int, keyword, platform string) (Produc
 	}
 	return ProductListPayload{Items: items, Total: total, Platforms: platforms}, nil
 }
+func (a *App) BindDefaultAddresses(waveID uint) (map[string]int64, error) {
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return nil, fmt.Errorf("bind default addresses failed: %w", err)
+	}
+	defer closeDB()
+	updated, skipped, err := service.BindDefaultAddresses(db, waveID)
+	if err != nil {
+		return nil, fmt.Errorf("bind default addresses failed: %w", err)
+	}
+	return map[string]int64{"updated": int64(updated), "skipped": int64(skipped)}, nil
+}
+
+func (a *App) ExportOrderCSV(waveID uint, exportTemplateID uint) (string, error) {
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return "", fmt.Errorf("export order CSV failed: %w", err)
+	}
+	defer closeDB()
+
+	var wave model.Wave
+	if err := db.First(&wave, waveID).Error; err != nil {
+		return "", fmt.Errorf("export order CSV failed: wave not found: %w", err)
+	}
+
+	var template model.TemplateConfig
+	if err := db.First(&template, exportTemplateID).Error; err != nil {
+		return "", fmt.Errorf("export order CSV failed: export template not found: %w", err)
+	}
+
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("eligift-factory-order-%d-%s.csv", waveID, time.Now().Format("20060102150405")))
+	if a.ctx != nil {
+		selected, dialogErr := wailsruntime.SaveFileDialog(a.ctx, wailsruntime.SaveDialogOptions{DefaultFilename: filepath.Base(path)})
+		if dialogErr != nil {
+			return "", fmt.Errorf("export order CSV failed: %w", dialogErr)
+		}
+		if selected == "" {
+			return "", fmt.Errorf("export canceled")
+		}
+		path = selected
+	}
+
+	if err := service.ExportOrderCSV(db, waveID, path, template); err != nil {
+		return "", fmt.Errorf("export order CSV failed: %w", err)
+	}
+
+	return path, nil
+}
+
+func (a *App) PreviewExport(waveID uint) (map[string]int64, error) {
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return nil, fmt.Errorf("preview export failed: %w", err)
+	}
+	defer closeDB()
+
+	total, missing, err := service.ExportWavePreview(db, waveID)
+	if err != nil {
+		return nil, fmt.Errorf("preview export failed: %w", err)
+	}
+
+	return map[string]int64{"totalRecords": int64(total), "missingAddressCount": int64(missing)}, nil
+}
+
 func (a *App) SetDefaultAddress(memberID, addressID uint) error {
 	db, closeDB, err := a.openDatabase()
 	if err != nil {
@@ -505,6 +567,200 @@ func (a *App) ListTemplates() ([]TemplateItem, error) {
 		items = append(items, templateItemFromModel(template))
 	}
 	return items, nil
+}
+
+func (a *App) PickCSVFile() (string, error) {
+	if a.ctx != nil {
+		selected, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+			Title:   "选择 CSV 文件",
+			Filters: []wailsruntime.FileFilter{{DisplayName: "CSV 文件 (*.csv)", Pattern: "*.csv"}},
+		})
+		if err != nil {
+			return "", err
+		}
+		return selected, nil
+	}
+	return "", fmt.Errorf("pick CSV file: context not available")
+}
+
+func (a *App) PickZIPFile() (string, error) {
+	if a.ctx != nil {
+		selected, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+			Title:   "选择 ZIP 文件",
+			Filters: []wailsruntime.FileFilter{{DisplayName: "ZIP 压缩文件 (*.zip)", Pattern: "*.zip"}},
+		})
+		if err != nil {
+			return "", err
+		}
+		return selected, nil
+	}
+	return "", fmt.Errorf("pick ZIP file: context not available")
+}
+
+func (a *App) ListProductTags(platform string) ([]string, error) {
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return nil, fmt.Errorf("list product tags failed: %w", err)
+	}
+	defer closeDB()
+	var tags []string
+	if err := db.Model(&model.ProductTag{}).Where("platform = ?", strings.TrimSpace(platform)).Distinct().Order("tag_name ASC").Pluck("tag_name", &tags).Error; err != nil {
+		return nil, fmt.Errorf("list product tags failed: %w", err)
+	}
+	return tags, nil
+}
+
+func (a *App) ListProductsWithTags(waveID uint, platform string, page, pageSize int) (ProductListWithTagsPayload, error) {
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return ProductListWithTagsPayload{}, fmt.Errorf("list products with tags failed: %w", err)
+	}
+	defer closeDB()
+	page, pageSize = normalizePagination(page, pageSize)
+	q := db.Model(&model.Product{}).Preload("Tags")
+	if waveID != 0 {
+		q = q.Where("wave_id = ?", waveID)
+	}
+	if platform = strings.TrimSpace(platform); platform != "" {
+		if plats := strings.Split(platform, ","); len(plats) > 1 {
+			q = q.Where("platform IN ?", plats)
+		} else {
+			q = q.Where("platform = ?", platform)
+		}
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return ProductListWithTagsPayload{}, err
+	}
+	var products []model.Product
+	if err := q.Order("updated_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&products).Error; err != nil {
+		return ProductListWithTagsPayload{}, err
+	}
+	items := make([]ProductItemWithTags, 0, len(products))
+	for _, p := range products {
+		tagNames := make([]string, 0, len(p.Tags))
+		for _, t := range p.Tags {
+			tagNames = append(tagNames, t.TagName)
+		}
+		items = append(items, ProductItemWithTags{ID: p.ID, Platform: p.Platform, Factory: p.Factory, FactorySKU: p.FactorySKU, Name: p.Name, CoverImage: p.CoverImage, ExtraData: p.ExtraData, UpdatedAt: p.UpdatedAt, Tags: tagNames})
+	}
+	platforms, _ := queryProductPlatforms(db)
+	return ProductListWithTagsPayload{Items: items, Total: total, Platforms: platforms}, nil
+}
+
+func (a *App) AssignProductTag(productID uint, platform, tagName string) error {
+	platform, tagName = strings.TrimSpace(platform), strings.TrimSpace(tagName)
+	if platform == "" || tagName == "" || productID == 0 {
+		return fmt.Errorf("assign product tag failed: productId, platform, and tagName are required")
+	}
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return fmt.Errorf("assign product tag failed: %w", err)
+	}
+	defer closeDB()
+	tag := model.ProductTag{ProductID: productID, Platform: platform, TagName: tagName}
+	if err := db.Where("product_id = ? AND platform = ? AND tag_name = ?", productID, platform, tagName).FirstOrCreate(&tag).Error; err != nil {
+		return fmt.Errorf("assign product tag failed: %w", err)
+	}
+	return nil
+}
+
+func (a *App) GetProductImages(productID uint) ([]model.ProductImage, error) {
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return nil, fmt.Errorf("get product images failed: %w", err)
+	}
+	defer closeDB()
+	var images []model.ProductImage
+	if err := db.Where("product_id = ?", productID).Order("sort_order ASC").Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("get product images failed: %w", err)
+	}
+	return images, nil
+}
+
+func (a *App) RemoveProductTag(productID uint, platform, tagName string) error {
+	platform, tagName = strings.TrimSpace(platform), strings.TrimSpace(tagName)
+	if platform == "" || tagName == "" || productID == 0 {
+		return fmt.Errorf("remove product tag failed: productId, platform, and tagName are required")
+	}
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return fmt.Errorf("remove product tag failed: %w", err)
+	}
+	defer closeDB()
+	result := db.Where("product_id = ? AND platform = ? AND tag_name = ?", productID, platform, tagName).Delete(&model.ProductTag{})
+	if result.Error != nil {
+		return fmt.Errorf("remove product tag failed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("remove product tag failed: tag not found")
+	}
+	return nil
+}
+
+func (a *App) AllocateByTags(waveID uint) (int, error) {
+	db, closeDB, err := a.openDatabase()
+	if err != nil {
+		return 0, fmt.Errorf("allocate by tags failed: %w", err)
+	}
+	defer closeDB()
+
+	var wave model.Wave
+	if err := db.First(&wave, waveID).Error; err != nil {
+		return 0, fmt.Errorf("allocate by tags failed: wave not found: %w", err)
+	}
+
+	type levelTagEntry struct {
+		Platform string `json:"platform"`
+		TagName  string `json:"tagName"`
+	}
+	var levelTags []levelTagEntry
+	if err := json.Unmarshal([]byte(wave.LevelTags), &levelTags); err != nil || len(levelTags) == 0 {
+		return 0, fmt.Errorf("allocate by tags failed: wave has no level tags — import member data first")
+	}
+
+	allocatedCount := 0
+	err = db.Transaction(func(tx *gorm.DB) error {
+		for _, lt := range levelTags {
+			var members []model.Member
+			if err := tx.Where("platform = ? AND extra_data LIKE ?",
+				lt.Platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, lt.TagName)).
+				Find(&members).Error; err != nil {
+				return fmt.Errorf("query members for %s/%s failed: %w", lt.Platform, lt.TagName, err)
+			}
+			var tags []model.ProductTag
+			if err := tx.Where("platform = ? AND tag_name = ?", lt.Platform, lt.TagName).
+				Find(&tags).Error; err != nil {
+				return fmt.Errorf("lookup product tags for %s/%s failed: %w", lt.Platform, lt.TagName, err)
+			}
+			if len(tags) == 0 {
+				continue
+			}
+			for _, member := range members {
+				for _, tag := range tags {
+					var cnt int64
+					if err := tx.Model(&model.DispatchRecord{}).
+						Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, member.ID, tag.ProductID).
+						Count(&cnt).Error; err != nil {
+						return err
+					}
+					if cnt > 0 {
+						continue
+					}
+					record := model.DispatchRecord{WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID, Quantity: 1, Status: "draft"}
+					if err := tx.Create(&record).Error; err != nil {
+						return err
+					}
+					allocatedCount++
+				}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("allocate by tags failed: %w", err)
+	}
+	return allocatedCount, nil
 }
 
 func (a *App) BackupDatabase() (string, error) {
@@ -778,74 +1034,6 @@ func normalizePagination(page, pageSize int) (int, int) {
 		pageSize = 200
 	}
 	return page, pageSize
-}
-func parseAllocationProductIDs(raw string) ([]uint, error) {
-	var generic map[string]any
-	if err := json.Unmarshal([]byte(raw), &generic); err != nil {
-		return nil, err
-	}
-	ids := make([]uint, 0, len(generic))
-	for _, v := range generic {
-		switch value := v.(type) {
-		case float64:
-			ids = append(ids, uint(value))
-		case string:
-			parsed, err := strconv.ParseUint(strings.TrimSpace(value), 10, 64)
-			if err != nil {
-				return nil, err
-			}
-			ids = append(ids, uint(parsed))
-		}
-	}
-	if len(ids) == 0 {
-		return nil, fmt.Errorf("at least one product id is required")
-	}
-	return ids, nil
-}
-func ensureProductPlatform(tx *gorm.DB, productID uint, platform string) error {
-	var count int64
-	if err := tx.Model(&model.Product{}).Where("id = ? AND platform = ?", productID, platform).Count(&count).Error; err != nil {
-		return err
-	}
-	if count == 0 {
-		return fmt.Errorf("product %d not found in platform %s", productID, platform)
-	}
-	return nil
-}
-func defaultAddressForMember(tx *gorm.DB, memberID uint) (*uint, string) {
-	var address model.MemberAddress
-	if err := tx.Where("member_id = ? AND is_deleted = ?", memberID, false).Order("is_default DESC, created_at DESC").First(&address).Error; err != nil {
-		return nil, model.DispatchStatusPendingAddress
-	}
-	return &address.ID, model.DispatchStatusPending
-}
-func writeWavePlatformCSV(db *gorm.DB, waveID uint, platform, path string) error {
-	var records []model.DispatchRecord
-	if err := db.Preload("Wave").Preload("Member.Nicknames", func(d *gorm.DB) *gorm.DB { return d.Order("created_at DESC") }).Preload("Product").Preload("MemberAddress").Joins("JOIN products ON products.id = dispatch_records.product_id").Where("dispatch_records.wave_id = ? AND products.platform = ?", waveID, platform).Order("dispatch_records.id ASC").Find(&records).Error; err != nil {
-		return err
-	}
-	file, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-	if err := writer.Write([]string{"WaveNo", "Platform", "PlatformUID", "Nickname", "Product", "FactorySKU", "Quantity", "Recipient", "Phone", "Address"}); err != nil {
-		return err
-	}
-	for _, record := range records {
-		recipient, phone, address := "", "", ""
-		if record.MemberAddress != nil {
-			recipient = record.MemberAddress.RecipientName
-			phone = record.MemberAddress.Phone
-			address = record.MemberAddress.Address
-		}
-		if err := writer.Write([]string{record.Wave.WaveNo, platform, record.Member.PlatformUID, latestNickname(record.Member), record.Product.Name, record.Product.FactorySKU, strconv.Itoa(record.Quantity), recipient, phone, address}); err != nil {
-			return err
-		}
-	}
-	return writer.Error()
 }
 func buildDashboardWarnings(payload DashboardPayload) []DashboardWarning {
 	warnings := make([]DashboardWarning, 0, 3)
