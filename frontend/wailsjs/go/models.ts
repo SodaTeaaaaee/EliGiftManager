@@ -110,6 +110,7 @@ export namespace main {
 	    waveNo: string;
 	    name: string;
 	    status: string;
+	    levelTags: string;
 	    totalRecords: number;
 	    totalQuantity: number;
 	    pendingAddressRecords: number;
@@ -126,6 +127,7 @@ export namespace main {
 	        this.waveNo = source["waveNo"];
 	        this.name = source["name"];
 	        this.status = source["status"];
+	        this.levelTags = source["levelTags"];
 	        this.totalRecords = source["totalRecords"];
 	        this.totalQuantity = source["totalQuantity"];
 	        this.pendingAddressRecords = source["pendingAddressRecords"];
