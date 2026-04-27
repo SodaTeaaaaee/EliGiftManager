@@ -22,9 +22,10 @@ const detailImages = ref<{ id: number; path: string; sortOrder: number; sourceDi
 const showDetail = ref(false)
 
 const mainImages = computed(() => detailImages.value.filter(img => img.sourceDir === '主图'))
+function nameWithoutExt(p: string) { const i = p.lastIndexOf('.'); return i > 0 ? p.substring(0, i) : p }
 const allImagesSorted = computed(() => {
-  const main = detailImages.value.filter(img => img.sourceDir === '主图').sort((a, b) => a.path.localeCompare(b.path))
-  const detail = detailImages.value.filter(img => img.sourceDir !== '主图').sort((a, b) => a.path.localeCompare(b.path))
+  const main = detailImages.value.filter(img => img.sourceDir === '主图').sort((a, b) => nameWithoutExt(a.path).localeCompare(nameWithoutExt(b.path)))
+  const detail = detailImages.value.filter(img => img.sourceDir !== '主图').sort((a, b) => nameWithoutExt(a.path).localeCompare(nameWithoutExt(b.path)))
   return [...main, ...detail]
 })
 const mainIndex = ref(0)
@@ -189,13 +190,13 @@ onMounted(loadProducts)
         <template v-if="detailProduct">
           <!-- 主图轮播 -->
           <!-- 主图区域 — 内容驱动高度，自适应 -->
-          <div v-if="mainImages.length" class="relative bg-black/5 rounded overflow-hidden">
+          <div v-if="mainImages.length" class="bg-black/5 rounded overflow-hidden">
             <img v-if="currentMainImage" :src="'/local-images/' + currentMainImage.path" class="w-full block" style="max-height: 60vh; object-fit: contain;" />
-            <NButton v-if="mainImages.length > 1" size="small" circle quaternary class="absolute left-2 top-1/2 -translate-y-1/2 !bg-white/80" @click="prevImage"><template #icon><NIcon><ChevronBackOutline /></NIcon></template></NButton>
-            <NButton v-if="mainImages.length > 1" size="small" circle quaternary class="absolute right-2 top-1/2 -translate-y-1/2 !bg-white/80" @click="nextImage"><template #icon><NIcon><ChevronForwardOutline /></NIcon></template></NButton>
           </div>
-          <div v-if="mainImages.length > 1" class="flex justify-center gap-1.5 mt-1">
+          <div v-if="mainImages.length > 1" class="flex items-center justify-center gap-2 mt-1">
+            <NButton size="tiny" circle quaternary @click="prevImage"><template #icon><NIcon><ChevronBackOutline /></NIcon></template></NButton>
             <span v-for="(img, i) in mainImages" :key="img.id" class="w-1.5 h-1.5 rounded-full cursor-pointer transition-colors" :class="i === mainIndex ? 'bg-gray-700 dark:bg-gray-300' : 'bg-gray-300 dark:bg-gray-600'" @click="mainIndex = i" />
+            <NButton size="tiny" circle quaternary @click="nextImage"><template #icon><NIcon><ChevronForwardOutline /></NIcon></template></NButton>
           </div>
           <NEmpty v-if="!detailImages.length" description="暂无商品图片" class="py-6" />
 

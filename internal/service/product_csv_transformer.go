@@ -179,7 +179,8 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 			os.MkdirAll(filepath.Join(extractDir, f.Name), 0o755)
 			continue
 		}
-		destPath := filepath.Join(extractDir, f.Name)
+		// Sanitize filename for Windows compatibility (* → _)
+		destPath := filepath.Join(extractDir, strings.ReplaceAll(f.Name, "*", "_"))
 		// 防止目录遍历
 		cleanExtract, _ := filepath.Abs(extractDir)
 		cleanDest, _ := filepath.Abs(destPath)
