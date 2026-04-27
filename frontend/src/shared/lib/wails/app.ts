@@ -1,34 +1,44 @@
 import {
-  AllocateByTags as allocateByTagsBinding,
-  AssignProductTag as assignProductTagBinding,
-  BackupDatabase as backupDatabaseBinding,
-  BindDefaultAddresses as bindDefaultAddressesBinding,
-  Bootstrap as bootstrapBinding,
-  CreateTemplate as createTemplateBinding,
-  CreateWave as createWaveBinding,
-  DeleteWave as deleteWaveBinding,
-  ExportOrderCSV as exportOrderCSVBinding,
-  GetDashboard as getDashboardBinding,
-  GetProductImages as getProductImagesBinding,
-  ImportDispatchWave as importDispatchWaveBinding,
-  ImportToWave as importToWaveBinding,
-  ListDefaultTemplates as listDefaultTemplatesBinding,
-  ListDispatchRecords as listDispatchRecordsBinding,
-  ListMembers as listMembersBinding,
-  ListProductTags as listProductTagsBinding,
-  ListProducts as listProductsBinding,
-  ListProductsWithTags as listProductsWithTagsBinding,
-  ListTemplates as listTemplatesBinding,
-  ListWaves as listWavesBinding,
-  PingDB as pingDatabaseBinding,
-  PreviewExport as previewExportBinding,
-  RemoveProductTag as removeProductTagBinding,
-  RestoreDatabase as restoreDatabaseBinding,
-  SetDefaultAddress as setDefaultAddressBinding,
-  UpdateProduct as updateProductBinding,
   PickCSVFile as pickCSVFileBinding,
   PickZIPFile as pickZIPFileBinding,
 } from '../../../../wailsjs/go/main/App'
+import {
+  ListMembers as listMembersBinding,
+  SetDefaultAddress as setDefaultAddressBinding,
+} from '../../../../wailsjs/go/main/MemberController'
+import {
+  AssignProductTag as assignProductTagBinding,
+  GetProductImages as getProductImagesBinding,
+  ListProductTags as listProductTagsBinding,
+  ListProducts as listProductsBinding,
+  ListProductsWithTags as listProductsWithTagsBinding,
+  RemoveProductTag as removeProductTagBinding,
+  UpdateProduct as updateProductBinding,
+} from '../../../../wailsjs/go/main/ProductController'
+import {
+  AllocateByTags as allocateByTagsBinding,
+  BindDefaultAddresses as bindDefaultAddressesBinding,
+  CreateWave as createWaveBinding,
+  DeleteWave as deleteWaveBinding,
+  ExportOrderCSV as exportOrderCSVBinding,
+  ImportDispatchWave as importDispatchWaveBinding,
+  ImportToWave as importToWaveBinding,
+  ListDispatchRecords as listDispatchRecordsBinding,
+  ListWaves as listWavesBinding,
+  PreviewExport as previewExportBinding,
+} from '../../../../wailsjs/go/main/WaveController'
+import {
+  BackupDatabase as backupDatabaseBinding,
+  Bootstrap as bootstrapBinding,
+  GetDashboard as getDashboardBinding,
+  PingDB as pingDatabaseBinding,
+  RestoreDatabase as restoreDatabaseBinding,
+} from '../../../../wailsjs/go/main/SystemController'
+import {
+  CreateTemplate as createTemplateBinding,
+  ListDefaultTemplates as listDefaultTemplatesBinding,
+  ListTemplates as listTemplatesBinding,
+} from '../../../../wailsjs/go/main/TemplateController'
 import type { BootstrapPayload } from '@/shared/types/app'
 import { model } from '../../../../wailsjs/go/models'
 import type { main } from '../../../../wailsjs/go/models'
