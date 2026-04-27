@@ -69,14 +69,6 @@ func normalizeForMatch(s string) string {
 	return r.Replace(s)
 }
 
-// escapeLikePattern escapes SQLite LIKE special characters '_' and '%'
-// for use with ESCAPE '\'.
-func escapeLikePattern(s string) string {
-	s = strings.ReplaceAll(s, "_", "\\_")
-	s = strings.ReplaceAll(s, "%", "\\%")
-	return s
-}
-
 // copyAssetFile copies src to dst, creating the destination directory if it
 // does not exist.
 func copyAssetFile(src, dst string) error {
@@ -157,12 +149,11 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 		}
 
 		normalized := normalizeForMatch(productName)
-		escaped := escapeLikePattern(normalized)
 
 		var matchedProducts []model.Product
 		if err := db.Where(
-			"REPLACE(REPLACE(REPLACE(name, '*', '_'), '（', '('), '）', ')') LIKE ? ESCAPE '\\'",
-			"%"+escaped+"%",
+			"REPLACE(REPLACE(REPLACE(name, '*', '_'), '（', '('), '）', ')') = ?",
+			normalized,
 		).Find(&matchedProducts).Error; err != nil {
 			return nil
 		}
