@@ -57,6 +57,7 @@ type WaveItem struct {
 	WaveNo                string    `json:"waveNo"`
 	Name                  string    `json:"name"`
 	Status                string    `json:"status"`
+	LevelTags             string    `json:"levelTags"`
 	TotalRecords          int64     `json:"totalRecords"`
 	TotalQuantity         int64     `json:"totalQuantity"`
 	PendingAddressRecords int64     `json:"pendingAddressRecords"`
@@ -919,7 +920,7 @@ func queryWaves(db *gorm.DB, limit int, status string) ([]WaveItem, error) {
 	}
 	items := make([]WaveItem, 0, len(waves))
 	for _, wave := range waves {
-		item := WaveItem{ID: wave.ID, WaveNo: wave.WaveNo, Name: wave.Name, Status: wave.Status, UpdatedAt: wave.UpdatedAt}
+		item := WaveItem{ID: wave.ID, WaveNo: wave.WaveNo, Name: wave.Name, Status: wave.Status, LevelTags: wave.LevelTags, UpdatedAt: wave.UpdatedAt}
 		if err := db.Model(&model.DispatchRecord{}).Where("wave_id = ?", wave.ID).Select("COUNT(*) AS total_records, COALESCE(SUM(quantity), 0) AS total_quantity, COALESCE(SUM(CASE WHEN status = ? THEN 1 ELSE 0 END), 0) AS pending_address_records", model.DispatchStatusPendingAddress).Row().Scan(&item.TotalRecords, &item.TotalQuantity, &item.PendingAddressRecords); err != nil {
 			return nil, err
 		}
