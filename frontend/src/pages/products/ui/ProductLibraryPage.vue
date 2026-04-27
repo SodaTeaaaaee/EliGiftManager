@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ImageOutline, SearchOutline } from '@vicons/ionicons5'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { ChevronBackOutline, ChevronForwardOutline } from '@vicons/ionicons5'
 import { NButton, NCard, NDivider, NDrawer, NDrawerContent, NEmpty, NIcon, NInput, NPagination, NSelect, NTag, useMessage } from 'naive-ui'
 import { getProductImages, isWailsRuntimeAvailable, listProducts, WAILS_PREVIEW_MESSAGE, type ProductItem } from '@/shared/lib/wails/app'
@@ -22,11 +22,24 @@ const detailImages = ref<{ id: number; path: string; sortOrder: number; sourceDi
 const showDetail = ref(false)
 
 const mainImages = computed(() => detailImages.value.filter(img => img.sourceDir === '主图'))
-const detailOnlyImages = computed(() => detailImages.value.filter(img => img.sourceDir !== '主图'))
+const allImagesSorted = computed(() => {
+  const main = detailImages.value.filter(img => img.sourceDir === '主图').sort((a, b) => a.path.localeCompare(b.path))
+  const detail = detailImages.value.filter(img => img.sourceDir !== '主图').sort((a, b) => a.path.localeCompare(b.path))
+  return [...main, ...detail]
+})
 const mainIndex = ref(0)
 const currentMainImage = computed(() => mainImages.value[mainIndex.value] ?? null)
-function prevImage() { if (mainImages.value.length) mainIndex.value = (mainIndex.value - 1 + mainImages.value.length) % mainImages.value.length }
-function nextImage() { if (mainImages.value.length) mainIndex.value = (mainIndex.value + 1) % mainImages.value.length }
+let autoplayTimer: ReturnType<typeof setInterval> | null = null
+
+function startAutoplay() {
+  stopAutoplay()
+  if (mainImages.value.length <= 1) return
+  autoplayTimer = setInterval(() => nextImage(), 4000)
+}
+function stopAutoplay() { if (autoplayTimer) { clearInterval(autoplayTimer); autoplayTimer = null } }
+function prevImage() { if (mainImages.value.length) { mainIndex.value = (mainIndex.value - 1 + mainImages.value.length) % mainImages.value.length; startAutoplay() } }
+function nextImage() { if (mainImages.value.length) { mainIndex.value = (mainIndex.value + 1) % mainImages.value.length; startAutoplay() } }
+onUnmounted(stopAutoplay)
 
 const platformOptions = computed(() =>
   platformCatalog.value.map((value) => ({ label: value, value })),
@@ -81,6 +94,7 @@ async function openDetail(product: ProductItem) {
   mainIndex.value = 0
   try {
     detailImages.value = await getProductImages(product.id)
+    startAutoplay()
   } catch {
     detailImages.value = []
   }
@@ -88,6 +102,7 @@ async function openDetail(product: ProductItem) {
 
 function closeDetail() {
   showDetail.value = false
+  stopAutoplay()
   detailProduct.value = null
   detailImages.value = []
 }
@@ -182,7 +197,7 @@ onMounted(loadProducts)
           <div v-if="mainImages.length > 1" class="flex justify-center gap-1.5 mt-1">
             <span v-for="(img, i) in mainImages" :key="img.id" class="w-1.5 h-1.5 rounded-full cursor-pointer transition-colors" :class="i === mainIndex ? 'bg-gray-700 dark:bg-gray-300' : 'bg-gray-300 dark:bg-gray-600'" @click="mainIndex = i" />
           </div>
-          <NEmpty v-if="!mainImages.length && !detailOnlyImages.length" description="暂无商品图片" class="py-6" />
+          <NEmpty v-if="!detailImages.length" description="暂无商品图片" class="py-6" />
 
           <!-- 商品信息 -->
           <div class="mt-1 space-y-1">
@@ -195,10 +210,10 @@ onMounted(loadProducts)
           </div>
 
           <!-- 详情图片 -->
-          <template v-if="detailOnlyImages.length">
+          <template v-if="allImagesSorted.length">
             <NDivider>详情图片</NDivider>
             <div class="space-y-3">
-              <img v-for="img in detailOnlyImages" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
+              <img v-for="img in allImagesSorted" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
             </div>
           </template>
         </template>
