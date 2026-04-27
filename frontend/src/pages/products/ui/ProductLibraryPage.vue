@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ImageOutline, SearchOutline } from '@vicons/ionicons5'
 import { computed, onMounted, ref } from 'vue'
-import { NButton, NCard, NEmpty, NIcon, NInput, NModal, NPagination, NSelect, NTag, useMessage } from 'naive-ui'
-import { isWailsRuntimeAvailable, listProducts, updateProduct, WAILS_PREVIEW_MESSAGE, type ProductItem, type ProductUpdateInput } from '@/shared/lib/wails/app'
+import { NButton, NCard, NCarousel, NDivider, NDrawer, NDrawerContent, NEmpty, NIcon, NInput, NPagination, NSelect, NTag, useMessage } from 'naive-ui'
+import { getProductImages, isWailsRuntimeAvailable, listProducts, WAILS_PREVIEW_MESSAGE, type ProductItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const products = ref<ProductItem[]>([])
@@ -11,13 +11,14 @@ const platform = ref('')
 const page = ref(1)
 const pageSize = ref(12)
 const total = ref(0)
-const editing = ref<ProductItem | null>(null)
-const editCover = ref('')
-const editExtra = ref('{}')
 const isLoading = ref(false)
 const errorMessage = ref('')
 
 const platformCatalog = ref<string[]>([])
+
+const detailProduct = ref<ProductItem | null>(null)
+const detailImages = ref<{ id: number; path: string; sortOrder: number }[]>([])
+const showDetail = ref(false)
 
 const platformOptions = computed(() =>
   platformCatalog.value.map((value) => ({ label: value, value })),
@@ -66,42 +67,24 @@ function handlePageSizeChange(nextPageSize: number) {
   void loadProducts()
 }
 
-function openEdit(product: ProductItem) {
-  editing.value = product
-  editCover.value = product.coverImage
-  editExtra.value = product.extraData || '{}'
-}
-
-function closeEditor() {
-  editing.value = null
-}
-
-function handleEditorVisibility(show: boolean) {
-  if (!show) {
-    closeEditor()
-  }
-}
-
-async function saveEdit() {
-  if (!editing.value) return
-
+async function openDetail(product: ProductItem) {
+  detailProduct.value = product
+  showDetail.value = true
   try {
-    const product: ProductUpdateInput = {
-      id: editing.value.id,
-      platform: editing.value.platform,
-      factory: editing.value.factory,
-      factorySku: editing.value.factorySku,
-      name: editing.value.name,
-      coverImage: editCover.value,
-      extraData: editExtra.value,
-    }
-    await updateProduct(product)
-    message.success('礼物已更新')
-    closeEditor()
-    await loadProducts()
-  } catch (error) {
-    message.error(String(error))
+    detailImages.value = await getProductImages(product.id)
+  } catch {
+    detailImages.value = []
   }
+}
+
+function closeDetail() {
+  showDetail.value = false
+  detailProduct.value = null
+  detailImages.value = []
+}
+
+function handleDrawerVisibility(show: boolean) {
+  if (!show) closeDetail()
 }
 
 onMounted(loadProducts)
@@ -145,7 +128,7 @@ onMounted(loadProducts)
     <template v-else>
       <NEmpty v-if="!products.length" description="暂无礼物" />
       <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <NCard v-for="product in products" :key="product.id" size="small" hoverable>
+        <NCard v-for="product in products" :key="product.id" size="small" hoverable class="cursor-pointer" @click="openDetail(product)">
           <div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
             <img v-if="product.coverImage" :src="'/local-images/' + product.coverImage" class="h-full w-full object-cover" />
             <div v-else class="flex h-full items-center justify-center">
@@ -160,7 +143,6 @@ onMounted(loadProducts)
             <NTag size="small" round>{{ product.platform }}</NTag>
           </div>
           <p class="app-copy mt-2 line-clamp-2">{{ product.extraData }}</p>
-          <NButton class="mt-3" block secondary @click="openEdit(product)">编辑头图 / Extra</NButton>
         </NCard>
       </div>
 
@@ -178,12 +160,36 @@ onMounted(loadProducts)
       </div>
     </template>
 
-    <NModal :show="!!editing" preset="card" title="编辑礼物" style="max-width: 560px" @update:show="handleEditorVisibility">
-      <div class="space-y-3">
-        <NInput v-model:value="editCover" placeholder="头图 URL" />
-        <NInput v-model:value="editExtra" type="textarea" :autosize="{ minRows: 5 }" placeholder="ExtraData JSON" />
-        <NButton type="primary" block @click="saveEdit">保存</NButton>
-      </div>
-    </NModal>
+    <NDrawer :show="showDetail" :width="680" @update:show="handleDrawerVisibility">
+      <NDrawerContent title="商品详情" closable>
+        <template v-if="detailProduct">
+          <!-- 主图轮播 -->
+          <NCarousel v-if="detailImages.length" autoplay show-arrow>
+            <div v-for="img in detailImages" :key="img.id" class="flex items-center justify-center bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden" style="height: 360px">
+              <img :src="'/local-images/' + img.path" class="h-full w-full object-contain" />
+            </div>
+          </NCarousel>
+          <NEmpty v-else description="暂无商品图片" class="py-6" />
+
+          <!-- 商品信息 -->
+          <div class="mt-4 space-y-2">
+            <h2 class="text-xl font-semibold">{{ detailProduct.name }}</h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="app-copy">{{ detailProduct.factory }} / {{ detailProduct.factorySku }}</span>
+              <NTag size="small" round>{{ detailProduct.platform }}</NTag>
+            </div>
+            <p v-if="detailProduct.extraData && detailProduct.extraData !== '{}'" class="app-copy text-sm">{{ detailProduct.extraData }}</p>
+          </div>
+
+          <!-- 详情图片 -->
+          <template v-if="detailImages.length">
+            <NDivider>详情图片</NDivider>
+            <div class="space-y-3">
+              <img v-for="img in detailImages" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
+            </div>
+          </template>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
   </section>
 </template>

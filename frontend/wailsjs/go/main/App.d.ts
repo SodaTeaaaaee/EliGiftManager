@@ -29,6 +29,8 @@ export function ImportDispatchWave(arg1:number,arg2:string,arg3:number):Promise<
 
 export function ImportToWave(arg1:number,arg2:string,arg3:number):Promise<void>;
 
+export function ListDefaultTemplates():Promise<Array<main.TemplateItem>>;
+
 export function ListDispatchRecords(arg1:number):Promise<Array<main.DispatchRecordItem>>;
 
 export function ListMembers(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.MemberListPayload>;
@@ -42,8 +44,6 @@ export function ListProductsWithTags(arg1:number,arg2:string,arg3:number,arg4:nu
 export function ListTemplates():Promise<Array<main.TemplateItem>>;
 
 export function ListWaves(arg1:string):Promise<Array<main.WaveItem>>;
-
-export function ListDefaultTemplates():Promise<Array<main.TemplateItem>>;
 
 export function PickCSVFile():Promise<string>;
 

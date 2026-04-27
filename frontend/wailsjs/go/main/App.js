@@ -54,6 +54,10 @@ export function ImportToWave(arg1, arg2, arg3) {
   return window['go']['main']['App']['ImportToWave'](arg1, arg2, arg3);
 }
 
+export function ListDefaultTemplates() {
+  return window['go']['main']['App']['ListDefaultTemplates']();
+}
+
 export function ListDispatchRecords(arg1) {
   return window['go']['main']['App']['ListDispatchRecords'](arg1);
 }
@@ -80,10 +84,6 @@ export function ListTemplates() {
 
 export function ListWaves(arg1) {
   return window['go']['main']['App']['ListWaves'](arg1);
-}
-
-export function ListDefaultTemplates() {
-  return window['go']['main']['App']['ListDefaultTemplates']();
 }
 
 export function PickCSVFile() {

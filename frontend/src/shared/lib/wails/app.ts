@@ -9,6 +9,7 @@ import {
   DeleteWave as deleteWaveBinding,
   ExportOrderCSV as exportOrderCSVBinding,
   GetDashboard as getDashboardBinding,
+  GetProductImages as getProductImagesBinding,
   ImportDispatchWave as importDispatchWaveBinding,
   ImportToWave as importToWaveBinding,
   ListDefaultTemplates as listDefaultTemplatesBinding,
@@ -56,6 +57,10 @@ export function assignProductTag(productId: number, platform: string, tagName: s
 export function removeProductTag(productId: number, platform: string, tagName: string): Promise<void> { assertWailsRuntime(); return removeProductTagBinding(productId, platform, tagName) }
 export function listMembers(page = 1, pageSize = 50, keyword = '', platform = ''): Promise<main.MemberListPayload> { assertWailsRuntime(); return listMembersBinding(page, pageSize, keyword, platform) }
 export function listProducts(page = 1, pageSize = 50, keyword = '', platform = ''): Promise<main.ProductListPayload> { assertWailsRuntime(); return listProductsBinding(page, pageSize, keyword, platform) }
+export function getProductImages(productId: number): Promise<model.ProductImage[]> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve([])
+  return getProductImagesBinding(productId)
+}
 export function listDispatchRecords(waveId = 0): Promise<main.DispatchRecordItem[]> { assertWailsRuntime(); return listDispatchRecordsBinding(waveId) }
 export function createTemplate(platform: string, templateType: string, name: string, mappingRules: string): Promise<main.TemplateItem> { assertWailsRuntime(); return createTemplateBinding(platform, templateType, name, mappingRules) }
 export function listTemplates(): Promise<main.TemplateItem[]> { assertWailsRuntime(); return listTemplatesBinding() }
