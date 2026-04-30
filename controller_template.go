@@ -95,3 +95,37 @@ func (c *TemplateController) ListDefaultTemplates() ([]TemplateItem, error) {
 	}
 	return items, nil
 }
+
+func (c *TemplateController) UpdateTemplate(id uint, platform, templateType, name, mappingRules string) error {
+	platform = strings.TrimSpace(platform)
+	templateType = strings.TrimSpace(templateType)
+	name = strings.TrimSpace(name)
+	mappingRules = strings.TrimSpace(mappingRules)
+	if platform == "" || templateType == "" || name == "" {
+		return fmt.Errorf("platform, type and name are required")
+	}
+	if mappingRules == "" {
+		mappingRules = "{}"
+	}
+	var probe map[string]any
+	if err := json.Unmarshal([]byte(mappingRules), &probe); err != nil {
+		return fmt.Errorf("mapping rules must be valid JSON: %w", err)
+	}
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("database not available")
+	}
+	result := db.Model(&model.TemplateConfig{}).Where("id = ?", id).Updates(map[string]any{
+		"platform":      platform,
+		"type":          templateType,
+		"name":          name,
+		"mapping_rules": mappingRules,
+	})
+	if result.Error != nil {
+		return fmt.Errorf("update template failed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("template not found")
+	}
+	return nil
+}

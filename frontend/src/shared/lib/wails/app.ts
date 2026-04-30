@@ -42,6 +42,7 @@ import {
   CreateTemplate as createTemplateBinding,
   ListDefaultTemplates as listDefaultTemplatesBinding,
   ListTemplates as listTemplatesBinding,
+  UpdateTemplate as updateTemplateBinding,
 } from '../../../../wailsjs/go/main/TemplateController'
 import type { BootstrapPayload } from '@/shared/types/app'
 import { model } from '../../../../wailsjs/go/models'
@@ -81,6 +82,10 @@ export function listTemplates(): Promise<main.TemplateItem[]> { assertWailsRunti
 export function listDefaultTemplates(): Promise<main.TemplateItem[]> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve([])
   return listDefaultTemplatesBinding()
+}
+export function updateTemplate(id: number, platform: string, templateType: string, name: string, mappingRules: string): Promise<void> {
+  assertWailsRuntime()
+  return updateTemplateBinding(id, platform, templateType, name, mappingRules)
 }
 export function setDefaultAddress(memberId: number, addressId: number): Promise<void> { assertWailsRuntime(); return setDefaultAddressBinding(memberId, addressId) }
 export function addMemberAddress(memberId: number, recipientName: string, phone: string, address: string): Promise<model.MemberAddress> {

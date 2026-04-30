@@ -113,7 +113,7 @@ onMounted(async () => {
       <div class="p-3 border border-gray-100 dark:border-gray-700 rounded-lg">
         <span class="text-xs text-gray-500 block mb-3 font-medium">商品导入（工厂平台 {{ productFileExt }}）</span>
         <NFlex :wrap="false" class="mb-2">
-          <NButton size="small" secondary @click="handlePickProductFile">选择 {{ productFileExt }}</NButton>
+          <NButton v-if="productTemplateId" size="small" secondary @click="handlePickProductFile">选择 {{ productFileExt }}</NButton>
           <span class="text-xs text-gray-400 self-center truncate max-w-[200px]">{{ productCsvPath || '未选择文件' }}</span>
         </NFlex>
         <NSelect v-model:value="productTemplateId" :options="productTemplates" placeholder="选择商品导入模板" class="mb-2" />
@@ -122,7 +122,7 @@ onMounted(async () => {
       <div class="p-3 border border-gray-100 dark:border-gray-700 rounded-lg">
         <span class="text-xs text-gray-500 block mb-3 font-medium">发货数据导入（会员来源 CSV）</span>
         <NFlex :wrap="false" class="mb-2">
-          <NButton size="small" secondary @click="handlePickCSV">选择 CSV</NButton>
+          <NButton v-if="importTemplateId" size="small" secondary @click="handlePickCSV">选择 CSV</NButton>
           <span class="text-xs text-gray-400 self-center truncate max-w-[200px]">{{ csvPath || '未选择文件' }}</span>
         </NFlex>
         <NSelect v-model:value="importTemplateId" :options="dispatchTemplates" placeholder="选择发货导入模板" class="mb-2" />

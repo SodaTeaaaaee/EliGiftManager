@@ -13,3 +13,7 @@ export function ListDefaultTemplates() {
 export function ListTemplates() {
   return window['go']['main']['TemplateController']['ListTemplates']();
 }
+
+export function UpdateTemplate(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['TemplateController']['UpdateTemplate'](arg1, arg2, arg3, arg4, arg5);
+}
