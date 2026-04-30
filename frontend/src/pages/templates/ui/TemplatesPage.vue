@@ -57,10 +57,78 @@ onMounted(async () => { await loadTemplates(); await loadDefaultTemplates() })
 </script>
 <template>
   <section class="space-y-5">
-    <header class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between"><div><p class="app-kicker">Templates</p><h1 class="app-title mt-2">模板设置</h1><p class="app-copy mt-2">模板必须绑定平台；匹配规则模板用于建立“外部业务字段 -> 内部产品 ID”。</p></div><NButton type="primary" @click="openCreateModal"><template #icon><NIcon><AddOutline /></NIcon></template>新建模板</NButton></header>
+    <header class="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+      <div>
+        <p class="app-kicker">Templates</p>
+        <h1 class="app-title mt-2">模板设置</h1>
+        <p class="app-copy mt-2">模板必须绑定平台；匹配规则模板用于建立“外部业务字段 -> 内部产品 ID”。</p>
+      </div>
+      <NButton type="primary" @click="openCreateModal"><template #icon>
+          <NIcon>
+            <AddOutline />
+          </NIcon>
+        </template>新建模板
+      </NButton>
+    </header>
     <NEmpty v-if="errorMessage" :description="errorMessage" />
-    <NCard v-else size="medium"><NTabs v-model:value="activePlatform" type="segment"><NTabPane v-for="platform in platforms" :key="platform" :name="platform" :tab="platform === 'all' ? '全部平台' : platform"><div class="grid gap-4 xl:grid-cols-[1fr_0.9fr]"><NDataTable :columns="columns" :data="filteredTemplates" :bordered="false" :scroll-x="900" :pagination="{ pageSize: 10 }" /><NCard embedded title="匹配规则模板" size="small"><div v-if="allocationTemplates.length" class="space-y-3"><div v-for="template in allocationTemplates" :key="template.id" class="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div class="flex items-center justify-between"><strong>{{ template.name }}</strong><NTag size="small" type="info" round>{{ template.platform }}</NTag></div><NInput class="mt-3" type="textarea" readonly :value="template.mappingRules" :autosize="{ minRows: 5 }" /></div></div><NEmpty v-else description="当前平台暂无匹配规则模板" /></NCard></div></NTabPane></NTabs></NCard>
-    <NModal v-model:show="showCreateModal" preset="card" title="新建模板" style="max-width: 620px"><NForm label-placement="top"><NFormItem label="创建方式"><NRadioGroup v-model:value="createMode"><NRadio value="preset">从预设添加</NRadio><NRadio value="custom">自定义</NRadio></NRadioGroup></NFormItem><template v-if="createMode === 'preset'"><NFormItem label="选择预设模板"><NSelect v-model:value="presetIndex" :options="presetOptions" placeholder="选择预设模板" /></NFormItem><NFormItem v-if="selectedPreset" label="模板预览"><NCard size="small"><pre class="text-xs whitespace-pre-wrap">{{ JSON.stringify(JSON.parse(selectedPreset.mappingRules), null, 2) }}</pre></NCard></NFormItem></template><template v-else><NFormItem label="平台"><NInput v-model:value="form.platform" placeholder="例如：抖音 / 快手" /></NFormItem><NFormItem label="模板类型"><NSelect v-model:value="form.type" :options="typeOptions" /></NFormItem><NFormItem label="模板名称"><NInput v-model:value="form.name" placeholder="输入模板名称" /></NFormItem><NFormItem label="映射规则 JSON"><NInput v-model:value="form.mappingRules" type="textarea" :autosize="{ minRows: 8 }" placeholder='例如：{"platform_uid":"用户ID"}' /></NFormItem></template><NButton type="primary" block :loading="isSaving" @click="handleCreateTemplate">创建模板</NButton></NForm></NModal>
+    <NCard v-else size="medium">
+      <NTabs v-model:value="activePlatform" type="segment">
+        <NTabPane v-for="platform in platforms" :key="platform" :name="platform"
+          :tab="platform === 'all' ? '全部平台' : platform">
+          <div class="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+            <NDataTable :columns="columns" :data="filteredTemplates" :bordered="false" :scroll-x="900"
+              :pagination="{ pageSize: 10 }" />
+            <NCard embedded title="匹配规则模板" size="small">
+              <div v-if="allocationTemplates.length" class="space-y-3">
+                <div v-for="template in allocationTemplates" :key="template.id"
+                  class="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <div class="flex items-center justify-between"><strong>{{ template.name }}</strong>
+                    <NTag size="small" type="info" round>{{ template.platform }}</NTag>
+                  </div>
+                  <NInput class="mt-3" type="textarea" readonly :value="template.mappingRules"
+                    :autosize="{ minRows: 5 }" />
+                </div>
+              </div>
+              <NEmpty v-else description="当前平台暂无匹配规则模板" />
+            </NCard>
+          </div>
+        </NTabPane>
+      </NTabs>
+    </NCard>
+    <NModal v-model:show="showCreateModal" preset="card" title="新建模板" style="max-width: 620px">
+      <NForm label-placement="top">
+        <NFormItem label="创建方式">
+          <NRadioGroup v-model:value="createMode">
+            <NRadio value="preset">从预设添加</NRadio>
+            <NRadio value="custom">自定义</NRadio>
+          </NRadioGroup>
+        </NFormItem><template v-if="createMode === 'preset'">
+          <NFormItem label="选择预设模板">
+            <NSelect v-model:value="presetIndex" :options="presetOptions" placeholder="选择预设模板" />
+          </NFormItem>
+          <NFormItem v-if="selectedPreset" label="模板预览">
+            <NCard size="small">
+              <pre
+                class="text-xs whitespace-pre-wrap">{{ JSON.stringify(JSON.parse(selectedPreset.mappingRules), null, 2) }}</pre>
+            </NCard>
+          </NFormItem>
+        </template><template v-else>
+          <NFormItem label="平台">
+            <NInput v-model:value="form.platform" placeholder="例如：抖音 / 快手" />
+          </NFormItem>
+          <NFormItem label="模板类型">
+            <NSelect v-model:value="form.type" :options="typeOptions" />
+          </NFormItem>
+          <NFormItem label="模板名称">
+            <NInput v-model:value="form.name" placeholder="输入模板名称" />
+          </NFormItem>
+          <NFormItem label="映射规则 JSON">
+            <NInput v-model:value="form.mappingRules" type="textarea" :autosize="{ minRows: 8 }"
+              placeholder='例如：{"platform_uid":"用户ID"}' />
+          </NFormItem>
+        </template>
+        <NButton type="primary" block :loading="isSaving" @click="handleCreateTemplate">创建模板</NButton>
+      </NForm>
+    </NModal>
   </section>
 </template>
-

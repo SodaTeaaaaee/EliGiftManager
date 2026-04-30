@@ -141,10 +141,13 @@ onMounted(loadProducts)
       <div class="flex flex-col gap-3 md:flex-row">
         <NInput v-model:value="keyword" clearable placeholder="搜索名称 / SKU / 工厂" @keyup.enter="searchProducts">
           <template #prefix>
-            <NIcon><SearchOutline /></NIcon>
+            <NIcon>
+              <SearchOutline />
+            </NIcon>
           </template>
         </NInput>
-        <NSelect v-model:value="platform" clearable :options="platformOptions" placeholder="平台筛选" style="max-width: 180px" @update:value="searchProducts" />
+        <NSelect v-model:value="platform" clearable :options="platformOptions" placeholder="平台筛选"
+          style="max-width: 180px" @update:value="searchProducts" />
         <NButton type="primary" @click="searchProducts">搜索</NButton>
       </div>
     </NCard>
@@ -153,11 +156,15 @@ onMounted(loadProducts)
     <template v-else>
       <NEmpty v-if="!products.length" description="暂无礼物" />
       <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <NCard v-for="product in products" :key="product.id" size="small" hoverable class="cursor-pointer" @click="openDetail(product)">
+        <NCard v-for="product in products" :key="product.id" size="small" hoverable class="cursor-pointer"
+          @click="openDetail(product)">
           <div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
-            <img v-if="product.coverImage" :src="'/local-images/' + product.coverImage" class="h-full w-full object-cover" />
+            <img v-if="product.coverImage" :src="'/local-images/' + product.coverImage"
+              class="h-full w-full object-cover" />
             <div v-else class="flex h-full items-center justify-center">
-              <NIcon size="42" depth="3"><ImageOutline /></NIcon>
+              <NIcon size="42" depth="3">
+                <ImageOutline />
+              </NIcon>
             </div>
           </div>
           <div class="mt-3 flex items-start justify-between gap-3">
@@ -173,15 +180,8 @@ onMounted(loadProducts)
 
       <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <p class="app-copy">共 {{ total }} 条记录</p>
-        <NPagination
-          :page="page"
-          :page-size="pageSize"
-          :item-count="total"
-          :page-sizes="[12, 24, 48]"
-          show-size-picker
-          @update:page="handlePageChange"
-          @update:page-size="handlePageSizeChange"
-        />
+        <NPagination :page="page" :page-size="pageSize" :item-count="total" :page-sizes="[12, 24, 48]" show-size-picker
+          @update:page="handlePageChange" @update:page-size="handlePageSizeChange" />
       </div>
     </template>
 
@@ -191,12 +191,25 @@ onMounted(loadProducts)
           <!-- 主图轮播 -->
           <!-- 主图区域 — 内容驱动高度，自适应 -->
           <div v-if="mainImages.length" class="bg-black/5 rounded overflow-hidden">
-            <img v-if="currentMainImage" :src="'/local-images/' + currentMainImage.path" class="w-full block" style="max-height: 60vh; object-fit: contain;" />
+            <img v-if="currentMainImage" :src="'/local-images/' + currentMainImage.path" class="w-full block"
+              style="max-height: 60vh; object-fit: contain;" />
           </div>
           <div v-if="mainImages.length > 1" class="flex items-center justify-center gap-2 mt-1">
-            <NButton size="tiny" circle quaternary @click="prevImage"><template #icon><NIcon><ChevronBackOutline /></NIcon></template></NButton>
-            <span v-for="(img, i) in mainImages" :key="img.id" class="w-1.5 h-1.5 rounded-full cursor-pointer transition-colors" :class="i === mainIndex ? 'bg-gray-700 dark:bg-gray-300' : 'bg-gray-300 dark:bg-gray-600'" @click="mainIndex = i" />
-            <NButton size="tiny" circle quaternary @click="nextImage"><template #icon><NIcon><ChevronForwardOutline /></NIcon></template></NButton>
+            <NButton size="tiny" circle quaternary @click="prevImage"><template #icon>
+                <NIcon>
+                  <ChevronBackOutline />
+                </NIcon>
+              </template>
+            </NButton>
+            <span v-for="(img, i) in mainImages" :key="img.id"
+              class="w-1.5 h-1.5 rounded-full cursor-pointer transition-colors"
+              :class="i === mainIndex ? 'bg-gray-700 dark:bg-gray-300' : 'bg-gray-300 dark:bg-gray-600'"
+              @click="mainIndex = i" />
+            <NButton size="tiny" circle quaternary @click="nextImage"><template #icon>
+                <NIcon>
+                  <ChevronForwardOutline />
+                </NIcon>
+              </template></NButton>
           </div>
           <NEmpty v-if="!detailImages.length" description="暂无商品图片" class="py-6" />
 
@@ -207,14 +220,16 @@ onMounted(loadProducts)
               <span class="app-copy">{{ detailProduct.factory }} / {{ detailProduct.factorySku }}</span>
               <NTag size="small" round>{{ detailProduct.platform }}</NTag>
             </div>
-            <p v-if="detailProduct.extraData && detailProduct.extraData !== '{}'" class="app-copy text-sm">{{ detailProduct.extraData }}</p>
+            <p v-if="detailProduct.extraData && detailProduct.extraData !== '{}'" class="app-copy text-sm">{{
+              detailProduct.extraData }}</p>
           </div>
 
           <!-- 详情图片 -->
           <template v-if="allImagesSorted.length">
             <NDivider>详情图片</NDivider>
             <div class="space-y-3">
-              <img v-for="img in allImagesSorted" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
+              <img v-for="img in allImagesSorted" :key="img.id" :src="'/local-images/' + img.path"
+                class="w-full rounded-lg object-contain" />
             </div>
           </template>
         </template>

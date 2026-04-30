@@ -111,7 +111,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		levelTagMap[key] = struct{}{}
 	}
 
-	// Transaction: member upsert + nickname maintenance.
+	// Transaction: member upsert + wave-member association + nickname maintenance.
 	// DispatchRecord creation is deferred to AllocateByTags.
 	importedCount := 0
 	err = db.Transaction(func(tx *gorm.DB) error {
@@ -128,6 +128,12 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 				DoUpdates: clause.AssignmentColumns([]string{"extra_data", "updated_at"}),
 			}).Create(&member).Error; upsertErr != nil {
 				return fmt.Errorf("upsert member failed for platform_uid=%q: %w", row.platformUid, upsertErr)
+			}
+
+			// Record wave-member association (幂等)
+			if wmErr := tx.Where("wave_id = ? AND member_id = ?", waveID, member.ID).
+				FirstOrCreate(&model.WaveMember{WaveID: waveID, MemberID: member.ID}).Error; wmErr != nil {
+				return fmt.Errorf("record wave-member association failed: %w", wmErr)
 			}
 
 			if strings.TrimSpace(row.nickname) != "" {

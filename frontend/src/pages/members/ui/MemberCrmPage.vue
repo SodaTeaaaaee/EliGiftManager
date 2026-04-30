@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { AddOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5'
 import { SearchOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, ref } from 'vue'
 import {
@@ -9,8 +10,11 @@ import {
   NDrawer,
   NDrawerContent,
   NEmpty,
+  NForm,
+  NFormItem,
   NIcon,
   NInput,
+  NModal,
   NPagination,
   NSelect,
   NTag,
@@ -19,7 +23,8 @@ import {
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
-import { isWailsRuntimeAvailable, listMembers, setDefaultAddress, WAILS_PREVIEW_MESSAGE, type MemberItem } from '@/shared/lib/wails/app'
+import { addMemberAddress, deleteMemberAddress, isWailsRuntimeAvailable, listMembers, setDefaultAddress, updateMemberAddress, WAILS_PREVIEW_MESSAGE, type MemberItem } from '@/shared/lib/wails/app'
+import type { model } from '../../../../wailsjs/go/models'
 
 const message = useMessage()
 const members = ref<MemberItem[]>([])
@@ -31,6 +36,10 @@ const total = ref(0)
 const selectedMember = ref<MemberItem | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
+const showAddressModal = ref(false)
+const editingAddress = ref<model.MemberAddress | null>(null)
+const addressForm = ref({ recipientName: '', phone: '', address: '' })
+const isSavingAddress = ref(false)
 
 const platformCatalog = ref<string[]>([])
 
@@ -149,6 +158,52 @@ async function handleDefault(addressId: number) {
   }
 }
 
+function openAddAddress() {
+  editingAddress.value = null
+  addressForm.value = { recipientName: '', phone: '', address: '' }
+  showAddressModal.value = true
+}
+
+function openEditAddress(addr: model.MemberAddress) {
+  editingAddress.value = addr
+  addressForm.value = { recipientName: addr.recipientName, phone: addr.phone, address: addr.address }
+  showAddressModal.value = true
+}
+
+async function saveAddress() {
+  if (!selectedMember.value) return
+  isSavingAddress.value = true
+  try {
+    if (editingAddress.value) {
+      await updateMemberAddress(editingAddress.value.id, addressForm.value.recipientName, addressForm.value.phone, addressForm.value.address)
+      message.success('地址已更新')
+    } else {
+      await addMemberAddress(selectedMember.value.id, addressForm.value.recipientName, addressForm.value.phone, addressForm.value.address)
+      message.success('地址已添加')
+    }
+    showAddressModal.value = false
+    await loadMembers()
+    selectedMember.value = members.value.find((m) => m.id === selectedMember.value!.id) ?? null
+  } catch (error) {
+    message.error(String(error))
+  } finally {
+    isSavingAddress.value = false
+  }
+}
+
+async function handleDeleteAddress(addressId: number) {
+  try {
+    await deleteMemberAddress(addressId)
+    message.success('地址已删除')
+    await loadMembers()
+    if (selectedMember.value) {
+      selectedMember.value = members.value.find((m) => m.id === selectedMember.value!.id) ?? null
+    }
+  } catch (error) {
+    message.error(String(error))
+  }
+}
+
 onMounted(loadMembers)
 </script>
 
@@ -221,7 +276,13 @@ onMounted(loadMembers)
       <NDrawerContent :title="selectedMember?.latestNickname || selectedMember?.platformUid" closable>
         <div class="space-y-5">
           <NCard title="历史地址" size="small">
-            <div v-if="selectedMember?.addresses?.length" class="space-y-3">
+            <template #header-extra>
+              <NButton size="small" type="primary" @click="openAddAddress">
+                <template #icon><NIcon><AddOutline /></NIcon></template>
+                添加地址
+              </NButton>
+            </template>
+            <div v-if="selectedMember?.addresses?.filter((item) => !item.isDeleted).length" class="space-y-3">
               <div
                 v-for="address in selectedMember.addresses.filter((item) => !item.isDeleted)"
                 :key="address.id"
@@ -233,9 +294,19 @@ onMounted(loadMembers)
                 </div>
                 <p class="app-copy mt-1">{{ address.phone }}</p>
                 <p class="app-copy mt-1">{{ address.address }}</p>
-                <NButton v-if="!address.isDefault" class="mt-2" size="small" secondary @click="handleDefault(address.id)">
-                  设为默认
-                </NButton>
+                <div class="mt-2 flex gap-2">
+                  <NButton v-if="!address.isDefault" size="small" secondary @click="handleDefault(address.id)">
+                    设为默认
+                  </NButton>
+                  <NButton size="small" secondary @click="openEditAddress(address)">
+                    <template #icon><NIcon><CreateOutline /></NIcon></template>
+                    编辑
+                  </NButton>
+                  <NButton size="small" secondary type="error" @click="handleDeleteAddress(address.id)">
+                    <template #icon><NIcon><TrashOutline /></NIcon></template>
+                    删除
+                  </NButton>
+                </div>
               </div>
             </div>
             <NEmpty v-else description="暂无地址" />
@@ -255,5 +326,22 @@ onMounted(loadMembers)
         </div>
       </NDrawerContent>
     </NDrawer>
+
+    <NModal v-model:show="showAddressModal" preset="card" :title="editingAddress ? '编辑地址' : '添加地址'" style="max-width: 480px">
+      <NForm label-placement="top">
+        <NFormItem label="收件人" required>
+          <NInput v-model:value="addressForm.recipientName" placeholder="收件人姓名" />
+        </NFormItem>
+        <NFormItem label="手机号" required>
+          <NInput v-model:value="addressForm.phone" placeholder="手机号码" />
+        </NFormItem>
+        <NFormItem label="地址" required>
+          <NInput v-model:value="addressForm.address" type="textarea" placeholder="详细地址" />
+        </NFormItem>
+        <NButton type="primary" block :loading="isSavingAddress" @click="saveAddress">
+          {{ editingAddress ? '保存修改' : '添加地址' }}
+        </NButton>
+      </NForm>
+    </NModal>
   </section>
 </template>

@@ -330,9 +330,9 @@ func queryProductDispatchAggregates(db *gorm.DB, products []model.Product) (map[
 		return map[uint]productDispatchAggregate{}, nil
 	}
 	type productDispatchAggregateRow struct {
-		ProductID      uint
-		DispatchCount  int64
-		TotalQuantity  int64
+		ProductID     uint
+		DispatchCount int64
+		TotalQuantity int64
 	}
 	var rows []productDispatchAggregateRow
 	if err := db.Model(&model.DispatchRecord{}).

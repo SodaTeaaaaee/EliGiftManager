@@ -26,19 +26,43 @@ onMounted(loadSettings)
 </script>
 <template>
   <section class="space-y-5">
-    <header><p class="app-kicker">Settings</p><h1 class="app-title mt-2">系统设置</h1><p class="app-copy mt-2">管理界面主题、SQLite 数据文件和运行时信息。</p></header>
+    <header>
+      <p class="app-kicker">Settings</p>
+      <h1 class="app-title mt-2">系统设置</h1>
+      <p class="app-copy mt-2">管理界面主题、SQLite 数据文件和运行时信息。</p>
+    </header>
     <NAlert v-if="errorMessage" type="warning" :show-icon="false">{{ errorMessage }}</NAlert>
     <div class="grid gap-4 xl:grid-cols-2">
       <NCard title="界面主题" size="medium">
         <p class="app-copy mb-3">选择浅色、深色，或跟随操作系统。</p>
         <NRadioGroup :value="themeStore.preference" @update:value="handleThemeChange">
-          <NRadioButton v-for="option in themePreferenceOptions" :key="option.value" :value="option.value">{{ option.label }}</NRadioButton>
+          <NRadioButton v-for="option in themePreferenceOptions" :key="option.value" :value="option.value">{{
+            option.label }}</NRadioButton>
         </NRadioGroup>
       </NCard>
-      <NCard title="数据库状态" size="medium"><p class="app-copy">{{ dbStatus }}</p><p class="app-copy mt-3 break-all">{{ dashboard?.databasePath ?? '等待连接' }}</p></NCard>
+      <NCard title="数据库状态" size="medium">
+        <p class="app-copy">{{ dbStatus }}</p>
+        <p class="app-copy mt-3 break-all">{{ dashboard?.databasePath ?? '等待连接' }}</p>
+      </NCard>
       <NCard title="数据安全" size="medium" class="xl:col-span-2">
-        <div class="grid gap-3 md:grid-cols-2"><NButton size="large" type="primary" @click="handleBackup"><template #icon><NIcon><CloudDownloadOutline /></NIcon></template>导出数据备份 (.db)</NButton><NButton size="large" type="error" ghost @click="handleRestore"><template #icon><NIcon><CloudUploadOutline /></NIcon></template>从备份恢复数据</NButton></div>
-        <NAlert class="mt-4" type="warning" :show-icon="false"><span class="inline-flex items-center gap-2"><NIcon><AlertCircleOutline /></NIcon>恢复前会自动生成带时间戳的防灾副本。</span></NAlert>
+        <div class="grid gap-3 md:grid-cols-2">
+          <NButton size="large" type="primary" @click="handleBackup"><template #icon>
+              <NIcon>
+                <CloudDownloadOutline />
+              </NIcon>
+            </template>导出数据备份
+            (.db)</NButton>
+          <NButton size="large" type="error" ghost @click="handleRestore"><template #icon>
+              <NIcon>
+                <CloudUploadOutline />
+              </NIcon>
+            </template>从备份恢复数据</NButton>
+        </div>
+        <NAlert class="mt-4" type="warning" :show-icon="false"><span class="inline-flex items-center gap-2">
+            <NIcon>
+              <AlertCircleOutline />
+            </NIcon>恢复前会自动生成带时间戳的防灾副本。
+          </span></NAlert>
       </NCard>
     </div>
   </section>

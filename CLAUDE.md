@@ -28,22 +28,21 @@ cd frontend && deno task preview      # preview production build
 
 ### Directory Map
 
-| Path | Purpose |
-|------|---------|
-| `main.go` | Wails bootstrap, DB singleton init, controller binding |
-| `app.go` | Lifecycle hooks (startup) + PickCSVFile/PickZIPFile + shared types/functions |
-| `controller_*.go` | Domain-specific Wails bound methods (Member/Product/Wave/System/Template) |
-| `internal/config/` | App metadata, window sizing |
-| `internal/controller/` | *(deprecated — controllers now live at project root as package main)* |
-| `internal/db/` | SQLite init (WAL mode), auto-migration, DB singleton |
-| `internal/middleware/` | Wails AssetServer middleware for `/local-images/` |
-| `internal/model/` | DB tables (GORM), enums, payload types |
-| `internal/service/` | Business logic: CSV transformers, import pipeline, image storage, path resolution |
-| `frontend/src/app/` | App shell, layout, router |
-| `frontend/src/pages/` | Route-level screens |
-| `frontend/src/shared/` | Reusable UI, types, Wails wrappers |
+| Path                                   | Purpose                                                                             |
+| -------------------------------------- | ----------------------------------------------------------------------------------- |
+| `main.go`                              | Wails bootstrap, DB singleton init, controller binding                              |
+| `app.go`                               | Lifecycle hooks (startup) + PickCSVFile/PickZIPFile + shared types/functions        |
+| `controller_*.go`                      | Domain-specific Wails bound methods (Member/Product/Wave/System/Template)           |
+| `internal/config/`                     | App metadata, window sizing                                                         |
+| `internal/db/`                         | SQLite init (WAL mode), auto-migration, DB singleton                                |
+| `internal/middleware/`                 | Wails AssetServer middleware for `/local-images/`                                   |
+| `internal/model/`                      | DB tables (GORM), enums, payload types                                              |
+| `internal/service/`                    | Business logic: CSV transformers, import pipeline, image storage, path resolution   |
+| `frontend/src/app/`                    | App shell, layout, router                                                           |
+| `frontend/src/pages/`                  | Route-level screens                                                                 |
+| `frontend/src/shared/`                 | Reusable UI, types, Wails wrappers                                                  |
 | `frontend/src/shared/lib/wails/app.ts` | **Single entry point for all Wails bridge calls** (imports from 6 controller files) |
-| `frontend/wailsjs/` | Generated Wails bindings (committed) |
+| `frontend/wailsjs/`                    | Generated Wails bindings (committed)                                                |
 
 ## Key Conventions
 
@@ -61,3 +60,63 @@ cd frontend && deno task preview      # preview production build
 - **Go**: standard `gofmt`
 - **Frontend**: TypeScript + Vue 3 `<script setup lang="ts">`, 2-space indent, LF line endings
 - **`.editorconfig`** and **`.gitattributes`** enforce line endings and whitespace
+
+## Codex Integration
+
+Codex (GPT-5.5, 1M context) is wired in as an extension — NOT a replacement for the sub-agent team.
+
+### Core constraints
+
+1. **Verify everything**: GPT-5.X has weak attention over long contexts. Every Codex output — analysis, suggestion, code — must be independently verified before acting on it. Do NOT trust a Codex claim just because it sounds plausible.
+2. **Exhaustive prompts, zero guesswork**: Codex excels at detailed, sharply-bounded instructions. When writing prompts: spell out all requirements, constraints, file paths, and expected outputs explicitly. Leave nothing for it to infer. Ambiguity is where its attention drifts.
+3. **No PR contribution**: This repo is not contributed to upstream projects. Codex is for internal quality and decision support only.
+
+### Model selection
+
+Codex offers two models — choose per task. Manual override always available.
+
+| Model       | Strengths                           | Weaknesses                                  | Cost |
+| ----------- | ----------------------------------- | ------------------------------------------- | ---- |
+| **GPT-5.5** | Strongest reasoning, deep analysis  | Attention decays severely with long context | Full |
+| **GPT-5.4** | Slightly better attention retention | Weaker reasoning than 5.5                   | Half |
+
+**Default strategy (no override):**
+
+| Scenario                           | Model   | Rationale                                                   |
+| ---------------------------------- | ------- | ----------------------------------------------------------- |
+| Rescue after 2 failures            | GPT-5.5 | Cost of wrong answer too high; needs best reasoning         |
+| Devil's advocate / design critique | GPT-5.4 | Output is verified anyway; 5.4's thoroughness is sufficient |
+| Refactoring audit (3–10 files)     | GPT-5.4 | Broader scope, moderate stakes — 5.4's attention wins       |
+| Broad design review (multi-module) | GPT-5.4 | Context breadth > reasoning depth; 5.5 would drift          |
+| Quick sanity check                 | GPT-5.4 | Low stakes, half cost                                       |
+
+**Override:** Manual override always available. Upgrade devil's advocate to 5.5 for high-stakes irreversible decisions (architecture overhaul, data migration, breaking API changes).
+
+### Rescue on repeated failures
+
+Same bug/error after 2 consecutive fix attempts → STOP. Do NOT attempt a 3rd fix. Call `codex:rescue` for independent diagnosis.
+
+### Devil's advocate on design decisions
+
+During `/work` plan phase, after the main architecture direction is drafted:
+
+- Call `codex:rescue` with the design summary and ask for a structured critique: what breaks, what doesn't scale, what edge cases were missed.
+- Treat the critique as a checklist of risks to evaluate, NOT as a voted decision. Each point must be verified against the actual codebase.
+- Weight: Codex's signal is "what to double-check", not "what to do".
+
+### Refactoring verification
+
+After a significant refactor (3+ files touched or architectural change):
+
+- Call `codex:rescue` with the diff summary + the refactor's stated goal.
+- Ask: "Did the refactor achieve its goal? Did it introduce any inconsistency with the surrounding codebase?"
+- Cross-check every inconsistency flag against the code yourself. Codex may flag false positives due to missing context.
+
+### Task decomposition for Codex
+
+GPT-5.5 has strong reasoning but weak attention over long contexts. When assigning work to Codex:
+
+- Break tasks into small, well-scoped pieces — single responsibilities with clear boundaries
+- Keep each assignment short enough to complete in one pass without drifting
+- Do NOT hand Codex large monolithic tasks; the attention window won't hold
+- Codex is an extension of the workflow, not a substitute — main work still goes through the sub-agent team

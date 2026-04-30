@@ -3,8 +3,12 @@ import {
   PickZIPFile as pickZIPFileBinding,
 } from '../../../../wailsjs/go/main/App'
 import {
+  AddMemberAddress as addMemberAddressBinding,
+  DeleteMemberAddress as deleteMemberAddressBinding,
   ListMembers as listMembersBinding,
+  ListWaveMembers as listWaveMembersBinding,
   SetDefaultAddress as setDefaultAddressBinding,
+  UpdateMemberAddress as updateMemberAddressBinding,
 } from '../../../../wailsjs/go/main/MemberController'
 import {
   AssignProductTag as assignProductTagBinding,
@@ -79,6 +83,19 @@ export function listDefaultTemplates(): Promise<main.TemplateItem[]> {
   return listDefaultTemplatesBinding()
 }
 export function setDefaultAddress(memberId: number, addressId: number): Promise<void> { assertWailsRuntime(); return setDefaultAddressBinding(memberId, addressId) }
+export function addMemberAddress(memberId: number, recipientName: string, phone: string, address: string): Promise<model.MemberAddress> {
+  assertWailsRuntime()
+  return addMemberAddressBinding(memberId, recipientName, phone, address)
+}
+export function updateMemberAddress(addressId: number, recipientName: string, phone: string, address: string): Promise<void> {
+  assertWailsRuntime()
+  return updateMemberAddressBinding(addressId, recipientName, phone, address)
+}
+export function deleteMemberAddress(addressId: number): Promise<void> { assertWailsRuntime(); return deleteMemberAddressBinding(addressId) }
+export function listWaveMembers(waveId: number): Promise<MemberItem[]> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve([])
+  return listWaveMembersBinding(waveId)
+}
 export type ProductUpdateInput = {
   id: number
   platform: string

@@ -4,11 +4,11 @@
 
 ## 技术栈
 
-| 层 | 技术 |
-|---|---|
-| 后端 | Go 1.26 + Wails v2.12 + GORM + SQLite (WAL) |
+| 层   | 技术                                                    |
+| ---- | ------------------------------------------------------- |
+| 后端 | Go 1.26 + Wails v2.12 + GORM + SQLite (WAL)             |
 | 前端 | Vue 3.5 + TypeScript + Vite 8 + Naive UI + Tailwind CSS |
-| 工具 | Deno 2.7 (前端), Go modules (后端) |
+| 工具 | Deno 2.7 (前端), Go modules (后端)                      |
 
 ## 快速开始
 

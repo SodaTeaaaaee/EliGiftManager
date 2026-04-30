@@ -6,12 +6,7 @@ import Sidebar from '@/shared/ui/Sidebar.vue'
 
 <template>
   <NLayout has-sider class="app-viewport">
-    <NLayoutSider
-      bordered
-      :width="220"
-      content-style="padding: 16px 12px;"
-      style="background: var(--surface-strong)"
-    >
+    <NLayoutSider bordered :width="220" content-style="padding: 16px 12px;" style="background: var(--surface-strong)">
       <Sidebar />
     </NLayoutSider>
 

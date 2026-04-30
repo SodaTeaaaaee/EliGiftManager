@@ -75,6 +75,7 @@ func autoMigrateTables(db *gorm.DB) error {
 		&model.Wave{},
 		&model.DispatchRecord{},
 		&model.TemplateConfig{},
+		&model.WaveMember{},
 	); err != nil {
 		return fmt.Errorf("auto migrate database tables failed: %w", err)
 	}

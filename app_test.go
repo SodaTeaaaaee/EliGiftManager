@@ -17,6 +17,11 @@ func TestBuildMemberItemsAggregatesDispatchCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to initialize test database: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	memberWithDispatches := model.Member{Platform: "douyin", PlatformUID: "uid-1", ExtraData: "{}"}
 	memberWithoutDispatches := model.Member{Platform: "kuaishou", PlatformUID: "uid-2", ExtraData: "{}"}
@@ -102,6 +107,11 @@ func TestBuildProductItemsAggregatesDispatchStats(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to initialize test database: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	member := model.Member{Platform: "douyin", PlatformUID: "uid-1", ExtraData: "{}"}
 	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "wave-a", Status: "draft"}
@@ -162,9 +172,15 @@ func TestValidateDatabaseFile(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "app-test.db")
-	if _, err := database.InitDB(dbPath); err != nil {
+	db, err := database.InitDB(dbPath)
+	if err != nil {
 		t.Fatalf("failed to initialize test database: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("failed to get underlying sql db: %v", err)
+	}
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	if err := validateDatabaseFile(dbPath); err != nil {
 		t.Fatalf("validateDatabaseFile returned unexpected error: %v", err)
 	}
