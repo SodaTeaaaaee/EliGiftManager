@@ -16,7 +16,14 @@ export const router = createRouter({
         {
           path: 'waves',
           name: 'waves',
-          component: () => import('@/pages/waves/ui/DispatchTaskPage.vue'),
+          component: () => import('@/pages/waves/ui/DispatchTaskShell.vue'),
+          children: [
+            { path: '', name: 'waves-welcome', component: () => import('@/pages/waves/ui/WaveWelcomePage.vue') },
+            { path: ':waveId/step/1', name: 'waves-step-import', component: () => import('@/pages/waves/ui/WaveImportStep.vue') },
+            { path: ':waveId/step/2', name: 'waves-step-tags', component: () => import('@/pages/waves/ui/WaveTagStep.vue') },
+            { path: ':waveId/step/3', name: 'waves-step-preview', component: () => import('@/pages/waves/ui/WavePreviewStep.vue') },
+            { path: ':waveId/step/4', name: 'waves-step-export', component: () => import('@/pages/waves/ui/WaveExportStep.vue') },
+          ],
         },
         {
           path: 'members',

@@ -1,3 +1,14 @@
+<!--
+  此文件已拆分为以下组件（2026-05-01）：
+  - DispatchTaskShell.vue  壳组件（波次列表 + 抽屉 + 创建弹窗 + 步骤导航 + RouterView）
+  - WaveWelcomePage.vue    欢迎页 / 空状态
+  - WaveImportStep.vue     步骤一：导入数据
+  - WaveTagStep.vue        步骤二：Tag 管理与分配
+  - WavePreviewStep.vue    步骤三：导出预览与编辑
+  - WaveExportStep.vue     步骤四：异常检查与导出
+
+  路由配置见 frontend/src/app/router/index.ts
+-->
 <script setup lang="ts">
 import { AddOutline, CloudUploadOutline, DownloadOutline, PlayOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, ref } from 'vue'

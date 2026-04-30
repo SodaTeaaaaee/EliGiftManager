@@ -49,7 +49,14 @@ const settingsOptions = [createMenuOption(settingsItem)]
 const route = useRoute()
 const router = useRouter()
 
-const selectedKey = computed(() => route.name?.toString() ?? 'dashboard')
+const selectedKey = computed(() => {
+  for (const m of route.matched) {
+    const name = m.name?.toString() ?? ''
+    if (mainItems.some(i => i.name === name)) return name
+    if (name === settingsItem.name) return name
+  }
+  return route.name?.toString() ?? 'dashboard'
+})
 
 function handleNavigate(key: string | number) {
   void router.push({ name: String(key) })

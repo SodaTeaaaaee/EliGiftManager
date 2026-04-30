@@ -65,6 +65,18 @@ cd frontend && deno task preview      # preview production build
 
 Codex (GPT-5.5, 1M context) is wired in as an extension — NOT a replacement for the sub-agent team.
 
+### Codex scope — three roles only
+
+Codex 仅在以下三个场景介入，其他所有工作（实现编码、仓库内调研、常规审查）一律使用 Claude Code 自带 sub-agent（general-purpose / Explore / Plan）：
+
+| 场景 | 触发条件 | 方式 |
+|---|---|---|
+| **疑难 bug 修复** | 同一 bug 连续 2 次修复失败 | `codex:rescue` 独立诊断 |
+| **Plan 审查** | `/work-plan` 产出设计草案后 | `codex:rescue` 做 devil's advocate 结构化 critique |
+| **网络资料调研** | 需要查外部 API 文档、官方最佳实践、过时检查 | `codex:rescue` 做 WebSearch/WebFetch |
+
+Codex **不参与**：实现编码、仓库内代码调研（Grep/Glob/Read）、OCP 审查、一般性代码修改。
+
 ### Core constraints
 
 1. **Verify everything**: GPT-5.X has weak attention over long contexts. Every Codex output — analysis, suggestion, code — must be independently verified before acting on it. Do NOT trust a Codex claim just because it sounds plausible.
