@@ -63,7 +63,7 @@ watchEffect(() => {
     <NGlobalStyle />
     <NMessageProvider>
       <NDialogProvider>
-        <RouterView />
+        <RouterView class="h-full" />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>

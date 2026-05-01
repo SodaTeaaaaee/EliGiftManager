@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ImageOutline, SearchOutline } from '@vicons/ionicons5'
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref } from 'vue'
 import { ChevronBackOutline, ChevronForwardOutline } from '@vicons/ionicons5'
-import { NButton, NCard, NDivider, NDrawer, NDrawerContent, NEmpty, NIcon, NInput, NPagination, NSelect, NTag, useMessage } from 'naive-ui'
+import { NButton, NButtonGroup, NCard, NDataTable, NDivider, NDrawer, NDrawerContent, NEmpty, NIcon, NInput, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { getProductImages, isWailsRuntimeAvailable, listProducts, WAILS_PREVIEW_MESSAGE, type ProductItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
@@ -14,6 +14,24 @@ const pageSize = ref(12)
 const total = ref(0)
 const isLoading = ref(false)
 const errorMessage = ref('')
+const viewMode = ref<'grid' | 'list'>('grid')
+
+const listColumns: DataTableColumns<ProductItem> = [
+  {
+    title: '', key: 'coverImage', width: 72,
+    render: (row) => row.coverImage
+      ? h('img', { src: '/local-images/' + row.coverImage, class: 'w-12 h-12 rounded object-cover' })
+      : h('div', { class: 'w-12 h-12 rounded bg-gray-100' }),
+  },
+  { title: '商品名', key: 'name', minWidth: 120 },
+  { title: '平台', key: 'platform', width: 100, render: (row) => h(NTag, { size: 'small', round: true }, { default: () => row.platform }) },
+  { title: '工厂', key: 'factory', minWidth: 100 },
+  { title: 'SKU', key: 'factorySku', minWidth: 120 },
+  {
+    title: '操作', key: 'actions', width: 80,
+    render: (row) => h(NButton, { size: 'tiny', onClick: () => openDetail(row) }, { default: () => '详情' }),
+  },
+]
 
 const platformCatalog = ref<string[]>([])
 
@@ -138,6 +156,12 @@ onMounted(loadProducts)
     </div>
 
     <NCard size="medium">
+      <template #header-extra>
+        <NButtonGroup size="small">
+          <NButton :type="viewMode === 'grid' ? 'primary' : 'default'" @click="viewMode = 'grid'">网格</NButton>
+          <NButton :type="viewMode === 'list' ? 'primary' : 'default'" @click="viewMode = 'list'">列表</NButton>
+        </NButtonGroup>
+      </template>
       <div class="flex flex-col gap-3 md:flex-row">
         <NInput v-model:value="keyword" clearable placeholder="搜索名称 / SKU / 工厂" @keyup.enter="searchProducts">
           <template #prefix>
@@ -155,34 +179,44 @@ onMounted(loadProducts)
     <NEmpty v-if="errorMessage" :description="errorMessage" />
     <template v-else>
       <NEmpty v-if="!products.length" description="暂无礼物" />
-      <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <NCard v-for="product in products" :key="product.id" size="small" hoverable class="cursor-pointer"
-          @click="openDetail(product)">
-          <div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
-            <img v-if="product.coverImage" :src="'/local-images/' + product.coverImage"
-              class="h-full w-full object-cover" />
-            <div v-else class="flex h-full items-center justify-center">
-              <NIcon size="42" depth="3">
-                <ImageOutline />
-              </NIcon>
-            </div>
-          </div>
-          <div class="mt-3 flex items-start justify-between gap-3">
-            <div>
-              <strong>{{ product.name }}</strong>
-              <p class="app-copy mt-1">{{ product.factory }} / {{ product.factorySku }}</p>
-            </div>
-            <NTag size="small" round>{{ product.platform }}</NTag>
-          </div>
-          <p class="app-copy mt-2 line-clamp-2">{{ product.extraData }}</p>
-        </NCard>
-      </div>
+      <template v-else>
+        <div class="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p class="app-copy">共 {{ total }} 条记录</p>
+          <NPagination :page="page" :page-size="pageSize" :item-count="total" :page-sizes="[12, 24, 48]" show-size-picker
+            @update:page="handlePageChange" @update:page-size="handlePageSizeChange" />
+        </div>
 
-      <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <p class="app-copy">共 {{ total }} 条记录</p>
-        <NPagination :page="page" :page-size="pageSize" :item-count="total" :page-sizes="[12, 24, 48]" show-size-picker
-          @update:page="handlePageChange" @update:page-size="handlePageSizeChange" />
-      </div>
+        <div v-if="viewMode === 'grid'" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <NCard v-for="product in products" :key="product.id" size="small" hoverable class="cursor-pointer"
+            @click="openDetail(product)">
+            <div class="aspect-square overflow-hidden rounded-xl bg-slate-100 dark:bg-slate-800">
+              <img v-if="product.coverImage" :src="'/local-images/' + product.coverImage"
+                class="aspect-square object-cover w-full rounded-lg" />
+              <div v-else class="flex h-full items-center justify-center">
+                <NIcon size="42" depth="3">
+                  <ImageOutline />
+                </NIcon>
+              </div>
+            </div>
+            <div class="mt-3 flex items-start justify-between gap-3">
+              <div>
+                <strong>{{ product.name }}</strong>
+                <p class="app-copy mt-1">{{ product.factory }} / {{ product.factorySku }}</p>
+              </div>
+              <NTag size="small" round>{{ product.platform }}</NTag>
+            </div>
+            <p class="app-copy mt-2 line-clamp-2">{{ product.extraData }}</p>
+          </NCard>
+        </div>
+
+        <NDataTable v-else :columns="listColumns" :data="products" :bordered="false" :pagination="false" size="small" />
+
+        <div class="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p class="app-copy">共 {{ total }} 条记录</p>
+          <NPagination :page="page" :page-size="pageSize" :item-count="total" :page-sizes="[12, 24, 48]" show-size-picker
+            @update:page="handlePageChange" @update:page-size="handlePageSizeChange" />
+        </div>
+      </template>
     </template>
 
     <NDrawer :show="showDetail" :width="680" @update:show="handleDrawerVisibility">

@@ -2,8 +2,8 @@
 import { PlayOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NCard, NButton, NDataTable, NEmpty, NIcon, NSelect, NTag, NFlex, useMessage, type DataTableColumns } from 'naive-ui'
-import { allocateByTags, assignProductTag, isWailsRuntimeAvailable, listProductsWithTags, listWaves, removeProductTag, WAILS_PREVIEW_MESSAGE, type WaveItem } from '@/shared/lib/wails/app'
+import { NCard, NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NIcon, NSelect, NTag, NFlex, useMessage, type DataTableColumns } from 'naive-ui'
+import { allocateSingleTag, assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaves, removeProductTag, removeSingleTag, WAILS_PREVIEW_MESSAGE, type WaveItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -19,6 +19,10 @@ const checkedProductIds = ref<number[]>([])
 const selectedBatchTag = ref<string | null>(null)
 const isTagLoading = ref(false)
 const errorMessage = ref('')
+
+const showProductDrawer = ref(false)
+const drawerProduct = ref<{ id: number; name: string; factorySku: string; platform: string; tags: string[]; coverImage: string } | null>(null)
+const drawerProductImages = ref<{ id: number; path: string; sortOrder: number; sourceDir: string }[]>([])
 
 type LevelTag = { platform: string; tagName: string }
 const waveLevelTags = computed<LevelTag[]>(() => {
@@ -41,10 +45,15 @@ function platformTagColor(platform: string) {
 
 const productColumns: DataTableColumns = [
   { type: 'selection' as const },
-  { title: '商品名', key: 'name', minWidth: 160 },
-  { title: 'FactorySKU', key: 'factorySku', minWidth: 140 },
+  { title: '', key: 'coverImage', width: 56, render: (row: any) =>
+    row.coverImage ? h('img', { src: '/local-images/' + row.coverImage, class: 'w-10 h-10 rounded object-cover' }) : h('div', { class: 'w-10 h-10 rounded bg-gray-100' })
+  },
+  { title: '商品名', key: 'name', minWidth: 120, render: (row: any) =>
+    h('span', { class: 'cursor-pointer text-blue-600 hover:underline', onClick: () => openProductDrawer(row) }, row.name)
+  },
+  { title: 'FactorySKU', key: 'factorySku', minWidth: 100 },
   {
-    title: 'Tags', key: 'tags', minWidth: 200, render: (row) => h(NFlex, { size: 'small', wrap: true }, {
+    title: 'Tags', key: 'tags', minWidth: 140, render: (row) => h(NFlex, { size: 'small', wrap: true }, {
       default: () => (row.tags as string[]).map(tag => h(NTag, {
         size: 'small', round: true, closable: true,
         onClose: () => handleRemoveTag(row.id as number, row.platform as string, tag),
@@ -73,7 +82,7 @@ async function loadTagProducts() {
     const result = await listProductsWithTags(waveId.value, '', tagProductPage.value, 50)
     tagProducts.value = result.items.map(item => ({
       id: item.id, name: item.name, factorySku: item.factorySku,
-      platform: item.platform, tags: item.tags,
+      platform: item.platform, tags: item.tags, coverImage: (item as any).coverImage || '',
     }))
     tagProductTotal.value = result.total
   } catch (e) { console.error('加载商品标签失败', e) }
@@ -85,7 +94,8 @@ async function handleAssignTag() {
   const [platform, tagName] = selectedBatchTag.value.split('|')
   try {
     for (const productId of checkedProductIds.value) { await assignProductTag(productId, platform, tagName) }
-    message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签`)
+    const count = await allocateSingleTag(waveId.value, platform, tagName)
+    message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签，分配 ${count} 条记录`)
     await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
 }
@@ -95,14 +105,26 @@ async function handleBatchRemoveTag() {
   const [platform, tagName] = selectedBatchTag.value.split('|')
   try {
     for (const productId of checkedProductIds.value) { await removeProductTag(productId, platform, tagName) }
+    await removeSingleTag(waveId.value, platform, tagName)
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除 ${platform}·${tagName} 标签`)
     await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
 }
 
 async function handleRemoveTag(productId: number, platform: string, tagName: string) {
-  try { await removeProductTag(productId, platform, tagName); await loadTagProducts() }
+  try {
+    await removeProductTag(productId, platform, tagName)
+    await removeSingleTag(waveId.value, platform, tagName)
+    await loadTagProducts()
+  }
   catch (e) { message.error(String(e)) }
+}
+
+async function openProductDrawer(product: typeof tagProducts.value[0]) {
+  drawerProduct.value = product
+  showProductDrawer.value = true
+  try { drawerProductImages.value = await getProductImages(product.id) }
+  catch { drawerProductImages.value = [] }
 }
 
 async function handleAllocateByTags() {
@@ -124,7 +146,7 @@ onMounted(async () => {
 })
 </script>
 <template>
-  <NCard size="small">
+  <NCard size="small" class="h-full overflow-auto">
     <template #header>
       <span class="flex items-center gap-2">
         <NIcon><PlayOutline /></NIcon>步骤二：Tag 管理与分配
@@ -154,14 +176,35 @@ onMounted(async () => {
         :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds"
         :pagination="{ pageSize: 50 }" />
 
-      <NButton block type="success" @click="handleAllocateByTags" :disabled="!waveId">
-        <template #icon><NIcon><PlayOutline /></NIcon></template>
-        一键分配
-      </NButton>
     </div>
     <div class="flex justify-between mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
       <NButton @click="goPrev">上一步</NButton>
       <NButton type="primary" @click="goNext">下一步</NButton>
     </div>
+
+    <!-- Product Detail Drawer -->
+    <NDrawer :show="showProductDrawer" :width="560" @update:show="(v: boolean) => { if (!v) { showProductDrawer = false; drawerProduct = null; drawerProductImages = [] } }">
+      <NDrawerContent title="商品详情" closable>
+        <template v-if="drawerProduct">
+          <div class="space-y-3">
+            <img v-if="drawerProduct.coverImage" :src="'/local-images/' + drawerProduct.coverImage" class="w-full rounded-lg object-contain" style="max-height:50vh" />
+            <h2 class="text-xl font-semibold">{{ drawerProduct.name }}</h2>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="text-sm text-gray-500">{{ drawerProduct.factorySku }}</span>
+              <NTag size="small" round>{{ drawerProduct.platform }}</NTag>
+            </div>
+            <NFlex :size="'small'" :wrap="true">
+              <NTag v-for="tag in drawerProduct.tags" :key="tag" size="small" round :color="platformTagColor(drawerProduct.platform)">{{ tag }}</NTag>
+            </NFlex>
+          </div>
+          <template v-if="drawerProductImages.length">
+            <NDivider>详情图片</NDivider>
+            <div class="space-y-3">
+              <img v-for="img in drawerProductImages" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
+            </div>
+          </template>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
   </NCard>
 </template>

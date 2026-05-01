@@ -89,8 +89,6 @@ func (c *WaveController) ImportToWave(waveID uint, csvPath string, templateID ui
 		return fmt.Errorf("import failed: template not found: %w", err)
 	}
 	switch template.Type {
-	case model.TemplateTypeImportMember:
-		_, err = service.ImportMembersFromCSV(db, csvPath, template)
 	case model.TemplateTypeImportProduct:
 		var templateMeta struct {
 			Format   string `json:"format"`
@@ -259,6 +257,122 @@ func (c *WaveController) AllocateByTags(waveID uint) (int, error) {
 		return 0, fmt.Errorf("allocate by tags failed: %w", err)
 	}
 	return allocatedCount, nil
+}
+
+func (c *WaveController) AllocateSingleTag(waveID uint, platform, tagName string) (int, error) {
+	db := c.db()
+	if db == nil {
+		return 0, fmt.Errorf("database not available")
+	}
+
+	var members []model.Member
+	if err := db.Where("platform = ? AND extra_data LIKE ?", platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, tagName)).Find(&members).Error; err != nil {
+		return 0, err
+	}
+
+	var tags []model.ProductTag
+	if err := db.Where("platform = ? AND tag_name = ?", platform, tagName).Find(&tags).Error; err != nil {
+		return 0, err
+	}
+
+	if len(tags) == 0 || len(members) == 0 {
+		return 0, nil
+	}
+
+	allocated := 0
+	for _, member := range members {
+		for _, tag := range tags {
+			var cnt int64
+			db.Model(&model.DispatchRecord{}).Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, member.ID, tag.ProductID).Count(&cnt)
+			if cnt > 0 {
+				continue
+			}
+			db.Create(&model.DispatchRecord{WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID, Quantity: 1, Status: "draft"})
+			allocated++
+		}
+	}
+	return allocated, nil
+}
+
+func (c *WaveController) SetDispatchAddress(waveID, memberID, addressID uint) error {
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("set dispatch address failed: database not available")
+	}
+	return db.Model(&model.DispatchRecord{}).Where("wave_id = ? AND member_id = ?", waveID, memberID).Update("member_address_id", addressID).Error
+}
+
+func (c *WaveController) RemoveSingleTag(waveID uint, platform, tagName string) (int, error) {
+	db := c.db()
+	if db == nil {
+		return 0, fmt.Errorf("database not available")
+	}
+
+	var tags []model.ProductTag
+	if err := db.Where("platform = ? AND tag_name = ?", platform, tagName).Find(&tags).Error; err != nil {
+		return 0, err
+	}
+
+	if len(tags) == 0 {
+		return 0, nil
+	}
+
+	var productIDs []uint
+	for _, t := range tags {
+		productIDs = append(productIDs, t.ProductID)
+	}
+
+	result := db.Where("wave_id = ? AND product_id IN ?", waveID, productIDs).Delete(&model.DispatchRecord{})
+	return int(result.RowsAffected), result.Error
+}
+
+func (c *WaveController) UpdateDispatchQuantity(dispatchID uint, quantity int) error {
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("database not available")
+	}
+	if quantity < 1 {
+		return fmt.Errorf("quantity must be at least 1")
+	}
+	r := db.Model(&model.DispatchRecord{}).Where("id = ?", dispatchID).Update("quantity", quantity)
+	if r.Error != nil {
+		return r.Error
+	}
+	if r.RowsAffected == 0 {
+		return fmt.Errorf("dispatch record not found")
+	}
+	return nil
+}
+
+func (c *WaveController) AddDispatchToMember(waveID, memberID, productID uint, quantity int) error {
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("database not available")
+	}
+	if quantity < 1 {
+		quantity = 1
+	}
+	var cnt int64
+	db.Model(&model.DispatchRecord{}).Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).Count(&cnt)
+	if cnt > 0 {
+		return fmt.Errorf("this product is already assigned to this member")
+	}
+	return db.Create(&model.DispatchRecord{WaveID: waveID, MemberID: memberID, ProductID: productID, Quantity: quantity, Status: "draft"}).Error
+}
+
+func (c *WaveController) RemoveDispatchFromMember(dispatchID uint) error {
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("database not available")
+	}
+	r := db.Delete(&model.DispatchRecord{}, dispatchID)
+	if r.Error != nil {
+		return r.Error
+	}
+	if r.RowsAffected == 0 {
+		return fmt.Errorf("dispatch record not found")
+	}
+	return nil
 }
 
 func (c *WaveController) BindDefaultAddresses(waveID uint) (map[string]int64, error) {

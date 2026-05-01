@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { AlbumsOutline, AlertCircleOutline, GiftOutline, PeopleOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, ref } from 'vue'
 import { NAlert, NButton, NCard, NDataTable, NEmpty, NIcon, NProgress, NStatistic, NTag, type DataTableColumns } from 'naive-ui'

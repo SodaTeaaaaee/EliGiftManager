@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { AlertCircleOutline, CloudDownloadOutline, CloudUploadOutline } from '@vicons/ionicons5'
 import { onMounted, ref } from 'vue'
 import { NAlert, NButton, NCard, NIcon, NRadioButton, NRadioGroup, useDialog, useMessage } from 'naive-ui'

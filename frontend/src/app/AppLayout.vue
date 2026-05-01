@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NLayout, NLayoutContent, NLayoutSider, NScrollbar } from 'naive-ui'
+import { NLayout, NLayoutContent, NLayoutSider } from 'naive-ui'
 import { RouterView } from 'vue-router'
 import Sidebar from '@/shared/ui/Sidebar.vue'
 </script>
@@ -11,11 +11,9 @@ import Sidebar from '@/shared/ui/Sidebar.vue'
     </NLayoutSider>
 
     <NLayoutContent style="background: transparent">
-      <NScrollbar style="height: 100%">
-        <div class="px-5 py-5 lg:px-6 lg:py-6">
-          <RouterView />
-        </div>
-      </NScrollbar>
+      <div class="px-5 py-5 lg:px-6 lg:py-6 h-full" style="display: flex; flex-direction: column;">
+        <RouterView class="flex-1 min-h-0" />
+      </div>
     </NLayoutContent>
   </NLayout>
 </template>

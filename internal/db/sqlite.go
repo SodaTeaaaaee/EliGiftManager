@@ -46,6 +46,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	// WAL mode + reduced sync for better concurrent read/write performance.
 	db.Exec("PRAGMA journal_mode = WAL;")
 	db.Exec("PRAGMA synchronous = NORMAL;")
+	db.Exec("PRAGMA foreign_keys = ON;")
 	if err := autoMigrateTables(db); err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: %w", err)
 	}
