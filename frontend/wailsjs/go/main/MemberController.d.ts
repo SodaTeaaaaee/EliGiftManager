@@ -11,6 +11,8 @@ export function ListMembers(arg1:number,arg2:number,arg3:string,arg4:string):Pro
 
 export function ListWaveMembers(arg1:number):Promise<Array<main.MemberItem>>;
 
+export function RemoveMemberFromWave(arg1:number,arg2:number):Promise<void>;
+
 export function SetDefaultAddress(arg1:number,arg2:number):Promise<void>;
 
 export function UpdateMemberAddress(arg1:number,arg2:string,arg3:string,arg4:string):Promise<void>;

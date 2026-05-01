@@ -2,8 +2,8 @@
 import { CloudUploadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDataTable, NIcon, NPagination, NSelect, NFlex, useMessage, type DataTableColumns } from 'naive-ui'
-import { importDispatchWave, importToWave, isWailsRuntimeAvailable, listProductsWithTags, listTemplates, listWaveMembers, pickCSVFile, pickZIPFile, WAILS_PREVIEW_MESSAGE, type MemberItem, type TemplateItem } from '@/shared/lib/wails/app'
+import { NButton, NDataTable, NIcon, NPagination, NPopconfirm, NSelect, useMessage, type DataTableColumns } from 'naive-ui'
+import { importDispatchWave, importToWave, isWailsRuntimeAvailable, listProductsWithTags, listTemplates, listWaveMembers, pickCSVFile, pickZIPFile, removeMemberFromWave, removeProductFromWave, WAILS_PREVIEW_MESSAGE, type MemberItem, type TemplateItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -12,8 +12,6 @@ const router = useRouter()
 const waveId = computed(() => Number(route.params.waveId) || 0)
 
 const templates = ref<TemplateItem[]>([])
-const csvPath = ref('')
-const productCsvPath = ref('')
 const importTemplateId = ref<number | null>(null)
 const productTemplateId = ref<number | null>(null)
 const waveMembers = ref<MemberItem[]>([])
@@ -181,6 +179,16 @@ function handleMemberPageChange(p: number) { memberCurrentPage.value = p }
 
 // ── product table: fetch all at once, paginate client-side ──
 const allProducts = ref<{ id: number; name: string; factorySku: string }[]>([])
+const productIndexMap = computed(() => {
+  const map = new Map<number, number>()
+  allProducts.value.forEach((p, i) => map.set(p.id, i + 1))
+  return map
+})
+const memberIndexMap = computed(() => {
+  const map = new Map<number, number>()
+  waveMembers.value.forEach((m, i) => map.set(m.id, i + 1))
+  return map
+})
 const productTableWrapper = ref<HTMLElement | null>(null)
 const productPaginationRef = ref<HTMLElement | null>(null)
 const productAvailableH = ref(400)
@@ -253,24 +261,47 @@ function setupResizeObserver() {
 }
 
 // ── column definitions ──
-const memberColumns: DataTableColumns<MemberItem> = [
-  { title: '昵称', key: 'latestNickname', minWidth: 100, render: (row) => clampedText(row.latestNickname || row.platformUid) },
-  { title: '平台', key: 'platform', width: 100, render: (row) => clampedText(row.platform) },
-  { title: 'UID', key: 'platformUid', minWidth: 100, render: (row) => clampedText(row.platformUid) },
-  {
-    title: '等级', key: 'extraData', width: 100, render: (row) => clampedText((() => {
-      try { const ed = JSON.parse(row.extraData); return ed.giftLevel || '-' }
-      catch { return '-' }
-    })())
-  },
-  { title: '地址数', key: 'activeAddressCount', width: 70 },
-]
+const showSkuColumn = computed(() => lastProductW.value === 0 || lastProductW.value >= 400)
+const showMemberExtraColumns = computed(() => lastMemberW.value === 0 || lastMemberW.value >= 400)
 
-// Hide SKU column when wrapper too narrow for both columns at their min-widths
-const showSkuColumn = computed(() => lastProductW.value === 0 || lastProductW.value >= 260)
+const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
+  const cols: DataTableColumns<MemberItem> = [
+    { title: '#', key: '__index', width: 50,
+      render: (row: any) => h('span', { style: { color: '#999' } }, String(memberIndexMap.value.get(row.id) ?? '')) },
+    { title: '昵称', key: 'latestNickname', minWidth: 100, render: (row) => clampedText(row.latestNickname || row.platformUid) },
+    { title: '平台', key: 'platform', width: 100, render: (row) => clampedText(row.platform) },
+    { title: 'UID', key: 'platformUid', minWidth: 100, render: (row) => clampedText(row.platformUid) },
+  ]
+  if (showMemberExtraColumns.value) {
+    cols.push({
+      title: '等级', key: 'extraData', width: 100, render: (row) => clampedText((() => {
+        try { const ed = JSON.parse(row.extraData); return ed.giftLevel || '-' }
+        catch { return '-' }
+      })())
+    })
+    cols.push({ title: '地址数', key: 'activeAddressCount', width: 70 })
+  }
+  cols.push({
+    title: '操作', key: '__actions', width: 80,
+    render(row: any) {
+      return h(NPopconfirm, {
+        onPositiveClick: () => handleDeleteMember(row.id),
+        negativeText: '取消', positiveText: '确认',
+      }, {
+        trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }),
+        default: () => '确认从波次中移除此会员？',
+      })
+    },
+  })
+  return cols
+})
 
 const productDataColumns = computed<DataTableColumns>(() => {
   const cols: DataTableColumns = [
+    {
+      title: '#', key: '__index', width: 50,
+      render: (row: any) => h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? ''))
+    },
     { title: '商品名', key: 'name', minWidth: 140, render: (row: any) => clampedText(row.name) },
   ]
   if (showSkuColumn.value) {
@@ -279,6 +310,18 @@ const productDataColumns = computed<DataTableColumns>(() => {
       render: (row: any) => h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
     })
   }
+  cols.push({
+    title: '操作', key: '__actions', width: 80,
+    render(row: any) {
+      return h(NPopconfirm, {
+        onPositiveClick: () => handleDeleteProduct(row.id),
+        negativeText: '取消', positiveText: '确认',
+      }, {
+        trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }),
+        default: () => '确认从波次中移除此商品？',
+      })
+    },
+  })
   return cols
 })
 
@@ -312,26 +355,30 @@ async function loadWaveMembers() {
   finally { isMembersLoading.value = false }
 }
 
-async function handlePickCSV() {
-  const p = await pickCSVFile()
-  if (p) csvPath.value = p
-}
-
-async function handlePickProductFile() {
-  const fmt = templateFormat(productTemplateId.value)
-  const p = fmt === 'zip' ? await pickZIPFile() : await pickCSVFile()
-  if (p) productCsvPath.value = p
-}
-
 async function handleImportProduct() {
-  if (!waveId.value || !productCsvPath.value || !productTemplateId.value) return message.warning('请选择商品 CSV 文件和导入模板')
-  try { await importToWave(waveId.value, productCsvPath.value, productTemplateId.value); message.success('商品导入完成'); await loadAllProducts(); await loadWaveMembers() }
+  if (!productTemplateId.value) return message.warning('请先选择商品导入模板')
+  const fmt = templateFormat(productTemplateId.value)
+  const filePath = fmt === 'zip' ? await pickZIPFile() : await pickCSVFile()
+  if (!filePath) return
+  try { await importToWave(waveId.value, filePath, productTemplateId.value); message.success('商品导入完成'); await loadAllProducts(); await loadWaveMembers() }
+  catch (e) { message.error(String(e)) }
+}
+
+async function handleDeleteProduct(productId: number) {
+  try { await removeProductFromWave(waveId.value, productId); message.success('已从波次中移除'); await loadAllProducts(); await loadWaveMembers() }
+  catch (e) { message.error(String(e)) }
+}
+
+async function handleDeleteMember(memberId: number) {
+  try { await removeMemberFromWave(waveId.value, memberId); message.success('已从波次中移除'); await loadWaveMembers() }
   catch (e) { message.error(String(e)) }
 }
 
 async function handleImportDispatch() {
-  if (!waveId.value || !csvPath.value || !importTemplateId.value) return message.warning('请选择发货任务、填写 CSV 路径、并选择导入模板')
-  try { await importDispatchWave(waveId.value, csvPath.value, importTemplateId.value); message.success('发货数据导入完成'); await loadWaveMembers() }
+  if (!importTemplateId.value) return message.warning('请先选择发货导入模板')
+  const filePath = await pickCSVFile()
+  if (!filePath) return
+  try { await importDispatchWave(waveId.value, filePath, importTemplateId.value); message.success('发货数据导入完成'); await loadWaveMembers() }
   catch (e) { message.error(String(e)) }
 }
 
@@ -392,12 +439,6 @@ onUnmounted(() => {
       <div class="border border-gray-100 dark:border-gray-700 rounded-lg flex flex-col min-h-0">
         <div class="p-3 pb-0 shrink-0">
           <span class="text-xs text-gray-500 block mb-3 font-medium">商品导入（工厂平台 {{ productFileExt }}）</span>
-          <NFlex :wrap="false" class="mb-2">
-            <NButton v-if="productTemplateId" size="small" secondary @click="handlePickProductFile">选择 {{ productFileExt
-            }}</NButton>
-            <span class="text-xs text-gray-400 self-center truncate max-w-[200px]">{{ productCsvPath || '未选择文件'
-            }}</span>
-          </NFlex>
           <NSelect v-model:value="productTemplateId" :options="productTemplates" placeholder="选择商品导入模板" class="mb-2" />
           <NButton block secondary @click="handleImportProduct">导入商品</NButton>
         </div>
@@ -418,10 +459,6 @@ onUnmounted(() => {
       <div class="border border-gray-100 dark:border-gray-700 rounded-lg flex flex-col min-h-0">
         <div class="p-3 pb-0 shrink-0">
           <span class="text-xs text-gray-500 block mb-3 font-medium">发货数据导入（会员来源 CSV）</span>
-          <NFlex :wrap="false" class="mb-2">
-            <NButton v-if="importTemplateId" size="small" secondary @click="handlePickCSV">选择 CSV</NButton>
-            <span class="text-xs text-gray-400 self-center truncate max-w-[200px]">{{ csvPath || '未选择文件' }}</span>
-          </NFlex>
           <NSelect v-model:value="importTemplateId" :options="dispatchTemplates" placeholder="选择发货导入模板" class="mb-2" />
           <NButton block type="primary" @click="handleImportDispatch">导入发货数据</NButton>
         </div>

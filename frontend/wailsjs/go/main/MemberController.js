@@ -18,6 +18,10 @@ export function ListWaveMembers(arg1) {
   return window['go']['main']['MemberController']['ListWaveMembers'](arg1);
 }
 
+export function RemoveMemberFromWave(arg1, arg2) {
+  return window['go']['main']['MemberController']['RemoveMemberFromWave'](arg1, arg2);
+}
+
 export function SetDefaultAddress(arg1, arg2) {
   return window['go']['main']['MemberController']['SetDefaultAddress'](arg1, arg2);
 }

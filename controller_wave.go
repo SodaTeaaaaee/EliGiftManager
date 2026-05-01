@@ -375,6 +375,26 @@ func (c *WaveController) RemoveDispatchFromMember(dispatchID uint) error {
 	return nil
 }
 
+func (c *WaveController) RemoveProductFromWave(waveID, productID uint) error {
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("database not available")
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		var product model.Product
+		if err := tx.Where("id = ? AND wave_id = ?", productID, waveID).First(&product).Error; err != nil {
+			return fmt.Errorf("product not found in this wave: %w", err)
+		}
+		if err := tx.Model(&product).Update("wave_id", nil).Error; err != nil {
+			return fmt.Errorf("remove product from wave failed: %w", err)
+		}
+		if err := tx.Where("wave_id = ? AND product_id = ?", waveID, productID).Delete(&model.DispatchRecord{}).Error; err != nil {
+			return fmt.Errorf("clean dispatch records failed: %w", err)
+		}
+		return nil
+	})
+}
+
 func (c *WaveController) BindDefaultAddresses(waveID uint) (map[string]int64, error) {
 	db := c.db()
 	if db == nil {

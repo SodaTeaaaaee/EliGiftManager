@@ -7,6 +7,7 @@ import {
   DeleteMemberAddress as deleteMemberAddressBinding,
   ListMembers as listMembersBinding,
   ListWaveMembers as listWaveMembersBinding,
+  RemoveMemberFromWave as removeMemberFromWaveBinding,
   SetDefaultAddress as setDefaultAddressBinding,
   UpdateMemberAddress as updateMemberAddressBinding,
 } from "../../../../wailsjs/go/main/MemberController";
@@ -33,6 +34,7 @@ import {
   ListWaves as listWavesBinding,
   PreviewExport as previewExportBinding,
   RemoveDispatchFromMember as removeDispatchFromMemberBinding,
+  RemoveProductFromWave as removeProductFromWaveBinding,
   RemoveSingleTag as removeSingleTagBinding,
   SetDispatchAddress as setDispatchAddressBinding,
   UpdateDispatchQuantity as updateDispatchQuantityBinding,
@@ -145,6 +147,13 @@ export function addDispatchToMember(
 export function removeDispatchFromMember(dispatchId: number): Promise<void> {
   assertWailsRuntime();
   return removeDispatchFromMemberBinding(dispatchId);
+}
+export function removeProductFromWave(
+  waveId: number,
+  productId: number,
+): Promise<void> {
+  assertWailsRuntime();
+  return removeProductFromWaveBinding(waveId, productId);
 }
 export function setDispatchAddress(
   waveId: number,
@@ -268,6 +277,13 @@ export function updateMemberAddress(
 export function deleteMemberAddress(addressId: number): Promise<void> {
   assertWailsRuntime();
   return deleteMemberAddressBinding(addressId);
+}
+export function removeMemberFromWave(
+  waveId: number,
+  memberId: number,
+): Promise<void> {
+  assertWailsRuntime();
+  return removeMemberFromWaveBinding(waveId, memberId);
 }
 export function listWaveMembers(waveId: number): Promise<MemberItem[]> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve([]);

@@ -183,3 +183,23 @@ func (c *MemberController) DeleteMemberAddress(addressID uint) error {
 		return tx.Model(&addr).Update("is_deleted", true).Error
 	})
 }
+
+func (c *MemberController) RemoveMemberFromWave(waveID, memberID uint) error {
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("database not available")
+	}
+	return db.Transaction(func(tx *gorm.DB) error {
+		r := tx.Where("wave_id = ? AND member_id = ?", waveID, memberID).Delete(&model.WaveMember{})
+		if r.Error != nil {
+			return fmt.Errorf("remove member from wave failed: %w", r.Error)
+		}
+		if r.RowsAffected == 0 {
+			return fmt.Errorf("member not found in this wave")
+		}
+		if err := tx.Where("wave_id = ? AND member_id = ?", waveID, memberID).Delete(&model.DispatchRecord{}).Error; err != nil {
+			return fmt.Errorf("clean dispatch records failed: %w", err)
+		}
+		return nil
+	})
+}

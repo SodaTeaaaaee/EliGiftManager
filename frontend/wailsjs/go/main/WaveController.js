@@ -54,6 +54,10 @@ export function RemoveDispatchFromMember(arg1) {
   return window['go']['main']['WaveController']['RemoveDispatchFromMember'](arg1);
 }
 
+export function RemoveProductFromWave(arg1, arg2) {
+  return window['go']['main']['WaveController']['RemoveProductFromWave'](arg1, arg2);
+}
+
 export function RemoveSingleTag(arg1, arg2, arg3) {
   return window['go']['main']['WaveController']['RemoveSingleTag'](arg1, arg2, arg3);
 }

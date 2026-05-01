@@ -29,6 +29,8 @@ export function PreviewExport(arg1:number):Promise<Record<string, number>>;
 
 export function RemoveDispatchFromMember(arg1:number):Promise<void>;
 
+export function RemoveProductFromWave(arg1:number,arg2:number):Promise<void>;
+
 export function RemoveSingleTag(arg1:number,arg2:string,arg3:string):Promise<number>;
 
 export function SetDispatchAddress(arg1:number,arg2:number,arg3:number):Promise<void>;
