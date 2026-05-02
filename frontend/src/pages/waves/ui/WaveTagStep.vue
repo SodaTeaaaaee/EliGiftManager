@@ -127,7 +127,14 @@ function renderTagChip(row: any, tag: TagInfo) {
   const displayName = tag.tagType === 'user'
     ? (wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName)
     : tag.tagName
-  const label = tag.quantity === 1 ? displayName : `${displayName}:${tag.quantity}`
+  const accent = platformTagColor(tag.platform).textColor || '#aaa'
+  const content = tag.quantity === 1
+    ? h('span', { style: { color: accent, fontWeight: 500 } }, displayName)
+    : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
+        h('span', { style: { color: accent, fontWeight: 500 } }, displayName),
+        h('span', { style: { color: '#666', margin: '0 1px' } }, ':'),
+        h('span', { style: { color: '#fff', fontWeight: 600 } }, String(tag.quantity)),
+      ])
   return h(NPopover, {
     trigger: 'click',
     show: showTagPopover.value && editTagProduct.value?.id === row.id && editTagInfo.value?.tagName === tag.tagName && editTagInfo.value?.tagType === tag.tagType,
@@ -135,14 +142,14 @@ function renderTagChip(row: any, tag: TagInfo) {
     placement: 'bottom',
   }, {
     trigger: () => h(NTag, {
-      size: 'small', round: true,
+      size: 'medium', round: true,
       color: platformTagColor(tag.platform).color,
       style: { cursor: 'pointer' },
       onClick: (e: MouseEvent) => {
         e.stopPropagation()
         openTagEdit(row, tag)
       },
-    }, { default: () => label }),
+    }, { default: () => content }),
     default: () => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px' } }, [
       h(NInputNumber, {
         value: editTagNewQty.value,
