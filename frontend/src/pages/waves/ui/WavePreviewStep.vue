@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { DownloadOutline } from '@vicons/ionicons5'
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NCard, NAlert, NButton, NDataTable, NIcon, NInput, NInputNumber, NModal, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
+import { NAlert, NButton, NDataTable, NIcon, NInput, NInputNumber, NModal, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { addDispatchToMember, addMemberAddress, isWailsRuntimeAvailable, listDispatchRecords, listProductsWithTags, listTemplates, listWaveMembers, previewExport, removeDispatchFromMember, setDispatchAddress, updateDispatchQuantity, WAILS_PREVIEW_MESSAGE, type DispatchRecordItem, type TemplateItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
@@ -82,14 +82,205 @@ const memberGroups = computed(() => {
   return [...map.values()]
 })
 
-const memberGroupColumns: DataTableColumns = [
-  { title: '会员', key: 'nickname', minWidth: 140 },
-  { title: '平台', key: 'platform', width: 100 },
-  { title: 'UID', key: 'platformUid', minWidth: 140 },
-  { title: '礼物数', key: 'records', width: 80, render: (row: any) => String(row.records.length) },
-  { title: '地址', key: 'addressStatus', width: 80, render: (row: any) => h(NTag, { type: row.addressStatus === '已绑定' ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.addressStatus }) },
-]
+// ══════════════════════════════════════════════
+// adaptive packRows — memberGroupColumns table
+// ══════════════════════════════════════════════
 
+// ── line-clamped cell renderer ──
+const MAX_LINES = 4
+const LINE_HEIGHT = 21
+const CELL_PAD_V = 16
+
+function clampedText(text: string, lines = MAX_LINES) {
+  return h('div', {
+    style: {
+      display: '-webkit-box',
+      '-webkit-line-clamp': String(lines),
+      '-webkit-box-orient': 'vertical',
+      overflow: 'hidden',
+      wordBreak: 'break-all',
+      lineHeight: String(LINE_HEIGHT) + 'px',
+    },
+  }, String(text ?? ''))
+}
+
+// Column keys for estimation & DOM measurement (must match column `key` in definitions)
+const MEMBER_EST_KEYS = ['nickname', 'platformUid']
+
+// Measured column widths — updated from DOM after render & on resize
+const memberColWidths = ref<number[]>(MEMBER_EST_KEYS.map(() => 100))
+
+// ── per-row height estimation (column widths measured from DOM) ──
+function estimateCellLines(text: string, colWidth: number): number {
+  const avgCharW = 12
+  const charsPerLine = Math.max(1, Math.floor(colWidth / avgCharW))
+  return Math.min(MAX_LINES, Math.max(1, Math.ceil(text.length / charsPerLine)))
+}
+
+function estimateRowHeight(row: Record<string, any>, keys: string[], widths: number[]): number {
+  let maxLines = 1
+  for (let i = 0; i < keys.length; i++) {
+    const colW = widths[i] ?? 100
+    const text = String(row[keys[i]] ?? '')
+    const lines = estimateCellLines(text, colW)
+    if (lines > maxLines) maxLines = lines
+  }
+  return maxLines * LINE_HEIGHT + CELL_PAD_V
+}
+
+function memberEstimateRow(group: { nickname: string; platformUid: string }): Record<string, any> {
+  return { nickname: group.nickname, platformUid: group.platformUid }
+}
+
+// ── page packing: accumulate row heights, break at overflow (no clipping tolerated) ──
+function packRows<T>(
+  rows: T[],
+  extract: (r: T) => Record<string, any>,
+  keys: string[],
+  widths: number[],
+  availableH: number,
+  headerH: number,
+): Array<{ start: number; end: number }> {
+  const pages: Array<{ start: number; end: number }> = []
+  if (rows.length === 0) return pages
+  const bodyH = availableH - headerH
+  if (bodyH <= 0) {
+    for (let i = 0; i < rows.length; i++) pages.push({ start: i, end: i })
+    return pages
+  }
+  let pageStart = 0
+  let used = 0
+  for (let i = 0; i < rows.length; i++) {
+    const h = estimateRowHeight(extract(rows[i]), keys, widths)
+    if (used + h > bodyH && i > pageStart) {
+      pages.push({ start: pageStart, end: i - 1 })
+      pageStart = i
+      used = h
+    } else {
+      used += h
+    }
+  }
+  pages.push({ start: pageStart, end: rows.length - 1 })
+  return pages
+}
+
+function measureColWidths(wrapper: HTMLElement | null, keys: string[], fallback: number[]): number[] {
+  if (!wrapper) return fallback
+  const ths = wrapper.querySelectorAll('.n-data-table-th')
+  if (ths.length === 0) return fallback
+  const result: number[] = []
+  for (let i = 0; i < keys.length; i++) {
+    const el = wrapper.querySelector(`[data-col-key="${keys[i]}"]`)
+    result.push(el instanceof HTMLElement ? el.offsetWidth : (fallback[i] ?? 100))
+  }
+  return result
+}
+
+// ── measured header & pagination heights (DOM, updated on resize) ──
+const memberHeaderH = ref(38)
+const memberPaginationH = ref(32)
+
+function measureHeaderHeight(wrapper: HTMLElement | null): number {
+  if (!wrapper) return 38
+  const thead = wrapper.querySelector('.n-data-table-thead')
+  return thead instanceof HTMLElement ? thead.offsetHeight : 40
+}
+
+function measurePaginationHeight(el: HTMLElement | null): number {
+  return el ? el.offsetHeight : 32
+}
+
+// ── member table: all data client-side ──
+const memberTableWrapper = ref<HTMLElement | null>(null)
+const memberPaginationRef = ref<HTMLElement | null>(null)
+const memberAvailableH = ref(400)
+const memberCurrentPage = ref(1)
+
+const memberPages = computed(() =>
+  packRows(memberGroups.value, memberEstimateRow, MEMBER_EST_KEYS, memberColWidths.value,
+    memberAvailableH.value - memberPaginationH.value * 2, memberHeaderH.value),
+)
+
+const memberTotalPages = computed(() => memberPages.value.length || 1)
+
+const visibleMemberGroups = computed(() => {
+  const page = memberPages.value[memberCurrentPage.value - 1]
+  if (!page) return memberGroups.value
+  return memberGroups.value.slice(page.start, page.end + 1)
+})
+
+function handleMemberPageChange(p: number) { memberCurrentPage.value = p }
+
+// ── ResizeObserver: track wrapper height & width → re-measure column widths → repack ──
+let resizeObserver: ResizeObserver | null = null
+const lastMemberW = ref(0)
+
+function syncAllColWidths() {
+  memberColWidths.value = measureColWidths(memberTableWrapper.value, MEMBER_EST_KEYS, memberColWidths.value)
+  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
+  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
+}
+
+function setupResizeObserver() {
+  resizeObserver = new ResizeObserver(entries => {
+    for (const entry of entries) {
+      if (entry.target === memberTableWrapper.value) {
+        const w = entry.contentRect.width
+        const h = entry.contentRect.height
+        if (h <= 0) continue
+        const wChanged = w !== lastMemberW.value
+        const hChanged = h !== memberAvailableH.value
+        if (!wChanged && !hChanged) continue
+        if (wChanged) {
+          lastMemberW.value = w
+          memberColWidths.value = measureColWidths(memberTableWrapper.value, MEMBER_EST_KEYS, memberColWidths.value)
+        }
+        if (hChanged) memberAvailableH.value = h
+        memberCurrentPage.value = 1
+      }
+    }
+  })
+  if (memberTableWrapper.value) resizeObserver.observe(memberTableWrapper.value)
+}
+
+// ── column definitions ──
+const showExtraColumns = computed(() => lastMemberW.value === 0 || lastMemberW.value >= 500)
+
+const memberIndexMap = computed(() => {
+  const map = new Map<number, number>()
+  memberGroups.value.forEach((g, i) => map.set(g.memberId, i + 1))
+  return map
+})
+
+const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
+  const cols: DataTableColumns = [
+    {
+      title: '#', key: '__index', width: 50,
+      render: (row: any) => h('span', { style: { color: '#999' } }, String(memberIndexMap.value.get(row.memberId) ?? '')),
+    },
+    {
+      title: '会员', key: 'nickname', minWidth: 140,
+      render: (row: any) => clampedText(row.nickname),
+    },
+    { title: '平台', key: 'platform', width: 100 },
+  ]
+  if (showExtraColumns.value) {
+    cols.push({
+      title: 'UID', key: 'platformUid', minWidth: 140,
+      render: (row: any) => clampedText(row.platformUid),
+    })
+  }
+  cols.push(
+    { title: '礼物数', key: 'records', width: 80, render: (row: any) => String(row.records.length) },
+    {
+      title: '地址', key: 'addressStatus', width: 80,
+      render: (row: any) => h(NTag, { type: row.addressStatus === '已绑定' ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.addressStatus }),
+    },
+  )
+  return cols
+})
+
+// ── giftColumns: modal 内表格，完全不动 ──
 const giftColumns: DataTableColumns = [
   { title: '', key: 'productImage', width: 56, render: (row: any) => {
       const cover = productCoverMap.value[row.productId]
@@ -238,6 +429,7 @@ function goNext() {
   router.push({ name: 'waves-step-export', params: { waveId: String(waveId.value) } })
 }
 
+// ── lifecycle ──
 onMounted(async () => {
   await loadTemplates()
   await loadRecords()
@@ -250,17 +442,44 @@ onMounted(async () => {
     } catch (e) { console.error('自动预览失败', e) }
     finally { isPreviewLoading.value = false }
   }
+  // Adaptive layout setup
+  await nextTick()
+  syncAllColWidths()
+  if (memberTableWrapper.value) {
+    const h = memberTableWrapper.value.clientHeight
+    if (h > 0) memberAvailableH.value = h
+    lastMemberW.value = memberTableWrapper.value.clientWidth
+  }
+  setupResizeObserver()
+})
+
+watch([() => memberGroups.value.length], async () => {
+  await nextTick()
+  syncAllColWidths()
+  if (memberTableWrapper.value) {
+    resizeObserver?.observe(memberTableWrapper.value)
+    const h = memberTableWrapper.value.clientHeight
+    if (h > 0) memberAvailableH.value = h
+  }
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
 })
 </script>
 <template>
-  <NCard size="small" class="h-full overflow-auto">
-    <template #header>
-      <span class="flex items-center gap-2">
-        <NIcon><DownloadOutline /></NIcon>步骤三：导出预览与编辑
-      </span>
-    </template>
-    <div class="space-y-3">
-      <div v-if="exportPlatforms.length" class="space-y-2 mb-3">
+  <div class="h-full flex flex-col">
+    <!-- Title header -->
+    <div class="flex items-center gap-2 shrink-0 px-1 py-2">
+      <NIcon size="18">
+        <DownloadOutline />
+      </NIcon>
+      <span class="font-semibold text-sm">步骤三：导出预览与编辑</span>
+    </div>
+
+    <!-- Header area (shrink-0) -->
+    <div class="shrink-0 px-1 space-y-3">
+      <div v-if="exportPlatforms.length" class="space-y-2">
         <div class="text-xs text-gray-500">导出模板（已自动匹配）</div>
         <div v-for="ep in exportPlatforms" :key="ep.platform" class="flex items-center gap-2">
           <NTag size="small" round>{{ ep.platform }}</NTag>
@@ -272,16 +491,29 @@ onMounted(async () => {
         共 {{ previewExportResult.totalRecords }} 条记录
         <span v-if="previewExportResult.missingAddressCount > 0">，{{ previewExportResult.missingAddressCount }} 条缺失地址</span>
       </NAlert>
-      <p class="text-xs text-gray-400 mb-2">点击会员行查看该会员的礼物明细</p>
-      <NDataTable
-        :columns="memberGroupColumns"
-        :data="memberGroups"
-        :bordered="false"
-        :pagination="{ pageSize: 10 }"
-        :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })"
-      />
+      <p class="text-xs text-gray-400">点击会员行查看该会员的礼物明细</p>
     </div>
-    <div class="flex justify-between mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+
+    <!-- Content area (flex-1, min-h-0) -->
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div ref="memberTableWrapper" class="flex-1 min-h-0 overflow-hidden">
+        <NDataTable
+          :columns="memberGroupColumnsComputed"
+          :data="visibleMemberGroups"
+          :bordered="false"
+          :pagination="false"
+          size="small"
+          :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })"
+        />
+      </div>
+      <div ref="memberPaginationRef" class="flex justify-center mt-2 shrink-0">
+        <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
+          @update:page="handleMemberPageChange" />
+      </div>
+    </div>
+
+    <!-- Footer area (shrink-0) -->
+    <div class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700">
       <NButton @click="goPrev">上一步</NButton>
       <NButton type="primary" @click="goNext">下一步</NButton>
     </div>
@@ -323,5 +555,5 @@ onMounted(async () => {
         <NButton type="primary" block @click="handleAddGift">确认添加</NButton>
       </div>
     </NModal>
-  </NCard>
+  </div>
 </template>
