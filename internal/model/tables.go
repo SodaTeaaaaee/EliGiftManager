@@ -74,6 +74,7 @@ type ProductTag struct {
 	TagType   string    `gorm:"size:20;not null;default:'level';uniqueIndex:idx_prod_platform_tag" json:"tagType"`
 	Quantity  int       `gorm:"not null;default:1" json:"quantity"`
 	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 	Product   Product   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
 }
 

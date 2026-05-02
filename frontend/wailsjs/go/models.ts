@@ -579,6 +579,8 @@ export namespace model {
 	    quantity: number;
 	    // Go type: time
 	    createdAt: any;
+	    // Go type: time
+	    updatedAt: any;
 	    product: Product;
 	
 	    static createFrom(source: any = {}) {
@@ -594,6 +596,7 @@ export namespace model {
 	        this.tagType = source["tagType"];
 	        this.quantity = source["quantity"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	        this.product = this.convertValues(source["product"], Product);
 	    }
 	

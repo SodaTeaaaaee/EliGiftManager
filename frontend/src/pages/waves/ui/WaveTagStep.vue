@@ -3,7 +3,7 @@ import { PlayOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NInputNumber, NPopover, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
-import { allocateSingleTag, assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, reallocateWave, removeProductTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
+import { assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, removeProductTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -52,19 +52,10 @@ async function handleUpdateTagQuantity() {
     } else {
       await assignProductTag(row.id, row.platform, tag.tagName, newQty, tag.tagType)
     }
-    await allocateSingleTag(waveId.value, row.platform, tag.tagName, tag.tagType)
-    scheduleReallocate()
     await loadTagProducts()
     showTagPopover.value = false
     message.success('标签数量已更新')
   } catch (e) { message.error(String(e)) }
-}
-
-// ── reallocate debounce ──
-let reallocateTimer: ReturnType<typeof setTimeout> | null = null
-function scheduleReallocate() {
-  if (reallocateTimer) clearTimeout(reallocateTimer)
-  reallocateTimer = setTimeout(() => reallocateWave(waveId.value), 300)
 }
 
 // ── wave level tags ──
@@ -404,9 +395,7 @@ async function handleAssignTag() {
     for (const productId of checkedProductIds.value) {
       await assignProductTag(productId, platform, tagName, batchTagQuantity.value, 'level')
     }
-    const count = await allocateSingleTag(waveId.value, platform, tagName, 'level')
-    scheduleReallocate()
-    message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签，分配 ${count} 条记录`)
+    message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签`)
     await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
 }
@@ -418,8 +407,6 @@ async function handleBatchRemoveTag() {
     for (const productId of checkedProductIds.value) {
       await removeProductTag(productId, platform, tagName, 'level')
     }
-    await allocateSingleTag(waveId.value, platform, tagName, 'level')
-    scheduleReallocate()
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除 ${platform}·${tagName} 标签`)
     await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
@@ -453,7 +440,6 @@ async function handleAddUserTag() {
       if (!product) continue
       await assignProductTag(productId, product.platform, tagName, quantity, 'user')
     }
-    scheduleReallocate()
     await loadTagProducts()
     message.success(`已为 ${checkedProductIds.value.length} 件商品添加用户 Tag`)
   } catch (e) { message.error(String(e)) }
@@ -505,7 +491,6 @@ watch([() => allTagProducts.value.length], async () => {
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
-  if (reallocateTimer) clearTimeout(reallocateTimer)
 })
 </script>
 <template>

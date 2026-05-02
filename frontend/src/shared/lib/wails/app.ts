@@ -23,7 +23,6 @@ import {
 import {
   AddDispatchToMember as addDispatchToMemberBinding,
   AllocateByTags as allocateByTagsBinding,
-  AllocateSingleTag as allocateSingleTagBinding,
   BindDefaultAddresses as bindDefaultAddressesBinding,
   CreateWave as createWaveBinding,
   DeleteWave as deleteWaveBinding,
@@ -33,11 +32,10 @@ import {
   ListDispatchRecords as listDispatchRecordsBinding,
   ListWaves as listWavesBinding,
   PreviewExport as previewExportBinding,
-  ReallocateWave as reallocateWaveBinding,
   RemoveDispatchFromMember as removeDispatchFromMemberBinding,
   RemoveProductFromWave as removeProductFromWaveBinding,
-  RemoveSingleTag as removeSingleTagBinding,
   SetDispatchAddress as setDispatchAddressBinding,
+  SyncUserTagForTargetQuantity as syncUserTagForTargetQuantityBinding,
   UpdateDispatchQuantity as updateDispatchQuantityBinding,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
@@ -113,34 +111,21 @@ export function allocateByTags(waveId: number): Promise<number> {
   assertWailsRuntime();
   return allocateByTagsBinding(waveId);
 }
-export function allocateSingleTag(
-  waveId: number,
-  platform: string,
-  tagName: string,
-  tagType: string,
-): Promise<number> {
-  assertWailsRuntime();
-  return allocateSingleTagBinding(waveId, platform, tagName, tagType);
-}
-
-export function reallocateWave(waveId: number): Promise<void> {
-  assertWailsRuntime();
-  return reallocateWaveBinding(waveId);
-}
-export function removeSingleTag(
-  waveId: number,
-  platform: string,
-  tagName: string,
-): Promise<number> {
-  assertWailsRuntime();
-  return removeSingleTagBinding(waveId, platform, tagName);
-}
 export function updateDispatchQuantity(
   dispatchId: number,
   quantity: number,
 ): Promise<void> {
   assertWailsRuntime();
   return updateDispatchQuantityBinding(dispatchId, quantity);
+}
+export function syncUserTagForTargetQuantity(
+  waveId: number,
+  memberId: number,
+  productId: number,
+  targetQty: number,
+): Promise<void> {
+  assertWailsRuntime();
+  return syncUserTagForTargetQuantityBinding(waveId, memberId, productId, targetQty);
 }
 export function addDispatchToMember(
   waveId: number,

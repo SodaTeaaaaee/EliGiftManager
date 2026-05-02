@@ -10,10 +10,6 @@ export function AllocateByTags(arg1) {
   return window['go']['main']['WaveController']['AllocateByTags'](arg1);
 }
 
-export function AllocateSingleTag(arg1, arg2, arg3, arg4) {
-  return window['go']['main']['WaveController']['AllocateSingleTag'](arg1, arg2, arg3, arg4);
-}
-
 export function BindDefaultAddresses(arg1) {
   return window['go']['main']['WaveController']['BindDefaultAddresses'](arg1);
 }
@@ -54,6 +50,10 @@ export function ReallocateWave(arg1) {
   return window['go']['main']['WaveController']['ReallocateWave'](arg1);
 }
 
+export function ReconcileWave(arg1) {
+  return window['go']['main']['WaveController']['ReconcileWave'](arg1);
+}
+
 export function RemoveDispatchFromMember(arg1) {
   return window['go']['main']['WaveController']['RemoveDispatchFromMember'](arg1);
 }
@@ -62,12 +62,12 @@ export function RemoveProductFromWave(arg1, arg2) {
   return window['go']['main']['WaveController']['RemoveProductFromWave'](arg1, arg2);
 }
 
-export function RemoveSingleTag(arg1, arg2, arg3) {
-  return window['go']['main']['WaveController']['RemoveSingleTag'](arg1, arg2, arg3);
-}
-
 export function SetDispatchAddress(arg1, arg2, arg3) {
   return window['go']['main']['WaveController']['SetDispatchAddress'](arg1, arg2, arg3);
+}
+
+export function SyncUserTagForTargetQuantity(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['WaveController']['SyncUserTagForTargetQuantity'](arg1, arg2, arg3, arg4);
 }
 
 export function UpdateDispatchQuantity(arg1, arg2) {

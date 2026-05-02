@@ -7,6 +7,7 @@ import (
 	dbpkg "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type ProductController struct{}
@@ -119,39 +120,51 @@ func (c *ProductController) ListProductTags(platform string) ([]string, error) {
 }
 
 func (c *ProductController) AssignProductTag(productID uint, platform, tagName string, quantity int, tagType string) error {
-	platform, tagName, tagType = strings.TrimSpace(platform), strings.TrimSpace(tagName), strings.TrimSpace(tagType)
+	platform = strings.TrimSpace(platform)
+	tagName = strings.TrimSpace(tagName)
+	tagType = strings.TrimSpace(tagType)
+
 	if platform == "" || tagName == "" || productID == 0 {
-		return fmt.Errorf("assign product tag failed: productId, platform, and tagName are required")
+		return fmt.Errorf("assign product tag failed: invalid parameters")
 	}
 	if tagType == "" {
 		tagType = "level"
 	}
-	db := c.db()
-	if db == nil {
-		return fmt.Errorf("database not available")
+
+	// User tag 必须先校验用户是否存在
+	if tagType == "user" {
+		var count int64
+		c.db().Model(&model.Member{}).Where("platform = ? AND platform_uid = ?", platform, tagName).Count(&count)
+		if count == 0 {
+			return fmt.Errorf("无法添加指定用户分配：平台 [%s] UID [%s] 的用户不存在", platform, tagName)
+		}
 	}
 
-	// Normalise: if we're writing a "level" tag and a legacy record exists with
-	// tag_type="", migrate it to tag_type="level" first to avoid duplicates.
-	if tagType == "level" {
-		db.Model(&model.ProductTag{}).
-			Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = ?", productID, platform, tagName, "").
-			Update("tag_type", "level")
+	tag := model.ProductTag{
+		ProductID: productID,
+		Platform:  platform,
+		TagName:   tagName,
+		TagType:   tagType,
+		Quantity:  quantity,
 	}
 
-	tag := model.ProductTag{ProductID: productID, Platform: platform, TagName: tagName, TagType: tagType, Quantity: quantity}
-	if err := db.Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = ?", productID, platform, tagName, tagType).FirstOrCreate(&tag).Error; err != nil {
+	err := c.db().Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "product_id"}, {Name: "platform"}, {Name: "tag_name"}, {Name: "tag_type"}},
+		DoUpdates: clause.AssignmentColumns([]string{"quantity", "updated_at"}),
+	}).Create(&tag).Error
+	if err != nil {
 		return fmt.Errorf("assign product tag failed: %w", err)
 	}
-	if tag.Quantity != quantity || tag.TagType != tagType {
-		updates := map[string]interface{}{"quantity": quantity}
-		if tag.TagType != tagType {
-			updates["tag_type"] = tagType
-		}
-		if err := db.Model(&tag).Updates(updates).Error; err != nil {
-			return fmt.Errorf("assign product tag failed: update: %w", err)
+
+	// 主动触发 ReconcileWave
+	var product model.Product
+	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
+		var wc WaveController
+		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
+			return fmt.Errorf("reconcile wave after tag assign failed: %w", err)
 		}
 	}
+
 	return nil
 }
 
@@ -171,6 +184,16 @@ func (c *ProductController) RemoveProductTag(productID uint, platform, tagName, 
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("remove product tag failed: tag not found")
 	}
+
+	// 主动触发 ReconcileWave
+	var product model.Product
+	if err := db.First(&product, productID).Error; err == nil && product.WaveID != nil {
+		var wc WaveController
+		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
+			return fmt.Errorf("reconcile wave after tag remove failed: %w", err)
+		}
+	}
+
 	return nil
 }
 

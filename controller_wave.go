@@ -13,6 +13,7 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type WaveController struct{}
@@ -195,192 +196,100 @@ func (c *WaveController) ListDispatchRecords(waveID uint) ([]DispatchRecordItem,
 	return queryDispatchRecords(db, waveID, 500)
 }
 
-func (c *WaveController) AllocateByTags(waveID uint) (int, error) {
-	db := c.db()
-	if db == nil {
-		return 0, fmt.Errorf("allocate by tags failed: database not available")
-	}
-
-	var wave model.Wave
-	if err := db.First(&wave, waveID).Error; err != nil {
-		return 0, fmt.Errorf("allocate by tags failed: wave not found: %w", err)
-	}
-
-	// Load all ProductTags for products belonging to this wave.
-	var allTags []model.ProductTag
-	if err := db.Model(&model.ProductTag{}).
-		Joins("JOIN products ON products.id = product_tags.product_id").
-		Where("products.wave_id = ?", waveID).
-		Find(&allTags).Error; err != nil {
-		return 0, fmt.Errorf("allocate by tags failed: load product tags: %w", err)
-	}
-	if len(allTags) == 0 {
-		return 0, fmt.Errorf("allocate by tags failed: no product tags found for this wave")
-	}
-
-	// Group tags by product ID.
-	tagsByProduct := make(map[uint][]model.ProductTag)
-	for _, tag := range allTags {
-		tagsByProduct[tag.ProductID] = append(tagsByProduct[tag.ProductID], tag)
-	}
-
-	allocatedCount := 0
-	err := db.Transaction(func(tx *gorm.DB) error {
-		for productID, productTagList := range tagsByProduct {
-			// Aggregate net quantity per member for this product across all its tags.
-			memberQty := make(map[uint]int)
-
-			for _, tag := range productTagList {
-				switch tag.TagType {
-				case "user":
-					var member model.Member
-					if err := tx.Where("platform = ? AND platform_uid = ?",
-						tag.Platform, tag.TagName).First(&member).Error; err != nil {
-						if err == gorm.ErrRecordNotFound {
-							continue
-						}
-						return fmt.Errorf("lookup member for user tag %s/%s: %w", tag.Platform, tag.TagName, err)
-					}
-					memberQty[member.ID] += tag.Quantity
-				default: // "level" or any unrecognised TagType falls back to level matching
-					var members []model.Member
-					if err := tx.Where("platform = ? AND extra_data LIKE ?",
-						tag.Platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, tag.TagName)).
-						Find(&members).Error; err != nil {
-						return fmt.Errorf("query members for level tag %s/%s: %w", tag.Platform, tag.TagName, err)
-					}
-					for _, m := range members {
-						memberQty[m.ID] += tag.Quantity
-					}
-				}
-			}
-
-			for memberID, netQty := range memberQty {
-				if netQty > 0 {
-					var record model.DispatchRecord
-					result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
-						waveID, memberID, productID).
-						FirstOrCreate(&record, model.DispatchRecord{
-							WaveID:    waveID,
-							MemberID:  memberID,
-							ProductID: productID,
-							Quantity:  netQty,
-							Status:    "draft",
-						})
-					if result.Error != nil {
-						return fmt.Errorf("upsert dispatch record: %w", result.Error)
-					}
-					if result.RowsAffected > 0 {
-						allocatedCount++
-					}
-					if record.Quantity != netQty {
-						if err := tx.Model(&record).Update("quantity", netQty).Error; err != nil {
-							return fmt.Errorf("update dispatch quantity: %w", err)
-						}
-					}
-				} else {
-					if err := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
-						waveID, memberID, productID).
-						Delete(&model.DispatchRecord{}).Error; err != nil {
-						return fmt.Errorf("delete dispatch record: %w", err)
-					}
-				}
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return 0, fmt.Errorf("allocate by tags failed: %w", err)
-	}
-	return allocatedCount, nil
-}
-
-func (c *WaveController) AllocateSingleTag(waveID uint, platform, tagName, tagType string) (int, error) {
-	if tagType == "" {
-		tagType = "level"
-	}
+// ReconcileWave 根据 ProductTag 和 WaveMember 重新计算整个波次的 DispatchRecord。
+// 比对期望状态与实际状态，通过 INSERT/UPDATE/DELETE 抹平差异。幂等。
+func (c *WaveController) ReconcileWave(waveID uint) (int, error) {
 	db := c.db()
 	if db == nil {
 		return 0, fmt.Errorf("database not available")
 	}
 
-	// Load ProductTags matching this specific tag, only for products in the wave.
-	var tags []model.ProductTag
-	if err := db.Model(&model.ProductTag{}).
-		Joins("JOIN products ON products.id = product_tags.product_id").
-		Where("products.wave_id = ? AND product_tags.platform = ? AND product_tags.tag_name = ? AND product_tags.tag_type = ?",
-			waveID, platform, tagName, tagType).
-		Find(&tags).Error; err != nil {
-		return 0, fmt.Errorf("allocate single tag failed: %w", err)
-	}
-	if len(tags) == 0 {
-		return 0, nil
+	// 1. 预查询 WaveMembers（一次查询，不在循环内重复查）
+	var waveMembers []model.WaveMember
+	if err := db.Where("wave_id = ?", waveID).Preload("Member").Find(&waveMembers).Error; err != nil {
+		return 0, fmt.Errorf("load wave members failed: %w", err)
 	}
 
-	allocated := 0
-	err := db.Transaction(func(tx *gorm.DB) error {
-		for _, tag := range tags {
-			switch tag.TagType {
-			case "user":
+	// 2. 读取该波次下的所有商品及其 Tags
+	var products []model.Product
+	if err := db.Where("wave_id = ?", waveID).Preload("Tags").Find(&products).Error; err != nil {
+		return 0, fmt.Errorf("load products failed: %w", err)
+	}
+
+	// 3. 计算期望状态: productID -> memberID -> expectedQuantity
+	expectedState := make(map[uint]map[uint]int)
+	for _, p := range products {
+		expectedState[p.ID] = make(map[uint]int)
+	}
+
+	for _, p := range products {
+		for _, tag := range p.Tags {
+			if tag.TagType == "user" {
 				var member model.Member
-				if err := tx.Where("platform = ? AND platform_uid = ?",
-					tag.Platform, tag.TagName).First(&member).Error; err != nil {
-					if err == gorm.ErrRecordNotFound {
-						continue
-					}
-					return err
+				if err := db.Where("platform = ? AND platform_uid = ?", tag.Platform, tag.TagName).First(&member).Error; err == nil {
+					expectedState[p.ID][member.ID] += tag.Quantity
 				}
-				var record model.DispatchRecord
-				result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
-					waveID, member.ID, tag.ProductID).
-					FirstOrCreate(&record, model.DispatchRecord{
-						WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID,
-						Quantity: tag.Quantity, Status: "draft",
-					})
-				if result.Error != nil {
-					return result.Error
-				}
-				if result.RowsAffected > 0 {
-					allocated++
-				}
-				if record.Quantity != tag.Quantity {
-					if err := tx.Model(&record).Update("quantity", tag.Quantity).Error; err != nil {
-						return err
-					}
-				}
-			default: // "level"
-				var members []model.Member
-				if err := tx.Where("platform = ? AND extra_data LIKE ?",
-					tag.Platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, tag.TagName)).
-					Find(&members).Error; err != nil {
-					return err
-				}
-				for _, member := range members {
-					var record model.DispatchRecord
-					result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
-						waveID, member.ID, tag.ProductID).
-						FirstOrCreate(&record, model.DispatchRecord{
-							WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID,
-							Quantity: tag.Quantity, Status: "draft",
-						})
-					if result.Error != nil {
-						return result.Error
-					}
-					if result.RowsAffected > 0 {
-						allocated++
-					}
-					if record.Quantity != tag.Quantity {
-						if err := tx.Model(&record).Update("quantity", tag.Quantity).Error; err != nil {
-							return err
-						}
+			} else {
+				// Level tag: 只匹配 WaveMember（非全局 member）
+				for _, wm := range waveMembers {
+					if wm.Member.Platform == tag.Platform && strings.Contains(wm.Member.ExtraData, fmt.Sprintf(`"giftLevel":"%s"`, tag.TagName)) {
+						expectedState[p.ID][wm.Member.ID] += tag.Quantity
 					}
 				}
 			}
 		}
+	}
+
+	allocatedCount := 0
+	err := db.Transaction(func(tx *gorm.DB) error {
+		var validDispatchIDs []uint
+
+		for productID, memberMap := range expectedState {
+			for memberID, expectedQty := range memberMap {
+				if expectedQty > 0 {
+					var record model.DispatchRecord
+					result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).
+						FirstOrCreate(&record, model.DispatchRecord{
+							WaveID:    waveID,
+							MemberID:  memberID,
+							ProductID: productID,
+							Quantity:  expectedQty,
+							Status:    "draft",
+						})
+					if result.Error != nil {
+						return fmt.Errorf("upsert dispatch record (member=%d, product=%d): %w", memberID, productID, result.Error)
+					}
+					if record.Quantity != expectedQty {
+						if err := tx.Model(&record).Update("quantity", expectedQty).Error; err != nil {
+							return fmt.Errorf("update dispatch quantity (id=%d): %w", record.ID, err)
+						}
+					}
+					allocatedCount++
+					validDispatchIDs = append(validDispatchIDs, record.ID)
+				}
+			}
+		}
+
+		// GC: 删除不在期望状态中的 DispatchRecord
+		if len(validDispatchIDs) > 0 {
+			if err := tx.Where("wave_id = ? AND id NOT IN ?", waveID, validDispatchIDs).Delete(&model.DispatchRecord{}).Error; err != nil {
+				return fmt.Errorf("cleanup orphaned dispatch records failed: %w", err)
+			}
+		} else {
+			if err := tx.Where("wave_id = ?", waveID).Delete(&model.DispatchRecord{}).Error; err != nil {
+				return fmt.Errorf("clear all dispatch records failed: %w", err)
+			}
+		}
 		return nil
 	})
+	if err != nil {
+		return 0, fmt.Errorf("reconcile wave failed: %w", err)
+	}
+	return allocatedCount, nil
+}
 
-	return allocated, err
+func (c *WaveController) AllocateByTags(waveID uint) (int, error) {
+	return c.ReconcileWave(waveID)
 }
 
 func (c *WaveController) SetDispatchAddress(waveID, memberID, addressID uint) error {
@@ -391,64 +300,78 @@ func (c *WaveController) SetDispatchAddress(waveID, memberID, addressID uint) er
 	return db.Model(&model.DispatchRecord{}).Where("wave_id = ? AND member_id = ?", waveID, memberID).Update("member_address_id", addressID).Error
 }
 
-func (c *WaveController) RemoveSingleTag(waveID uint, platform, tagName string) (int, error) {
-	db := c.db()
-	if db == nil {
-		return 0, fmt.Errorf("database not available")
-	}
-
-	var tags []model.ProductTag
-	if err := db.Where("platform = ? AND tag_name = ?", platform, tagName).Find(&tags).Error; err != nil {
-		return 0, err
-	}
-
-	if len(tags) == 0 {
-		return 0, nil
-	}
-
-	var productIDs []uint
-	for _, t := range tags {
-		productIDs = append(productIDs, t.ProductID)
-	}
-
-	result := db.Where("wave_id = ? AND product_id IN ?", waveID, productIDs).Delete(&model.DispatchRecord{})
-	return int(result.RowsAffected), result.Error
-}
-
 func (c *WaveController) UpdateDispatchQuantity(dispatchID uint, quantity int) error {
 	db := c.db()
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
-	r := db.Model(&model.DispatchRecord{}).Where("id = ?", dispatchID).Update("quantity", quantity)
-	if r.Error != nil {
-		return r.Error
+	var record model.DispatchRecord
+	if err := db.First(&record, dispatchID).Error; err != nil {
+		return fmt.Errorf("dispatch record not found: %w", err)
 	}
-	if r.RowsAffected == 0 {
-		return fmt.Errorf("dispatch record not found")
-	}
-	return nil
+	return c.SyncUserTagForTargetQuantity(record.WaveID, record.MemberID, record.ProductID, quantity)
 }
 
-func (c *WaveController) ReallocateWave(waveID uint) error {
-	_, err := c.AllocateByTags(waveID)
-	return err
-}
-
-func (c *WaveController) AddDispatchToMember(waveID, memberID, productID uint, quantity int) error {
+func (c *WaveController) SyncUserTagForTargetQuantity(waveID, memberID, productID uint, targetQty int) error {
 	db := c.db()
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
+
+	var member model.Member
+	if err := db.First(&member, memberID).Error; err != nil {
+		return fmt.Errorf("lookup member failed: %w", err)
+	}
+
+	var levelTags []model.ProductTag
+	db.Where("product_id = ? AND platform = ? AND tag_type = 'level'", productID, member.Platform).Find(&levelTags)
+
+	baseQty := 0
+	for _, tag := range levelTags {
+		var count int64
+		if err := db.Model(&model.Member{}).Where("id = ? AND extra_data LIKE ?",
+			memberID, fmt.Sprintf(`%%"giftLevel":%%%s%%`, tag.TagName)).Count(&count).Error; err == nil && count > 0 {
+			baseQty += tag.Quantity
+		}
+	}
+
+	neededUserQty := targetQty - baseQty
+
+	if neededUserQty == 0 {
+		db.Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = 'user'",
+			productID, member.Platform, member.PlatformUID).Delete(&model.ProductTag{})
+	} else {
+		userTag := model.ProductTag{
+			ProductID: productID,
+			Platform:  member.Platform,
+			TagName:   member.PlatformUID,
+			TagType:   "user",
+			Quantity:  neededUserQty,
+		}
+		if err := db.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "product_id"}, {Name: "platform"}, {Name: "tag_name"}, {Name: "tag_type"}},
+			DoUpdates: clause.AssignmentColumns([]string{"quantity", "updated_at"}),
+		}).Create(&userTag).Error; err != nil {
+			return fmt.Errorf("upsert user tag failed: %w", err)
+		}
+	}
+
+	_, err := c.ReconcileWave(waveID)
+	return err
+}
+
+// ReallocateWave is a deprecated wrapper kept for Wails binding compatibility.
+// New code should call ReconcileWave directly; tag operations auto-trigger it.
+func (c *WaveController) ReallocateWave(waveID uint) error {
+	_, err := c.ReconcileWave(waveID)
+	return err
+}
+
+func (c *WaveController) AddDispatchToMember(waveID, memberID, productID uint, quantity int) error {
 	if quantity < 1 {
 		quantity = 1
 	}
-	var cnt int64
-	db.Model(&model.DispatchRecord{}).Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).Count(&cnt)
-	if cnt > 0 {
-		return fmt.Errorf("this product is already assigned to this member")
-	}
-	return db.Create(&model.DispatchRecord{WaveID: waveID, MemberID: memberID, ProductID: productID, Quantity: quantity, Status: "draft"}).Error
+	return c.SyncUserTagForTargetQuantity(waveID, memberID, productID, quantity)
 }
 
 func (c *WaveController) RemoveDispatchFromMember(dispatchID uint) error {
@@ -456,14 +379,11 @@ func (c *WaveController) RemoveDispatchFromMember(dispatchID uint) error {
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
-	r := db.Delete(&model.DispatchRecord{}, dispatchID)
-	if r.Error != nil {
-		return r.Error
+	var record model.DispatchRecord
+	if err := db.First(&record, dispatchID).Error; err != nil {
+		return fmt.Errorf("dispatch record not found: %w", err)
 	}
-	if r.RowsAffected == 0 {
-		return fmt.Errorf("dispatch record not found")
-	}
-	return nil
+	return c.SyncUserTagForTargetQuantity(record.WaveID, record.MemberID, record.ProductID, 0)
 }
 
 func (c *WaveController) RemoveProductFromWave(waveID, productID uint) error {

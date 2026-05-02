@@ -3,7 +3,7 @@ import { DownloadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAlert, NButton, NDataTable, NIcon, NInput, NInputNumber, NModal, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
-import { addDispatchToMember, addMemberAddress, isWailsRuntimeAvailable, listDispatchRecords, listProductsWithTags, listTemplates, listWaveMembers, previewExport, reallocateWave, removeDispatchFromMember, setDispatchAddress, updateDispatchQuantity, WAILS_PREVIEW_MESSAGE, type DispatchRecordItem, type TemplateItem } from '@/shared/lib/wails/app'
+import { addMemberAddress, isWailsRuntimeAvailable, listDispatchRecords, listProductsWithTags, listTemplates, listWaveMembers, previewExport, setDispatchAddress, syncUserTagForTargetQuantity, WAILS_PREVIEW_MESSAGE, type DispatchRecordItem, type TemplateItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -250,11 +250,11 @@ const giftColumns: DataTableColumns = [
   { title: 'SKU', key: 'factorySku', width: 100 },
   {
     title: '数量', key: 'quantity', width: 130, render: (row: any) =>
-      h(NInputNumber, { value: row.quantity, size: 'small', min: 1, onUpdateValue: (v: number | null) => { if (v && v !== row.quantity) handleUpdateQuantity(row.id, v) } }),
+      h(NInputNumber, { value: row.quantity, size: 'small', min: 1, onUpdateValue: (v: number | null) => { if (v && v !== row.quantity) handleUpdateQuantity(row.memberId, row.productId, v) } }),
   },
   {
     title: '', key: 'actions', width: 60, render: (row: any) =>
-      h(NButton, { size: 'tiny', type: 'error', secondary: true, onClick: () => handleRemoveGift(row.id) }, { default: () => '删除' }),
+      h(NButton, { size: 'tiny', type: 'error', secondary: true, onClick: () => handleRemoveGift(row.memberId, row.productId) }, { default: () => '删除' }),
   },
 ]
 
@@ -295,21 +295,19 @@ async function openMemberPopup(group: typeof memberGroups.value[0]) {
   } catch { productCoverMap.value = {} }
 }
 
-async function handleUpdateQuantity(recordId: number, qty: number) {
+async function handleUpdateQuantity(memberId: number, productId: number, qty: number) {
   if (qty < 1) return
   try {
-    await updateDispatchQuantity(recordId, qty)
-    await reallocateWave(waveId.value)
+    await syncUserTagForTargetQuantity(waveId.value, memberId, productId, qty)
     records.value = await listDispatchRecords(waveId.value)
     const group = memberGroups.value.find(g => g.memberId === selectedMember.value?.memberId)
     if (group) memberRecords.value = group.records
   } catch (e) { message.error(String(e)) }
 }
 
-async function handleRemoveGift(recordId: number) {
+async function handleRemoveGift(memberId: number, productId: number) {
   try {
-    await removeDispatchFromMember(recordId)
-    await reallocateWave(waveId.value)
+    await syncUserTagForTargetQuantity(waveId.value, memberId, productId, 0)
     records.value = await listDispatchRecords(waveId.value)
     const group = memberGroups.value.find(g => g.memberId === selectedMember.value?.memberId)
     if (group) memberRecords.value = group.records
@@ -320,8 +318,7 @@ async function handleRemoveGift(recordId: number) {
 async function handleAddGift() {
   if (!addGiftProductId.value || !selectedMember.value) return
   try {
-    await addDispatchToMember(waveId.value, selectedMember.value.memberId, addGiftProductId.value, addGiftQuantity.value)
-    await reallocateWave(waveId.value)
+    await syncUserTagForTargetQuantity(waveId.value, selectedMember.value.memberId, addGiftProductId.value, addGiftQuantity.value)
     showAddGiftModal.value = false
     addGiftProductId.value = null
     addGiftQuantity.value = 1

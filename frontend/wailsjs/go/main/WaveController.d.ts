@@ -7,8 +7,6 @@ export function AddDispatchToMember(arg1:number,arg2:number,arg3:number,arg4:num
 
 export function AllocateByTags(arg1:number):Promise<number>;
 
-export function AllocateSingleTag(arg1:number,arg2:string,arg3:string,arg4:string):Promise<number>;
-
 export function BindDefaultAddresses(arg1:number):Promise<Record<string, number>>;
 
 export function CreateWave(arg1:string):Promise<model.Wave>;
@@ -29,12 +27,14 @@ export function PreviewExport(arg1:number):Promise<Record<string, number>>;
 
 export function ReallocateWave(arg1:number):Promise<void>;
 
+export function ReconcileWave(arg1:number):Promise<number>;
+
 export function RemoveDispatchFromMember(arg1:number):Promise<void>;
 
 export function RemoveProductFromWave(arg1:number,arg2:number):Promise<void>;
 
-export function RemoveSingleTag(arg1:number,arg2:string,arg3:string):Promise<number>;
-
 export function SetDispatchAddress(arg1:number,arg2:number,arg3:number):Promise<void>;
+
+export function SyncUserTagForTargetQuantity(arg1:number,arg2:number,arg3:number,arg4:number):Promise<void>;
 
 export function UpdateDispatchQuantity(arg1:number,arg2:number):Promise<void>;
