@@ -47,7 +47,8 @@ export namespace main {
 	    quantity: number;
 	    status: string;
 	    memberId: number;
-	    platform: string;
+	    memberPlatform: string;
+	    productPlatform: string;
 	    platformUid: string;
 	    memberNickname: string;
 	    productId: number;
@@ -73,7 +74,8 @@ export namespace main {
 	        this.quantity = source["quantity"];
 	        this.status = source["status"];
 	        this.memberId = source["memberId"];
-	        this.platform = source["platform"];
+	        this.memberPlatform = source["memberPlatform"];
+	        this.productPlatform = source["productPlatform"];
 	        this.platformUid = source["platformUid"];
 	        this.memberNickname = source["memberNickname"];
 	        this.productId = source["productId"];
@@ -208,9 +210,11 @@ export namespace main {
 	
 	export class MemberItem {
 	    id: number;
+	    memberId: number;
 	    platform: string;
 	    platformUid: string;
 	    latestNickname: string;
+	    giftLevel: string;
 	    extraData: string;
 	    addressCount: number;
 	    activeAddressCount: number;
@@ -230,9 +234,11 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.memberId = source["memberId"];
 	        this.platform = source["platform"];
 	        this.platformUid = source["platformUid"];
 	        this.latestNickname = source["latestNickname"];
+	        this.giftLevel = source["giftLevel"];
 	        this.extraData = source["extraData"];
 	        this.addressCount = source["addressCount"];
 	        this.activeAddressCount = source["activeAddressCount"];
@@ -350,6 +356,8 @@ export namespace main {
 	    tagName: string;
 	    quantity: number;
 	    tagType: string;
+	    platform: string;
+	    waveMemberId: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new TagInfo(source);
@@ -360,6 +368,8 @@ export namespace main {
 	        this.tagName = source["tagName"];
 	        this.quantity = source["quantity"];
 	        this.tagType = source["tagType"];
+	        this.platform = source["platform"];
+	        this.waveMemberId = source["waveMemberId"];
 	    }
 	}
 	export class ProductItemWithTags {
@@ -577,6 +587,7 @@ export namespace model {
 	    tagName: string;
 	    tagType: string;
 	    quantity: number;
+	    waveMemberId?: number;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -595,6 +606,7 @@ export namespace model {
 	        this.tagName = source["tagName"];
 	        this.tagType = source["tagType"];
 	        this.quantity = source["quantity"];
+	        this.waveMemberId = source["waveMemberId"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	        this.product = this.convertValues(source["product"], Product);
@@ -912,6 +924,56 @@ export namespace model {
 	
 	
 	
+	
+	export class WaveMember {
+	    id: number;
+	    waveId: number;
+	    memberId: number;
+	    platform: string;
+	    platformUid: string;
+	    giftLevel: string;
+	    latestNickname: string;
+	    // Go type: time
+	    createdAt: any;
+	    Wave: Wave;
+	    Member: Member;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveMember(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveId = source["waveId"];
+	        this.memberId = source["memberId"];
+	        this.platform = source["platform"];
+	        this.platformUid = source["platformUid"];
+	        this.giftLevel = source["giftLevel"];
+	        this.latestNickname = source["latestNickname"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.Wave = this.convertValues(source["Wave"], Wave);
+	        this.Member = this.convertValues(source["Member"], Member);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

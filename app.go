@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -80,9 +81,11 @@ type WaveItem struct {
 }
 type MemberItem struct {
 	ID                 uint                   `json:"id"`
+	MemberID           uint                   `json:"memberId"`
 	Platform           string                 `json:"platform"`
 	PlatformUID        string                 `json:"platformUid"`
 	LatestNickname     string                 `json:"latestNickname"`
+	GiftLevel          string                 `json:"giftLevel"`
 	ExtraData          string                 `json:"extraData"`
 	AddressCount       int                    `json:"addressCount"`
 	ActiveAddressCount int                    `json:"activeAddressCount"`
@@ -117,9 +120,11 @@ type ProductListPayload struct {
 	Platforms []string      `json:"platforms"`
 }
 type TagInfo struct {
-	TagName  string `json:"tagName"`
-	Quantity int    `json:"quantity"`
-	TagType  string `json:"tagType"`
+	TagName      string `json:"tagName"`
+	Quantity     int    `json:"quantity"`
+	TagType      string `json:"tagType"`
+	Platform     string `json:"platform"`
+	WaveMemberID uint   `json:"waveMemberId"`
 }
 type ProductItemWithTags struct {
 	ID         uint      `json:"id"`
@@ -144,7 +149,8 @@ type DispatchRecordItem struct {
 	Quantity        int       `json:"quantity"`
 	Status          string    `json:"status"`
 	MemberID        uint      `json:"memberId"`
-	Platform        string    `json:"platform"`
+	MemberPlatform  string    `json:"memberPlatform"`
+	ProductPlatform string    `json:"productPlatform"`
 	PlatformUID     string    `json:"platformUid"`
 	MemberNickname  string    `json:"memberNickname"`
 	ProductID       uint      `json:"productId"`
@@ -247,7 +253,7 @@ func queryDispatchRecords(db *gorm.DB, waveID uint, limit int) ([]DispatchRecord
 	}
 	items := make([]DispatchRecordItem, 0, len(records))
 	for _, record := range records {
-		item := DispatchRecordItem{ID: record.ID, WaveID: record.WaveID, WaveNo: record.Wave.WaveNo, Quantity: record.Quantity, Status: record.Status, MemberID: record.MemberID, Platform: record.Member.Platform, PlatformUID: record.Member.PlatformUID, MemberNickname: latestNickname(record.Member), ProductID: record.ProductID, ProductName: record.Product.Name, FactorySKU: record.Product.FactorySKU, MemberAddressID: record.MemberAddressID, UpdatedAt: record.UpdatedAt}
+		item := DispatchRecordItem{ID: record.ID, WaveID: record.WaveID, WaveNo: record.Wave.WaveNo, Quantity: record.Quantity, Status: record.Status, MemberID: record.MemberID, MemberPlatform: record.Member.Platform, ProductPlatform: record.Product.Platform, PlatformUID: record.Member.PlatformUID, MemberNickname: latestNickname(record.Member), ProductID: record.ProductID, ProductName: record.Product.Name, FactorySKU: record.Product.FactorySKU, MemberAddressID: record.MemberAddressID, UpdatedAt: record.UpdatedAt}
 		if record.MemberAddress != nil && !record.MemberAddress.IsDeleted {
 			item.HasAddress = true
 			item.RecipientName = record.MemberAddress.RecipientName
@@ -265,7 +271,7 @@ func buildMemberItems(db *gorm.DB, members []model.Member) ([]MemberItem, error)
 		return nil, err
 	}
 	for _, member := range members {
-		item := MemberItem{ID: member.ID, Platform: member.Platform, PlatformUID: member.PlatformUID, LatestNickname: latestNickname(member), ExtraData: member.ExtraData, AddressCount: len(member.Addresses), UpdatedAt: member.UpdatedAt, Addresses: member.Addresses, Nicknames: member.Nicknames, DispatchCount: dispatchCounts[member.ID]}
+		item := MemberItem{ID: member.ID, MemberID: member.ID, Platform: member.Platform, PlatformUID: member.PlatformUID, LatestNickname: latestNickname(member), GiftLevel: giftLevelFromExtraData(member.ExtraData), ExtraData: member.ExtraData, AddressCount: len(member.Addresses), UpdatedAt: member.UpdatedAt, Addresses: member.Addresses, Nicknames: member.Nicknames, DispatchCount: dispatchCounts[member.ID]}
 		for _, address := range member.Addresses {
 			if address.IsDeleted {
 				continue
@@ -370,6 +376,21 @@ func queryMemberPlatforms(db *gorm.DB) ([]string, error) {
 	return platforms, nil
 }
 
+func giftLevelFromExtraData(extraData string) string {
+	if extraData == "" {
+		return ""
+	}
+	var ed map[string]interface{}
+	if err := json.Unmarshal([]byte(extraData), &ed); err != nil {
+		return ""
+	}
+	if gl, ok := ed["giftLevel"]; ok {
+		if glStr, ok := gl.(string); ok {
+			return glStr
+		}
+	}
+	return ""
+}
 func latestNickname(member model.Member) string {
 	if len(member.Nicknames) > 0 {
 		return member.Nicknames[0].Nickname

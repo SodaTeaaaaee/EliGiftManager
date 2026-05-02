@@ -12,13 +12,15 @@ import {
   UpdateMemberAddress as updateMemberAddressBinding,
 } from "../../../../wailsjs/go/main/MemberController";
 import {
-  AssignProductTag as assignProductTagBinding,
   GetProductImages as getProductImagesBinding,
   ListProducts as listProductsBinding,
   ListProductsWithTags as listProductsWithTagsBinding,
   ListProductTags as listProductTagsBinding,
-  RemoveProductTag as removeProductTagBinding,
+  RemoveLevelTag as removeLevelTagBinding,
+  RemoveUserTag as removeUserTagBinding,
   UpdateProduct as updateProductBinding,
+  UpsertLevelTag as upsertLevelTagBinding,
+  UpsertUserTag as upsertUserTagBinding,
 } from "../../../../wailsjs/go/main/ProductController";
 import {
   AddDispatchToMember as addDispatchToMemberBinding,
@@ -168,30 +170,37 @@ export function listProductsWithTags(
   assertWailsRuntime();
   return listProductsWithTagsBinding(waveId, platform, page, pageSize);
 }
-export function assignProductTag(
+export function upsertLevelTag(
   productId: number,
-  platform: string,
-  tagName: string,
+  memberPlatform: string,
+  levelName: string,
   quantity: number,
-  tagType: string,
 ): Promise<void> {
   assertWailsRuntime();
-  return assignProductTagBinding(
-    productId,
-    platform,
-    tagName,
-    quantity,
-    tagType,
-  );
+  return upsertLevelTagBinding(productId, memberPlatform, levelName, quantity);
 }
-export function removeProductTag(
+export function upsertUserTag(
+  productId: number,
+  waveMemberId: number,
+  quantity: number,
+): Promise<void> {
+  assertWailsRuntime();
+  return upsertUserTagBinding(productId, waveMemberId, quantity);
+}
+export function removeLevelTag(
   productId: number,
   platform: string,
   tagName: string,
-  tagType: string,
 ): Promise<void> {
   assertWailsRuntime();
-  return removeProductTagBinding(productId, platform, tagName, tagType);
+  return removeLevelTagBinding(productId, platform, tagName);
+}
+export function removeUserTag(
+  productId: number,
+  waveMemberId: number,
+): Promise<void> {
+  assertWailsRuntime();
+  return removeUserTagBinding(productId, waveMemberId);
 }
 export function listMembers(
   page = 1,

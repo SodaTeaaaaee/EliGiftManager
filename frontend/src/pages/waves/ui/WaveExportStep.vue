@@ -27,7 +27,7 @@ function toOption(template: TemplateItem) {
 const platformTemplateSelections = ref<Record<string, number | null>>({})
 
 const exportPlatforms = computed(() => {
-  const platforms = [...new Set(records.value.map(r => r.platform))]
+  const platforms = [...new Set(records.value.map(r => r.productPlatform))]
   for (const platform of platforms) {
     if (!(platform in platformTemplateSelections.value)) {
       const candidates = templates.value.filter(t => t.type === 'export_order' && t.platform === platform)
@@ -46,7 +46,7 @@ const exportPlatforms = computed(() => {
 
 const recordColumns: DataTableColumns<DispatchRecordItem> = [
   { title: '会员', key: 'memberNickname', minWidth: 120, render: (row) => row.memberNickname || row.platformUid },
-  { title: '平台', key: 'platform', width: 100 },
+  { title: '平台', key: 'memberPlatform', width: 100 },
   { title: '礼物', key: 'productName', minWidth: 140 },
   { title: '数量', key: 'quantity', width: 80 },
   { title: '地址', key: 'hasAddress', width: 110, render: (row) => h(NTag, { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.hasAddress ? '已绑定' : '待补全' }) },

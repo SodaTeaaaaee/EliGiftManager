@@ -13,9 +13,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ImportDispatchWave imports a headless CSV into the wave: parses rows, upserts
-// members with giftLevel stored in ExtraData, collects levelTags on the wave.
-// DispatchRecord creation is deferred to AllocateByTags.
+// ImportDispatchWave imports a headless CSV into the wave.  It deduplicates rows by
+// (platform, platformUid), upserts global members (CRM/address reuse, no giftLevel in
+// extra_data), maintains nickname history, upserts wave_member snapshot rows, removes
+// wave_members that disappeared from this import, and rebuilds waves.level_tags.
+// DispatchRecord creation is deferred to ReconcileWave.
 func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate model.TemplateConfig) (int, error) {
 	if strings.TrimSpace(csvPath) == "" {
 		return 0, fmt.Errorf("import dispatch wave failed: CSV path is required")
@@ -53,7 +55,11 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		nickname    string
 		platform    string
 	}
-	var rows []csvRow
+
+	// Parse CSV and deduplicate to unique (platform, platformUid) pairs.
+	// Last occurrence wins when the same member appears multiple times.
+	dedupMap := make(map[string]csvRow) // key: platform + "||" + platformUid
+	levelTagMap := map[string]struct{}{} // key: platform + "::" + giftName
 
 	file, oErr := os.Open(csvPath)
 	if oErr != nil {
@@ -93,75 +99,116 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 			return 0, fmt.Errorf("import dispatch wave failed: line %d missing required fields (giftName=%q, platformUid=%q)", lineNo, row.giftName, row.platformUid)
 		}
 
-		rows = append(rows, row)
+		// Deduplicate: last row for a given (platform, uid) wins.
+		dedupKey := row.platform + "||" + row.platformUid
+		dedupMap[dedupKey] = row
+
+		// Collect unique level tags.
+		ltKey := row.platform + "::" + row.giftName
+		levelTagMap[ltKey] = struct{}{}
 	}
 
-	if len(rows) == 0 {
+	if len(dedupMap) == 0 {
 		return 0, fmt.Errorf("import dispatch wave failed: CSV contains no data rows")
 	}
 
-	// Collect unique levelTags.
-	type levelTagEntry struct {
-		Platform string `json:"platform"`
-		TagName  string `json:"tagName"`
-	}
-	levelTagMap := map[string]struct{}{}
-	for _, row := range rows {
-		key := row.platform + "::" + row.giftName
-		levelTagMap[key] = struct{}{}
-	}
+	// Transaction: upsert members, maintain nicknames, upsert wave_members, prune stale.
+	importedMemberIDs := make(map[uint]bool)
 
-	// Transaction: member upsert + wave-member association + nickname maintenance.
-	// DispatchRecord creation is deferred to AllocateByTags.
-	importedCount := 0
 	err = db.Transaction(func(tx *gorm.DB) error {
-		for _, row := range rows {
-			extraDataJSON := fmt.Sprintf(`{"giftLevel":%q}`, row.giftName)
-
+		for _, row := range dedupMap {
+			// Upsert global member (platform + platform_uid only; no giftLevel in extra_data).
 			member := model.Member{
 				Platform:    strings.TrimSpace(row.platform),
 				PlatformUID: strings.TrimSpace(row.platformUid),
-				ExtraData:   extraDataJSON,
+				ExtraData:   "{}",
 			}
 			if upsertErr := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "platform_uid"}, {Name: "platform"}},
-				DoUpdates: clause.AssignmentColumns([]string{"extra_data", "updated_at"}),
+				DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
 			}).Create(&member).Error; upsertErr != nil {
 				return fmt.Errorf("upsert member failed for platform_uid=%q: %w", row.platformUid, upsertErr)
 			}
 
-			// Record wave-member association (幂等)
-			if wmErr := tx.Where("wave_id = ? AND member_id = ?", waveID, member.ID).
-				FirstOrCreate(&model.WaveMember{WaveID: waveID, MemberID: member.ID}).Error; wmErr != nil {
-				return fmt.Errorf("record wave-member association failed: %w", wmErr)
-			}
-
+			// Maintain nickname history.
 			if strings.TrimSpace(row.nickname) != "" {
 				if nickErr := ensureLatestNickname(tx, member.ID, row.nickname); nickErr != nil {
 					return fmt.Errorf("maintain nickname failed: %w", nickErr)
 				}
 			}
 
-			importedCount++
+			// Determine latest nickname for the wave_member snapshot.
+			latestNick := strings.TrimSpace(row.nickname)
+			if latestNick == "" {
+				latestNick = row.platformUid
+			}
+
+			// Upsert wave_member — FirstOrCreate to get the ID, then update snapshot fields.
+			wm := model.WaveMember{WaveID: waveID, MemberID: member.ID}
+			if wmErr := tx.Where("wave_id = ? AND member_id = ?", waveID, member.ID).
+				FirstOrCreate(&wm).Error; wmErr != nil {
+				return fmt.Errorf("upsert wave member failed: %w", wmErr)
+			}
+			if updateErr := tx.Model(&wm).Updates(map[string]any{
+				"platform":        row.platform,
+				"platform_uid":    row.platformUid,
+				"gift_level":      row.giftName,
+				"latest_nickname": latestNick,
+			}).Error; updateErr != nil {
+				return fmt.Errorf("update wave member snapshot failed: %w", updateErr)
+			}
+
+			importedMemberIDs[member.ID] = true
 		}
+
+		// Delete wave_members that are no longer in this import.
+		// Manual cascade: delete user tags and dispatch records before the wave_member row.
+		var existingWMs []model.WaveMember
+		if err := tx.Where("wave_id = ?", waveID).Find(&existingWMs).Error; err != nil {
+			return fmt.Errorf("query existing wave members for pruning failed: %w", err)
+		}
+		for _, wm := range existingWMs {
+			if importedMemberIDs[wm.MemberID] {
+				continue
+			}
+			// Delete user tags referencing this wave member.
+			if err := tx.Where("wave_member_id = ? AND tag_type = 'user'", wm.ID).Delete(&model.ProductTag{}).Error; err != nil {
+				return fmt.Errorf("delete user tags for removed wave member (id=%d) failed: %w", wm.ID, err)
+			}
+			// Delete dispatch records for this (wave, member) pair.
+			if err := tx.Where("wave_id = ? AND member_id = ?", waveID, wm.MemberID).Delete(&model.DispatchRecord{}).Error; err != nil {
+				return fmt.Errorf("delete dispatch records for removed member (id=%d) failed: %w", wm.MemberID, err)
+			}
+			// Delete the wave_member row itself.
+			if err := tx.Delete(&wm).Error; err != nil {
+				return fmt.Errorf("delete wave member (id=%d) failed: %w", wm.ID, err)
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
 		return 0, fmt.Errorf("import dispatch wave failed: %w", err)
 	}
 
-	// Update wave levelTags.
+	// Rebuild waves.level_tags from current wave_members.
+	type levelTagEntry struct {
+		Platform string `json:"platform"`
+		TagName  string `json:"tagName"`
+	}
 	var levelTags []levelTagEntry
 	for key := range levelTagMap {
 		parts := strings.SplitN(key, "::", 2)
-		levelTags = append(levelTags, levelTagEntry{Platform: parts[0], TagName: parts[1]})
+		if len(parts) == 2 {
+			levelTags = append(levelTags, levelTagEntry{Platform: parts[0], TagName: parts[1]})
+		}
 	}
 	levelTagsJSON, _ := json.Marshal(levelTags)
 	if updateErr := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("level_tags", string(levelTagsJSON)).Error; updateErr != nil {
-		return importedCount, fmt.Errorf("import dispatch wave warning: records imported but level_tags update failed: %w", updateErr)
+		return len(dedupMap), fmt.Errorf("import dispatch wave warning: records imported but level_tags update failed: %w", updateErr)
 	}
 
-	return importedCount, nil
+	return len(dedupMap), nil
 }
 
 func normalizeDispatchImportFieldName(field string) (string, error) {

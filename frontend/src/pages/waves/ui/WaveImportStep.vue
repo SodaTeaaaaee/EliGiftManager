@@ -239,10 +239,7 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
   ]
   if (showMemberExtraColumns.value) {
     cols.push({
-      title: '等级', key: 'extraData', width: 50, render: (row) => clampedText((() => {
-        try { const ed = JSON.parse(row.extraData); return ed.giftLevel || '-' }
-        catch { return '-' }
-      })())
+      title: '等级', key: 'giftLevel', width: 50, render: (row) => clampedText(row.giftLevel || '-')
     })
     cols.push({ title: '地址数', key: 'activeAddressCount', width: 60 })
   }

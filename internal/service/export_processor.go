@@ -40,9 +40,10 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 	}
 
 	// 1. Precheck: abort if any record still has NULL member_address_id.
+	// Only check records whose product platform matches the export template platform.
 	var count int64
 	if err := db.Model(&model.DispatchRecord{}).
-		Where("wave_id = ? AND member_address_id IS NULL", waveID).
+		Where("wave_id = ? AND member_address_id IS NULL AND product_id IN (SELECT id FROM products WHERE platform = ?)", waveID, template.Platform).
 		Count(&count).Error; err != nil {
 		return fmt.Errorf("export order CSV failed: precheck error: %w", err)
 	}
@@ -50,13 +51,16 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 		return fmt.Errorf("export aborted: %d records in wave %d have no address", count, waveID)
 	}
 
-	// 2. Load all records with their relationships.
+	// 2. Load records filtered by product platform (not member platform).
+	// A wave may contain products from multiple factory platforms;
+	// each export run only includes records whose product platform
+	// matches the export template platform.
 	var records []model.DispatchRecord
 	if err := db.
 		Preload("MemberAddress").
 		Preload("Product").
 		Preload("Member").
-		Where("wave_id = ?", waveID).
+		Where("wave_id = ? AND product_id IN (SELECT id FROM products WHERE platform = ?)", waveID, template.Platform).
 		Find(&records).Error; err != nil {
 		return fmt.Errorf("export order CSV failed: query error: %w", err)
 	}

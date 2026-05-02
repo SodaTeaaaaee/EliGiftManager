@@ -13,6 +13,14 @@ export function ListProducts(arg1:number,arg2:number,arg3:string,arg4:string):Pr
 
 export function ListProductsWithTags(arg1:number,arg2:string,arg3:number,arg4:number):Promise<main.ProductListWithTagsPayload>;
 
+export function RemoveLevelTag(arg1:number,arg2:string,arg3:string):Promise<void>;
+
 export function RemoveProductTag(arg1:number,arg2:string,arg3:string,arg4:string):Promise<void>;
 
+export function RemoveUserTag(arg1:number,arg2:number):Promise<void>;
+
 export function UpdateProduct(arg1:model.Product):Promise<void>;
+
+export function UpsertLevelTag(arg1:number,arg2:string,arg3:string,arg4:number):Promise<void>;
+
+export function UpsertUserTag(arg1:number,arg2:number,arg3:number):Promise<void>;

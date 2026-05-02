@@ -3,7 +3,7 @@ import { PlayOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NInputNumber, NPopover, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
-import { assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, removeProductTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
+import { getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, removeLevelTag, removeUserTag, upsertLevelTag, upsertUserTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -12,7 +12,7 @@ const router = useRouter()
 const waveId = computed(() => Number(route.params.waveId) || 0)
 
 // ── types ──
-type TagInfo = { tagName: string; quantity: number; tagType: string }
+type TagInfo = { tagName: string; quantity: number; tagType: string; platform: string; waveMemberId: number }
 
 // ── state ──
 const wave = ref<WaveItem | null>(null)
@@ -48,9 +48,9 @@ async function handleUpdateTagQuantity() {
 
   try {
     if (newQty === 0) {
-      await removeProductTag(row.id, row.platform, tag.tagName, tag.tagType)
+      await (tag.tagType === 'level' ? removeLevelTag(row.id, tag.platform, tag.tagName) : removeUserTag(row.id, tag.waveMemberId))
     } else {
-      await assignProductTag(row.id, row.platform, tag.tagName, newQty, tag.tagType)
+      await (tag.tagType === 'level' ? upsertLevelTag(row.id, tag.platform, tag.tagName, newQty) : upsertUserTag(row.id, tag.waveMemberId, newQty))
     }
     await loadTagProducts()
     showTagPopover.value = false
@@ -393,7 +393,7 @@ async function handleAssignTag() {
   const [platform, tagName] = selectedBatchTag.value.split('|')
   try {
     for (const productId of checkedProductIds.value) {
-      await assignProductTag(productId, platform, tagName, batchTagQuantity.value, 'level')
+      await upsertLevelTag(productId, platform, tagName, batchTagQuantity.value)
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签`)
     await loadTagProducts(); checkedProductIds.value = []
@@ -405,7 +405,7 @@ async function handleBatchRemoveTag() {
   const [platform, tagName] = selectedBatchTag.value.split('|')
   try {
     for (const productId of checkedProductIds.value) {
-      await removeProductTag(productId, platform, tagName, 'level')
+      await removeLevelTag(productId, platform, tagName)
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除 ${platform}·${tagName} 标签`)
     await loadTagProducts(); checkedProductIds.value = []
@@ -419,8 +419,8 @@ const waveMembers = ref<MemberItem[]>([])
 
 const memberOptions = computed(() =>
   waveMembers.value.map(m => ({
-    label: `${m.latestNickname} (${m.platformUid})`,
-    value: m.platformUid,
+    label: `${m.platform} · ${m.latestNickname} (${m.platformUid})`,
+    value: m.id,
   }))
 )
 
@@ -432,13 +432,11 @@ async function loadWaveMembers() {
 
 async function handleAddUserTag() {
   if (!addUserTagMemberId.value || checkedProductIds.value.length === 0) return message.warning('请选择会员和商品')
-  const tagName = addUserTagMemberId.value
+  const waveMemberId = Number(addUserTagMemberId.value)
   const quantity = addUserTagQuantity.value
   try {
     for (const productId of checkedProductIds.value) {
-      const product = allTagProducts.value.find(p => p.id === productId)
-      if (!product) continue
-      await assignProductTag(productId, product.platform, tagName, quantity, 'user')
+      await upsertUserTag(productId, waveMemberId, quantity)
     }
     await loadTagProducts()
     message.success(`已为 ${checkedProductIds.value.length} 件商品添加用户 Tag`)

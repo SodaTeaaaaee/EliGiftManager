@@ -88,27 +88,46 @@ func (c *MemberController) ListWaveMembers(waveID uint) ([]MemberItem, error) {
 		return nil, fmt.Errorf("database not available")
 	}
 
-	// 1. Get member IDs from wave_members
-	var memberIDs []uint
-	if err := db.Model(&model.WaveMember{}).Where("wave_id = ?", waveID).Pluck("member_id", &memberIDs).Error; err != nil {
-		return nil, fmt.Errorf("list wave members failed: %w", err)
-	}
-	if len(memberIDs) == 0 {
-		return []MemberItem{}, nil
-	}
-
-	// 2. Load members with preloads
-	var members []model.Member
-	if err := db.Preload("Nicknames", func(d *gorm.DB) *gorm.DB { return d.Order("created_at DESC") }).
-		Preload("Addresses", func(d *gorm.DB) *gorm.DB { return d.Order("is_default DESC, created_at DESC") }).
-		Where("id IN ?", memberIDs).
-		Order("updated_at DESC").
-		Find(&members).Error; err != nil {
+	// 1. Load wave_members with snapshot fields + related Member.Addresses
+	var waveMembers []model.WaveMember
+	if err := db.
+		Preload("Member.Addresses", func(d *gorm.DB) *gorm.DB { return d.Order("is_default DESC, created_at DESC") }).
+		Preload("Member.Nicknames", func(d *gorm.DB) *gorm.DB { return d.Order("created_at DESC") }).
+		Where("wave_id = ?", waveID).
+		Order("id ASC").
+		Find(&waveMembers).Error; err != nil {
 		return nil, fmt.Errorf("list wave members failed: %w", err)
 	}
 
-	// 3. Build items using existing helper
-	return buildMemberItems(db, members)
+	// 2. Build MemberItems from wave_member snapshot fields + Member.Addresses
+	items := make([]MemberItem, 0, len(waveMembers))
+	for _, wm := range waveMembers {
+		item := MemberItem{
+			ID:             wm.ID,
+			MemberID:       wm.MemberID,
+			Platform:       wm.Platform,
+			PlatformUID:    wm.PlatformUID,
+			LatestNickname: wm.LatestNickname,
+			GiftLevel:      wm.GiftLevel,
+			ExtraData:      wm.Member.ExtraData,
+			AddressCount:   len(wm.Member.Addresses),
+			Addresses:      wm.Member.Addresses,
+			Nicknames:      wm.Member.Nicknames,
+		}
+		for _, address := range wm.Member.Addresses {
+			if address.IsDeleted {
+				continue
+			}
+			item.ActiveAddressCount++
+			if item.LatestAddress == "" || address.IsDefault {
+				item.LatestRecipient = address.RecipientName
+				item.LatestPhone = address.Phone
+				item.LatestAddress = address.Address
+			}
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }
 
 // AddMemberAddress creates a new address for a member.
@@ -184,21 +203,28 @@ func (c *MemberController) DeleteMemberAddress(addressID uint) error {
 	})
 }
 
-func (c *MemberController) RemoveMemberFromWave(waveID, memberID uint) error {
+func (c *MemberController) RemoveMemberFromWave(waveID, waveMemberID uint) error {
 	db := c.db()
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
 	return db.Transaction(func(tx *gorm.DB) error {
-		r := tx.Where("wave_id = ? AND member_id = ?", waveID, memberID).Delete(&model.WaveMember{})
-		if r.Error != nil {
-			return fmt.Errorf("remove member from wave failed: %w", r.Error)
-		}
-		if r.RowsAffected == 0 {
+		// Find wave_member record to get the underlying member_id
+		var wm model.WaveMember
+		if err := tx.Where("id = ? AND wave_id = ?", waveMemberID, waveID).First(&wm).Error; err != nil {
 			return fmt.Errorf("member not found in this wave")
 		}
-		if err := tx.Where("wave_id = ? AND member_id = ?", waveID, memberID).Delete(&model.DispatchRecord{}).Error; err != nil {
+		// Delete user tags referencing this wave member (manual FK cascade).
+		if err := tx.Where("wave_member_id = ? AND tag_type = 'user'", wm.ID).Delete(&model.ProductTag{}).Error; err != nil {
+			return fmt.Errorf("clean user tags failed: %w", err)
+		}
+		// Clean up associated dispatch records by wave_id + member_id
+		if err := tx.Where("wave_id = ? AND member_id = ?", waveID, wm.MemberID).Delete(&model.DispatchRecord{}).Error; err != nil {
 			return fmt.Errorf("clean dispatch records failed: %w", err)
+		}
+		// Delete the wave_member record
+		if err := tx.Delete(&wm).Error; err != nil {
+			return fmt.Errorf("remove member from wave failed: %w", err)
 		}
 		return nil
 	})

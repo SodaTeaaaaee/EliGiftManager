@@ -22,10 +22,26 @@ export function ListProductsWithTags(arg1, arg2, arg3, arg4) {
   return window['go']['main']['ProductController']['ListProductsWithTags'](arg1, arg2, arg3, arg4);
 }
 
+export function RemoveLevelTag(arg1, arg2, arg3) {
+  return window['go']['main']['ProductController']['RemoveLevelTag'](arg1, arg2, arg3);
+}
+
 export function RemoveProductTag(arg1, arg2, arg3, arg4) {
   return window['go']['main']['ProductController']['RemoveProductTag'](arg1, arg2, arg3, arg4);
 }
 
+export function RemoveUserTag(arg1, arg2) {
+  return window['go']['main']['ProductController']['RemoveUserTag'](arg1, arg2);
+}
+
 export function UpdateProduct(arg1) {
   return window['go']['main']['ProductController']['UpdateProduct'](arg1);
+}
+
+export function UpsertLevelTag(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['ProductController']['UpsertLevelTag'](arg1, arg2, arg3, arg4);
+}
+
+export function UpsertUserTag(arg1, arg2, arg3) {
+  return window['go']['main']['ProductController']['UpsertUserTag'](arg1, arg2, arg3);
 }

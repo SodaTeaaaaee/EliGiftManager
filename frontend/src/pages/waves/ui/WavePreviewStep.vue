@@ -47,7 +47,7 @@ function toOption(template: TemplateItem) {
 const platformTemplateSelections = ref<Record<string, number | null>>({})
 
 const exportPlatforms = computed(() => {
-  const platforms = [...new Set(records.value.map(r => r.platform))]
+  const platforms = [...new Set(records.value.map(r => r.productPlatform))]
   for (const platform of platforms) {
     if (!(platform in platformTemplateSelections.value)) {
       const candidates = templates.value.filter(t => t.type === 'export_order' && t.platform === platform)
@@ -72,7 +72,7 @@ const memberGroups = computed(() => {
         memberId: r.memberId,
         nickname: r.memberNickname || r.platformUid,
         platformUid: r.platformUid,
-        platform: r.platform,
+        platform: r.memberPlatform,
         records: [],
         addressStatus: r.hasAddress ? '已绑定' : '待补全',
       })
@@ -271,7 +271,7 @@ async function openMemberPopup(group: typeof memberGroups.value[0]) {
   // Load member addresses
   try {
     const allMembers = await listWaveMembers(waveId.value)
-    const member = allMembers.find(m => m.id === group.memberId)
+    const member = allMembers.find(m => m.memberId === group.memberId)
     if (member?.addresses) {
       memberAddresses.value = member.addresses
         .filter(a => !(a as any).isDeleted)

@@ -66,16 +66,23 @@ type ProductImage struct {
 // ProductTag stores platform-level classification tags attached to a product.
 // TagName captures the gift tier/level name (e.g. "舰长", "提督").
 // TagType distinguishes level tags from user-specific tags.
+//
+// Level tags (tag_type='level'): unique on (product_id, platform, tag_name, tag_type).
+//   WaveMemberID is NULL.
+// User tags (tag_type='user'): unique on (product_id, wave_member_id, tag_type).
+//   WaveMemberID points to the specific wave member.
 type ProductTag struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	ProductID uint      `gorm:"not null;uniqueIndex:idx_prod_platform_tag" json:"productId"`
-	Platform  string    `gorm:"size:100;not null;uniqueIndex:idx_prod_platform_tag" json:"platform"`
-	TagName   string    `gorm:"size:255;not null;uniqueIndex:idx_prod_platform_tag" json:"tagName"`
-	TagType   string    `gorm:"size:20;not null;default:'level';uniqueIndex:idx_prod_platform_tag" json:"tagType"`
-	Quantity  int       `gorm:"not null;default:1" json:"quantity"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
-	Product   Product   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
+	ID           uint        `gorm:"primaryKey" json:"id"`
+	ProductID    uint        `gorm:"not null;uniqueIndex:idx_prod_platform_tag" json:"productId"`
+	Platform     string      `gorm:"size:100;not null;uniqueIndex:idx_prod_platform_tag" json:"platform"`
+	TagName      string      `gorm:"size:255;not null;uniqueIndex:idx_prod_platform_tag" json:"tagName"`
+	TagType      string      `gorm:"size:20;not null;default:'level';uniqueIndex:idx_prod_platform_tag" json:"tagType"`
+	Quantity     int         `gorm:"not null;default:1" json:"quantity"`
+	WaveMemberID *uint       `json:"waveMemberId"`
+	CreatedAt    time.Time   `json:"createdAt"`
+	UpdatedAt    time.Time   `json:"updatedAt"`
+	WaveMember   *WaveMember `gorm:"foreignKey:WaveMemberID" json:"-"`
+	Product      Product     `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
 }
 
 // Wave 表示一次按特定规则聚合的发货波次（UI 层面称为发货任务）。
@@ -119,13 +126,19 @@ type TemplateConfig struct {
 }
 
 // WaveMember records which members were imported into a wave.
+// It serves as a snapshot of the member's key attributes at import time,
+// decoupling wave-level operations (tag matching, dispatch) from the global members table.
 type WaveMember struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	WaveID    uint      `gorm:"not null;uniqueIndex:idx_wave_member" json:"waveId"`
-	MemberID  uint      `gorm:"not null;uniqueIndex:idx_wave_member" json:"memberId"`
-	CreatedAt time.Time `json:"createdAt"`
-	Wave      Wave      `gorm:"foreignKey:WaveID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
-	Member    Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	WaveID         uint      `gorm:"not null;uniqueIndex:idx_wave_member" json:"waveId"`
+	MemberID       uint      `gorm:"not null;uniqueIndex:idx_wave_member" json:"memberId"`
+	Platform       string    `gorm:"size:100;not null;default:''" json:"platform"`
+	PlatformUID    string    `gorm:"size:255;not null;default:''" json:"platformUid"`
+	GiftLevel      string    `gorm:"size:100;not null;default:''" json:"giftLevel"`
+	LatestNickname string    `gorm:"size:255;not null;default:''" json:"latestNickname"`
+	CreatedAt      time.Time `json:"createdAt"`
+	Wave           Wave      `gorm:"foreignKey:WaveID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Member         Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
 func (Member) TableName() string         { return "members" }
