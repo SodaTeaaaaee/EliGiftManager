@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -261,20 +262,24 @@ func (c *WaveController) ReconcileWave(waveID uint) (int, error) {
 			for memberID, expectedQty := range memberMap {
 				if expectedQty > 0 {
 					var record model.DispatchRecord
-					result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).
-						FirstOrCreate(&record, model.DispatchRecord{
+					err := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).
+						First(&record).Error
+					if errors.Is(err, gorm.ErrRecordNotFound) {
+						record = model.DispatchRecord{
 							WaveID:    waveID,
 							MemberID:  memberID,
 							ProductID: productID,
 							Quantity:  expectedQty,
 							Status:    "draft",
-						})
-					if result.Error != nil {
-						return fmt.Errorf("upsert dispatch record (member=%d, product=%d): %w", memberID, productID, result.Error)
-					}
-					if record.Quantity != expectedQty {
-						if err := tx.Model(&record).Update("quantity", expectedQty).Error; err != nil {
-							return fmt.Errorf("update dispatch quantity (id=%d): %w", record.ID, err)
+						}
+						if createErr := tx.Create(&record).Error; createErr != nil {
+							return fmt.Errorf("create dispatch record (member=%d, product=%d): %w", memberID, productID, createErr)
+						}
+					} else if err != nil {
+						return fmt.Errorf("lookup dispatch record (member=%d, product=%d): %w", memberID, productID, err)
+					} else if record.Quantity != expectedQty {
+						if updateErr := tx.Model(&record).Update("quantity", expectedQty).Error; updateErr != nil {
+							return fmt.Errorf("update dispatch quantity (id=%d): %w", record.ID, updateErr)
 						}
 					}
 					allocatedCount++
