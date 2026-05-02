@@ -2,7 +2,7 @@
 import { PlayOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NInputNumber, NModal, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
+import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NInputNumber, NPopover, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { allocateSingleTag, assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, reallocateWave, removeProductTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
@@ -19,6 +19,7 @@ const wave = ref<WaveItem | null>(null)
 const allTagProducts = ref<{ id: number; name: string; factorySku: string; platform: string; tags: TagInfo[]; coverImage: string }[]>([])
 const checkedProductIds = ref<number[]>([])
 const selectedBatchTag = ref<string | null>(null)
+const batchTagQuantity = ref(1)
 const isTagLoading = ref(false)
 const errorMessage = ref('')
 
@@ -26,17 +27,17 @@ const showProductDrawer = ref(false)
 const drawerProduct = ref<any>(null)
 const drawerProductImages = ref<{ id: number; path: string; sortOrder: number; sourceDir: string }[]>([])
 
-// ── tag edit modal ──
-const showTagEdit = ref(false)
+// ── tag edit popover ──
 const editTagProduct = ref<any>(null)
 const editTagInfo = ref<TagInfo | null>(null)
 const editTagNewQty = ref(1)
+const showTagPopover = ref(false)
 
 function openTagEdit(row: any, tag: TagInfo) {
   editTagProduct.value = row
   editTagInfo.value = tag
   editTagNewQty.value = tag.quantity
-  showTagEdit.value = true
+  showTagPopover.value = true
 }
 
 async function handleUpdateTagQuantity() {
@@ -54,7 +55,7 @@ async function handleUpdateTagQuantity() {
     await allocateSingleTag(waveId.value, row.platform, tag.tagName, tag.tagType)
     scheduleReallocate()
     await loadTagProducts()
-    showTagEdit.value = false
+    showTagPopover.value = false
     message.success('标签数量已更新')
   } catch (e) { message.error(String(e)) }
 }
@@ -105,19 +106,38 @@ function clampedText(text: string, lines = MAX_LINES) {
   }, String(text ?? ''))
 }
 
-// ── tag chip renderer ──
+// ── tag chip renderer (with NPopover for quantity editing) ──
 function renderTagChip(row: any, tag: TagInfo) {
   const label = tag.quantity === 1 ? tag.tagName : `${tag.tagName}:${tag.quantity}`
   const colors = tag.tagType === 'level' ? platformTagColor(row.platform) : userTagColor
-  return h(NTag, {
-    size: 'small', round: true,
-    color: colors.color,
-    style: { cursor: 'pointer' },
-    onClick: (e: MouseEvent) => {
-      e.stopPropagation()
-      openTagEdit(row, tag)
-    },
-  }, { default: () => label })
+  return h(NPopover, {
+    trigger: 'click',
+    show: showTagPopover.value && editTagProduct.value?.id === row.id && editTagInfo.value?.tagName === tag.tagName && editTagInfo.value?.tagType === tag.tagType,
+    'onUpdate:show': (v: boolean) => { if (!v) showTagPopover.value = false },
+    placement: 'bottom',
+  }, {
+    trigger: () => h(NTag, {
+      size: 'small', round: true,
+      color: colors.color,
+      style: { cursor: 'pointer' },
+      onClick: (e: MouseEvent) => {
+        e.stopPropagation()
+        openTagEdit(row, tag)
+      },
+    }, { default: () => label }),
+    default: () => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px' } }, [
+      h(NInputNumber, {
+        value: editTagNewQty.value,
+        size: 'small',
+        style: { width: '100px' },
+        'onUpdate:value': (v: number | null) => { if (v != null) editTagNewQty.value = v },
+      }),
+      h(NButton, {
+        size: 'tiny', type: 'primary',
+        onClick: () => handleUpdateTagQuantity(),
+      }, { default: () => '确定' }),
+    ]),
+  })
 }
 
 // ── measured header & pagination heights (DOM, updated on resize) ──
@@ -192,16 +212,58 @@ async function remeasureTags() {
   if (tagCurrentPage.value > tagPages.value.length) tagCurrentPage.value = 1
 }
 
-function handleTagPageChange(p: number) { tagCurrentPage.value = p }
+function handleTagPageChange(p: number) { tagCurrentPage.value = p; lastClickedIndex.value = -1 }
 
-// ── row props: single-select on click, highlight on selected ──
+// ── row props: multi-select with Ctrl/Shift, highlight selected ──
+const lastClickedIndex = ref(-1)
+
 function rowProps(row: any) {
   const selected = checkedProductIds.value.includes(row.id)
   return {
     class: selected ? 'row-selected' : '',
     style: { cursor: 'pointer' },
     onClick: (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest('.n-checkbox')) return
+      if ((e.target as HTMLElement).closest('.n-checkbox')) {
+        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        if (idx >= 0) lastClickedIndex.value = idx
+        return
+      }
+      // Ctrl+Shift: additive range select
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        if (lastClickedIndex.value >= 0 && idx >= 0) {
+          const lo = Math.min(lastClickedIndex.value, idx)
+          const hi = Math.max(lastClickedIndex.value, idx)
+          const rangeIds = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
+          checkedProductIds.value = [...new Set([...checkedProductIds.value, ...rangeIds])]
+        }
+        return
+      }
+      // Ctrl: toggle single row
+      if (e.ctrlKey || e.metaKey) {
+        const id = row.id
+        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === id)
+        if (idx >= 0) lastClickedIndex.value = idx
+        if (checkedProductIds.value.includes(id)) {
+          checkedProductIds.value = checkedProductIds.value.filter(x => x !== id)
+        } else {
+          checkedProductIds.value = [...checkedProductIds.value, id]
+        }
+        return
+      }
+      // Shift: replacement range select
+      if (e.shiftKey) {
+        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        if (lastClickedIndex.value >= 0 && idx >= 0) {
+          const lo = Math.min(lastClickedIndex.value, idx)
+          const hi = Math.max(lastClickedIndex.value, idx)
+          checkedProductIds.value = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
+        }
+        return
+      }
+      // Plain click: select single row
+      const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+      if (idx >= 0) lastClickedIndex.value = idx
       checkedProductIds.value = [row.id]
     },
   }
@@ -340,7 +402,7 @@ async function handleAssignTag() {
   const [platform, tagName] = selectedBatchTag.value.split('|')
   try {
     for (const productId of checkedProductIds.value) {
-      await assignProductTag(productId, platform, tagName, 1, 'level')
+      await assignProductTag(productId, platform, tagName, batchTagQuantity.value, 'level')
     }
     const count = await allocateSingleTag(waveId.value, platform, tagName, 'level')
     scheduleReallocate()
@@ -474,6 +536,7 @@ onUnmounted(() => {
       </NFlex>
       <NFlex :size="'small'" :wrap="true" class="items-center">
         <span class="text-xs shrink-0">批量操作：</span>
+        <NInputNumber v-model:value="batchTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
         <NSelect v-model:value="selectedBatchTag" :options="batchTagOptions" placeholder="勾选 tag" size="small"
           style="width: 180px" clearable />
         <NButton size="medium" type="primary" @click="handleAssignTag"
@@ -536,23 +599,6 @@ onUnmounted(() => {
       </NDrawerContent>
     </NDrawer>
 
-    <!-- Tag Quantity Edit Modal -->
-    <NModal :show="showTagEdit" @update:show="(v: boolean) => { if (!v) showTagEdit = false }">
-      <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-80 mx-auto mt-40">
-        <h3 class="text-lg font-semibold mb-4">编辑标签数量</h3>
-        <div class="mb-2 text-sm text-gray-500">
-          {{ editTagInfo?.tagName }}
-          <NTag size="small" round :bordered="false" class="ml-1">
-            {{ editTagInfo?.tagType === 'level' ? '身份Tag' : '用户Tag' }}
-          </NTag>
-        </div>
-        <NInputNumber v-model:value="editTagNewQty" :min="-999" :max="999" class="w-full mb-4" />
-        <NFlex justify="end" :size="'small'">
-          <NButton size="small" @click="showTagEdit = false">取消</NButton>
-          <NButton size="small" type="primary" @click="handleUpdateTagQuantity">确认</NButton>
-        </NFlex>
-      </div>
-    </NModal>
   </div>
 </template>
 

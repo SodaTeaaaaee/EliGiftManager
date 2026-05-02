@@ -296,6 +296,9 @@ func (c *WaveController) AllocateByTags(waveID uint) (int, error) {
 }
 
 func (c *WaveController) AllocateSingleTag(waveID uint, platform, tagName, tagType string) (int, error) {
+	if tagType == "" {
+		tagType = "level"
+	}
 	db := c.db()
 	if db == nil {
 		return 0, fmt.Errorf("database not available")

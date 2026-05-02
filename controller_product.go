@@ -94,7 +94,11 @@ func (c *ProductController) ListProductsWithTags(waveID uint, platform string, p
 	for _, p := range products {
 		tagInfos := make([]TagInfo, 0, len(p.Tags))
 		for _, t := range p.Tags {
-			tagInfos = append(tagInfos, TagInfo{TagName: t.TagName, Quantity: t.Quantity, TagType: t.TagType})
+			tt := t.TagType
+			if tt == "" {
+				tt = "level"
+			}
+			tagInfos = append(tagInfos, TagInfo{TagName: t.TagName, Quantity: t.Quantity, TagType: tt})
 		}
 		items = append(items, ProductItemWithTags{ID: p.ID, Platform: p.Platform, Factory: p.Factory, FactorySKU: p.FactorySKU, Name: p.Name, CoverImage: p.CoverImage, ExtraData: p.ExtraData, UpdatedAt: p.UpdatedAt, Tags: tagInfos})
 	}
@@ -122,16 +126,31 @@ func (c *ProductController) AssignProductTag(productID uint, platform, tagName s
 	if tagType == "" {
 		tagType = "level"
 	}
-	if quantity < 1 {
-		quantity = 1
-	}
 	db := c.db()
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
+
+	// Normalise: if we're writing a "level" tag and a legacy record exists with
+	// tag_type="", migrate it to tag_type="level" first to avoid duplicates.
+	if tagType == "level" {
+		db.Model(&model.ProductTag{}).
+			Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = ?", productID, platform, tagName, "").
+			Update("tag_type", "level")
+	}
+
 	tag := model.ProductTag{ProductID: productID, Platform: platform, TagName: tagName, TagType: tagType, Quantity: quantity}
 	if err := db.Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = ?", productID, platform, tagName, tagType).FirstOrCreate(&tag).Error; err != nil {
 		return fmt.Errorf("assign product tag failed: %w", err)
+	}
+	if tag.Quantity != quantity || tag.TagType != tagType {
+		updates := map[string]interface{}{"quantity": quantity}
+		if tag.TagType != tagType {
+			updates["tag_type"] = tagType
+		}
+		if err := db.Model(&tag).Updates(updates).Error; err != nil {
+			return fmt.Errorf("assign product tag failed: update: %w", err)
+		}
 	}
 	return nil
 }

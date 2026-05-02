@@ -82,5 +82,22 @@ func autoMigrateTables(db *gorm.DB) error {
 	); err != nil {
 		return fmt.Errorf("auto migrate database tables failed: %w", err)
 	}
+	// Normalise legacy data: tag_type="" → "level" and quantity=0 → 1.
+	db.Exec("UPDATE product_tags SET tag_type = 'level' WHERE tag_type = '' OR tag_type IS NULL")
+	db.Exec("UPDATE product_tags SET quantity = 1 WHERE quantity = 0")
+
+	// Remove duplicate tags that may have been created when tag_type was inconsistent.
+	// Keep the one with the highest quantity, delete the rest.
+	db.Exec(`DELETE FROM product_tags WHERE id IN (
+		SELECT id FROM (
+			SELECT t1.id FROM product_tags t1
+			INNER JOIN product_tags t2 ON t1.product_id = t2.product_id
+				AND t1.platform = t2.platform
+				AND t1.tag_name = t2.tag_name
+				AND t1.tag_type = t2.tag_type
+				AND t1.id > t2.id
+		) dup
+	)`)
+
 	return nil
 }
