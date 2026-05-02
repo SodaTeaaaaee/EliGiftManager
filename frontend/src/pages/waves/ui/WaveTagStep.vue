@@ -18,8 +18,10 @@ type TagInfo = { tagName: string; quantity: number; tagType: string; platform: s
 const wave = ref<WaveItem | null>(null)
 const allTagProducts = ref<{ id: number; name: string; factorySku: string; platform: string; tags: TagInfo[]; coverImage: string }[]>([])
 const checkedProductIds = ref<number[]>([])
-const selectedBatchTag = ref<string | null>(null)
-const batchTagQuantity = ref(1)
+const selectedLevelTag = ref<string | null>(null)
+const levelTagQuantity = ref(1)
+const selectedUserTagMember = ref<string | null>(null)
+const userTagQuantity = ref(1)
 const isTagLoading = ref(false)
 const errorMessage = ref('')
 
@@ -419,21 +421,22 @@ async function loadTagProducts() {
 }
 
 // ── batch operations ──
-async function handleAssignTag() {
-  if (!selectedBatchTag.value || checkedProductIds.value.length === 0) return message.warning('请选择商品和 Tag')
-  const [platform, tagName] = selectedBatchTag.value.split('|')
+
+async function handleBatchAddLevelTag() {
+  if (!selectedLevelTag.value || checkedProductIds.value.length === 0) return
+  const [platform, tagName] = selectedLevelTag.value.split('|')
   try {
     for (const productId of checkedProductIds.value) {
-      await upsertLevelTag(productId, platform, tagName, batchTagQuantity.value)
+      await upsertLevelTag(productId, platform, tagName, levelTagQuantity.value)
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签`)
     await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
 }
 
-async function handleBatchRemoveTag() {
-  if (!selectedBatchTag.value || checkedProductIds.value.length === 0) return message.warning('请选择商品和 Tag')
-  const [platform, tagName] = selectedBatchTag.value.split('|')
+async function handleBatchRemoveLevelTag() {
+  if (!selectedLevelTag.value || checkedProductIds.value.length === 0) return
+  const [platform, tagName] = selectedLevelTag.value.split('|')
   try {
     for (const productId of checkedProductIds.value) {
       await removeLevelTag(productId, platform, tagName)
@@ -443,9 +446,7 @@ async function handleBatchRemoveTag() {
   } catch (e) { message.error(String(e)) }
 }
 
-// ── user tag batch add ──
-const addUserTagMemberId = ref<string | null>(null)
-const addUserTagQuantity = ref(1)
+// ── user tag batch ──
 const waveMembers = ref<MemberItem[]>([])
 
 const memberOptions = computed(() =>
@@ -461,16 +462,28 @@ async function loadWaveMembers() {
   catch (e) { console.error('加载波次会员失败', e) }
 }
 
-async function handleAddUserTag() {
-  if (!addUserTagMemberId.value || checkedProductIds.value.length === 0) return message.warning('请选择会员和商品')
-  const waveMemberId = Number(addUserTagMemberId.value)
-  const quantity = addUserTagQuantity.value
+async function handleBatchAddUserTag() {
+  if (!selectedUserTagMember.value || checkedProductIds.value.length === 0) return
+  const waveMemberId = Number(selectedUserTagMember.value)
+  const quantity = userTagQuantity.value
   try {
     for (const productId of checkedProductIds.value) {
       await upsertUserTag(productId, waveMemberId, quantity)
     }
-    await loadTagProducts()
     message.success(`已为 ${checkedProductIds.value.length} 件商品添加用户 Tag`)
+    await loadTagProducts(); checkedProductIds.value = []
+  } catch (e) { message.error(String(e)) }
+}
+
+async function handleBatchRemoveUserTag() {
+  if (!selectedUserTagMember.value || checkedProductIds.value.length === 0) return
+  const waveMemberId = Number(selectedUserTagMember.value)
+  try {
+    for (const productId of checkedProductIds.value) {
+      await removeUserTag(productId, waveMemberId)
+    }
+    message.success(`已为 ${checkedProductIds.value.length} 件商品移除用户 Tag`)
+    await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
 }
 
@@ -531,9 +544,8 @@ onUnmounted(() => {
       <span class="font-semibold text-sm">步骤二：Tag 管理与分配</span>
     </div>
 
-    <div class="shrink-0 px-1 space-y-3">
+    <div class="shrink-0 px-1 space-y-2">
       <div v-if="waveLevelTags.length > 0">
-        <span class="text-xs text-gray-500 block mb-2">可选 Tag：</span>
         <NFlex :size="'small'" :wrap="true">
           <NTag v-for="tag in waveLevelTags" :key="`${tag.platform}|${tag.tagName}`" size="small" round
             :color="platformTagColor(tag.platform)">{{ tag.platform }}·{{ tag.tagName }}</NTag>
@@ -548,22 +560,29 @@ onUnmounted(() => {
         <NButton size="small" secondary @click="handleInvertPage">本页反选</NButton>
         <NTag size="small" round :bordered="false">已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}</NTag>
       </NFlex>
+
+      <!-- Level tag row -->
       <NFlex :size="'small'" :wrap="true" class="items-center">
-        <span class="text-xs shrink-0">批量操作：</span>
-        <NInputNumber v-model:value="batchTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
-        <NSelect v-model:value="selectedBatchTag" :options="batchTagOptions" placeholder="勾选 tag" size="small"
+        <span class="text-xs shrink-0 font-medium" style="width: 52px">身份 Tag</span>
+        <NSelect v-model:value="selectedLevelTag" :options="batchTagOptions" placeholder="选择等级" size="small"
           style="width: 180px" clearable />
-        <NButton size="medium" type="primary" @click="handleAssignTag"
-          :disabled="!selectedBatchTag || checkedProductIds.length === 0">打标</NButton>
-        <NButton size="medium" type="warning" @click="handleBatchRemoveTag"
-          :disabled="!selectedBatchTag || checkedProductIds.length === 0">取消打标</NButton>
+        <NInputNumber v-model:value="levelTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
+        <NButton size="small" type="primary" :disabled="!selectedLevelTag || checkedProductIds.length === 0"
+          @click="handleBatchAddLevelTag">添加</NButton>
+        <NButton size="small" type="error" secondary :disabled="!selectedLevelTag || checkedProductIds.length === 0"
+          @click="handleBatchRemoveLevelTag">删除</NButton>
       </NFlex>
+
+      <!-- User tag row -->
       <NFlex :size="'small'" :wrap="true" class="items-center">
-        <span class="text-xs shrink-0">添加用户Tag：</span>
-        <NSelect v-model:value="addUserTagMemberId" :options="memberOptions" placeholder="搜索会员" size="small"
-          style="width: 200px" clearable filterable />
-        <NInputNumber v-model:value="addUserTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
-        <NButton size="small" secondary :disabled="!addUserTagMemberId" @click="handleAddUserTag">添加</NButton>
+        <span class="text-xs shrink-0 font-medium" style="width: 52px">用户 Tag</span>
+        <NSelect v-model:value="selectedUserTagMember" :options="memberOptions" placeholder="搜索会员" size="small"
+          style="width: 180px" clearable filterable />
+        <NInputNumber v-model:value="userTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
+        <NButton size="small" type="primary" :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
+          @click="handleBatchAddUserTag">添加</NButton>
+        <NButton size="small" type="error" secondary :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
+          @click="handleBatchRemoveUserTag">删除</NButton>
       </NFlex>
     </div>
 

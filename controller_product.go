@@ -180,10 +180,8 @@ func (c *ProductController) RemoveLevelTag(productID uint, platform string, tagN
 	if result.Error != nil {
 		return fmt.Errorf("remove level tag failed: %w", result.Error)
 	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("remove level tag failed: tag not found")
-	}
 
+	// Idempotent: if the tag didn't exist, still trigger ReconcileWave to be safe.
 	var product model.Product
 	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
 		var wc WaveController
@@ -249,10 +247,8 @@ func (c *ProductController) RemoveUserTag(productID uint, waveMemberID uint) err
 	if result.Error != nil {
 		return fmt.Errorf("remove user tag failed: %w", result.Error)
 	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("remove user tag failed: tag not found")
-	}
 
+	// Idempotent: trigger ReconcileWave even if the tag didn't exist.
 	var product model.Product
 	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
 		var wc WaveController
