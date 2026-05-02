@@ -381,7 +381,9 @@ func (c *WaveController) syncUserTagForTargetQuantity(waveID, waveMemberID, prod
 	neededUserQty := targetQty - baseQty
 
 	// 4. Upsert or delete user tag.
-	if neededUserQty <= 0 {
+	// neededUserQty == 0 → no override needed, remove user tag.
+	// neededUserQty > 0 or < 0 → upsert (allows negative user tags to reduce allocation).
+	if neededUserQty == 0 {
 		db.Where("product_id = ? AND wave_member_id = ? AND tag_type = 'user'",
 			productID, waveMemberID).Delete(&model.ProductTag{})
 	} else {

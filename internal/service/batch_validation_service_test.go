@@ -28,10 +28,14 @@ func TestValidateBatchBindsActiveAddressAndMarksMissingMembers(t *testing.T) {
 	if err := db.Create(&activeAddress).Error; err != nil {
 		t.Fatalf("failed to seed active address: %v", err)
 	}
+	product2 := model.Product{Platform: "douyin", Factory: "f2", FactorySKU: "sku-2", Name: "gift-b", ExtraData: "{}"}
+	if err := db.Create(&product2).Error; err != nil {
+		t.Fatalf("failed to seed product2: %v", err)
+	}
 	dispatchRecords := []model.DispatchRecord{
 		{WaveID: wave.ID, MemberID: memberWithAddress.ID, ProductID: product.ID, Quantity: 1, Status: model.DispatchStatusPendingAddress},
 		{WaveID: wave.ID, MemberID: memberWithoutAddress.ID, ProductID: product.ID, Quantity: 2, Status: model.DispatchStatusPending},
-		{WaveID: wave.ID, MemberID: memberWithoutAddress.ID, ProductID: product.ID, Quantity: 1, Status: model.DispatchStatusPending},
+		{WaveID: wave.ID, MemberID: memberWithoutAddress.ID, ProductID: product2.ID, Quantity: 1, Status: model.DispatchStatusPending},
 	}
 	for _, record := range dispatchRecords {
 		if err := db.Create(&record).Error; err != nil {

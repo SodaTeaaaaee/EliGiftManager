@@ -43,9 +43,13 @@ func TestBuildMemberItemsAggregatesDispatchCounts(t *testing.T) {
 			t.Fatalf("failed to seed address: %v", err)
 		}
 	}
+	product2 := model.Product{Platform: "douyin", Factory: "f2", FactorySKU: "sku-2", Name: "gift-b", ExtraData: "{}"}
+	if err := db.Create(&product2).Error; err != nil {
+		t.Fatalf("failed to seed product2: %v", err)
+	}
 	for _, record := range []model.DispatchRecord{
 		{WaveID: wave.ID, MemberID: memberWithDispatches.ID, ProductID: product.ID, Quantity: 1, Status: model.DispatchStatusPending},
-		{WaveID: wave.ID, MemberID: memberWithDispatches.ID, ProductID: product.ID, Quantity: 2, Status: model.DispatchStatusPending},
+		{WaveID: wave.ID, MemberID: memberWithDispatches.ID, ProductID: product2.ID, Quantity: 2, Status: model.DispatchStatusPending},
 	} {
 		record := record
 		if err := db.Create(&record).Error; err != nil {
@@ -122,9 +126,13 @@ func TestBuildProductItemsAggregatesDispatchStats(t *testing.T) {
 			t.Fatalf("failed to seed test record: %v", err)
 		}
 	}
+	member2 := model.Member{Platform: "douyin", PlatformUID: "uid-2", ExtraData: "{}"}
+	if err := db.Create(&member2).Error; err != nil {
+		t.Fatalf("failed to seed member2: %v", err)
+	}
 	for _, record := range []model.DispatchRecord{
 		{WaveID: wave.ID, MemberID: member.ID, ProductID: productWithDispatches.ID, Quantity: 2, Status: model.DispatchStatusPending},
-		{WaveID: wave.ID, MemberID: member.ID, ProductID: productWithDispatches.ID, Quantity: 3, Status: model.DispatchStatusPending},
+		{WaveID: wave.ID, MemberID: member2.ID, ProductID: productWithDispatches.ID, Quantity: 3, Status: model.DispatchStatusPending},
 	} {
 		record := record
 		if err := db.Create(&record).Error; err != nil {

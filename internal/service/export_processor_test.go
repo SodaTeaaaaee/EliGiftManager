@@ -373,8 +373,12 @@ func TestExportWavePreviewUnchanged(t *testing.T) {
 	if err := db.Create(&addr).Error; err != nil {
 		t.Fatalf("seed address: %v", err)
 	}
+	member2 := model.Member{Platform: "BILIBILI", PlatformUID: "uid-pv2", ExtraData: "{}"}
+	if err := db.Create(&member2).Error; err != nil {
+		t.Fatalf("seed member2: %v", err)
+	}
 	dr1 := model.DispatchRecord{WaveID: wave.ID, MemberID: member.ID, ProductID: product.ID, MemberAddressID: &addr.ID, Quantity: 1, Status: model.DispatchStatusPending}
-	dr2 := model.DispatchRecord{WaveID: wave.ID, MemberID: member.ID, ProductID: product.ID, MemberAddressID: nil, Quantity: 1, Status: model.DispatchStatusPendingAddress}
+	dr2 := model.DispatchRecord{WaveID: wave.ID, MemberID: member2.ID, ProductID: product.ID, MemberAddressID: nil, Quantity: 1, Status: model.DispatchStatusPendingAddress}
 	for _, d := range []*model.DispatchRecord{&dr1, &dr2} {
 		if err := db.Create(d).Error; err != nil {
 			t.Fatalf("seed dispatch: %v", err)

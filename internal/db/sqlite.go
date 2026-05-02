@@ -112,6 +112,19 @@ func autoMigrateTables(db *gorm.DB) error {
 	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_prod_wm_tag ON product_tags(product_id, wave_member_id, tag_type)")
 	db.Exec("CREATE INDEX IF NOT EXISTS idx_product_tags_wm_id ON product_tags(wave_member_id)")
 
+	// (b2) Dedup dispatch_records then add unique constraint to prevent duplicate
+	// (wave_id, member_id, product_id) rows that could cause stale quantity display.
+	db.Exec(`DELETE FROM dispatch_records WHERE id IN (
+		SELECT id FROM (
+			SELECT d1.id FROM dispatch_records d1
+			INNER JOIN dispatch_records d2 ON d1.wave_id = d2.wave_id
+				AND d1.member_id = d2.member_id
+				AND d1.product_id = d2.product_id
+				AND d1.id > d2.id
+		) dup
+	)`)
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_dispatch_wave_member_product ON dispatch_records(wave_id, member_id, product_id)")
+
 	// (c.1) Backfill wave_members snapshot fields from members + nickname history.
 	db.Exec(`
 		UPDATE wave_members SET

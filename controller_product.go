@@ -134,8 +134,8 @@ func (c *ProductController) UpsertLevelTag(productID uint, memberPlatform string
 	if productID == 0 || memberPlatform == "" || levelName == "" {
 		return fmt.Errorf("upsert level tag failed: productID, memberPlatform, and levelName are required")
 	}
-	if quantity < 1 {
-		quantity = 1
+	if quantity < 0 {
+		quantity = 0
 	}
 
 	tag := model.ProductTag{
@@ -204,10 +204,6 @@ func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, qua
 	if productID == 0 || waveMemberID == 0 {
 		return fmt.Errorf("upsert user tag failed: productID and waveMemberID are required")
 	}
-	if quantity < 1 {
-		quantity = 1
-	}
-
 	// Look up WaveMember to fill Platform and TagName for display.
 	var wm model.WaveMember
 	if err := c.db().First(&wm, waveMemberID).Error; err != nil {
