@@ -193,13 +193,37 @@ function handleRowClick(row: any, event: MouseEvent) {
 }
 
 function rowProps(row: any) {
-  return {
-    style: {
-      cursor: 'pointer',
-      ...(anchorId.value === row.id ? { outline: '2px solid #2080f0', outlineOffset: '-2px' } : {}),
-    },
-    onClick: (e: MouseEvent) => handleRowClick(row, e),
+  const selected = checkedProductIds.value.includes(row.id)
+  const isAnchor = anchorId.value === row.id
+  const cls: string[] = []
+  if (selected) cls.push('row-selected')
+  if (isAnchor) cls.push('row-anchor')
+  return { class: cls.join(' '), style: { cursor: 'pointer' }, onClick: (e: MouseEvent) => handleRowClick(row, e) }
+}
+
+// ── selection buttons ──
+const allSelected = computed(() => allTagProducts.value.length > 0 && checkedProductIds.value.length === allTagProducts.value.length)
+const pageAllSelected = computed(() => {
+  if (visibleTagProducts.value.length === 0) return false
+  return visibleTagProducts.value.every(p => checkedProductIds.value.includes(p.id))
+})
+
+function handleSelectAll() {
+  if (allSelected.value) { checkedProductIds.value = [] }
+  else { checkedProductIds.value = allTagProducts.value.map(p => p.id) }
+}
+function handleSelectPage() {
+  const pageIds = visibleTagProducts.value.map(p => p.id)
+  if (pageAllSelected.value) {
+    checkedProductIds.value = checkedProductIds.value.filter(id => !pageIds.includes(id))
+  } else {
+    checkedProductIds.value = [...new Set([...checkedProductIds.value, ...pageIds])]
   }
+}
+function handleInvertPage() {
+  const pageIds = new Set(visibleTagProducts.value.map(p => p.id))
+  const toAdd = visibleTagProducts.value.filter(p => !checkedProductIds.value.includes(p.id)).map(p => p.id)
+  checkedProductIds.value = checkedProductIds.value.filter(id => !pageIds.has(id)).concat(toAdd)
 }
 
 // ── ResizeObserver: track wrapper height & width → remeasure row heights → repack ──
@@ -394,15 +418,22 @@ onUnmounted(() => {
       </div>
       <NEmpty v-else description="当前波次无等级 Tag，导入会员数据后将自动提取" size="small" />
 
-      <div class="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <span class="text-xs text-gray-500 shrink-0">批量操作：</span>
+      <NFlex :size="'small'" :wrap="true" class="items-center">
+        <span class="text-xs shrink-0">选择：</span>
+        <NButton size="small" secondary @click="handleSelectAll">{{ allSelected ? '取消全选' : '全选所有' }}</NButton>
+        <NButton size="small" secondary @click="handleSelectPage">{{ pageAllSelected ? '取消本页' : '本页全选' }}</NButton>
+        <NButton size="small" secondary @click="handleInvertPage">本页反选</NButton>
+        <NTag size="small" round :bordered="false">已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}</NTag>
+      </NFlex>
+      <NFlex :size="'small'" :wrap="true" class="items-center">
+        <span class="text-xs shrink-0">批量操作：</span>
         <NSelect v-model:value="selectedBatchTag" :options="batchTagOptions" placeholder="勾选 tag" size="small"
           style="width: 180px" clearable />
-        <NButton size="small" type="primary" @click="handleAssignTag"
+        <NButton size="medium" type="primary" @click="handleAssignTag"
           :disabled="!selectedBatchTag || checkedProductIds.length === 0">打标</NButton>
-        <NButton size="small" type="warning" @click="handleBatchRemoveTag"
+        <NButton size="medium" type="warning" @click="handleBatchRemoveTag"
           :disabled="!selectedBatchTag || checkedProductIds.length === 0">取消打标</NButton>
-      </div>
+      </NFlex>
     </div>
 
     <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
@@ -451,7 +482,24 @@ onUnmounted(() => {
 </template>
 
 <style>
-.n-data-table .n-checkbox .n-checkbox-box {
+.n-data-table-th--selection .n-checkbox {
+  display: none;
+}
+.n-data-table-td--selection {
+  vertical-align: middle;
+}
+.n-data-table-td--selection .n-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   transform: scale(1.5);
+  transform-origin: center center;
+}
+.row-selected td {
+  background: rgba(32, 128, 240, 0.12) !important;
+}
+.row-anchor {
+  outline: 2px solid #2080f0;
+  outline-offset: -2px;
 }
 </style>
