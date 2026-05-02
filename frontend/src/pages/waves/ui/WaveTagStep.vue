@@ -163,7 +163,76 @@ const visibleTagProducts = computed(() => {
   return allTagProducts.value.slice(page.start, page.end + 1)
 })
 
-function handleTagPageChange(p: number) { tagCurrentPage.value = p }
+function handleTagPageChange(p: number) { tagCurrentPage.value = p; lastClickedRowIndex.value = -1 }
+
+const lastClickedRowIndex = ref(-1)
+
+const anchorId = computed(() => {
+  if (lastClickedRowIndex.value < 0) return null
+  return visibleTagProducts.value[lastClickedRowIndex.value]?.id ?? null
+})
+
+function handleRowClick(row: any, event: MouseEvent) {
+  const el = event.target as HTMLElement
+
+  // 1. 复选框点击 → 设锚点（不弹 drawer）
+  if (el.closest('.n-checkbox')) {
+    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+    if (idx >= 0) lastClickedRowIndex.value = idx
+    return
+  }
+
+  // 2. Ctrl+Shift + Click → 加性范围选中（保留范围外旧选择，不弹 drawer）
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
+    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+    if (lastClickedRowIndex.value >= 0 && idx >= 0) {
+      const lo = Math.min(lastClickedRowIndex.value, idx)
+      const hi = Math.max(lastClickedRowIndex.value, idx)
+      const rangeIds = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
+      checkedProductIds.value = [...new Set([...checkedProductIds.value, ...rangeIds])]
+    }
+    return
+  }
+
+  // 3. Ctrl/Cmd + Click → toggle 单行选中，设锚点（不弹 drawer）
+  if (event.ctrlKey || event.metaKey) {
+    const id = row.id
+    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === id)
+    if (idx >= 0) lastClickedRowIndex.value = idx
+    if (checkedProductIds.value.includes(id)) {
+      checkedProductIds.value = checkedProductIds.value.filter(x => x !== id)
+    } else {
+      checkedProductIds.value = [...checkedProductIds.value, id]
+    }
+    return
+  }
+
+  // 4. Shift + Click → 替换式范围选中（清掉范围外旧选择，不弹 drawer）
+  if (event.shiftKey) {
+    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+    if (lastClickedRowIndex.value >= 0 && idx >= 0) {
+      const lo = Math.min(lastClickedRowIndex.value, idx)
+      const hi = Math.max(lastClickedRowIndex.value, idx)
+      checkedProductIds.value = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
+    }
+    return
+  }
+
+  // 5. 普通点击 → 开 drawer，设锚点
+  const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+  if (idx >= 0) lastClickedRowIndex.value = idx
+  openProductDrawer(row)
+}
+
+function rowProps(row: any) {
+  return {
+    style: {
+      cursor: 'pointer',
+      ...(anchorId.value === row.id ? { outline: '2px solid #2080f0', outlineOffset: '-2px' } : {}),
+    },
+    onClick: (e: MouseEvent) => handleRowClick(row, e),
+  }
+}
 
 // ── ResizeObserver: track wrapper height & width → re-measure column widths → repack ──
 let resizeObserver: ResizeObserver | null = null
@@ -376,7 +445,7 @@ onUnmounted(() => {
         <NDataTable :columns="tagColumns" :data="visibleTagProducts" :loading="isTagLoading" :bordered="false"
           :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds"
           :pagination="false" size="small"
-          :row-props="(row: any) => ({ style: { cursor: 'pointer' }, onClick: () => openProductDrawer(row) })" />
+          :row-props="rowProps" />
       </div>
       <div ref="tagPaginationRef" class="flex justify-center mt-2 shrink-0">
         <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"
@@ -415,3 +484,9 @@ onUnmounted(() => {
     </NDrawer>
   </div>
 </template>
+
+<style>
+.n-data-table .n-checkbox .n-checkbox-box {
+  transform: scale(1.5);
+}
+</style>
