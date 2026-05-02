@@ -44,9 +44,6 @@ function platformTagColor(platform: string) {
 // ── line-clamped cell renderer ──
 const MAX_LINES = 4
 const LINE_HEIGHT = 21
-const CELL_PAD_V = 16
-const TAG_ROW_MIN_H = 56
-const TAG_EST_KEYS = ['name', 'tags']
 
 function clampedText(text: string, lines = MAX_LINES) {
   return h('div', {
@@ -61,42 +58,6 @@ function clampedText(text: string, lines = MAX_LINES) {
   }, String(text ?? ''))
 }
 
-// ── per-row height estimation (column widths measured from DOM) ──
-function estimateCellLines(text: string, colWidth: number): number {
-  const avgCharW = 12
-  const charsPerLine = Math.max(1, Math.floor(colWidth / avgCharW))
-  return Math.min(MAX_LINES, Math.max(1, Math.ceil(text.length / charsPerLine)))
-}
-
-function estimateRowHeight(row: Record<string, any>, keys: string[], widths: number[]): number {
-  let maxLines = 1
-  for (let i = 0; i < keys.length; i++) {
-    const colW = widths[i] ?? 100
-    const text = String(row[keys[i]] ?? '')
-    const lines = estimateCellLines(text, colW)
-    if (lines > maxLines) maxLines = lines
-  }
-  return Math.max(TAG_ROW_MIN_H, maxLines * LINE_HEIGHT + CELL_PAD_V)
-}
-
-function tagEstimateRow(p: { name: string; tags: string[] }): Record<string, any> {
-  return { name: p.name, tags: (p.tags || []).join(' ') }
-}
-
-// Measured column widths — updated from DOM after render & on resize
-const tagColWidths = ref<number[]>(TAG_EST_KEYS.map(() => 100))
-
-function measureColWidths(wrapper: HTMLElement | null, keys: string[], fallback: number[]): number[] {
-  if (!wrapper) return fallback
-  const ths = wrapper.querySelectorAll('.n-data-table-th')
-  if (ths.length === 0) return fallback
-  const result: number[] = []
-  for (let i = 0; i < keys.length; i++) {
-    const el = wrapper.querySelector(`[data-col-key="${keys[i]}"]`)
-    result.push(el instanceof HTMLElement ? el.offsetWidth : (fallback[i] ?? 100))
-  }
-  return result
-}
 
 // ── measured header & pagination heights (DOM, updated on resize) ──
 const tagHeaderH = ref(38)
@@ -112,35 +73,27 @@ function measurePaginationHeight(el: HTMLElement | null): number {
   return el ? el.offsetHeight : 32
 }
 
-// ── page packing: accumulate row heights, break at overflow (no clipping tolerated) ──
-function packRows<T>(
-  rows: T[],
-  extract: (r: T) => Record<string, any>,
-  keys: string[],
-  widths: number[],
-  availableH: number,
-  headerH: number,
-): Array<{ start: number; end: number }> {
+// ── page packing: accumulate DOM-measured row heights, break at overflow ──
+function packByHeights(heights: number[], availableH: number, headerH: number): Array<{ start: number; end: number }> {
   const pages: Array<{ start: number; end: number }> = []
-  if (rows.length === 0) return pages
+  if (heights.length === 0) return pages
   const bodyH = availableH - headerH
   if (bodyH <= 0) {
-    for (let i = 0; i < rows.length; i++) pages.push({ start: i, end: i })
+    for (let i = 0; i < heights.length; i++) pages.push({ start: i, end: i })
     return pages
   }
   let pageStart = 0
   let used = 0
-  for (let i = 0; i < rows.length; i++) {
-    const h = estimateRowHeight(extract(rows[i]), keys, widths)
-    if (used + h > bodyH && i > pageStart) {
+  for (let i = 0; i < heights.length; i++) {
+    if (used + heights[i] > bodyH && i > pageStart) {
       pages.push({ start: pageStart, end: i - 1 })
       pageStart = i
-      used = h
+      used = heights[i]
     } else {
-      used += h
+      used += heights[i]
     }
   }
-  pages.push({ start: pageStart, end: rows.length - 1 })
+  pages.push({ start: pageStart, end: heights.length - 1 })
   return pages
 }
 
@@ -150,18 +103,33 @@ const tagPaginationRef = ref<HTMLElement | null>(null)
 const tagAvailableH = ref(400)
 const tagCurrentPage = ref(1)
 
+const tagNeedsMeasure = ref(true)
+const tagMeasuredHeights = ref<number[]>([])
+
 const tagPages = computed(() =>
-  packRows(allTagProducts.value, tagEstimateRow, TAG_EST_KEYS, tagColWidths.value,
+  packByHeights(tagMeasuredHeights.value,
     tagAvailableH.value - tagPaginationH.value * 2, tagHeaderH.value),
 )
 
 const tagTotalPages = computed(() => tagPages.value.length || 1)
 
 const visibleTagProducts = computed(() => {
+  if (tagNeedsMeasure.value) return allTagProducts.value
   const page = tagPages.value[tagCurrentPage.value - 1]
   if (!page) return allTagProducts.value
   return allTagProducts.value.slice(page.start, page.end + 1)
 })
+
+async function remeasureTags() {
+  tagNeedsMeasure.value = true
+  await nextTick()
+  const trs = tagTableWrapper.value?.querySelectorAll('tbody tr')
+  if (trs && trs.length > 0) {
+    tagMeasuredHeights.value = Array.from(trs).map(tr => (tr as HTMLElement).offsetHeight)
+  }
+  tagNeedsMeasure.value = false
+  if (tagCurrentPage.value > tagPages.value.length) tagCurrentPage.value = 1
+}
 
 function handleTagPageChange(p: number) { tagCurrentPage.value = p; lastClickedRowIndex.value = -1 }
 
@@ -234,15 +202,9 @@ function rowProps(row: any) {
   }
 }
 
-// ── ResizeObserver: track wrapper height & width → re-measure column widths → repack ──
+// ── ResizeObserver: track wrapper height & width → remeasure row heights → repack ──
 let resizeObserver: ResizeObserver | null = null
 const lastTagW = ref(0)
-
-function syncAllColWidths() {
-  tagColWidths.value = measureColWidths(tagTableWrapper.value, TAG_EST_KEYS, tagColWidths.value)
-  tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
-  tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
-}
 
 function setupResizeObserver() {
   resizeObserver = new ResizeObserver(entries => {
@@ -256,10 +218,9 @@ function setupResizeObserver() {
         if (!wChanged && !hChanged) continue
         if (wChanged) {
           lastTagW.value = w
-          tagColWidths.value = measureColWidths(tagTableWrapper.value, TAG_EST_KEYS, tagColWidths.value)
+          remeasureTags()
         }
-        if (hChanged) tagAvailableH.value = h
-        tagCurrentPage.value = 1
+        if (hChanged) { tagAvailableH.value = h; tagCurrentPage.value = 1 }
       }
     }
   })
@@ -387,23 +348,27 @@ onMounted(async () => {
   await loadWave()
   await loadTagProducts()
   await nextTick()
-  syncAllColWidths()
+  tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
+  tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
   if (tagTableWrapper.value) {
     const h = tagTableWrapper.value.clientHeight
     if (h > 0) tagAvailableH.value = h
     lastTagW.value = tagTableWrapper.value.clientWidth
   }
+  await remeasureTags()
   setupResizeObserver()
 })
 
 watch([() => allTagProducts.value.length], async () => {
   await nextTick()
-  syncAllColWidths()
+  tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
+  tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
   if (tagTableWrapper.value) {
     resizeObserver?.observe(tagTableWrapper.value)
     const h = tagTableWrapper.value.clientHeight
     if (h > 0) tagAvailableH.value = h
   }
+  await remeasureTags()
 })
 
 onUnmounted(() => {

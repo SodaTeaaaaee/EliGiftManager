@@ -39,7 +39,6 @@ const productFileExt = computed(() => templateFormat(productTemplateId.value) ==
 // ── line-clamped cell renderer ──
 const MAX_LINES = 4
 const LINE_HEIGHT = 21
-const CELL_PAD_V = 16
 
 function clampedText(text: string, lines = MAX_LINES) {
   return h('div', {
@@ -52,59 +51,6 @@ function clampedText(text: string, lines = MAX_LINES) {
       lineHeight: String(LINE_HEIGHT) + 'px',
     },
   }, String(text ?? ''))
-}
-
-// ── per-row height estimation (column widths measured from DOM) ──
-function estimateCellLines(text: string, colWidth: number): number {
-  const avgCharW = 12
-  const charsPerLine = Math.max(1, Math.floor(colWidth / avgCharW))
-  return Math.min(MAX_LINES, Math.max(1, Math.ceil(text.length / charsPerLine)))
-}
-
-function estimateRowHeight(row: Record<string, any>, keys: string[], widths: number[]): number {
-  let maxLines = 1
-  for (let i = 0; i < keys.length; i++) {
-    const colW = widths[i] ?? 100
-    const text = String(row[keys[i]] ?? '')
-    const lines = estimateCellLines(text, colW)
-    if (lines > maxLines) maxLines = lines
-  }
-  return maxLines * LINE_HEIGHT + CELL_PAD_V
-}
-
-// Column keys for estimation & DOM measurement (must match column `key` in definitions)
-const MEMBER_EST_KEYS = ['latestNickname', 'platform', 'platformUid', 'extraData']
-const PRODUCT_EST_KEYS = ['name'] // only name column wraps; SKU is nowrap → always 1 line
-
-// Measured column widths — updated from DOM after render & on resize
-const memberColWidths = ref<number[]>(MEMBER_EST_KEYS.map(() => 100))
-const productColWidths = ref<number[]>(PRODUCT_EST_KEYS.map(() => 100))
-
-function measureColWidths(wrapper: HTMLElement | null, keys: string[], fallback: number[]): number[] {
-  if (!wrapper) return fallback
-  const ths = wrapper.querySelectorAll('.n-data-table-th')
-  if (ths.length === 0) return fallback
-  const result: number[] = []
-  for (let i = 0; i < keys.length; i++) {
-    const el = wrapper.querySelector(`[data-col-key="${keys[i]}"]`)
-    result.push(el instanceof HTMLElement ? el.offsetWidth : (fallback[i] ?? 100))
-  }
-  return result
-}
-
-function memberEstimateRow(m: MemberItem): Record<string, any> {
-  let giftLevel = '-'
-  try { giftLevel = JSON.parse(m.extraData).giftLevel || '-' } catch { /* ignore */ }
-  return {
-    latestNickname: m.latestNickname || m.platformUid,
-    platform: m.platform,
-    platformUid: m.platformUid,
-    extraData: giftLevel,
-  }
-}
-
-function productEstimateRow(p: { name: string; factorySku: string }): Record<string, any> {
-  return { name: p.name }
 }
 
 // ── measured header & pagination heights (DOM, updated on resize) ──
@@ -123,36 +69,28 @@ function measurePaginationHeight(el: HTMLElement | null): number {
   return el ? el.offsetHeight : 32
 }
 
-// ── page packing: accumulate row heights, break at overflow (no clipping tolerated) ──
+// ── page packing: accumulate DOM-measured row heights, break at overflow ──
 
-function packRows<T>(
-  rows: T[],
-  extract: (r: T) => Record<string, any>,
-  keys: string[],
-  widths: number[],
-  availableH: number,
-  headerH: number,
-): Array<{ start: number; end: number }> {
+function packByHeights(heights: number[], availableH: number, headerH: number): Array<{ start: number; end: number }> {
   const pages: Array<{ start: number; end: number }> = []
-  if (rows.length === 0) return pages
+  if (heights.length === 0) return pages
   const bodyH = availableH - headerH
   if (bodyH <= 0) {
-    for (let i = 0; i < rows.length; i++) pages.push({ start: i, end: i })
+    for (let i = 0; i < heights.length; i++) pages.push({ start: i, end: i })
     return pages
   }
   let pageStart = 0
   let used = 0
-  for (let i = 0; i < rows.length; i++) {
-    const h = estimateRowHeight(extract(rows[i]), keys, widths)
-    if (used + h > bodyH && i > pageStart) {
+  for (let i = 0; i < heights.length; i++) {
+    if (used + heights[i] > bodyH && i > pageStart) {
       pages.push({ start: pageStart, end: i - 1 })
       pageStart = i
-      used = h
+      used = heights[i]
     } else {
-      used += h
+      used += heights[i]
     }
   }
-  pages.push({ start: pageStart, end: rows.length - 1 })
+  pages.push({ start: pageStart, end: heights.length - 1 })
   return pages
 }
 
@@ -162,20 +100,35 @@ const memberPaginationRef = ref<HTMLElement | null>(null)
 const memberAvailableH = ref(400)
 const memberCurrentPage = ref(1)
 
+const memberNeedsMeasure = ref(true)
+const memberMeasuredHeights = ref<number[]>([])
+
 const memberPages = computed(() =>
-  packRows(waveMembers.value, memberEstimateRow, MEMBER_EST_KEYS, memberColWidths.value,
+  packByHeights(memberMeasuredHeights.value,
     memberAvailableH.value - memberPaginationH.value * 2, memberHeaderH.value),
 )
 
 const memberTotalPages = computed(() => memberPages.value.length || 1)
 
 const visibleMembers = computed(() => {
+  if (memberNeedsMeasure.value) return waveMembers.value
   const page = memberPages.value[memberCurrentPage.value - 1]
   if (!page) return waveMembers.value
   return waveMembers.value.slice(page.start, page.end + 1)
 })
 
 function handleMemberPageChange(p: number) { memberCurrentPage.value = p }
+
+async function remeasureMembers() {
+  memberNeedsMeasure.value = true
+  await nextTick()
+  const trs = memberTableWrapper.value?.querySelectorAll('tbody tr')
+  if (trs && trs.length > 0) {
+    memberMeasuredHeights.value = Array.from(trs).map(tr => (tr as HTMLElement).offsetHeight)
+  }
+  memberNeedsMeasure.value = false
+  if (memberCurrentPage.value > memberPages.value.length) memberCurrentPage.value = 1
+}
 
 // ── product table: fetch all at once, paginate client-side ──
 const allProducts = ref<{ id: number; name: string; factorySku: string }[]>([])
@@ -195,14 +148,18 @@ const productAvailableH = ref(400)
 const productCurrentPage = ref(1)
 const isProductLoading = ref(false)
 
+const productNeedsMeasure = ref(true)
+const productMeasuredHeights = ref<number[]>([])
+
 const productPages = computed(() =>
-  packRows(allProducts.value, productEstimateRow, PRODUCT_EST_KEYS, productColWidths.value,
+  packByHeights(productMeasuredHeights.value,
     productAvailableH.value - productPaginationH.value * 2, productHeaderH.value),
 )
 
 const productTotalPages = computed(() => productPages.value.length || 1)
 
 const visibleProducts = computed(() => {
+  if (productNeedsMeasure.value) return allProducts.value
   const page = productPages.value[productCurrentPage.value - 1]
   if (!page) return allProducts.value
   return allProducts.value.slice(page.start, page.end + 1)
@@ -210,19 +167,21 @@ const visibleProducts = computed(() => {
 
 function handleProductPageChange(p: number) { productCurrentPage.value = p }
 
-// ── ResizeObserver: track wrapper height & width → re-measure column widths → repack ──
+async function remeasureProducts() {
+  productNeedsMeasure.value = true
+  await nextTick()
+  const trs = productTableWrapper.value?.querySelectorAll('tbody tr')
+  if (trs && trs.length > 0) {
+    productMeasuredHeights.value = Array.from(trs).map(tr => (tr as HTMLElement).offsetHeight)
+  }
+  productNeedsMeasure.value = false
+  if (productCurrentPage.value > productPages.value.length) productCurrentPage.value = 1
+}
+
+// ── ResizeObserver: track wrapper height & width → re-measure row heights → repack ──
 let resizeObserver: ResizeObserver | null = null
 const lastProductW = ref(0)
 const lastMemberW = ref(0)
-
-function syncAllColWidths() {
-  productColWidths.value = measureColWidths(productTableWrapper.value, PRODUCT_EST_KEYS, productColWidths.value)
-  memberColWidths.value = measureColWidths(memberTableWrapper.value, MEMBER_EST_KEYS, memberColWidths.value)
-  productHeaderH.value = measureHeaderHeight(productTableWrapper.value)
-  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
-  productPaginationH.value = measurePaginationHeight(productPaginationRef.value)
-  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-}
 
 function setupResizeObserver() {
   resizeObserver = new ResizeObserver(entries => {
@@ -236,10 +195,12 @@ function setupResizeObserver() {
         if (!wChanged && !hChanged) continue
         if (wChanged) {
           lastProductW.value = w
-          productColWidths.value = measureColWidths(productTableWrapper.value, PRODUCT_EST_KEYS, productColWidths.value)
+          remeasureProducts()
         }
-        if (hChanged) productAvailableH.value = h
-        productCurrentPage.value = 1
+        if (hChanged) {
+          productAvailableH.value = h
+          productCurrentPage.value = 1
+        }
       } else if (entry.target === memberTableWrapper.value) {
         const w = entry.contentRect.width
         const h = entry.contentRect.height
@@ -249,10 +210,12 @@ function setupResizeObserver() {
         if (!wChanged && !hChanged) continue
         if (wChanged) {
           lastMemberW.value = w
-          memberColWidths.value = measureColWidths(memberTableWrapper.value, MEMBER_EST_KEYS, memberColWidths.value)
+          remeasureMembers()
         }
-        if (hChanged) memberAvailableH.value = h
-        memberCurrentPage.value = 1
+        if (hChanged) {
+          memberAvailableH.value = h
+          memberCurrentPage.value = 1
+        }
       }
     }
   })
@@ -262,24 +225,26 @@ function setupResizeObserver() {
 
 // ── column definitions ──
 const showSkuColumn = computed(() => lastProductW.value === 0 || lastProductW.value >= 400)
-const showMemberExtraColumns = computed(() => lastMemberW.value === 0 || lastMemberW.value >= 400)
+const showMemberExtraColumns = computed(() => lastMemberW.value === 0 || lastMemberW.value >= 450)
 
 const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
   const cols: DataTableColumns<MemberItem> = [
-    { title: '#', key: '__index', width: 50,
-      render: (row: any) => h('span', { style: { color: '#999' } }, String(memberIndexMap.value.get(row.id) ?? '')) },
-    { title: '昵称', key: 'latestNickname', minWidth: 100, render: (row) => clampedText(row.latestNickname || row.platformUid) },
-    { title: '平台', key: 'platform', width: 100, render: (row) => clampedText(row.platform) },
-    { title: 'UID', key: 'platformUid', minWidth: 100, render: (row) => clampedText(row.platformUid) },
+    {
+      title: '#', key: '__index', width: 40,
+      render: (row: any) => h('span', { style: { color: '#999' } }, String(memberIndexMap.value.get(row.id) ?? ''))
+    },
+    { title: '昵称', key: 'latestNickname', minWidth: 90, render: (row) => clampedText(row.latestNickname || row.platformUid) },
+    { title: '平台', key: 'platform', width: 70, render: (row) => clampedText(row.platform) },
+    { title: 'UID', key: 'platformUid', minWidth: 90, render: (row) => clampedText(row.platformUid) },
   ]
   if (showMemberExtraColumns.value) {
     cols.push({
-      title: '等级', key: 'extraData', width: 100, render: (row) => clampedText((() => {
+      title: '等级', key: 'extraData', width: 50, render: (row) => clampedText((() => {
         try { const ed = JSON.parse(row.extraData); return ed.giftLevel || '-' }
         catch { return '-' }
       })())
     })
-    cols.push({ title: '地址数', key: 'activeAddressCount', width: 70 })
+    cols.push({ title: '地址数', key: 'activeAddressCount', width: 60 })
   }
   cols.push({
     title: '操作', key: '__actions', width: 80,
@@ -289,7 +254,7 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
         negativeText: '取消', positiveText: '确认',
       }, {
         trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }),
-        default: () => '确认从波次中移除此会员？',
+        default: () => '确认从任务中移除此会员？',
       })
     },
   })
@@ -299,7 +264,7 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
 const productDataColumns = computed<DataTableColumns>(() => {
   const cols: DataTableColumns = [
     {
-      title: '#', key: '__index', width: 50,
+      title: '#', key: '__index', width: 40,
       render: (row: any) => h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? ''))
     },
     { title: '商品名', key: 'name', minWidth: 140, render: (row: any) => clampedText(row.name) },
@@ -318,7 +283,7 @@ const productDataColumns = computed<DataTableColumns>(() => {
         negativeText: '取消', positiveText: '确认',
       }, {
         trigger: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }),
-        default: () => '确认从波次中移除此商品？',
+        default: () => '确认从任务中移除此商品？',
       })
     },
   })
@@ -332,7 +297,7 @@ async function loadAllProducts() {
   try {
     const result = await listProductsWithTags(waveId.value, '', 1, 10000)
     allProducts.value = result.items.map(item => ({ id: item.id, name: item.name, factorySku: item.factorySku || '' }))
-  } catch (e) { console.error('加载波次商品失败', e) }
+  } catch (e) { console.error('加载任务商品失败', e) }
   finally { isProductLoading.value = false }
 }
 
@@ -351,7 +316,7 @@ async function loadWaveMembers() {
   if (!waveId.value) return
   isMembersLoading.value = true
   try { waveMembers.value = await listWaveMembers(waveId.value) }
-  catch (e) { console.error('加载波次会员失败', e) }
+  catch (e) { console.error('加载任务会员失败', e) }
   finally { isMembersLoading.value = false }
 }
 
@@ -365,20 +330,20 @@ async function handleImportProduct() {
 }
 
 async function handleDeleteProduct(productId: number) {
-  try { await removeProductFromWave(waveId.value, productId); message.success('已从波次中移除'); await loadAllProducts(); await loadWaveMembers() }
+  try { await removeProductFromWave(waveId.value, productId); message.success('已从任务中移除'); await loadAllProducts(); await loadWaveMembers() }
   catch (e) { message.error(String(e)) }
 }
 
 async function handleDeleteMember(memberId: number) {
-  try { await removeMemberFromWave(waveId.value, memberId); message.success('已从波次中移除'); await loadWaveMembers() }
+  try { await removeMemberFromWave(waveId.value, memberId); message.success('已从任务中移除'); await loadWaveMembers() }
   catch (e) { message.error(String(e)) }
 }
 
 async function handleImportDispatch() {
-  if (!importTemplateId.value) return message.warning('请先选择发货导入模板')
+  if (!importTemplateId.value) return message.warning('请先选择会员导入模板')
   const filePath = await pickCSVFile()
   if (!filePath) return
-  try { await importDispatchWave(waveId.value, filePath, importTemplateId.value); message.success('发货数据导入完成'); await loadWaveMembers() }
+  try { await importDispatchWave(waveId.value, filePath, importTemplateId.value); message.success('会员数据导入完成'); await loadWaveMembers() }
   catch (e) { message.error(String(e)) }
 }
 
@@ -392,7 +357,12 @@ onMounted(async () => {
   await loadWaveMembers()
   await loadAllProducts()
   await nextTick()
-  syncAllColWidths()
+  // 测量 header/pagination
+  productHeaderH.value = measureHeaderHeight(productTableWrapper.value)
+  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
+  productPaginationH.value = measurePaginationHeight(productPaginationRef.value)
+  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
+  // 初始 DOM 高度
   if (productTableWrapper.value) {
     const h = productTableWrapper.value.clientHeight
     if (h > 0) productAvailableH.value = h
@@ -403,12 +373,18 @@ onMounted(async () => {
     if (h > 0) memberAvailableH.value = h
     lastMemberW.value = memberTableWrapper.value.clientWidth
   }
+  // DOM 实测行高 + 打包
+  await remeasureProducts()
+  await remeasureMembers()
   setupResizeObserver()
 })
 
 watch([() => allProducts.value.length, () => waveMembers.value.length], async () => {
   await nextTick()
-  syncAllColWidths()
+  productHeaderH.value = measureHeaderHeight(productTableWrapper.value)
+  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
+  productPaginationH.value = measurePaginationHeight(productPaginationRef.value)
+  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
   if (productTableWrapper.value) {
     resizeObserver?.observe(productTableWrapper.value)
     const h = productTableWrapper.value.clientHeight
@@ -419,6 +395,8 @@ watch([() => allProducts.value.length, () => waveMembers.value.length], async ()
     const h = memberTableWrapper.value.clientHeight
     if (h > 0) memberAvailableH.value = h
   }
+  await remeasureProducts()
+  await remeasureMembers()
 })
 
 onUnmounted(() => {
@@ -458,9 +436,9 @@ onUnmounted(() => {
       <!-- 会员导入面板 -->
       <div class="border border-gray-100 dark:border-gray-700 rounded-lg flex flex-col min-h-0">
         <div class="p-3 pb-0 shrink-0">
-          <span class="text-xs text-gray-500 block mb-3 font-medium">发货数据导入（会员来源 CSV）</span>
-          <NSelect v-model:value="importTemplateId" :options="dispatchTemplates" placeholder="选择发货导入模板" class="mb-2" />
-          <NButton block type="primary" @click="handleImportDispatch">导入发货数据</NButton>
+          <span class="text-xs text-gray-500 block mb-3 font-medium">会员数据导入（会员来源 CSV）</span>
+          <NSelect v-model:value="importTemplateId" :options="dispatchTemplates" placeholder="选择会员导入模板" class="mb-2" />
+          <NButton block type="primary" @click="handleImportDispatch">导入会员数据</NButton>
         </div>
         <div v-if="waveMembers.length" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
           <div ref="memberTableWrapper" class="flex-1 min-h-0 overflow-hidden mt-2">

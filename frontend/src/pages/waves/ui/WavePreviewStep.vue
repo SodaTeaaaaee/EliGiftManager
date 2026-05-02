@@ -83,13 +83,12 @@ const memberGroups = computed(() => {
 })
 
 // ══════════════════════════════════════════════
-// adaptive packRows — memberGroupColumns table
+// adaptive paging — memberGroupColumns table
 // ══════════════════════════════════════════════
 
 // ── line-clamped cell renderer ──
 const MAX_LINES = 4
 const LINE_HEIGHT = 21
-const CELL_PAD_V = 16
 
 function clampedText(text: string, lines = MAX_LINES) {
   return h('div', {
@@ -104,76 +103,28 @@ function clampedText(text: string, lines = MAX_LINES) {
   }, String(text ?? ''))
 }
 
-// Column keys for estimation & DOM measurement (must match column `key` in definitions)
-const MEMBER_EST_KEYS = ['nickname', 'platformUid']
-
-// Measured column widths — updated from DOM after render & on resize
-const memberColWidths = ref<number[]>(MEMBER_EST_KEYS.map(() => 100))
-
-// ── per-row height estimation (column widths measured from DOM) ──
-function estimateCellLines(text: string, colWidth: number): number {
-  const avgCharW = 12
-  const charsPerLine = Math.max(1, Math.floor(colWidth / avgCharW))
-  return Math.min(MAX_LINES, Math.max(1, Math.ceil(text.length / charsPerLine)))
-}
-
-function estimateRowHeight(row: Record<string, any>, keys: string[], widths: number[]): number {
-  let maxLines = 1
-  for (let i = 0; i < keys.length; i++) {
-    const colW = widths[i] ?? 100
-    const text = String(row[keys[i]] ?? '')
-    const lines = estimateCellLines(text, colW)
-    if (lines > maxLines) maxLines = lines
-  }
-  return maxLines * LINE_HEIGHT + CELL_PAD_V
-}
-
-function memberEstimateRow(group: { nickname: string; platformUid: string }): Record<string, any> {
-  return { nickname: group.nickname, platformUid: group.platformUid }
-}
-
-// ── page packing: accumulate row heights, break at overflow (no clipping tolerated) ──
-function packRows<T>(
-  rows: T[],
-  extract: (r: T) => Record<string, any>,
-  keys: string[],
-  widths: number[],
-  availableH: number,
-  headerH: number,
-): Array<{ start: number; end: number }> {
+// ── pack rows by measured DOM heights ──
+function packByHeights(heights: number[], availableH: number, headerH: number): Array<{ start: number; end: number }> {
   const pages: Array<{ start: number; end: number }> = []
-  if (rows.length === 0) return pages
+  if (heights.length === 0) return pages
   const bodyH = availableH - headerH
   if (bodyH <= 0) {
-    for (let i = 0; i < rows.length; i++) pages.push({ start: i, end: i })
+    for (let i = 0; i < heights.length; i++) pages.push({ start: i, end: i })
     return pages
   }
   let pageStart = 0
   let used = 0
-  for (let i = 0; i < rows.length; i++) {
-    const h = estimateRowHeight(extract(rows[i]), keys, widths)
-    if (used + h > bodyH && i > pageStart) {
+  for (let i = 0; i < heights.length; i++) {
+    if (used + heights[i] > bodyH && i > pageStart) {
       pages.push({ start: pageStart, end: i - 1 })
       pageStart = i
-      used = h
+      used = heights[i]
     } else {
-      used += h
+      used += heights[i]
     }
   }
-  pages.push({ start: pageStart, end: rows.length - 1 })
+  pages.push({ start: pageStart, end: heights.length - 1 })
   return pages
-}
-
-function measureColWidths(wrapper: HTMLElement | null, keys: string[], fallback: number[]): number[] {
-  if (!wrapper) return fallback
-  const ths = wrapper.querySelectorAll('.n-data-table-th')
-  if (ths.length === 0) return fallback
-  const result: number[] = []
-  for (let i = 0; i < keys.length; i++) {
-    const el = wrapper.querySelector(`[data-col-key="${keys[i]}"]`)
-    result.push(el instanceof HTMLElement ? el.offsetWidth : (fallback[i] ?? 100))
-  }
-  return result
 }
 
 // ── measured header & pagination heights (DOM, updated on resize) ──
@@ -196,30 +147,39 @@ const memberPaginationRef = ref<HTMLElement | null>(null)
 const memberAvailableH = ref(400)
 const memberCurrentPage = ref(1)
 
+const memberNeedsMeasure = ref(true)
+const memberMeasuredHeights = ref<number[]>([])
+
 const memberPages = computed(() =>
-  packRows(memberGroups.value, memberEstimateRow, MEMBER_EST_KEYS, memberColWidths.value,
+  packByHeights(memberMeasuredHeights.value,
     memberAvailableH.value - memberPaginationH.value * 2, memberHeaderH.value),
 )
 
 const memberTotalPages = computed(() => memberPages.value.length || 1)
 
 const visibleMemberGroups = computed(() => {
+  if (memberNeedsMeasure.value) return memberGroups.value
   const page = memberPages.value[memberCurrentPage.value - 1]
   if (!page) return memberGroups.value
   return memberGroups.value.slice(page.start, page.end + 1)
 })
 
+async function remeasureMembers() {
+  memberNeedsMeasure.value = true
+  await nextTick()
+  const trs = memberTableWrapper.value?.querySelectorAll('tbody tr')
+  if (trs && trs.length > 0) {
+    memberMeasuredHeights.value = Array.from(trs).map(tr => (tr as HTMLElement).offsetHeight)
+  }
+  memberNeedsMeasure.value = false
+  if (memberCurrentPage.value > memberPages.value.length) memberCurrentPage.value = 1
+}
+
 function handleMemberPageChange(p: number) { memberCurrentPage.value = p }
 
-// ── ResizeObserver: track wrapper height & width → re-measure column widths → repack ──
+// ── ResizeObserver: track wrapper height & width → re-measure row heights → repack ──
 let resizeObserver: ResizeObserver | null = null
 const lastMemberW = ref(0)
-
-function syncAllColWidths() {
-  memberColWidths.value = measureColWidths(memberTableWrapper.value, MEMBER_EST_KEYS, memberColWidths.value)
-  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
-  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-}
 
 function setupResizeObserver() {
   resizeObserver = new ResizeObserver(entries => {
@@ -233,10 +193,9 @@ function setupResizeObserver() {
         if (!wChanged && !hChanged) continue
         if (wChanged) {
           lastMemberW.value = w
-          memberColWidths.value = measureColWidths(memberTableWrapper.value, MEMBER_EST_KEYS, memberColWidths.value)
+          remeasureMembers()
         }
-        if (hChanged) memberAvailableH.value = h
-        memberCurrentPage.value = 1
+        if (hChanged) { memberAvailableH.value = h; memberCurrentPage.value = 1 }
       }
     }
   })
@@ -442,25 +401,28 @@ onMounted(async () => {
     } catch (e) { console.error('自动预览失败', e) }
     finally { isPreviewLoading.value = false }
   }
-  // Adaptive layout setup
   await nextTick()
-  syncAllColWidths()
+  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
+  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
   if (memberTableWrapper.value) {
     const h = memberTableWrapper.value.clientHeight
     if (h > 0) memberAvailableH.value = h
     lastMemberW.value = memberTableWrapper.value.clientWidth
   }
+  await remeasureMembers()
   setupResizeObserver()
 })
 
 watch([() => memberGroups.value.length], async () => {
   await nextTick()
-  syncAllColWidths()
+  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
+  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
   if (memberTableWrapper.value) {
     resizeObserver?.observe(memberTableWrapper.value)
     const h = memberTableWrapper.value.clientHeight
     if (h > 0) memberAvailableH.value = h
   }
+  await remeasureMembers()
 })
 
 onUnmounted(() => {
