@@ -437,7 +437,7 @@ async function handleBatchAddLevelTag() {
       await upsertLevelTag(productId, platform, tagName, levelTagQuantity.value)
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签`)
-    await loadTagProducts(); checkedProductIds.value = []
+    await loadTagProducts()
   } catch (e) { message.error(String(e)) }
 }
 
@@ -449,7 +449,7 @@ async function handleBatchRemoveLevelTag() {
       await removeLevelTag(productId, platform, tagName)
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除 ${platform}·${tagName} 标签`)
-    await loadTagProducts(); checkedProductIds.value = []
+    await loadTagProducts()
   } catch (e) { message.error(String(e)) }
 }
 
@@ -478,7 +478,7 @@ async function handleBatchAddUserTag() {
       await upsertUserTag(productId, waveMemberId, quantity)
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品添加用户 Tag`)
-    await loadTagProducts(); checkedProductIds.value = []
+    await loadTagProducts()
   } catch (e) { message.error(String(e)) }
 }
 
@@ -490,7 +490,7 @@ async function handleBatchRemoveUserTag() {
       await removeUserTag(productId, waveMemberId)
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除用户 Tag`)
-    await loadTagProducts(); checkedProductIds.value = []
+    await loadTagProducts()
   } catch (e) { message.error(String(e)) }
 }
 
