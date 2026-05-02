@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,14 +57,28 @@ func (c *WaveController) DeleteWave(waveID uint) error {
 	if db == nil {
 		return fmt.Errorf("delete wave failed: database not available")
 	}
-	result := db.Delete(&model.Wave{}, waveID)
-	if result.Error != nil {
-		return fmt.Errorf("delete wave failed: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("delete wave failed: wave not found")
-	}
-	return nil
+	return db.Transaction(func(tx *gorm.DB) error {
+		// Manually cascade: SQLite FK constraints may be stale from previous
+		// migrations, so explicitly delete dependents before the wave itself.
+		if err := tx.Where("wave_id = ?", waveID).Delete(&model.DispatchRecord{}).Error; err != nil {
+			return fmt.Errorf("delete wave failed: clean dispatch records: %w", err)
+		}
+		if err := tx.Where("wave_id = ?", waveID).Delete(&model.WaveMember{}).Error; err != nil {
+			return fmt.Errorf("delete wave failed: clean wave members: %w", err)
+		}
+		// Unlink products (no FK, just set wave_id to NULL).
+		if err := tx.Model(&model.Product{}).Where("wave_id = ?", waveID).Update("wave_id", nil).Error; err != nil {
+			return fmt.Errorf("delete wave failed: unlink products: %w", err)
+		}
+		result := tx.Delete(&model.Wave{}, waveID)
+		if result.Error != nil {
+			return fmt.Errorf("delete wave failed: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("delete wave failed: wave not found")
+		}
+		return nil
+	})
 }
 
 func (c *WaveController) ListWaves(status string) ([]WaveItem, error) {
@@ -261,10 +274,13 @@ func (c *WaveController) ReconcileWave(waveID uint) (int, error) {
 		for productID, memberMap := range expectedState {
 			for memberID, expectedQty := range memberMap {
 				if expectedQty > 0 {
+					var records []model.DispatchRecord
+					if err := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).
+						Limit(1).Find(&records).Error; err != nil {
+						return fmt.Errorf("lookup dispatch record (member=%d, product=%d): %w", memberID, productID, err)
+					}
 					var record model.DispatchRecord
-					err := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).
-						First(&record).Error
-					if errors.Is(err, gorm.ErrRecordNotFound) {
+					if len(records) == 0 {
 						record = model.DispatchRecord{
 							WaveID:    waveID,
 							MemberID:  memberID,
@@ -275,11 +291,12 @@ func (c *WaveController) ReconcileWave(waveID uint) (int, error) {
 						if createErr := tx.Create(&record).Error; createErr != nil {
 							return fmt.Errorf("create dispatch record (member=%d, product=%d): %w", memberID, productID, createErr)
 						}
-					} else if err != nil {
-						return fmt.Errorf("lookup dispatch record (member=%d, product=%d): %w", memberID, productID, err)
-					} else if record.Quantity != expectedQty {
-						if updateErr := tx.Model(&record).Update("quantity", expectedQty).Error; updateErr != nil {
-							return fmt.Errorf("update dispatch quantity (id=%d): %w", record.ID, updateErr)
+					} else {
+						record = records[0]
+						if record.Quantity != expectedQty {
+							if updateErr := tx.Model(&record).Update("quantity", expectedQty).Error; updateErr != nil {
+								return fmt.Errorf("update dispatch quantity (id=%d): %w", record.ID, updateErr)
+							}
 						}
 					}
 					allocatedCount++
