@@ -65,11 +65,14 @@ type ProductImage struct {
 
 // ProductTag stores platform-level classification tags attached to a product.
 // TagName captures the gift tier/level name (e.g. "舰长", "提督").
+// TagType distinguishes level tags from user-specific tags.
 type ProductTag struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	ProductID uint      `gorm:"not null;uniqueIndex:idx_prod_platform_tag" json:"productId"`
 	Platform  string    `gorm:"size:100;not null;uniqueIndex:idx_prod_platform_tag" json:"platform"`
 	TagName   string    `gorm:"size:255;not null;uniqueIndex:idx_prod_platform_tag" json:"tagName"`
+	TagType   string    `gorm:"size:20;not null;default:'level';uniqueIndex:idx_prod_platform_tag" json:"tagType"`
+	Quantity  int       `gorm:"not null;default:1" json:"quantity"`
 	CreatedAt time.Time `json:"createdAt"`
 	Product   Product   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
 }

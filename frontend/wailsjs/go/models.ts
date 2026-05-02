@@ -346,6 +346,22 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class TagInfo {
+	    tagName: string;
+	    quantity: number;
+	    tagType: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new TagInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tagName = source["tagName"];
+	        this.quantity = source["quantity"];
+	        this.tagType = source["tagType"];
+	    }
+	}
 	export class ProductItemWithTags {
 	    id: number;
 	    platform: string;
@@ -354,7 +370,7 @@ export namespace main {
 	    name: string;
 	    coverImage: string;
 	    extraData: string;
-	    tags: string[];
+	    tags: TagInfo[];
 	    // Go type: time
 	    updatedAt: any;
 	
@@ -371,7 +387,7 @@ export namespace main {
 	        this.name = source["name"];
 	        this.coverImage = source["coverImage"];
 	        this.extraData = source["extraData"];
-	        this.tags = source["tags"];
+	        this.tags = this.convertValues(source["tags"], TagInfo);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	    }
 	
@@ -461,6 +477,7 @@ export namespace main {
 		    return a;
 		}
 	}
+	
 	export class TemplateItem {
 	    id: number;
 	    platform: string;
@@ -558,6 +575,8 @@ export namespace model {
 	    productId: number;
 	    platform: string;
 	    tagName: string;
+	    tagType: string;
+	    quantity: number;
 	    // Go type: time
 	    createdAt: any;
 	    product: Product;
@@ -572,6 +591,8 @@ export namespace model {
 	        this.productId = source["productId"];
 	        this.platform = source["platform"];
 	        this.tagName = source["tagName"];
+	        this.tagType = source["tagType"];
+	        this.quantity = source["quantity"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.product = this.convertValues(source["product"], Product);
 	    }

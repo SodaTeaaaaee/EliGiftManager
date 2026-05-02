@@ -206,48 +206,84 @@ func (c *WaveController) AllocateByTags(waveID uint) (int, error) {
 		return 0, fmt.Errorf("allocate by tags failed: wave not found: %w", err)
 	}
 
-	type levelTagEntry struct {
-		Platform string `json:"platform"`
-		TagName  string `json:"tagName"`
+	// Load all ProductTags for products belonging to this wave.
+	var allTags []model.ProductTag
+	if err := db.Model(&model.ProductTag{}).
+		Joins("JOIN products ON products.id = product_tags.product_id").
+		Where("products.wave_id = ?", waveID).
+		Find(&allTags).Error; err != nil {
+		return 0, fmt.Errorf("allocate by tags failed: load product tags: %w", err)
 	}
-	var levelTags []levelTagEntry
-	if err := json.Unmarshal([]byte(wave.LevelTags), &levelTags); err != nil || len(levelTags) == 0 {
-		return 0, fmt.Errorf("allocate by tags failed: wave has no level tags — import member data first")
+	if len(allTags) == 0 {
+		return 0, fmt.Errorf("allocate by tags failed: no product tags found for this wave")
+	}
+
+	// Group tags by product ID.
+	tagsByProduct := make(map[uint][]model.ProductTag)
+	for _, tag := range allTags {
+		tagsByProduct[tag.ProductID] = append(tagsByProduct[tag.ProductID], tag)
 	}
 
 	allocatedCount := 0
 	err := db.Transaction(func(tx *gorm.DB) error {
-		for _, lt := range levelTags {
-			var members []model.Member
-			if err := tx.Where("platform = ? AND extra_data LIKE ?",
-				lt.Platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, lt.TagName)).
-				Find(&members).Error; err != nil {
-				return fmt.Errorf("query members for %s/%s failed: %w", lt.Platform, lt.TagName, err)
-			}
-			var tags []model.ProductTag
-			if err := tx.Where("platform = ? AND tag_name = ?", lt.Platform, lt.TagName).
-				Find(&tags).Error; err != nil {
-				return fmt.Errorf("lookup product tags for %s/%s failed: %w", lt.Platform, lt.TagName, err)
-			}
-			if len(tags) == 0 {
-				continue
-			}
-			for _, member := range members {
-				for _, tag := range tags {
-					var cnt int64
-					if err := tx.Model(&model.DispatchRecord{}).
-						Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, member.ID, tag.ProductID).
-						Count(&cnt).Error; err != nil {
-						return err
+		for productID, productTagList := range tagsByProduct {
+			// Aggregate net quantity per member for this product across all its tags.
+			memberQty := make(map[uint]int)
+
+			for _, tag := range productTagList {
+				switch tag.TagType {
+				case "user":
+					var member model.Member
+					if err := tx.Where("platform = ? AND platform_uid = ?",
+						tag.Platform, tag.TagName).First(&member).Error; err != nil {
+						if err == gorm.ErrRecordNotFound {
+							continue
+						}
+						return fmt.Errorf("lookup member for user tag %s/%s: %w", tag.Platform, tag.TagName, err)
 					}
-					if cnt > 0 {
-						continue
+					memberQty[member.ID] += tag.Quantity
+				default: // "level" or any unrecognised TagType falls back to level matching
+					var members []model.Member
+					if err := tx.Where("platform = ? AND extra_data LIKE ?",
+						tag.Platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, tag.TagName)).
+						Find(&members).Error; err != nil {
+						return fmt.Errorf("query members for level tag %s/%s: %w", tag.Platform, tag.TagName, err)
 					}
-					record := model.DispatchRecord{WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID, Quantity: 1, Status: "draft"}
-					if err := tx.Create(&record).Error; err != nil {
-						return err
+					for _, m := range members {
+						memberQty[m.ID] += tag.Quantity
 					}
-					allocatedCount++
+				}
+			}
+
+			for memberID, netQty := range memberQty {
+				if netQty > 0 {
+					var record model.DispatchRecord
+					result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
+						waveID, memberID, productID).
+						FirstOrCreate(&record, model.DispatchRecord{
+							WaveID:    waveID,
+							MemberID:  memberID,
+							ProductID: productID,
+							Quantity:  netQty,
+							Status:    "draft",
+						})
+					if result.Error != nil {
+						return fmt.Errorf("upsert dispatch record: %w", result.Error)
+					}
+					if result.RowsAffected > 0 {
+						allocatedCount++
+					}
+					if record.Quantity != netQty {
+						if err := tx.Model(&record).Update("quantity", netQty).Error; err != nil {
+							return fmt.Errorf("update dispatch quantity: %w", err)
+						}
+					}
+				} else {
+					if err := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
+						waveID, memberID, productID).
+						Delete(&model.DispatchRecord{}).Error; err != nil {
+						return fmt.Errorf("delete dispatch record: %w", err)
+					}
 				}
 			}
 		}
@@ -259,39 +295,89 @@ func (c *WaveController) AllocateByTags(waveID uint) (int, error) {
 	return allocatedCount, nil
 }
 
-func (c *WaveController) AllocateSingleTag(waveID uint, platform, tagName string) (int, error) {
+func (c *WaveController) AllocateSingleTag(waveID uint, platform, tagName, tagType string) (int, error) {
 	db := c.db()
 	if db == nil {
 		return 0, fmt.Errorf("database not available")
 	}
 
-	var members []model.Member
-	if err := db.Where("platform = ? AND extra_data LIKE ?", platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, tagName)).Find(&members).Error; err != nil {
-		return 0, err
-	}
-
+	// Load ProductTags matching this specific tag, only for products in the wave.
 	var tags []model.ProductTag
-	if err := db.Where("platform = ? AND tag_name = ?", platform, tagName).Find(&tags).Error; err != nil {
-		return 0, err
+	if err := db.Model(&model.ProductTag{}).
+		Joins("JOIN products ON products.id = product_tags.product_id").
+		Where("products.wave_id = ? AND product_tags.platform = ? AND product_tags.tag_name = ? AND product_tags.tag_type = ?",
+			waveID, platform, tagName, tagType).
+		Find(&tags).Error; err != nil {
+		return 0, fmt.Errorf("allocate single tag failed: %w", err)
 	}
-
-	if len(tags) == 0 || len(members) == 0 {
+	if len(tags) == 0 {
 		return 0, nil
 	}
 
 	allocated := 0
-	for _, member := range members {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		for _, tag := range tags {
-			var cnt int64
-			db.Model(&model.DispatchRecord{}).Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, member.ID, tag.ProductID).Count(&cnt)
-			if cnt > 0 {
-				continue
+			switch tag.TagType {
+			case "user":
+				var member model.Member
+				if err := tx.Where("platform = ? AND platform_uid = ?",
+					tag.Platform, tag.TagName).First(&member).Error; err != nil {
+					if err == gorm.ErrRecordNotFound {
+						continue
+					}
+					return err
+				}
+				var record model.DispatchRecord
+				result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
+					waveID, member.ID, tag.ProductID).
+					FirstOrCreate(&record, model.DispatchRecord{
+						WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID,
+						Quantity: tag.Quantity, Status: "draft",
+					})
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected > 0 {
+					allocated++
+				}
+				if record.Quantity != tag.Quantity {
+					if err := tx.Model(&record).Update("quantity", tag.Quantity).Error; err != nil {
+						return err
+					}
+				}
+			default: // "level"
+				var members []model.Member
+				if err := tx.Where("platform = ? AND extra_data LIKE ?",
+					tag.Platform, fmt.Sprintf(`%%"giftLevel":%%%s%%`, tag.TagName)).
+					Find(&members).Error; err != nil {
+					return err
+				}
+				for _, member := range members {
+					var record model.DispatchRecord
+					result := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?",
+						waveID, member.ID, tag.ProductID).
+						FirstOrCreate(&record, model.DispatchRecord{
+							WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID,
+							Quantity: tag.Quantity, Status: "draft",
+						})
+					if result.Error != nil {
+						return result.Error
+					}
+					if result.RowsAffected > 0 {
+						allocated++
+					}
+					if record.Quantity != tag.Quantity {
+						if err := tx.Model(&record).Update("quantity", tag.Quantity).Error; err != nil {
+							return err
+						}
+					}
+				}
 			}
-			db.Create(&model.DispatchRecord{WaveID: waveID, MemberID: member.ID, ProductID: tag.ProductID, Quantity: 1, Status: "draft"})
-			allocated++
 		}
-	}
-	return allocated, nil
+		return nil
+	})
+
+	return allocated, err
 }
 
 func (c *WaveController) SetDispatchAddress(waveID, memberID, addressID uint) error {
@@ -331,9 +417,6 @@ func (c *WaveController) UpdateDispatchQuantity(dispatchID uint, quantity int) e
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
-	if quantity < 1 {
-		return fmt.Errorf("quantity must be at least 1")
-	}
 	r := db.Model(&model.DispatchRecord{}).Where("id = ?", dispatchID).Update("quantity", quantity)
 	if r.Error != nil {
 		return r.Error
@@ -342,6 +425,11 @@ func (c *WaveController) UpdateDispatchQuantity(dispatchID uint, quantity int) e
 		return fmt.Errorf("dispatch record not found")
 	}
 	return nil
+}
+
+func (c *WaveController) ReallocateWave(waveID uint) error {
+	_, err := c.AllocateByTags(waveID)
+	return err
 }
 
 func (c *WaveController) AddDispatchToMember(waveID, memberID, productID uint, quantity int) error {

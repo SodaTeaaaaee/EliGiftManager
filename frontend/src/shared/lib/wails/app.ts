@@ -33,6 +33,7 @@ import {
   ListDispatchRecords as listDispatchRecordsBinding,
   ListWaves as listWavesBinding,
   PreviewExport as previewExportBinding,
+  ReallocateWave as reallocateWaveBinding,
   RemoveDispatchFromMember as removeDispatchFromMemberBinding,
   RemoveProductFromWave as removeProductFromWaveBinding,
   RemoveSingleTag as removeSingleTagBinding,
@@ -116,9 +117,15 @@ export function allocateSingleTag(
   waveId: number,
   platform: string,
   tagName: string,
+  tagType: string,
 ): Promise<number> {
   assertWailsRuntime();
-  return allocateSingleTagBinding(waveId, platform, tagName);
+  return allocateSingleTagBinding(waveId, platform, tagName, tagType);
+}
+
+export function reallocateWave(waveId: number): Promise<void> {
+  assertWailsRuntime();
+  return reallocateWaveBinding(waveId);
 }
 export function removeSingleTag(
   waveId: number,
@@ -180,17 +187,26 @@ export function assignProductTag(
   productId: number,
   platform: string,
   tagName: string,
+  quantity: number,
+  tagType: string,
 ): Promise<void> {
   assertWailsRuntime();
-  return assignProductTagBinding(productId, platform, tagName);
+  return assignProductTagBinding(
+    productId,
+    platform,
+    tagName,
+    quantity,
+    tagType,
+  );
 }
 export function removeProductTag(
   productId: number,
   platform: string,
   tagName: string,
+  tagType: string,
 ): Promise<void> {
   assertWailsRuntime();
-  return removeProductTagBinding(productId, platform, tagName);
+  return removeProductTagBinding(productId, platform, tagName, tagType);
 }
 export function listMembers(
   page = 1,

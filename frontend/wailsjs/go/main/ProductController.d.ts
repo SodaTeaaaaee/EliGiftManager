@@ -3,7 +3,7 @@
 import {model} from '../models';
 import {main} from '../models';
 
-export function AssignProductTag(arg1:number,arg2:string,arg3:string):Promise<void>;
+export function AssignProductTag(arg1:number,arg2:string,arg3:string,arg4:number,arg5:string):Promise<void>;
 
 export function GetProductImages(arg1:number):Promise<Array<model.ProductImage>>;
 
@@ -13,6 +13,6 @@ export function ListProducts(arg1:number,arg2:number,arg3:string,arg4:string):Pr
 
 export function ListProductsWithTags(arg1:number,arg2:string,arg3:number,arg4:number):Promise<main.ProductListWithTagsPayload>;
 
-export function RemoveProductTag(arg1:number,arg2:string,arg3:string):Promise<void>;
+export function RemoveProductTag(arg1:number,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function UpdateProduct(arg1:model.Product):Promise<void>;

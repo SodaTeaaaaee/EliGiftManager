@@ -66,6 +66,8 @@ func ensureDatabaseDir(dbPath string) error {
 }
 
 func autoMigrateTables(db *gorm.DB) error {
+	// Drop old 3-column unique index so GORM can re-create it with the new 4-column (incl. tag_type) index.
+	db.Exec("DROP INDEX IF EXISTS idx_prod_platform_tag")
 	if err := db.AutoMigrate(
 		&model.Member{},
 		&model.MemberNickname{},

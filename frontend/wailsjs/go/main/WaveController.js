@@ -10,8 +10,8 @@ export function AllocateByTags(arg1) {
   return window['go']['main']['WaveController']['AllocateByTags'](arg1);
 }
 
-export function AllocateSingleTag(arg1, arg2, arg3) {
-  return window['go']['main']['WaveController']['AllocateSingleTag'](arg1, arg2, arg3);
+export function AllocateSingleTag(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['WaveController']['AllocateSingleTag'](arg1, arg2, arg3, arg4);
 }
 
 export function BindDefaultAddresses(arg1) {
@@ -48,6 +48,10 @@ export function ListWaves(arg1) {
 
 export function PreviewExport(arg1) {
   return window['go']['main']['WaveController']['PreviewExport'](arg1);
+}
+
+export function ReallocateWave(arg1) {
+  return window['go']['main']['WaveController']['ReallocateWave'](arg1);
 }
 
 export function RemoveDispatchFromMember(arg1) {

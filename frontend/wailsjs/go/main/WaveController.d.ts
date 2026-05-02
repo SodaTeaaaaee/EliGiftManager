@@ -7,7 +7,7 @@ export function AddDispatchToMember(arg1:number,arg2:number,arg3:number,arg4:num
 
 export function AllocateByTags(arg1:number):Promise<number>;
 
-export function AllocateSingleTag(arg1:number,arg2:string,arg3:string):Promise<number>;
+export function AllocateSingleTag(arg1:number,arg2:string,arg3:string,arg4:string):Promise<number>;
 
 export function BindDefaultAddresses(arg1:number):Promise<Record<string, number>>;
 
@@ -26,6 +26,8 @@ export function ListDispatchRecords(arg1:number):Promise<Array<main.DispatchReco
 export function ListWaves(arg1:string):Promise<Array<main.WaveItem>>;
 
 export function PreviewExport(arg1:number):Promise<Record<string, number>>;
+
+export function ReallocateWave(arg1:number):Promise<void>;
 
 export function RemoveDispatchFromMember(arg1:number):Promise<void>;
 

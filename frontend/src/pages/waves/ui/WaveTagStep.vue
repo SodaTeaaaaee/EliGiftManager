@@ -2,8 +2,8 @@
 import { PlayOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
-import { allocateSingleTag, assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaves, removeProductTag, removeSingleTag, WAILS_PREVIEW_MESSAGE, type WaveItem } from '@/shared/lib/wails/app'
+import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NInputNumber, NModal, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
+import { allocateSingleTag, assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, reallocateWave, removeProductTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -11,17 +11,62 @@ const router = useRouter()
 
 const waveId = computed(() => Number(route.params.waveId) || 0)
 
+// ── types ──
+type TagInfo = { tagName: string; quantity: number; tagType: string }
+
+// ── state ──
 const wave = ref<WaveItem | null>(null)
-const allTagProducts = ref<{ id: number; name: string; factorySku: string; platform: string; tags: string[]; coverImage: string }[]>([])
+const allTagProducts = ref<{ id: number; name: string; factorySku: string; platform: string; tags: TagInfo[]; coverImage: string }[]>([])
 const checkedProductIds = ref<number[]>([])
 const selectedBatchTag = ref<string | null>(null)
 const isTagLoading = ref(false)
 const errorMessage = ref('')
 
 const showProductDrawer = ref(false)
-const drawerProduct = ref<{ id: number; name: string; factorySku: string; platform: string; tags: string[]; coverImage: string } | null>(null)
+const drawerProduct = ref<any>(null)
 const drawerProductImages = ref<{ id: number; path: string; sortOrder: number; sourceDir: string }[]>([])
 
+// ── tag edit modal ──
+const showTagEdit = ref(false)
+const editTagProduct = ref<any>(null)
+const editTagInfo = ref<TagInfo | null>(null)
+const editTagNewQty = ref(1)
+
+function openTagEdit(row: any, tag: TagInfo) {
+  editTagProduct.value = row
+  editTagInfo.value = tag
+  editTagNewQty.value = tag.quantity
+  showTagEdit.value = true
+}
+
+async function handleUpdateTagQuantity() {
+  if (!editTagProduct.value || !editTagInfo.value) return
+  const row = editTagProduct.value
+  const tag = editTagInfo.value
+  const newQty = editTagNewQty.value
+
+  try {
+    if (newQty === 0) {
+      await removeProductTag(row.id, row.platform, tag.tagName, tag.tagType)
+    } else {
+      await assignProductTag(row.id, row.platform, tag.tagName, newQty, tag.tagType)
+    }
+    await allocateSingleTag(waveId.value, row.platform, tag.tagName, tag.tagType)
+    scheduleReallocate()
+    await loadTagProducts()
+    showTagEdit.value = false
+    message.success('标签数量已更新')
+  } catch (e) { message.error(String(e)) }
+}
+
+// ── reallocate debounce ──
+let reallocateTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleReallocate() {
+  if (reallocateTimer) clearTimeout(reallocateTimer)
+  reallocateTimer = setTimeout(() => reallocateWave(waveId.value), 300)
+}
+
+// ── wave level tags ──
 type LevelTag = { platform: string; tagName: string }
 const waveLevelTags = computed<LevelTag[]>(() => {
   if (!wave.value?.levelTags) return []
@@ -41,6 +86,8 @@ function platformTagColor(platform: string) {
   return colors[platform] || { color: undefined, textColor: undefined }
 }
 
+const userTagColor = { color: '#99999933', textColor: '#999999' }
+
 // ── line-clamped cell renderer ──
 const MAX_LINES = 4
 const LINE_HEIGHT = 21
@@ -58,6 +105,20 @@ function clampedText(text: string, lines = MAX_LINES) {
   }, String(text ?? ''))
 }
 
+// ── tag chip renderer ──
+function renderTagChip(row: any, tag: TagInfo) {
+  const label = tag.quantity === 1 ? tag.tagName : `${tag.tagName}:${tag.quantity}`
+  const colors = tag.tagType === 'level' ? platformTagColor(row.platform) : userTagColor
+  return h(NTag, {
+    size: 'small', round: true,
+    color: colors.color,
+    style: { cursor: 'pointer' },
+    onClick: (e: MouseEvent) => {
+      e.stopPropagation()
+      openTagEdit(row, tag)
+    },
+  }, { default: () => label })
+}
 
 // ── measured header & pagination heights (DOM, updated on resize) ──
 const tagHeaderH = ref(38)
@@ -131,74 +192,19 @@ async function remeasureTags() {
   if (tagCurrentPage.value > tagPages.value.length) tagCurrentPage.value = 1
 }
 
-function handleTagPageChange(p: number) { tagCurrentPage.value = p; lastClickedRowIndex.value = -1 }
+function handleTagPageChange(p: number) { tagCurrentPage.value = p }
 
-const lastClickedRowIndex = ref(-1)
-
-const anchorId = computed(() => {
-  if (lastClickedRowIndex.value < 0) return null
-  return visibleTagProducts.value[lastClickedRowIndex.value]?.id ?? null
-})
-
-function handleRowClick(row: any, event: MouseEvent) {
-  const el = event.target as HTMLElement
-
-  // 1. 复选框点击 → 设锚点（不弹 drawer）
-  if (el.closest('.n-checkbox')) {
-    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
-    if (idx >= 0) lastClickedRowIndex.value = idx
-    return
-  }
-
-  // 2. Ctrl+Shift + Click → 加性范围选中（保留范围外旧选择，不弹 drawer）
-  if ((event.ctrlKey || event.metaKey) && event.shiftKey) {
-    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
-    if (lastClickedRowIndex.value >= 0 && idx >= 0) {
-      const lo = Math.min(lastClickedRowIndex.value, idx)
-      const hi = Math.max(lastClickedRowIndex.value, idx)
-      const rangeIds = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
-      checkedProductIds.value = [...new Set([...checkedProductIds.value, ...rangeIds])]
-    }
-    return
-  }
-
-  // 3. Ctrl/Cmd + Click → toggle 单行选中，设锚点（不弹 drawer）
-  if (event.ctrlKey || event.metaKey) {
-    const id = row.id
-    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === id)
-    if (idx >= 0) lastClickedRowIndex.value = idx
-    if (checkedProductIds.value.includes(id)) {
-      checkedProductIds.value = checkedProductIds.value.filter(x => x !== id)
-    } else {
-      checkedProductIds.value = [...checkedProductIds.value, id]
-    }
-    return
-  }
-
-  // 4. Shift + Click → 替换式范围选中（清掉范围外旧选择，不弹 drawer）
-  if (event.shiftKey) {
-    const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
-    if (lastClickedRowIndex.value >= 0 && idx >= 0) {
-      const lo = Math.min(lastClickedRowIndex.value, idx)
-      const hi = Math.max(lastClickedRowIndex.value, idx)
-      checkedProductIds.value = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
-    }
-    return
-  }
-
-  // 5. 普通点击 → 开 drawer，设锚点
-  const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
-  if (idx >= 0) lastClickedRowIndex.value = idx
-  openProductDrawer(row)
-}
-
+// ── row props: single-select on click, highlight on selected ──
 function rowProps(row: any) {
   const selected = checkedProductIds.value.includes(row.id)
-  const isAnchor = anchorId.value === row.id
-  const cls: string[] = []
-  if (selected) cls.push('row-selected')
-  if (isAnchor) cls.push('row-anchor')
-  return { class: cls.join(' '), style: { cursor: 'pointer' }, onClick: (e: MouseEvent) => handleRowClick(row, e) }
+  return {
+    class: selected ? 'row-selected' : '',
+    style: { cursor: 'pointer' },
+    onClick: (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest('.n-checkbox')) return
+      checkedProductIds.value = [row.id]
+    },
+  }
 }
 
 // ── selection buttons ──
@@ -252,8 +258,6 @@ function setupResizeObserver() {
 }
 
 // ── column definitions ──
-const showSkuColumn = computed(() => lastTagW.value === 0 || lastTagW.value >= 400)
-
 const productIndexMap = computed(() => {
   const map = new Map<number, number>()
   allTagProducts.value.forEach((p, i) => map.set(p.id, i + 1))
@@ -270,28 +274,36 @@ const tagColumns = computed<DataTableColumns>(() => {
     {
       title: '', key: 'coverImage', width: 56,
       render: (row: any) =>
-        row.coverImage ? h('img', { src: '/local-images/' + row.coverImage, class: 'w-10 h-10 rounded object-cover' }) : h('div', { class: 'w-10 h-10 rounded bg-gray-100' }),
+        row.coverImage
+          ? h('img', {
+            src: '/local-images/' + row.coverImage,
+            class: 'w-10 h-10 rounded object-cover',
+            style: { cursor: 'pointer' },
+            onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
+          })
+          : h('div', { class: 'w-10 h-10 rounded bg-gray-100' }),
     },
     {
       title: '商品名', key: 'name', minWidth: 120,
       render: (row: any) => clampedText(row.name),
     },
+    {
+      title: '身份 Tag', key: 'levelTags', minWidth: 150,
+      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
+        default: () => (row.tags as TagInfo[])
+          .filter((t: TagInfo) => t.tagType === 'level')
+          .map((t: TagInfo) => renderTagChip(row, t)),
+      }),
+    },
+    {
+      title: '用户 Tag', key: 'userTags', minWidth: 150,
+      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
+        default: () => (row.tags as TagInfo[])
+          .filter((t: TagInfo) => t.tagType === 'user')
+          .map((t: TagInfo) => renderTagChip(row, t)),
+      }),
+    },
   ]
-  if (showSkuColumn.value) {
-    cols.push({
-      title: 'FactorySKU', key: 'factorySku', minWidth: 100,
-      render: (row: any) => h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
-    })
-  }
-  cols.push({
-    title: 'Tags', key: 'tags', minWidth: 140,
-    render: (row) => h(NFlex, { size: 'small', wrap: true }, {
-      default: () => (row.tags as string[]).map((tag: string) => h(NTag, {
-        size: 'small', round: true, closable: true,
-        onClose: () => handleRemoveTag(row.id as number, row.platform as string, tag),
-      }, { default: () => tag })),
-    }),
-  })
   return cols
 })
 
@@ -316,18 +328,22 @@ async function loadTagProducts() {
     const result = await listProductsWithTags(waveId.value, '', 1, 10000)
     allTagProducts.value = result.items.map(item => ({
       id: item.id, name: item.name, factorySku: item.factorySku,
-      platform: item.platform, tags: item.tags, coverImage: (item as any).coverImage || '',
+      platform: item.platform, tags: (item.tags as any as TagInfo[]), coverImage: (item as any).coverImage || '',
     }))
   } catch (e) { console.error('加载商品标签失败', e) }
   finally { isTagLoading.value = false }
 }
 
+// ── batch operations ──
 async function handleAssignTag() {
   if (!selectedBatchTag.value || checkedProductIds.value.length === 0) return message.warning('请选择商品和 Tag')
   const [platform, tagName] = selectedBatchTag.value.split('|')
   try {
-    for (const productId of checkedProductIds.value) { await assignProductTag(productId, platform, tagName) }
-    const count = await allocateSingleTag(waveId.value, platform, tagName)
+    for (const productId of checkedProductIds.value) {
+      await assignProductTag(productId, platform, tagName, 1, 'level')
+    }
+    const count = await allocateSingleTag(waveId.value, platform, tagName, 'level')
+    scheduleReallocate()
     message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签，分配 ${count} 条记录`)
     await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
@@ -337,22 +353,51 @@ async function handleBatchRemoveTag() {
   if (!selectedBatchTag.value || checkedProductIds.value.length === 0) return message.warning('请选择商品和 Tag')
   const [platform, tagName] = selectedBatchTag.value.split('|')
   try {
-    for (const productId of checkedProductIds.value) { await removeProductTag(productId, platform, tagName) }
-    await removeSingleTag(waveId.value, platform, tagName)
+    for (const productId of checkedProductIds.value) {
+      await removeProductTag(productId, platform, tagName, 'level')
+    }
+    await allocateSingleTag(waveId.value, platform, tagName, 'level')
+    scheduleReallocate()
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除 ${platform}·${tagName} 标签`)
     await loadTagProducts(); checkedProductIds.value = []
   } catch (e) { message.error(String(e)) }
 }
 
-async function handleRemoveTag(productId: number, platform: string, tagName: string) {
-  try {
-    await removeProductTag(productId, platform, tagName)
-    await removeSingleTag(waveId.value, platform, tagName)
-    await loadTagProducts()
-  }
-  catch (e) { message.error(String(e)) }
+// ── user tag batch add ──
+const addUserTagMemberId = ref<string | null>(null)
+const addUserTagQuantity = ref(1)
+const waveMembers = ref<MemberItem[]>([])
+
+const memberOptions = computed(() =>
+  waveMembers.value.map(m => ({
+    label: `${m.latestNickname} (${m.platformUid})`,
+    value: m.platformUid,
+  }))
+)
+
+async function loadWaveMembers() {
+  if (!waveId.value) return
+  try { waveMembers.value = await listWaveMembers(waveId.value) }
+  catch (e) { console.error('加载波次会员失败', e) }
 }
 
+async function handleAddUserTag() {
+  if (!addUserTagMemberId.value || checkedProductIds.value.length === 0) return message.warning('请选择会员和商品')
+  const tagName = addUserTagMemberId.value
+  const quantity = addUserTagQuantity.value
+  try {
+    for (const productId of checkedProductIds.value) {
+      const product = allTagProducts.value.find(p => p.id === productId)
+      if (!product) continue
+      await assignProductTag(productId, product.platform, tagName, quantity, 'user')
+    }
+    scheduleReallocate()
+    await loadTagProducts()
+    message.success(`已为 ${checkedProductIds.value.length} 件商品添加用户 Tag`)
+  } catch (e) { message.error(String(e)) }
+}
+
+// ── product drawer ──
 async function openProductDrawer(product: typeof allTagProducts.value[0]) {
   drawerProduct.value = product
   showProductDrawer.value = true
@@ -371,6 +416,7 @@ function goNext() {
 onMounted(async () => {
   await loadWave()
   await loadTagProducts()
+  await loadWaveMembers()
   await nextTick()
   tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
   tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
@@ -397,6 +443,7 @@ watch([() => allTagProducts.value.length], async () => {
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  if (reallocateTimer) clearTimeout(reallocateTimer)
 })
 </script>
 <template>
@@ -434,6 +481,13 @@ onUnmounted(() => {
         <NButton size="medium" type="warning" @click="handleBatchRemoveTag"
           :disabled="!selectedBatchTag || checkedProductIds.length === 0">取消打标</NButton>
       </NFlex>
+      <NFlex :size="'small'" :wrap="true" class="items-center">
+        <span class="text-xs shrink-0">添加用户Tag：</span>
+        <NSelect v-model:value="addUserTagMemberId" :options="memberOptions" placeholder="搜索会员" size="small"
+          style="width: 200px" clearable filterable />
+        <NInputNumber v-model:value="addUserTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
+        <NButton size="small" secondary :disabled="!addUserTagMemberId" @click="handleAddUserTag">添加</NButton>
+      </NFlex>
     </div>
 
     <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
@@ -466,7 +520,10 @@ onUnmounted(() => {
               <NTag size="small" round>{{ drawerProduct.platform }}</NTag>
             </div>
             <NFlex :size="'small'" :wrap="true">
-              <NTag v-for="tag in drawerProduct.tags" :key="tag" size="small" round :color="platformTagColor(drawerProduct.platform)">{{ tag }}</NTag>
+              <NTag v-for="tag in drawerProduct.tags" :key="tag.tagName + tag.tagType" size="small" round
+                :color="tag.tagType === 'level' ? platformTagColor(drawerProduct.platform).color : userTagColor.color">
+                {{ tag.quantity === 1 ? tag.tagName : `${tag.tagName}:${tag.quantity}` }}
+              </NTag>
             </NFlex>
           </div>
           <template v-if="drawerProductImages.length">
@@ -478,6 +535,24 @@ onUnmounted(() => {
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <!-- Tag Quantity Edit Modal -->
+    <NModal :show="showTagEdit" @update:show="(v: boolean) => { if (!v) showTagEdit = false }">
+      <div class="bg-white dark:bg-gray-800 rounded-lg p-6 w-80 mx-auto mt-40">
+        <h3 class="text-lg font-semibold mb-4">编辑标签数量</h3>
+        <div class="mb-2 text-sm text-gray-500">
+          {{ editTagInfo?.tagName }}
+          <NTag size="small" round :bordered="false" class="ml-1">
+            {{ editTagInfo?.tagType === 'level' ? '身份Tag' : '用户Tag' }}
+          </NTag>
+        </div>
+        <NInputNumber v-model:value="editTagNewQty" :min="-999" :max="999" class="w-full mb-4" />
+        <NFlex justify="end" :size="'small'">
+          <NButton size="small" @click="showTagEdit = false">取消</NButton>
+          <NButton size="small" type="primary" @click="handleUpdateTagQuantity">确认</NButton>
+        </NFlex>
+      </div>
+    </NModal>
   </div>
 </template>
 
@@ -497,9 +572,5 @@ onUnmounted(() => {
 }
 .row-selected td {
   background: rgba(32, 128, 240, 0.12) !important;
-}
-.row-anchor {
-  outline: 2px solid #2080f0;
-  outline-offset: -2px;
 }
 </style>

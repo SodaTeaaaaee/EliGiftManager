@@ -92,11 +92,11 @@ func (c *ProductController) ListProductsWithTags(waveID uint, platform string, p
 	}
 	items := make([]ProductItemWithTags, 0, len(products))
 	for _, p := range products {
-		tagNames := make([]string, 0, len(p.Tags))
+		tagInfos := make([]TagInfo, 0, len(p.Tags))
 		for _, t := range p.Tags {
-			tagNames = append(tagNames, t.TagName)
+			tagInfos = append(tagInfos, TagInfo{TagName: t.TagName, Quantity: t.Quantity, TagType: t.TagType})
 		}
-		items = append(items, ProductItemWithTags{ID: p.ID, Platform: p.Platform, Factory: p.Factory, FactorySKU: p.FactorySKU, Name: p.Name, CoverImage: p.CoverImage, ExtraData: p.ExtraData, UpdatedAt: p.UpdatedAt, Tags: tagNames})
+		items = append(items, ProductItemWithTags{ID: p.ID, Platform: p.Platform, Factory: p.Factory, FactorySKU: p.FactorySKU, Name: p.Name, CoverImage: p.CoverImage, ExtraData: p.ExtraData, UpdatedAt: p.UpdatedAt, Tags: tagInfos})
 	}
 	platforms, _ := queryProductPlatforms(db)
 	return ProductListWithTagsPayload{Items: items, Total: total, Platforms: platforms}, nil
@@ -114,24 +114,30 @@ func (c *ProductController) ListProductTags(platform string) ([]string, error) {
 	return tags, nil
 }
 
-func (c *ProductController) AssignProductTag(productID uint, platform, tagName string) error {
-	platform, tagName = strings.TrimSpace(platform), strings.TrimSpace(tagName)
+func (c *ProductController) AssignProductTag(productID uint, platform, tagName string, quantity int, tagType string) error {
+	platform, tagName, tagType = strings.TrimSpace(platform), strings.TrimSpace(tagName), strings.TrimSpace(tagType)
 	if platform == "" || tagName == "" || productID == 0 {
 		return fmt.Errorf("assign product tag failed: productId, platform, and tagName are required")
+	}
+	if tagType == "" {
+		tagType = "level"
+	}
+	if quantity < 1 {
+		quantity = 1
 	}
 	db := c.db()
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
-	tag := model.ProductTag{ProductID: productID, Platform: platform, TagName: tagName}
-	if err := db.Where("product_id = ? AND platform = ? AND tag_name = ?", productID, platform, tagName).FirstOrCreate(&tag).Error; err != nil {
+	tag := model.ProductTag{ProductID: productID, Platform: platform, TagName: tagName, TagType: tagType, Quantity: quantity}
+	if err := db.Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = ?", productID, platform, tagName, tagType).FirstOrCreate(&tag).Error; err != nil {
 		return fmt.Errorf("assign product tag failed: %w", err)
 	}
 	return nil
 }
 
-func (c *ProductController) RemoveProductTag(productID uint, platform, tagName string) error {
-	platform, tagName = strings.TrimSpace(platform), strings.TrimSpace(tagName)
+func (c *ProductController) RemoveProductTag(productID uint, platform, tagName, tagType string) error {
+	platform, tagName, tagType = strings.TrimSpace(platform), strings.TrimSpace(tagName), strings.TrimSpace(tagType)
 	if platform == "" || tagName == "" || productID == 0 {
 		return fmt.Errorf("remove product tag failed: productId, platform, and tagName are required")
 	}
@@ -139,7 +145,7 @@ func (c *ProductController) RemoveProductTag(productID uint, platform, tagName s
 	if db == nil {
 		return fmt.Errorf("database not available")
 	}
-	result := db.Where("product_id = ? AND platform = ? AND tag_name = ?", productID, platform, tagName).Delete(&model.ProductTag{})
+	result := db.Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = ?", productID, platform, tagName, tagType).Delete(&model.ProductTag{})
 	if result.Error != nil {
 		return fmt.Errorf("remove product tag failed: %w", result.Error)
 	}

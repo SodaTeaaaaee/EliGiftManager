@@ -3,7 +3,7 @@ import { DownloadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NAlert, NButton, NDataTable, NIcon, NInput, NInputNumber, NModal, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
-import { addDispatchToMember, addMemberAddress, isWailsRuntimeAvailable, listDispatchRecords, listProductsWithTags, listTemplates, listWaveMembers, previewExport, removeDispatchFromMember, setDispatchAddress, updateDispatchQuantity, WAILS_PREVIEW_MESSAGE, type DispatchRecordItem, type TemplateItem } from '@/shared/lib/wails/app'
+import { addDispatchToMember, addMemberAddress, isWailsRuntimeAvailable, listDispatchRecords, listProductsWithTags, listTemplates, listWaveMembers, previewExport, reallocateWave, removeDispatchFromMember, setDispatchAddress, updateDispatchQuantity, WAILS_PREVIEW_MESSAGE, type DispatchRecordItem, type TemplateItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -299,6 +299,7 @@ async function handleUpdateQuantity(recordId: number, qty: number) {
   if (qty < 1) return
   try {
     await updateDispatchQuantity(recordId, qty)
+    await reallocateWave(waveId.value)
     records.value = await listDispatchRecords(waveId.value)
     const group = memberGroups.value.find(g => g.memberId === selectedMember.value?.memberId)
     if (group) memberRecords.value = group.records
@@ -308,6 +309,7 @@ async function handleUpdateQuantity(recordId: number, qty: number) {
 async function handleRemoveGift(recordId: number) {
   try {
     await removeDispatchFromMember(recordId)
+    await reallocateWave(waveId.value)
     records.value = await listDispatchRecords(waveId.value)
     const group = memberGroups.value.find(g => g.memberId === selectedMember.value?.memberId)
     if (group) memberRecords.value = group.records
@@ -319,6 +321,7 @@ async function handleAddGift() {
   if (!addGiftProductId.value || !selectedMember.value) return
   try {
     await addDispatchToMember(waveId.value, selectedMember.value.memberId, addGiftProductId.value, addGiftQuantity.value)
+    await reallocateWave(waveId.value)
     showAddGiftModal.value = false
     addGiftProductId.value = null
     addGiftQuantity.value = 1

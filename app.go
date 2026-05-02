@@ -116,6 +116,11 @@ type ProductListPayload struct {
 	Total     int64         `json:"total"`
 	Platforms []string      `json:"platforms"`
 }
+type TagInfo struct {
+	TagName  string `json:"tagName"`
+	Quantity int    `json:"quantity"`
+	TagType  string `json:"tagType"`
+}
 type ProductItemWithTags struct {
 	ID         uint      `json:"id"`
 	Platform   string    `json:"platform"`
@@ -124,7 +129,7 @@ type ProductItemWithTags struct {
 	Name       string    `json:"name"`
 	CoverImage string    `json:"coverImage"`
 	ExtraData  string    `json:"extraData"`
-	Tags       []string  `json:"tags"`
+	Tags       []TagInfo `json:"tags"`
 	UpdatedAt  time.Time `json:"updatedAt"`
 }
 type ProductListWithTagsPayload struct {
