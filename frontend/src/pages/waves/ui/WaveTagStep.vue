@@ -58,6 +58,22 @@ async function handleUpdateTagQuantity() {
   } catch (e) { message.error(String(e)) }
 }
 
+async function handleDeleteTag() {
+  if (!editTagProduct.value || !editTagInfo.value) return
+  const row = editTagProduct.value
+  const tag = editTagInfo.value
+  try {
+    if (tag.tagType === 'level') {
+      await removeLevelTag(row.id, tag.platform, tag.tagName)
+    } else {
+      await removeUserTag(row.id, tag.waveMemberId)
+    }
+    await loadTagProducts()
+    showTagPopover.value = false
+    message.success('标签已删除')
+  } catch (e) { message.error(String(e)) }
+}
+
 // ── wave level tags ──
 type LevelTag = { platform: string; tagName: string }
 const waveLevelTags = computed<LevelTag[]>(() => {
@@ -75,10 +91,8 @@ function platformTagColor(platform: string) {
     BILIBILI: { color: '#00A1D633', textColor: '#00A1D6' },
     DOUYIN: { color: '#FE2C5533', textColor: '#FE2C55' },
   }
-  return colors[platform] || { color: undefined, textColor: undefined }
+  return colors[platform] || { color: '#99999933', textColor: '#999999' }
 }
-
-const userTagColor = { color: '#99999933', textColor: '#999999' }
 
 // ── line-clamped cell renderer ──
 const MAX_LINES = 4
@@ -97,10 +111,21 @@ function clampedText(text: string, lines = MAX_LINES) {
   }, String(text ?? ''))
 }
 
-// ── tag chip renderer (with NPopover for quantity editing) ──
+// ── wave member lookup for user tag display ──
+const wmNicknameMap = computed(() => {
+  const map = new Map<number, string>()
+  for (const m of waveMembers.value) {
+    map.set(m.id, m.latestNickname || m.platformUid)
+  }
+  return map
+})
+
+// ── tag chip renderer (with NPopover for quantity editing + delete) ──
 function renderTagChip(row: any, tag: TagInfo) {
-  const label = tag.quantity === 1 ? tag.tagName : `${tag.tagName}:${tag.quantity}`
-  const colors = tag.tagType === 'level' ? platformTagColor(row.platform) : userTagColor
+  const displayName = tag.tagType === 'user'
+    ? (wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName)
+    : tag.tagName
+  const label = tag.quantity === 1 ? displayName : `${displayName}:${tag.quantity}`
   return h(NPopover, {
     trigger: 'click',
     show: showTagPopover.value && editTagProduct.value?.id === row.id && editTagInfo.value?.tagName === tag.tagName && editTagInfo.value?.tagType === tag.tagType,
@@ -109,7 +134,7 @@ function renderTagChip(row: any, tag: TagInfo) {
   }, {
     trigger: () => h(NTag, {
       size: 'small', round: true,
-      color: colors.color,
+      color: platformTagColor(tag.platform).color,
       style: { cursor: 'pointer' },
       onClick: (e: MouseEvent) => {
         e.stopPropagation()
@@ -127,6 +152,10 @@ function renderTagChip(row: any, tag: TagInfo) {
         size: 'tiny', type: 'primary',
         onClick: () => handleUpdateTagQuantity(),
       }, { default: () => '确定' }),
+      h(NButton, {
+        size: 'tiny', type: 'error', secondary: true,
+        onClick: () => handleDeleteTag(),
+      }, { default: () => '删除' }),
     ]),
   })
 }
@@ -341,18 +370,20 @@ const tagColumns = computed<DataTableColumns>(() => {
       render: (row: any) => clampedText(row.name),
     },
     {
-      title: '身份 Tag', key: 'levelTags', minWidth: 150,
+      title: '身份 Tag', key: 'levelTags', minWidth: 160,
       render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
         default: () => (row.tags as TagInfo[])
           .filter((t: TagInfo) => t.tagType === 'level')
+          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
           .map((t: TagInfo) => renderTagChip(row, t)),
       }),
     },
     {
-      title: '用户 Tag', key: 'userTags', minWidth: 150,
+      title: '用户 Tag', key: 'userTags', minWidth: 160,
       render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
         default: () => (row.tags as TagInfo[])
           .filter((t: TagInfo) => t.tagType === 'user')
+          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
           .map((t: TagInfo) => renderTagChip(row, t)),
       }),
     },
@@ -540,7 +571,7 @@ onUnmounted(() => {
       <div ref="tagTableWrapper" class="flex-1 min-h-0 overflow-hidden">
         <NDataTable :columns="tagColumns" :data="visibleTagProducts" :loading="isTagLoading" :bordered="false"
           :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds"
-          :pagination="false" size="small"
+          :pagination="false" size="medium"
           :row-props="rowProps" />
       </div>
       <div ref="tagPaginationRef" class="flex justify-center mt-2 shrink-0">
@@ -567,7 +598,7 @@ onUnmounted(() => {
             </div>
             <NFlex :size="'small'" :wrap="true">
               <NTag v-for="tag in drawerProduct.tags" :key="tag.tagName + tag.tagType" size="small" round
-                :color="tag.tagType === 'level' ? platformTagColor(drawerProduct.platform).color : userTagColor.color">
+                :color="platformTagColor(tag.platform).color">
                 {{ tag.quantity === 1 ? tag.tagName : `${tag.tagName}:${tag.quantity}` }}
               </NTag>
             </NFlex>
