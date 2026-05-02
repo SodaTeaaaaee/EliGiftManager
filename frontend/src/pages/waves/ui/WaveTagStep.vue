@@ -220,8 +220,7 @@ const tagColumns = computed<DataTableColumns>(() => {
     },
     {
       title: '商品名', key: 'name', minWidth: 120,
-      render: (row: any) =>
-        h('span', { class: 'cursor-pointer text-blue-600 hover:underline', onClick: () => openProductDrawer(row) }, clampedText(row.name)),
+      render: (row: any) => clampedText(row.name),
     },
   ]
   if (showSkuColumn.value) {
@@ -376,7 +375,8 @@ onUnmounted(() => {
       <div ref="tagTableWrapper" class="flex-1 min-h-0 overflow-hidden">
         <NDataTable :columns="tagColumns" :data="visibleTagProducts" :loading="isTagLoading" :bordered="false"
           :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds"
-          :pagination="false" size="small" />
+          :pagination="false" size="small"
+          :row-props="(row: any) => ({ style: { cursor: 'pointer' }, onClick: () => openProductDrawer(row) })" />
       </div>
       <div ref="tagPaginationRef" class="flex justify-center mt-2 shrink-0">
         <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"
