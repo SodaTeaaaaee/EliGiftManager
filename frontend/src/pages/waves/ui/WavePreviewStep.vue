@@ -230,7 +230,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
     })
   }
   cols.push(
-    { title: '礼物数', key: 'records', width: 80, render: (row: any) => String(row.records.length) },
+    { title: '礼物种类', key: 'records', width: 80, render: (row: any) => String(row.records.length) },
+	    { title: '礼物数量', key: 'totalQty', width: 80, render: (row: any) => String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)) },
     {
       title: '地址', key: 'addressStatus', width: 80,
       render: (row: any) => h(NTag, { type: row.addressStatus === '已绑定' ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.addressStatus }),
