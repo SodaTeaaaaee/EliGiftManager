@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { PlayOutline } from '@vicons/ionicons5'
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NCard, NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NIcon, NSelect, NTag, NFlex, useMessage, type DataTableColumns } from 'naive-ui'
+import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { allocateSingleTag, assignProductTag, getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaves, removeProductTag, removeSingleTag, WAILS_PREVIEW_MESSAGE, type WaveItem } from '@/shared/lib/wails/app'
 
 const message = useMessage()
@@ -12,9 +12,7 @@ const router = useRouter()
 const waveId = computed(() => Number(route.params.waveId) || 0)
 
 const wave = ref<WaveItem | null>(null)
-const tagProducts = ref<{ id: number; name: string; factorySku: string; platform: string; tags: string[] }[]>([])
-const tagProductTotal = ref(0)
-const tagProductPage = ref(1)
+const allTagProducts = ref<{ id: number; name: string; factorySku: string; platform: string; tags: string[]; coverImage: string }[]>([])
 const checkedProductIds = ref<number[]>([])
 const selectedBatchTag = ref<string | null>(null)
 const isTagLoading = ref(false)
@@ -43,25 +41,208 @@ function platformTagColor(platform: string) {
   return colors[platform] || { color: undefined, textColor: undefined }
 }
 
-const productColumns: DataTableColumns = [
-  { type: 'selection' as const },
-  { title: '', key: 'coverImage', width: 56, render: (row: any) =>
-    row.coverImage ? h('img', { src: '/local-images/' + row.coverImage, class: 'w-10 h-10 rounded object-cover' }) : h('div', { class: 'w-10 h-10 rounded bg-gray-100' })
-  },
-  { title: '商品名', key: 'name', minWidth: 120, render: (row: any) =>
-    h('span', { class: 'cursor-pointer text-blue-600 hover:underline', onClick: () => openProductDrawer(row) }, row.name)
-  },
-  { title: 'FactorySKU', key: 'factorySku', minWidth: 100 },
-  {
-    title: 'Tags', key: 'tags', minWidth: 140, render: (row) => h(NFlex, { size: 'small', wrap: true }, {
-      default: () => (row.tags as string[]).map(tag => h(NTag, {
+// ── line-clamped cell renderer ──
+const MAX_LINES = 4
+const LINE_HEIGHT = 21
+const CELL_PAD_V = 16
+const TAG_ROW_MIN_H = 56
+const TAG_EST_KEYS = ['name', 'tags']
+
+function clampedText(text: string, lines = MAX_LINES) {
+  return h('div', {
+    style: {
+      display: '-webkit-box',
+      '-webkit-line-clamp': String(lines),
+      '-webkit-box-orient': 'vertical',
+      overflow: 'hidden',
+      wordBreak: 'break-all',
+      lineHeight: String(LINE_HEIGHT) + 'px',
+    },
+  }, String(text ?? ''))
+}
+
+// ── per-row height estimation (column widths measured from DOM) ──
+function estimateCellLines(text: string, colWidth: number): number {
+  const avgCharW = 12
+  const charsPerLine = Math.max(1, Math.floor(colWidth / avgCharW))
+  return Math.min(MAX_LINES, Math.max(1, Math.ceil(text.length / charsPerLine)))
+}
+
+function estimateRowHeight(row: Record<string, any>, keys: string[], widths: number[]): number {
+  let maxLines = 1
+  for (let i = 0; i < keys.length; i++) {
+    const colW = widths[i] ?? 100
+    const text = String(row[keys[i]] ?? '')
+    const lines = estimateCellLines(text, colW)
+    if (lines > maxLines) maxLines = lines
+  }
+  return Math.max(TAG_ROW_MIN_H, maxLines * LINE_HEIGHT + CELL_PAD_V)
+}
+
+function tagEstimateRow(p: { name: string; tags: string[] }): Record<string, any> {
+  return { name: p.name, tags: (p.tags || []).join(' ') }
+}
+
+// Measured column widths — updated from DOM after render & on resize
+const tagColWidths = ref<number[]>(TAG_EST_KEYS.map(() => 100))
+
+function measureColWidths(wrapper: HTMLElement | null, keys: string[], fallback: number[]): number[] {
+  if (!wrapper) return fallback
+  const ths = wrapper.querySelectorAll('.n-data-table-th')
+  if (ths.length === 0) return fallback
+  const result: number[] = []
+  for (let i = 0; i < keys.length; i++) {
+    const el = wrapper.querySelector(`[data-col-key="${keys[i]}"]`)
+    result.push(el instanceof HTMLElement ? el.offsetWidth : (fallback[i] ?? 100))
+  }
+  return result
+}
+
+// ── measured header & pagination heights (DOM, updated on resize) ──
+const tagHeaderH = ref(38)
+const tagPaginationH = ref(32)
+
+function measureHeaderHeight(wrapper: HTMLElement | null): number {
+  if (!wrapper) return 38
+  const thead = wrapper.querySelector('.n-data-table-thead')
+  return thead instanceof HTMLElement ? thead.offsetHeight : 40
+}
+
+function measurePaginationHeight(el: HTMLElement | null): number {
+  return el ? el.offsetHeight : 32
+}
+
+// ── page packing: accumulate row heights, break at overflow (no clipping tolerated) ──
+function packRows<T>(
+  rows: T[],
+  extract: (r: T) => Record<string, any>,
+  keys: string[],
+  widths: number[],
+  availableH: number,
+  headerH: number,
+): Array<{ start: number; end: number }> {
+  const pages: Array<{ start: number; end: number }> = []
+  if (rows.length === 0) return pages
+  const bodyH = availableH - headerH
+  if (bodyH <= 0) {
+    for (let i = 0; i < rows.length; i++) pages.push({ start: i, end: i })
+    return pages
+  }
+  let pageStart = 0
+  let used = 0
+  for (let i = 0; i < rows.length; i++) {
+    const h = estimateRowHeight(extract(rows[i]), keys, widths)
+    if (used + h > bodyH && i > pageStart) {
+      pages.push({ start: pageStart, end: i - 1 })
+      pageStart = i
+      used = h
+    } else {
+      used += h
+    }
+  }
+  pages.push({ start: pageStart, end: rows.length - 1 })
+  return pages
+}
+
+// ── tag table: fetch all at once, paginate client-side ──
+const tagTableWrapper = ref<HTMLElement | null>(null)
+const tagPaginationRef = ref<HTMLElement | null>(null)
+const tagAvailableH = ref(400)
+const tagCurrentPage = ref(1)
+
+const tagPages = computed(() =>
+  packRows(allTagProducts.value, tagEstimateRow, TAG_EST_KEYS, tagColWidths.value,
+    tagAvailableH.value - tagPaginationH.value * 2, tagHeaderH.value),
+)
+
+const tagTotalPages = computed(() => tagPages.value.length || 1)
+
+const visibleTagProducts = computed(() => {
+  const page = tagPages.value[tagCurrentPage.value - 1]
+  if (!page) return allTagProducts.value
+  return allTagProducts.value.slice(page.start, page.end + 1)
+})
+
+function handleTagPageChange(p: number) { tagCurrentPage.value = p }
+
+// ── ResizeObserver: track wrapper height & width → re-measure column widths → repack ──
+let resizeObserver: ResizeObserver | null = null
+const lastTagW = ref(0)
+
+function syncAllColWidths() {
+  tagColWidths.value = measureColWidths(tagTableWrapper.value, TAG_EST_KEYS, tagColWidths.value)
+  tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
+  tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
+}
+
+function setupResizeObserver() {
+  resizeObserver = new ResizeObserver(entries => {
+    for (const entry of entries) {
+      if (entry.target === tagTableWrapper.value) {
+        const w = entry.contentRect.width
+        const h = entry.contentRect.height
+        if (h <= 0) continue
+        const wChanged = w !== lastTagW.value
+        const hChanged = h !== tagAvailableH.value
+        if (!wChanged && !hChanged) continue
+        if (wChanged) {
+          lastTagW.value = w
+          tagColWidths.value = measureColWidths(tagTableWrapper.value, TAG_EST_KEYS, tagColWidths.value)
+        }
+        if (hChanged) tagAvailableH.value = h
+        tagCurrentPage.value = 1
+      }
+    }
+  })
+  if (tagTableWrapper.value) resizeObserver.observe(tagTableWrapper.value)
+}
+
+// ── column definitions ──
+const showSkuColumn = computed(() => lastTagW.value === 0 || lastTagW.value >= 400)
+
+const productIndexMap = computed(() => {
+  const map = new Map<number, number>()
+  allTagProducts.value.forEach((p, i) => map.set(p.id, i + 1))
+  return map
+})
+
+const tagColumns = computed<DataTableColumns>(() => {
+  const cols: DataTableColumns = [
+    { type: 'selection' as const },
+    {
+      title: '#', key: '__index', width: 50,
+      render: (row: any) => h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
+    },
+    {
+      title: '', key: 'coverImage', width: 56,
+      render: (row: any) =>
+        row.coverImage ? h('img', { src: '/local-images/' + row.coverImage, class: 'w-10 h-10 rounded object-cover' }) : h('div', { class: 'w-10 h-10 rounded bg-gray-100' }),
+    },
+    {
+      title: '商品名', key: 'name', minWidth: 120,
+      render: (row: any) =>
+        h('span', { class: 'cursor-pointer text-blue-600 hover:underline', onClick: () => openProductDrawer(row) }, clampedText(row.name)),
+    },
+  ]
+  if (showSkuColumn.value) {
+    cols.push({
+      title: 'FactorySKU', key: 'factorySku', minWidth: 100,
+      render: (row: any) => h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
+    })
+  }
+  cols.push({
+    title: 'Tags', key: 'tags', minWidth: 140,
+    render: (row) => h(NFlex, { size: 'small', wrap: true }, {
+      default: () => (row.tags as string[]).map((tag: string) => h(NTag, {
         size: 'small', round: true, closable: true,
         onClose: () => handleRemoveTag(row.id as number, row.platform as string, tag),
-      }, { default: () => tag }))
-    })
-  },
-]
+      }, { default: () => tag })),
+    }),
+  })
+  return cols
+})
 
+// ── data loading ──
 async function guardRuntime() {
   if (!isWailsRuntimeAvailable()) { errorMessage.value = WAILS_PREVIEW_MESSAGE; return false }
   return true
@@ -79,12 +260,11 @@ async function loadTagProducts() {
   if (!waveId.value) return
   isTagLoading.value = true
   try {
-    const result = await listProductsWithTags(waveId.value, '', tagProductPage.value, 50)
-    tagProducts.value = result.items.map(item => ({
+    const result = await listProductsWithTags(waveId.value, '', 1, 10000)
+    allTagProducts.value = result.items.map(item => ({
       id: item.id, name: item.name, factorySku: item.factorySku,
       platform: item.platform, tags: item.tags, coverImage: (item as any).coverImage || '',
     }))
-    tagProductTotal.value = result.total
   } catch (e) { console.error('加载商品标签失败', e) }
   finally { isTagLoading.value = false }
 }
@@ -120,17 +300,11 @@ async function handleRemoveTag(productId: number, platform: string, tagName: str
   catch (e) { message.error(String(e)) }
 }
 
-async function openProductDrawer(product: typeof tagProducts.value[0]) {
+async function openProductDrawer(product: typeof allTagProducts.value[0]) {
   drawerProduct.value = product
   showProductDrawer.value = true
   try { drawerProductImages.value = await getProductImages(product.id) }
   catch { drawerProductImages.value = [] }
-}
-
-async function handleAllocateByTags() {
-  if (!waveId.value) return
-  try { const count = await allocateByTags(waveId.value); message.success(`Tag 分配完成，共 ${count} 条记录`); await loadTagProducts() }
-  catch (e) { message.error(String(e)) }
 }
 
 function goPrev() {
@@ -140,19 +314,44 @@ function goNext() {
   router.push({ name: 'waves-step-preview', params: { waveId: String(waveId.value) } })
 }
 
+// ── lifecycle ──
 onMounted(async () => {
   await loadWave()
   await loadTagProducts()
+  await nextTick()
+  syncAllColWidths()
+  if (tagTableWrapper.value) {
+    const h = tagTableWrapper.value.clientHeight
+    if (h > 0) tagAvailableH.value = h
+    lastTagW.value = tagTableWrapper.value.clientWidth
+  }
+  setupResizeObserver()
+})
+
+watch([() => allTagProducts.value.length], async () => {
+  await nextTick()
+  syncAllColWidths()
+  if (tagTableWrapper.value) {
+    resizeObserver?.observe(tagTableWrapper.value)
+    const h = tagTableWrapper.value.clientHeight
+    if (h > 0) tagAvailableH.value = h
+  }
+})
+
+onUnmounted(() => {
+  resizeObserver?.disconnect()
 })
 </script>
 <template>
-  <NCard size="small" class="h-full overflow-auto">
-    <template #header>
-      <span class="flex items-center gap-2">
-        <NIcon><PlayOutline /></NIcon>步骤二：Tag 管理与分配
-      </span>
-    </template>
-    <div class="space-y-3">
+  <div class="h-full flex flex-col">
+    <div class="flex items-center gap-2 shrink-0 px-1 py-2">
+      <NIcon size="18">
+        <PlayOutline />
+      </NIcon>
+      <span class="font-semibold text-sm">步骤二：Tag 管理与分配</span>
+    </div>
+
+    <div class="shrink-0 px-1 space-y-3">
       <div v-if="waveLevelTags.length > 0">
         <span class="text-xs text-gray-500 block mb-2">可选 Tag：</span>
         <NFlex :size="'small'" :wrap="true">
@@ -171,13 +370,21 @@ onMounted(async () => {
         <NButton size="small" type="warning" @click="handleBatchRemoveTag"
           :disabled="!selectedBatchTag || checkedProductIds.length === 0">取消打标</NButton>
       </div>
-
-      <NDataTable :columns="productColumns" :data="tagProducts" :loading="isTagLoading" :bordered="false"
-        :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds"
-        :pagination="{ pageSize: 50 }" />
-
     </div>
-    <div class="flex justify-between mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div ref="tagTableWrapper" class="flex-1 min-h-0 overflow-hidden">
+        <NDataTable :columns="tagColumns" :data="visibleTagProducts" :loading="isTagLoading" :bordered="false"
+          :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds"
+          :pagination="false" size="small" />
+      </div>
+      <div ref="tagPaginationRef" class="flex justify-center mt-2 shrink-0">
+        <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"
+          @update:page="handleTagPageChange" />
+      </div>
+    </div>
+
+    <div class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700">
       <NButton @click="goPrev">上一步</NButton>
       <NButton type="primary" @click="goNext">下一步</NButton>
     </div>
@@ -206,5 +413,5 @@ onMounted(async () => {
         </template>
       </NDrawerContent>
     </NDrawer>
-  </NCard>
+  </div>
 </template>
