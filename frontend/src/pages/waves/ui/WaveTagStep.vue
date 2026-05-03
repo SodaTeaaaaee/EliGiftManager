@@ -553,6 +553,35 @@ async function loadTagProducts() {
   }
 }
 
+// ── panel toggles ──
+
+function toggleLevelPanel() {
+  showLevelPanel.value = !showLevelPanel.value
+  showUserPanel.value = false
+}
+
+function toggleUserPanel() {
+  showUserPanel.value = !showUserPanel.value
+  showLevelPanel.value = false
+}
+
+function toggleLevelTagSelection(key: string) {
+  const idx = selectedLevelTags.value.indexOf(key)
+  if (idx >= 0) selectedLevelTags.value.splice(idx, 1)
+  else selectedLevelTags.value.push(key)
+}
+
+function toggleUserTagSelection(key: string) {
+  const idx = selectedUserTags.value.indexOf(key)
+  if (idx >= 0) selectedUserTags.value.splice(idx, 1)
+  else selectedUserTags.value.push(key)
+}
+
+function setUserTagChecked(key: string) {
+  if (!selectedUserTags.value.includes(key)) selectedUserTags.value.push(key)
+  else selectedUserTags.value = selectedUserTags.value.filter((x) => x !== key)
+}
+
 // ── batch operations ──
 
 async function handleBatchAddLevelTag() {
@@ -803,10 +832,7 @@ onUnmounted(() => {
           <NButton
             size="small"
             secondary
-            @click="
-              showLevelPanel = !showLevelPanel
-              showUserPanel = false
-            "
+            @click="toggleLevelPanel"
           >
             {{ selectedLevelTags.length ? `已选 ${selectedLevelTags.length} 项 ▾` : '选择等级 ▾' }}
           </NButton>
@@ -867,11 +893,7 @@ onUnmounted(() => {
                   : platformTagColor((opt.value as string).split('|')[0])
               "
               style="cursor: pointer"
-              @click="
-                selectedLevelTags.includes(opt.value as string)
-                  ? (selectedLevelTags = selectedLevelTags.filter((v) => v !== opt.value))
-                  : selectedLevelTags.push(opt.value as string)
-              "
+              @click="toggleLevelTagSelection(opt.value as string)"
             >
               {{ opt.label }}
             </NTag>
@@ -890,10 +912,7 @@ onUnmounted(() => {
           <NButton
             size="small"
             secondary
-            @click="
-              showUserPanel = !showUserPanel
-              showLevelPanel = false
-            "
+            @click="toggleUserPanel"
           >
             {{ selectedUserTags.length ? `已选 ${selectedUserTags.length} 人 ▾` : '选择会员 ▾' }}
           </NButton>
@@ -945,23 +964,13 @@ onUnmounted(() => {
               v-for="opt in filteredMemberOptions"
               :key="opt.value"
               class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm"
-              @click="
-                selectedUserTags.includes(String(opt.value))
-                  ? (selectedUserTags = selectedUserTags.filter((v) => v !== String(opt.value)))
-                  : selectedUserTags.push(String(opt.value))
-              "
+              @click="toggleUserTagSelection(String(opt.value))"
             >
               <NCheckbox
                 :checked="selectedUserTags.includes(String(opt.value))"
                 size="small"
                 @click.stop
-                @update:checked="
-                  (v: boolean) => {
-                    v
-                      ? selectedUserTags.push(String(opt.value))
-                      : (selectedUserTags = selectedUserTags.filter((x) => x !== String(opt.value)))
-                  }
-                "
+                @update:checked="setUserTagChecked(String(opt.value))"
               />
               <span class="truncate">{{ opt.label }}</span>
             </div>
