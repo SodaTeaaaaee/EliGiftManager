@@ -467,7 +467,6 @@ onUnmounted(() => {
           :pagination="false" size="small"
           :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })" />
       </div>
-      <div class="flex-1" />
       <div v-if="memberTotalPages > 1" class="flex justify-center items-center shrink-0 rounded"
         style="height: 12px; background: rgba(255,165,0,0.3);">
         <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>

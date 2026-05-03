@@ -673,7 +673,6 @@ onUnmounted(() => {
           :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds" :pagination="false" size="medium"
           :row-props="rowProps" />
       </div>
-      <div class="flex-1" />
       <div v-if="tagTotalPages > 1" class="flex justify-center items-center shrink-0 rounded"
         style="height: 12px; background: rgba(255,165,0,0.3);">
         <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
@@ -683,6 +682,7 @@ onUnmounted(() => {
         <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"
           @update:page="handleTagPageChange" />
       </div>
+      <div class="flex-1" />
     </div>
 
     <div class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700">
