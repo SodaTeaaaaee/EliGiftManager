@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, watchEffect } from 'vue'
+import { computed, onMounted, onUnmounted, watchEffect } from 'vue'
 import { NConfigProvider, NDialogProvider, NGlobalStyle, NMessageProvider, darkTheme, useOsTheme, type GlobalThemeOverrides } from 'naive-ui'
 import { RouterView } from 'vue-router'
 import { useThemeStore } from '@/shared/model/theme'
+import { useContextMenu } from '@/shared/composables/useContextMenu'
+import ContextMenu from '@/shared/ui/ContextMenu.vue'
 
 const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
@@ -56,6 +58,22 @@ watchEffect(() => {
   document.documentElement.dataset.theme = resolvedTheme.value
   document.documentElement.style.colorScheme = resolvedTheme.value
 })
+
+const { handleEvent } = useContextMenu()
+
+function onGlobalContextMenu(event: MouseEvent) {
+  if (!handleEvent(event)) {
+    event.preventDefault()
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('contextmenu', onGlobalContextMenu)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('contextmenu', onGlobalContextMenu)
+})
 </script>
 
 <template>
@@ -64,6 +82,7 @@ watchEffect(() => {
     <NMessageProvider>
       <NDialogProvider>
         <RouterView class="h-full" />
+        <ContextMenu />
       </NDialogProvider>
     </NMessageProvider>
   </NConfigProvider>

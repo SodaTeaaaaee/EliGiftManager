@@ -4,6 +4,7 @@ import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NInputNumber, NPopover, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, removeLevelTag, removeUserTag, upsertLevelTag, upsertUserTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
+import { useContextMenu } from '@/shared/composables/useContextMenu'
 
 const message = useMessage()
 const route = useRoute()
@@ -251,6 +252,8 @@ function rowProps(row: any) {
   return {
     class: selected ? 'row-selected' : '',
     style: { cursor: 'pointer' },
+    'data-contextmenu': 'tag-row',
+    'data-product-id': row.id,
     onClick: (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('.n-checkbox')) {
         const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
@@ -512,12 +515,65 @@ function goNext() {
   router.push({ name: 'waves-step-preview', params: { waveId: String(waveId.value) } })
 }
 
+// ── context menu ──
+const { register } = useContextMenu()
+let unregisterCtxMenu: (() => void) | null = null
+
 // ── lifecycle ──
 onMounted(async () => {
   await loadWave()
   await loadTagProducts()
   await loadWaveMembers()
   await nextTick()
+
+  unregisterCtxMenu = register('tag-row', (_event: MouseEvent) => {
+    const target = _event.target as HTMLElement | null
+    if (!target) return []
+    const tr = target.closest<HTMLElement>('[data-product-id]')
+    if (!tr) return []
+    const productId = Number(tr.dataset.productId)
+    if (!productId) return []
+    const product = allTagProducts.value.find(p => p.id === productId)
+    if (!product) return []
+    const levelTags = product.tags.filter((t: TagInfo) => t.tagType === 'level')
+    const userTags = product.tags.filter((t: TagInfo) => t.tagType === 'user')
+    const items: Array<{ label: string; key: string; action: () => void; divider?: boolean }> = []
+    if (levelTags.length > 0 || userTags.length > 0) {
+      items.push({
+        label: '清空全部 Tag', key: 'clear-all',
+        action: async () => {
+          for (const t of levelTags) { await removeLevelTag(product.id, t.platform, t.tagName) }
+          for (const t of userTags) { await removeUserTag(product.id, t.waveMemberId) }
+          await loadTagProducts()
+          message.success('已清空全部 Tag')
+        },
+      })
+    }
+    if (levelTags.length > 0) {
+      items.push({
+        label: '清空身份 Tag', key: 'clear-level',
+        action: async () => {
+          for (const t of levelTags) { await removeLevelTag(product.id, t.platform, t.tagName) }
+          await loadTagProducts()
+          message.success('已清空身份 Tag')
+        },
+        divider: items.length > 0,
+      })
+    }
+    if (userTags.length > 0) {
+      items.push({
+        label: '清空用户 Tag', key: 'clear-user',
+        action: async () => {
+          for (const t of userTags) { await removeUserTag(product.id, t.waveMemberId) }
+          await loadTagProducts()
+          message.success('已清空用户 Tag')
+        },
+        divider: items.length > 0,
+      })
+    }
+    return items
+  })
+
   tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
   tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
   if (tagTableWrapper.value) {
@@ -543,6 +599,7 @@ watch([() => allTagProducts.value.length], async () => {
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  if (unregisterCtxMenu) unregisterCtxMenu()
 })
 </script>
 <template>

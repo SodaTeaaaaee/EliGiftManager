@@ -50,6 +50,11 @@ body {
   overflow: hidden;
   color: var(--text);
   background: linear-gradient(180deg, var(--bg) 0%, var(--bg-strong) 100%);
+  user-select: none;
+}
+
+input, textarea, [contenteditable], .n-input__input-el {
+  user-select: text;
 }
 
 button,
