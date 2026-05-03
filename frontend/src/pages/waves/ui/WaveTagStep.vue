@@ -894,7 +894,7 @@ onUnmounted(() => {
             >
               <span
                 :style="{
-                  color: platformTagColor((opt.value as string).split('|')[0]).textColor,
+                  color: 'var(--text)',
                   fontWeight: 500,
                 }"
               >
@@ -983,7 +983,7 @@ onUnmounted(() => {
                   >
                     <span
                       :style="{
-                        color: platformTagColor(opt.label.split(' · ')[0] || '').textColor,
+                        color: 'var(--text)',
                         fontWeight: 500,
                       }"
                     >
