@@ -77,31 +77,28 @@ function onGlobalContextMenu(event: MouseEvent) {
   handleEvent(event)
 }
 
-// ── zoom tracking ──
-let zoomPercent = 100
-let zoomSaveTimer: ReturnType<typeof setTimeout> | null = null
+// ── zoom persistence via devicePixelRatio ──
+// WebView2 native zoom changes devicePixelRatio proportionally.
+// Capture the ratio at startup (before any zoom), compare at shutdown.
+let baseDPR = 1
 
-function persistZoom() {
-  if (zoomSaveTimer) clearTimeout(zoomSaveTimer)
-  zoomSaveTimer = setTimeout(() => saveZoom(zoomPercent), 500)
-}
-
-function onGlobalWheel(event: WheelEvent) {
-  if (!event.ctrlKey) return
-  // Don't preventDefault — let native WebView2 zoom happen.
-  zoomPercent += event.deltaY > 0 ? -10 : 10
-  zoomPercent = Math.min(500, Math.max(25, zoomPercent))
-  persistZoom()
+function saveZoomFromDPR() {
+  const current = window.devicePixelRatio
+  const zoom = Math.round((current / baseDPR) * 100)
+  if (zoom >= 25 && zoom <= 500) saveZoom(zoom)
 }
 
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
-  document.addEventListener('wheel', onGlobalWheel, { passive: true })
+  baseDPR = window.devicePixelRatio
+  window.addEventListener('beforeunload', saveZoomFromDPR)
 })
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', onGlobalContextMenu)
-  document.removeEventListener('wheel', onGlobalWheel)
+  window.removeEventListener('beforeunload', saveZoomFromDPR)
+  // Save on page navigation too (SPA route change = closing this view)
+  saveZoomFromDPR()
 })
 </script>
 
