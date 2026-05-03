@@ -13,6 +13,6 @@ export function PingDB():Promise<string>;
 
 export function RestoreDatabase():Promise<void>;
 
-export function SetContext(arg1:context.Context):Promise<void>;
-
 export function SaveZoom(arg1:number):Promise<void>;
+
+export function SetContext(arg1:context.Context):Promise<void>;

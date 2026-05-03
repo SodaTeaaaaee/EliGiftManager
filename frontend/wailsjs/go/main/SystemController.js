@@ -22,10 +22,10 @@ export function RestoreDatabase() {
   return window['go']['main']['SystemController']['RestoreDatabase']();
 }
 
-export function SetContext(arg1) {
-  return window['go']['main']['SystemController']['SetContext'](arg1);
-}
-
 export function SaveZoom(arg1) {
   return window['go']['main']['SystemController']['SaveZoom'](arg1);
+}
+
+export function SetContext(arg1) {
+  return window['go']['main']['SystemController']['SetContext'](arg1);
 }

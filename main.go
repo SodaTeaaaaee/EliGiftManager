@@ -51,7 +51,8 @@ func main() {
 		},
 		BackgroundColour: &options.RGBA{R: 20, G: 18, B: 16, A: 1},
 		Windows: &wailsWindows.Options{
-			ZoomFactor: zoom / 100.0,
+			ZoomFactor:           zoom / 100.0,
+			IsZoomControlEnabled: true,
 		},
 		OnStartup:        app.startup,
 		Bind: []any{
