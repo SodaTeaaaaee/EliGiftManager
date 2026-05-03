@@ -249,8 +249,10 @@ const lastClickedIndex = ref(-1)
 
 function rowProps(row: any) {
   const selected = checkedProductIds.value.includes(row.id)
+  const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+  const isAnchor = selected && idx >= 0 && idx === lastClickedIndex.value
   return {
-    class: selected ? 'row-selected' : '',
+    class: [selected ? 'row-selected' : '', isAnchor ? 'row-anchor' : ''].filter(Boolean).join(' '),
     style: { cursor: 'pointer' },
     'data-contextmenu': 'tag-row',
     'data-product-id': row.id,
@@ -318,7 +320,7 @@ const pageAllSelected = computed(() => {
 })
 
 function handleSelectAll() {
-  if (allSelected.value) { checkedProductIds.value = [] }
+  if (allSelected.value) { checkedProductIds.value = []; lastClickedIndex.value = -1 }
   else { checkedProductIds.value = allTagProducts.value.map(p => p.id) }
 }
 function handleSelectPage() {
@@ -736,12 +738,12 @@ onUnmounted(() => {
   transform: scale(1.5);
   transform-origin: center center;
 }
-.row-selected {
-  outline: 2px solid rgba(32, 128, 240, 0.55);
-  outline-offset: -2px;
-}
 .row-selected td {
   background: rgba(32, 128, 240, 0.12) !important;
+}
+.row-anchor {
+  outline: 2px solid rgba(32, 128, 240, 0.55);
+  outline-offset: -2px;
 }
 .thumb-cell {
   display: flex;
