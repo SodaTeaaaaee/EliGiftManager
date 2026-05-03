@@ -2,28 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@font-face {
-  font-family: 'Noto Sans SC';
-  font-style: normal;
-  font-weight: 400;
-  src: url('/fonts/NotoSansSC-Regular.ttf') format('truetype');
-  font-display: block;
-}
-@font-face {
-  font-family: 'Noto Sans SC';
-  font-style: normal;
-  font-weight: 500;
-  src: url('/fonts/NotoSansSC-Medium.ttf') format('truetype');
-  font-display: block;
-}
-@font-face {
-  font-family: 'Noto Sans SC';
-  font-style: normal;
-  font-weight: 700;
-  src: url('/fonts/NotoSansSC-Bold.ttf') format('truetype');
-  font-display: block;
-}
-
 :root {
   --bg: #f5f7fa;
   --bg-strong: #eef2f7;
