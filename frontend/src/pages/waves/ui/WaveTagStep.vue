@@ -307,6 +307,8 @@ const {
   totalPages,
   visibleItems,
   scrollMode,
+  availableH,
+  headerH,
   indicatorFontSize,
   indicatorLeft,
   indicatorRight,
@@ -1092,6 +1094,7 @@ onUnmounted(() => {
           :data="visibleItems"
           :loading="isTagLoading"
           :bordered="false"
+          :max-height="availableH"
           :row-key="(row: any) => row.id"
           v-model:checked-row-keys="checkedProductIds"
           :pagination="false"

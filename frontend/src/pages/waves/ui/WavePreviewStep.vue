@@ -158,6 +158,7 @@ const {
   totalPages,
   visibleItems,
   scrollMode,
+  availableH,
   lastW,
   indicatorFontSize,
   indicatorLeft,
@@ -558,6 +559,7 @@ onUnmounted(() => {
           :data="visibleItems"
           :bordered="false"
           :pagination="false"
+          :max-height="availableH"
           size="small"
           :row-props="
             (row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })

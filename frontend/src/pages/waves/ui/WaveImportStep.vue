@@ -119,6 +119,7 @@ const {
   totalPages: productTotalPages,
   visibleItems: visibleProducts,
   scrollMode,
+  availableH: productAvailableH,
   lastW: lastProductW,
   indicatorFontSize: productIndicatorFontSize,
   indicatorLeft: productIndicatorLeft,
@@ -145,6 +146,7 @@ const {
   currentPage: memberCurrentPage,
   totalPages: memberTotalPages,
   visibleItems: visibleMembers,
+  availableH: memberAvailableH,
   lastW: lastMemberW,
   indicatorFontSize: memberIndicatorFontSize,
   indicatorLeft: memberIndicatorLeft,
@@ -426,6 +428,7 @@ onUnmounted(() => {
               :columns="productDataColumns"
               :data="visibleProducts"
               :loading="isProductLoading"
+              :max-height="productAvailableH"
               :bordered="false"
               :pagination="false"
               size="small"
@@ -491,6 +494,7 @@ onUnmounted(() => {
               :columns="memberColumns"
               :data="visibleMembers"
               :loading="isMembersLoading"
+              :max-height="memberAvailableH"
               :bordered="false"
               :pagination="false"
               size="small"
