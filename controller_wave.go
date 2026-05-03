@@ -163,13 +163,13 @@ func (c *WaveController) ImportToWave(waveID uint, csvPath string, templateID ui
 	return nil
 }
 
-func (c *WaveController) ImportDispatchWave(waveID uint, csvPath string, importTemplateID uint) error {
+func (c *WaveController) ImportDispatchWave(waveID uint, csvPath string, importTemplateID uint, setDefault bool) error {
 	db := c.db
 	var template model.TemplateConfig
 	if err := db.First(&template, importTemplateID).Error; err != nil {
 		return fmt.Errorf("import dispatch wave failed: template not found: %w", err)
 	}
-	_, err := service.ImportDispatchWave(db, waveID, csvPath, template)
+	_, err := service.ImportDispatchWave(db, waveID, csvPath, template, setDefault)
 	if err != nil {
 		return fmt.Errorf("import dispatch wave failed: %w", err)
 	}

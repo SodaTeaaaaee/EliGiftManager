@@ -4,3 +4,5 @@
 export function PickCSVFile():Promise<string>;
 
 export function PickZIPFile():Promise<string>;
+
+export function PreviewCSVHeaders(arg1:string):Promise<Array<string>>;

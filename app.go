@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -198,6 +199,20 @@ func (a *App) PickCSVFile() (string, error) {
 		return selected, nil
 	}
 	return "", fmt.Errorf("pick CSV file: context not available")
+}
+
+func (a *App) PreviewCSVHeaders(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open CSV: %w", err)
+	}
+	defer f.Close()
+	reader := csv.NewReader(f)
+	headers, err := reader.Read()
+	if err != nil {
+		return nil, fmt.Errorf("read CSV headers: %w", err)
+	}
+	return headers, nil
 }
 
 func (a *App) PickZIPFile() (string, error) {

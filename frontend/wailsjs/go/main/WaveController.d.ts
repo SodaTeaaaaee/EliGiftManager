@@ -16,7 +16,7 @@ export function DeleteWave(arg1:number):Promise<void>;
 
 export function ExportOrderCSV(arg1:number,arg2:number):Promise<string>;
 
-export function ImportDispatchWave(arg1:number,arg2:string,arg3:number):Promise<void>;
+export function ImportDispatchWave(arg1:number,arg2:string,arg3:number,arg4:boolean):Promise<void>;
 
 export function ImportToWave(arg1:number,arg2:string,arg3:number):Promise<void>;
 

@@ -1,6 +1,7 @@
 import {
   PickCSVFile as pickCSVFileBinding,
   PickZIPFile as pickZIPFileBinding,
+  PreviewCSVHeaders as previewCSVHeadersBinding,
 } from "../../../../wailsjs/go/main/App";
 import {
   AddMemberAddress as addMemberAddressBinding,
@@ -106,9 +107,15 @@ export function importDispatchWave(
   waveId: number,
   csvPath: string,
   importTemplateId: number,
+  setDefault: boolean,
 ): Promise<void> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve();
-  return importDispatchWaveBinding(waveId, csvPath, importTemplateId);
+  return importDispatchWaveBinding(
+    waveId,
+    csvPath,
+    importTemplateId,
+    setDefault,
+  );
 }
 export function allocateByTags(waveId: number): Promise<number> {
   assertWailsRuntime();
@@ -330,6 +337,10 @@ export function pickCSVFile(): Promise<string> {
 export function pickZIPFile(): Promise<string> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve("");
   return pickZIPFileBinding();
+}
+export function previewCSVHeaders(path: string): Promise<string[]> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
+  return previewCSVHeadersBinding(path);
 }
 export function restoreDatabase(): Promise<void> {
   assertWailsRuntime();

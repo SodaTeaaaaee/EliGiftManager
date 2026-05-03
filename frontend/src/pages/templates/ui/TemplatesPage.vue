@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { AddOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   NAlert,
   NButton,
@@ -33,6 +34,7 @@ import {
 } from '@/shared/lib/wails/app'
 
 const message = useMessage()
+const router = useRouter()
 const templates = ref<TemplateItem[]>([])
 const errorMessage = ref('')
 const showCreateModal = ref(false)
@@ -323,11 +325,16 @@ onMounted(async () => {
           模板必须绑定平台；匹配规则模板用于建立"外部业务字段 -> 内部产品 ID"。
         </p>
       </div>
-      <NButton type="primary" @click="openCreateModal()"
-        ><template #icon
-          ><NIcon><AddOutline /></NIcon></template
-        >新建模板</NButton
-      >
+      <div class="flex gap-2">
+        <NButton type="primary" @click="openCreateModal()"
+          ><template #icon
+            ><NIcon><AddOutline /></NIcon></template
+          >新建模板</NButton
+        >
+        <NButton secondary @click="router.push({ name: 'templates-builder' })"
+          >自定义构建器</NButton
+        >
+      </div>
     </header>
     <NEmpty v-if="errorMessage" :description="errorMessage" />
     <div v-else-if="platforms.filter((p) => p !== 'all').length" class="grid gap-4 xl:grid-cols-2">

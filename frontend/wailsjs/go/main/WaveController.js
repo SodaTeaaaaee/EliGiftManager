@@ -26,8 +26,8 @@ export function ExportOrderCSV(arg1, arg2) {
   return window['go']['main']['WaveController']['ExportOrderCSV'](arg1, arg2);
 }
 
-export function ImportDispatchWave(arg1, arg2, arg3) {
-  return window['go']['main']['WaveController']['ImportDispatchWave'](arg1, arg2, arg3);
+export function ImportDispatchWave(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['WaveController']['ImportDispatchWave'](arg1, arg2, arg3, arg4);
 }
 
 export function ImportToWave(arg1, arg2, arg3) {

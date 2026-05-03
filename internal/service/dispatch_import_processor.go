@@ -13,12 +13,13 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ImportDispatchWave imports a headless CSV into the wave.  It deduplicates rows by
-// (platform, platformUid), upserts global members (CRM/address reuse, no giftLevel in
-// extra_data), maintains nickname history, upserts wave_member snapshot rows, removes
-// wave_members that disappeared from this import, and rebuilds waves.level_tags.
+// ImportDispatchWave imports a CSV into the wave.  It deduplicates rows by
+// (platform, platformUid), upserts global members (CRM/address reuse), maintains
+// nickname history, upserts wave_member snapshot rows, removes wave_members that
+// disappeared from this import, and rebuilds waves.level_tags.
+// setDefault controls whether imported addresses are set as the member's default.
 // DispatchRecord creation is deferred to ReconcileWave.
-func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate model.TemplateConfig) (int, error) {
+func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate model.TemplateConfig, setDefault bool) (int, error) {
 	if strings.TrimSpace(csvPath) == "" {
 		return 0, fmt.Errorf("import dispatch wave failed: CSV path is required")
 	}
@@ -37,6 +38,10 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		platformUid string
 		nickname    string
 		platform    string
+		extraData   string // JSON string
+		recipient   string
+		phone       string
+		address     string
 	}
 
 	// Parse CSV and deduplicate to unique (platform, platformUid) pairs.
@@ -54,7 +59,19 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 	reader.FieldsPerRecord = -1
 	reader.TrimLeadingSpace = true
 
-	for lineNo := 1; ; lineNo++ {
+	// Read header line if the template expects one.
+	var headers []string
+	lineStart := 1
+	if rules.HasHeader {
+		hdr, hdrErr := reader.Read()
+		if hdrErr != nil {
+			return 0, fmt.Errorf("import dispatch wave failed: read header: %w", hdrErr)
+		}
+		headers = hdr
+		lineStart = 2
+	}
+
+	for lineNo := lineStart; ; lineNo++ {
 		record, readErr := reader.Read()
 		if readErr == io.EOF {
 			break
@@ -66,9 +83,15 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 			continue
 		}
 
-		coreData, _, parseErr := ParseRowDynamically(record, nil, rules)
+		coreData, extraDataMap, parseErr := ParseRowDynamically(record, headers, rules)
 		if parseErr != nil {
 			return 0, fmt.Errorf("import dispatch wave failed: line %d: %w", lineNo, parseErr)
+		}
+
+		extraDataJSON, _ := json.Marshal(extraDataMap)
+		extraDataStr := string(extraDataJSON)
+		if extraDataStr == "null" || extraDataStr == "{}" {
+			extraDataStr = "{}"
 		}
 
 		row := csvRow{
@@ -76,6 +99,10 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 			platformUid: coreData["platform_uid"],
 			nickname:    coreData["nickname"],
 			platform:    coreData["platform"],
+			extraData:   extraDataStr,
+			recipient:   strings.TrimSpace(coreData["recipient_name"]),
+			phone:       strings.TrimSpace(coreData["phone"]),
+			address:     strings.TrimSpace(coreData["address"]),
 		}
 
 		// platform fallback when columnIndex is -1 (column absent by design).
@@ -109,13 +136,38 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 			member := model.Member{
 				Platform:    strings.TrimSpace(row.platform),
 				PlatformUID: strings.TrimSpace(row.platformUid),
-				ExtraData:   "{}",
+				ExtraData:   row.extraData,
 			}
 			if upsertErr := tx.Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "platform_uid"}, {Name: "platform"}},
 				DoUpdates: clause.AssignmentColumns([]string{"updated_at"}),
 			}).Create(&member).Error; upsertErr != nil {
 				return fmt.Errorf("upsert member failed for platform_uid=%q: %w", row.platformUid, upsertErr)
+			}
+
+			// Address insertion (3-tuple present → dedup + insert).
+			if row.recipient != "" && row.phone != "" && row.address != "" {
+				var existingAddr model.MemberAddress
+				findErr := tx.Where("member_id = ? AND recipient_name = ? AND phone = ? AND address = ? AND is_deleted = ?",
+					member.ID, row.recipient, row.phone, row.address, false).First(&existingAddr).Error
+				if findErr == gorm.ErrRecordNotFound {
+					newAddr := model.MemberAddress{
+						MemberID:      member.ID,
+						RecipientName: row.recipient,
+						Phone:         row.phone,
+						Address:       row.address,
+						IsDefault:     setDefault,
+						IsDeleted:     false,
+					}
+					if createErr := tx.Create(&newAddr).Error; createErr != nil {
+						return fmt.Errorf("insert member address failed: %w", createErr)
+					}
+					// Unset IsDefault for other addresses of this member.
+					if setDefault {
+						tx.Model(&model.MemberAddress{}).Where("member_id = ? AND id != ?", member.ID, newAddr.ID).Update("is_default", false)
+					}
+				}
+				// If exact match found, skip (already exists).
 			}
 
 			// Maintain nickname history.

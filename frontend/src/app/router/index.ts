@@ -61,6 +61,11 @@ export const router = createRouter({
           component: () => import("@/pages/templates/ui/TemplatesPage.vue"),
         },
         {
+          path: "templates/builder",
+          name: "templates-builder",
+          component: () => import("@/pages/templates/ui/TemplateBuilder.vue"),
+        },
+        {
           path: "settings",
           name: "settings",
           component: () => import("@/pages/settings/ui/SettingsPage.vue"),

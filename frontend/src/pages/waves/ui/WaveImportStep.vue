@@ -5,6 +5,7 @@ import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
+  NCheckbox,
   NDataTable,
   NIcon,
   NPagination,
@@ -38,6 +39,19 @@ const waveId = computed(() => Number(route.params.waveId) || 0)
 const templates = ref<TemplateItem[]>([])
 const importTemplateId = ref<number | null>(null)
 const productTemplateId = ref<number | null>(null)
+
+const showAddressCheckbox = computed(() => {
+  if (!importTemplateId.value) return false
+  const t = templates.value.find((t) => t.id === importTemplateId.value)
+  if (!t) return false
+  try {
+    const rules = JSON.parse(t.mappingRules)
+    return 'recipient_name' in (rules.mapping || {})
+  } catch {
+    return false
+  }
+})
+const importAddress = ref(false)
 const waveMembers = ref<MemberItem[]>([])
 const isMembersLoading = ref(false)
 const errorMessage = ref('')
@@ -351,7 +365,7 @@ async function handleImportDispatch() {
   const filePath = await pickCSVFile()
   if (!filePath) return
   try {
-    await importDispatchWave(waveId.value, filePath, importTemplateId.value)
+    await importDispatchWave(waveId.value, filePath, importTemplateId.value, importAddress.value)
     message.success('会员数据导入完成')
     await loadWaveMembers()
   } catch (e) {
@@ -477,6 +491,9 @@ onUnmounted(() => {
             placeholder="选择会员导入模板"
             class="mb-2"
           />
+          <NCheckbox v-if="showAddressCheckbox" v-model:checked="importAddress" class="mb-2">
+            导入 CSV 中的地址信息
+          </NCheckbox>
           <NButton block type="primary" @click="handleImportDispatch">导入会员数据</NButton>
         </div>
         <div
