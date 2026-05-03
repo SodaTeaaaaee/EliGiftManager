@@ -95,8 +95,10 @@ function packByHeights(heights: number[], availableH: number, headerH: number): 
 }
 
 // ── member table: all data client-side ──
+const memberTableParent = ref<HTMLElement | null>(null)
 const memberTableWrapper = ref<HTMLElement | null>(null)
 const memberPaginationRef = ref<HTMLElement | null>(null)
+const memberIndicatorRef = ref<HTMLElement | null>(null)
 const memberAvailableH = ref(400)
 const memberCurrentPage = ref(1)
 
@@ -105,10 +107,47 @@ const memberMeasuredHeights = ref<number[]>([])
 
 const memberPages = computed(() =>
   packByHeights(memberMeasuredHeights.value,
-    memberAvailableH.value - memberPaginationH.value * 2, memberHeaderH.value),
+    memberAvailableH.value - memberPaginationH.value * 2 - 12, memberHeaderH.value),
 )
 
 const memberTotalPages = computed(() => memberPages.value.length || 1)
+
+// ── member indicator content ──
+const memberIndicatorW = ref(0)
+const memberIndicatorH = ref(0)
+let memberIndicatorObs: ResizeObserver | null = null
+
+const memberIndicatorFontSize = computed(() => {
+  const h = memberIndicatorH.value
+  if (h < 16) return 12
+  return Math.min(Math.floor(h * 0.95), 800)
+})
+
+const memberIndicatorLeft = computed(() => {
+  const current = memberCurrentPage.value
+  const total = memberTotalPages.value
+  if (total <= 1) return ""
+  const w = memberIndicatorW.value
+  const size = memberIndicatorFontSize.value
+  const charW = Math.max(size * 0.6, 6)
+  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
+  const half = count / 2
+  if (current === 1) return ""
+  return "<".repeat(current === total ? count : half)
+})
+
+const memberIndicatorRight = computed(() => {
+  const current = memberCurrentPage.value
+  const total = memberTotalPages.value
+  if (total <= 1) return ""
+  const w = memberIndicatorW.value
+  const size = memberIndicatorFontSize.value
+  const charW = Math.max(size * 0.6, 6)
+  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
+  const half = count / 2
+  if (current === total) return ""
+  return ">".repeat(current === 1 ? count : half)
+})
 
 const visibleMembers = computed(() => {
   if (memberNeedsMeasure.value) return waveMembers.value
@@ -142,8 +181,10 @@ const memberIndexMap = computed(() => {
   waveMembers.value.forEach((m, i) => map.set(m.id, i + 1))
   return map
 })
+const productTableParent = ref<HTMLElement | null>(null)
 const productTableWrapper = ref<HTMLElement | null>(null)
 const productPaginationRef = ref<HTMLElement | null>(null)
+const productIndicatorRef = ref<HTMLElement | null>(null)
 const productAvailableH = ref(400)
 const productCurrentPage = ref(1)
 const isProductLoading = ref(false)
@@ -153,10 +194,47 @@ const productMeasuredHeights = ref<number[]>([])
 
 const productPages = computed(() =>
   packByHeights(productMeasuredHeights.value,
-    productAvailableH.value - productPaginationH.value * 2, productHeaderH.value),
+    productAvailableH.value - productPaginationH.value * 2 - 12, productHeaderH.value),
 )
 
 const productTotalPages = computed(() => productPages.value.length || 1)
+
+// ── product indicator content ──
+const productIndicatorW = ref(0)
+const productIndicatorH = ref(0)
+let productIndicatorObs: ResizeObserver | null = null
+
+const productIndicatorFontSize = computed(() => {
+  const h = productIndicatorH.value
+  if (h < 16) return 12
+  return Math.min(Math.floor(h * 0.95), 800)
+})
+
+const productIndicatorLeft = computed(() => {
+  const current = productCurrentPage.value
+  const total = productTotalPages.value
+  if (total <= 1) return ""
+  const w = productIndicatorW.value
+  const size = productIndicatorFontSize.value
+  const charW = Math.max(size * 0.6, 6)
+  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
+  const half = count / 2
+  if (current === 1) return ""
+  return "<".repeat(current === total ? count : half)
+})
+
+const productIndicatorRight = computed(() => {
+  const current = productCurrentPage.value
+  const total = productTotalPages.value
+  if (total <= 1) return ""
+  const w = productIndicatorW.value
+  const size = productIndicatorFontSize.value
+  const charW = Math.max(size * 0.6, 6)
+  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
+  const half = count / 2
+  if (current === total) return ""
+  return ">".repeat(current === 1 ? count : half)
+})
 
 const visibleProducts = computed(() => {
   if (productNeedsMeasure.value) return allProducts.value
@@ -186,7 +264,7 @@ const lastMemberW = ref(0)
 function setupResizeObserver() {
   resizeObserver = new ResizeObserver(entries => {
     for (const entry of entries) {
-      if (entry.target === productTableWrapper.value) {
+      if (entry.target === productTableParent.value) {
         const w = entry.contentRect.width
         const h = entry.contentRect.height
         if (h <= 0) continue
@@ -201,7 +279,7 @@ function setupResizeObserver() {
           productAvailableH.value = h
           productCurrentPage.value = 1
         }
-      } else if (entry.target === memberTableWrapper.value) {
+      } else if (entry.target === memberTableParent.value) {
         const w = entry.contentRect.width
         const h = entry.contentRect.height
         if (h <= 0) continue
@@ -219,8 +297,31 @@ function setupResizeObserver() {
       }
     }
   })
-  if (productTableWrapper.value) resizeObserver.observe(productTableWrapper.value)
-  if (memberTableWrapper.value) resizeObserver.observe(memberTableWrapper.value)
+  if (productTableParent.value) resizeObserver.observe(productTableParent.value)
+  if (memberTableParent.value) resizeObserver.observe(memberTableParent.value)
+}
+
+function setupIndicatorObservers() {
+  productIndicatorObs?.disconnect()
+  memberIndicatorObs?.disconnect()
+  if (productIndicatorRef.value) {
+    productIndicatorObs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        productIndicatorW.value = entry.contentRect.width
+        productIndicatorH.value = entry.contentRect.height
+      }
+    })
+    productIndicatorObs.observe(productIndicatorRef.value)
+  }
+  if (memberIndicatorRef.value) {
+    memberIndicatorObs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        memberIndicatorW.value = entry.contentRect.width
+        memberIndicatorH.value = entry.contentRect.height
+      }
+    })
+    memberIndicatorObs.observe(memberIndicatorRef.value)
+  }
 }
 
 // ── column definitions ──
@@ -354,26 +455,24 @@ onMounted(async () => {
   await loadWaveMembers()
   await loadAllProducts()
   await nextTick()
-  // 测量 header/pagination
   productHeaderH.value = measureHeaderHeight(productTableWrapper.value)
   memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
   productPaginationH.value = measurePaginationHeight(productPaginationRef.value)
   memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  // 初始 DOM 高度
-  if (productTableWrapper.value) {
-    const h = productTableWrapper.value.clientHeight
+  if (productTableParent.value) {
+    const h = productTableParent.value.clientHeight
     if (h > 0) productAvailableH.value = h
-    lastProductW.value = productTableWrapper.value.clientWidth
+    lastProductW.value = productTableParent.value.clientWidth
   }
-  if (memberTableWrapper.value) {
-    const h = memberTableWrapper.value.clientHeight
+  if (memberTableParent.value) {
+    const h = memberTableParent.value.clientHeight
     if (h > 0) memberAvailableH.value = h
-    lastMemberW.value = memberTableWrapper.value.clientWidth
+    lastMemberW.value = memberTableParent.value.clientWidth
   }
-  // DOM 实测行高 + 打包
   await remeasureProducts()
   await remeasureMembers()
   setupResizeObserver()
+  setupIndicatorObservers()
 })
 
 watch([() => allProducts.value.length, () => waveMembers.value.length], async () => {
@@ -382,14 +481,14 @@ watch([() => allProducts.value.length, () => waveMembers.value.length], async ()
   memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
   productPaginationH.value = measurePaginationHeight(productPaginationRef.value)
   memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  if (productTableWrapper.value) {
-    resizeObserver?.observe(productTableWrapper.value)
-    const h = productTableWrapper.value.clientHeight
+  if (productTableParent.value) {
+    resizeObserver?.observe(productTableParent.value)
+    const h = productTableParent.value.clientHeight
     if (h > 0) productAvailableH.value = h
   }
-  if (memberTableWrapper.value) {
-    resizeObserver?.observe(memberTableWrapper.value)
-    const h = memberTableWrapper.value.clientHeight
+  if (memberTableParent.value) {
+    resizeObserver?.observe(memberTableParent.value)
+    const h = memberTableParent.value.clientHeight
     if (h > 0) memberAvailableH.value = h
   }
   await remeasureProducts()
@@ -398,6 +497,8 @@ watch([() => allProducts.value.length, () => waveMembers.value.length], async ()
 
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  productIndicatorObs?.disconnect()
+  memberIndicatorObs?.disconnect()
 })
 </script>
 <template>
@@ -417,12 +518,13 @@ onUnmounted(() => {
           <NSelect v-model:value="productTemplateId" :options="productTemplates" placeholder="选择商品导入模板" class="mb-2" />
           <NButton block secondary @click="handleImportProduct">导入商品</NButton>
         </div>
-        <div v-if="allProducts.length" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
-          <div ref="productTableWrapper" class="flex-1 min-h-0 overflow-hidden mt-2">
+        <div v-if="allProducts.length" ref="productTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
+          <div ref="productTableWrapper" class="overflow-hidden mt-2">
             <NDataTable :columns="productDataColumns" :data="visibleProducts" :loading="isProductLoading"
               :bordered="false" :pagination="false" size="small" />
           </div>
-          <div ref="productPaginationRef" class="flex justify-center mt-2 shrink-0">
+          <div ref="productIndicatorRef" class="flex-1 flex justify-center items-center select-none" :style="{ fontSize: productIndicatorFontSize + 'px', lineHeight: 1, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', marginBottom: '12px' }"><span style="color: rgba(96,165,250,0.10)">{{ productIndicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ productIndicatorRight }}</span></div>
+          <div ref="productPaginationRef" class="flex justify-center mt-0 mb-3 shrink-0" style="transform: scale(1.3); transform-origin: top center;">
             <NPagination :page="productCurrentPage" :page-count="productTotalPages" size="small"
               @update:page="handleProductPageChange" />
           </div>
@@ -437,12 +539,13 @@ onUnmounted(() => {
           <NSelect v-model:value="importTemplateId" :options="dispatchTemplates" placeholder="选择会员导入模板" class="mb-2" />
           <NButton block type="primary" @click="handleImportDispatch">导入会员数据</NButton>
         </div>
-        <div v-if="waveMembers.length" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
-          <div ref="memberTableWrapper" class="flex-1 min-h-0 overflow-hidden mt-2">
+        <div v-if="waveMembers.length" ref="memberTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
+          <div ref="memberTableWrapper" class="overflow-hidden mt-2">
             <NDataTable :columns="memberColumns" :data="visibleMembers" :loading="isMembersLoading" :bordered="false"
               :pagination="false" size="small" />
           </div>
-          <div ref="memberPaginationRef" class="flex justify-center mt-2 shrink-0">
+          <div ref="memberIndicatorRef" class="flex-1 flex justify-center items-center select-none" :style="{ fontSize: memberIndicatorFontSize + 'px', lineHeight: 1, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', marginBottom: '12px' }"><span style="color: rgba(96,165,250,0.10)">{{ memberIndicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ memberIndicatorRight }}</span></div>
+          <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-3 shrink-0" style="transform: scale(1.3); transform-origin: top center;">
             <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
               @update:page="handleMemberPageChange" />
           </div>
