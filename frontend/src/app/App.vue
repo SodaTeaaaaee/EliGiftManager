@@ -79,14 +79,14 @@ function onGlobalContextMenu(event: MouseEvent) {
 
 // ── zoom persistence via devicePixelRatio ──
 // WebView2 native zoom changes devicePixelRatio proportionally.
-// Save on shutdown: Go OnBeforeClose triggers window.__persistZoom().
+// Shutdown: Go OnBeforeClose → WindowExecJS → persistZoom() → saveZoom + localStorage.
 let baseDPR = 1
 
 function persistZoom() {
   const current = window.devicePixelRatio
   const zoom = Math.round((current / baseDPR) * 100)
   if (zoom < 25 || zoom > 500) return
-  saveZoom(zoom) // Go → zoom.cfg (may fail during shutdown, best-effort)
+  saveZoom(zoom) // Go → zoom.cfg
   try { localStorage.setItem('eligift_zoom', String(zoom)) } catch { /* ok */ }
 }
 
@@ -96,12 +96,10 @@ function persistZoom() {
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
   baseDPR = window.devicePixelRatio
-  window.addEventListener('beforeunload', persistZoom)
 })
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', onGlobalContextMenu)
-  window.removeEventListener('beforeunload', persistZoom)
   persistZoom()
 })
 </script>
