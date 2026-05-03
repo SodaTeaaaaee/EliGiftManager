@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { PlayOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -8,9 +7,7 @@ import {
   NDrawer,
   NDrawerContent,
   NDivider,
-  NEmpty,
   NFlex,
-  NIcon,
   NInput,
   NInputNumber,
   NPopover,
@@ -308,7 +305,6 @@ const {
   visibleItems,
   scrollMode,
   availableH,
-  headerH,
   indicatorFontSize,
   indicatorLeft,
   indicatorRight,
@@ -577,11 +573,6 @@ function toggleUserTagSelection(key: string) {
   const idx = selectedUserTags.value.indexOf(key)
   if (idx >= 0) selectedUserTags.value.splice(idx, 1)
   else selectedUserTags.value.push(key)
-}
-
-function setUserTagChecked(key: string) {
-  if (!selectedUserTags.value.includes(key)) selectedUserTags.value.push(key)
-  else selectedUserTags.value = selectedUserTags.value.filter((x) => x !== key)
 }
 
 // ── batch operations ──
