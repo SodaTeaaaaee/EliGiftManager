@@ -866,7 +866,7 @@ onUnmounted(() => {
         <!-- Level tag panel -->
         <div
           v-if="showLevelPanel"
-          class="border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-800"
+          class="border rounded-lg p-2" :style="{ background: 'var(--surface-strong, #fff)', borderColor: 'var(--muted, #d1d5db)' }"
         >
           <NInput
             v-if="batchTagOptions.length > 12"
@@ -950,7 +950,7 @@ onUnmounted(() => {
         <!-- User tag panel -->
         <div
           v-if="showUserPanel"
-          class="border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-800"
+          class="border rounded-lg p-2" :style="{ background: 'var(--surface-strong, #fff)', borderColor: 'var(--muted, #d1d5db)' }"
         >
           <NInput
             v-model:value="userSearch"
