@@ -363,16 +363,19 @@ const tagColumns = computed<DataTableColumns>(() => {
       render: (row: any) => h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
     },
     {
-      title: '', key: 'coverImage', width: 56,
+      title: '', key: 'coverImage', width: 64,
       render: (row: any) =>
         row.coverImage
-          ? h('img', {
-            src: '/local-images/' + row.coverImage,
-            class: 'w-10 h-10 rounded object-cover',
-            style: { cursor: 'pointer' },
-            onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
-          })
-          : h('div', { class: 'w-10 h-10 rounded bg-gray-100' }),
+          ? h('div', { class: 'thumb-cell' }, [
+              h('img', {
+                src: '/local-images/' + row.coverImage,
+                class: 'thumb-img rounded',
+                onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
+              }),
+            ])
+          : h('div', { class: 'thumb-cell' }, [
+              h('div', { class: 'thumb-placeholder rounded bg-gray-100' }),
+            ]),
     },
     {
       title: '商品名', key: 'name', minWidth: 120,
@@ -658,5 +661,34 @@ onUnmounted(() => {
 }
 .row-selected td {
   background: rgba(32, 128, 240, 0.12) !important;
+}
+
+/* ── thumbnail: square, fills cell height, independent per row ── */
+.n-data-table-td--coverImage {
+  position: relative;
+  padding: 4px !important;
+  vertical-align: middle;
+}
+.thumb-cell {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  bottom: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+}
+.thumb-img {
+  max-width: 100%;
+  max-height: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  cursor: pointer;
+}
+.thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
+  max-height: 100%;
 }
 </style>
