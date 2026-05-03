@@ -740,6 +740,7 @@ onUnmounted(() => {
           fontFamily: 'monospace',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
+          marginBottom: '24px',
         }"
       ><span style="color: rgba(96,165,250,0.10)">{{ indicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ indicatorRight }}</span></div>
       <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"

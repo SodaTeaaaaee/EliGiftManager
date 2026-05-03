@@ -533,6 +533,7 @@ onUnmounted(() => {
           fontFamily: 'monospace',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
+          marginBottom: '24px',
         }"
       ><span style="color: rgba(96,165,250,0.10)">{{ memberIndicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ memberIndicatorRight }}</span></div>
       <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
