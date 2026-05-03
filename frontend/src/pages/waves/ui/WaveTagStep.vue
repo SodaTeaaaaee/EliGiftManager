@@ -180,7 +180,7 @@ function tagColors(tag: TagInfo) {
     text: 'var(--text)',
     accent: p.textColor,
     number: neg ? NEG_RED : p.textColor,
-    border: neg ? `inset 0 0 0 2px ${NEG_RED}` : '',
+    border: neg ? `2.5px solid ${NEG_RED}` : '',
   }
 }
 
@@ -249,7 +249,7 @@ function renderTagChip(row: any, tag: TagInfo) {
             size: 'medium',
             round: true,
             color: t.bg,
-            style: { cursor: 'pointer', boxShadow: t.border },
+            style: { cursor: 'pointer', border: t.border },
             onClick: (e: MouseEvent) => {
               e.stopPropagation()
               openTagEdit(row, tag)
@@ -885,10 +885,10 @@ onUnmounted(() => {
               :color="platformTagColor((opt.value as string).split('|')[0])"
               :style="{
                 cursor: 'pointer',
-                boxShadow: selectedLevelTags.includes(opt.value as string)
-                  ? 'inset 0 0 0 2px ' +
+                border: selectedLevelTags.includes(opt.value as string)
+                  ? '2.5px solid ' +
                     platformTagColor((opt.value as string).split('|')[0]).textColor
-                  : '',
+                  : '2.5px solid transparent',
               }"
               @click="toggleLevelTagSelection(opt.value as string)"
             >
@@ -974,10 +974,10 @@ onUnmounted(() => {
                     :color="platformTagColor(opt.label.split(' · ')[0] || '')"
                     :style="{
                       cursor: 'pointer',
-                      boxShadow: selectedUserTags.includes(String(opt.value))
-                        ? 'inset 0 0 0 2px ' +
+                      border: selectedUserTags.includes(String(opt.value))
+                        ? '2.5px solid ' +
                           platformTagColor(opt.label.split(' · ')[0] || '').textColor
-                        : '',
+                        : '2.5px solid transparent',
                     }"
                     @click="toggleUserTagSelection(String(opt.value))"
                   >
