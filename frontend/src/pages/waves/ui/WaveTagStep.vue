@@ -888,10 +888,16 @@ onUnmounted(() => {
       </NFlex>
     </div>
     <!-- Row 2: Tag operations (tabbed panels) -->
-    <NFlex :size="'small'" class="items-start">
-      <!-- 身份 Tag ops group -->
-      <div :class="['tag-ops-group', { 'tag-ops-active': showLevelPanel }]">
-        <NFlex :size="'small'" :wrap="true" class="items-center">
+    <div class="shrink-0 px-1">
+      <!-- Tab bar: trigger buttons in one row -->
+      <NFlex :size="'small'" :wrap="true" class="items-center tab-bar">
+        <!-- Level tag tab -->
+        <NFlex
+          :size="'small'"
+          :wrap="true"
+          class="items-center tab-trigger"
+          :class="{ 'tab-trigger-active': showLevelPanel }"
+        >
           <NButton
             size="small"
             :type="showLevelPanel ? 'primary' : 'default'"
@@ -931,53 +937,13 @@ onUnmounted(() => {
           >
         </NFlex>
 
-        <!-- Level tag panel -->
-        <div v-if="showLevelPanel" class="tag-panel-expand tag-panel">
-          <NInput
-            v-if="batchTagOptions.length > 12"
-            v-model:value="levelSearch"
-            size="tiny"
-            placeholder="过滤..."
-            class="mb-2"
-            clearable
-          />
-          <NFlex :size="'small'" :wrap="true">
-            <NTag
-              v-for="opt in filteredLevelOptions"
-              :key="opt.value"
-              size="medium"
-              round
-              :color="platformTagColor((opt.value as string).split('|')[0])"
-              :style="{
-                cursor: 'pointer',
-                border: selectedLevelTags.includes(opt.value as string)
-                  ? '2.5px solid ' + platformTagColor((opt.value as string).split('|')[0]).textColor
-                  : '2.5px solid transparent',
-              }"
-              @click="toggleLevelTagSelection(opt.value as string)"
-            >
-              <span
-                :style="{
-                  color: 'var(--text)',
-                  fontWeight: 500,
-                }"
-              >
-                {{ opt.label }}
-              </span>
-            </NTag>
-          </NFlex>
-          <NFlex :size="'small'" class="mt-2 items-center justify-between">
-            <span class="text-xs" :style="{ color: 'var(--muted)' }"
-              >已选 {{ selectedLevelTags.length }} 项</span
-            >
-            <NButton size="tiny" @click="showLevelPanel = false">收起</NButton>
-          </NFlex>
-        </div>
-      </div>
-
-      <!-- 用户 Tag ops group -->
-      <div :class="['tag-ops-group', { 'tag-ops-active': showUserPanel }]">
-        <NFlex :size="'small'" :wrap="true" class="items-center">
+        <!-- User tag tab -->
+        <NFlex
+          :size="'small'"
+          :wrap="true"
+          class="items-center tab-trigger"
+          :class="{ 'tab-trigger-active': showUserPanel }"
+        >
           <NButton
             size="small"
             :type="showUserPanel ? 'primary' : 'default'"
@@ -1016,62 +982,105 @@ onUnmounted(() => {
             >清空</NButton
           >
         </NFlex>
+      </NFlex>
 
-        <!-- User tag panel -->
-        <div v-if="showUserPanel" class="tag-panel-expand tag-panel">
-          <NInput
-            v-model:value="userSearch"
-            size="tiny"
-            placeholder="搜索会员名或 UID..."
-            class="mb-2"
-            clearable
-          />
-          <div class="max-h-48 overflow-y-auto">
-            <NFlex :size="'small'" :wrap="true">
-              <NTooltip
-                v-for="opt in filteredMemberOptions"
-                :key="opt.value"
-                trigger="hover"
-                :delay="500"
-                :keep-alive-on-hover="false"
-              >
-                <template #trigger>
-                  <NTag
-                    size="medium"
-                    round
-                    :color="platformTagColor(opt.label.split(' · ')[0] || '')"
-                    :style="{
-                      cursor: 'pointer',
-                      border: selectedUserTags.includes(String(opt.value))
-                        ? '2.5px solid ' +
-                          platformTagColor(opt.label.split(' · ')[0] || '').textColor
-                        : '2.5px solid transparent',
-                    }"
-                    @click="toggleUserTagSelection(String(opt.value))"
-                  >
-                    <span
-                      :style="{
-                        color: 'var(--text)',
-                        fontWeight: 500,
-                      }"
-                    >
-                      {{ opt.label.split(' · ')[1]?.split(' (')[0] || opt.label }}
-                    </span>
-                  </NTag>
-                </template>
-                {{ opt.label }}
-              </NTooltip>
-            </NFlex>
-          </div>
-          <NFlex :size="'small'" class="mt-2 items-center justify-between">
-            <span class="text-xs" :style="{ color: 'var(--muted)' }"
-              >已选 {{ selectedUserTags.length }} 人</span
+      <!-- Panels: rendered below the tab bar, only one visible at a time -->
+      <!-- Level tag panel -->
+      <div v-if="showLevelPanel" class="tab-panel">
+        <NInput
+          v-if="batchTagOptions.length > 12"
+          v-model:value="levelSearch"
+          size="tiny"
+          placeholder="过滤..."
+          class="mb-2"
+          clearable
+        />
+        <NFlex :size="'small'" :wrap="true">
+          <NTag
+            v-for="opt in filteredLevelOptions"
+            :key="opt.value"
+            size="medium"
+            round
+            :color="platformTagColor((opt.value as string).split('|')[0])"
+            :style="{
+              cursor: 'pointer',
+              border: selectedLevelTags.includes(opt.value as string)
+                ? '2.5px solid ' + platformTagColor((opt.value as string).split('|')[0]).textColor
+                : '2.5px solid transparent',
+            }"
+            @click="toggleLevelTagSelection(opt.value as string)"
+          >
+            <span
+              :style="{
+                color: 'var(--text)',
+                fontWeight: 500,
+              }"
             >
-            <NButton size="tiny" @click="showUserPanel = false">收起</NButton>
+              {{ opt.label }}
+            </span>
+          </NTag>
+        </NFlex>
+        <NFlex :size="'small'" class="mt-2 items-center justify-between">
+          <span class="text-xs" :style="{ color: 'var(--muted)' }"
+            >已选 {{ selectedLevelTags.length }} 项</span
+          >
+          <NButton size="tiny" @click="showLevelPanel = false">收起</NButton>
+        </NFlex>
+      </div>
+
+      <!-- User tag panel -->
+      <div v-if="showUserPanel" class="tab-panel">
+        <NInput
+          v-model:value="userSearch"
+          size="tiny"
+          placeholder="搜索会员名或 UID..."
+          class="mb-2"
+          clearable
+        />
+        <div class="max-h-48 overflow-y-auto">
+          <NFlex :size="'small'" :wrap="true">
+            <NTooltip
+              v-for="opt in filteredMemberOptions"
+              :key="opt.value"
+              trigger="hover"
+              :delay="500"
+              :keep-alive-on-hover="false"
+            >
+              <template #trigger>
+                <NTag
+                  size="medium"
+                  round
+                  :color="platformTagColor(opt.label.split(' · ')[0] || '')"
+                  :style="{
+                    cursor: 'pointer',
+                    border: selectedUserTags.includes(String(opt.value))
+                      ? '2.5px solid ' + platformTagColor(opt.label.split(' · ')[0] || '').textColor
+                      : '2.5px solid transparent',
+                  }"
+                  @click="toggleUserTagSelection(String(opt.value))"
+                >
+                  <span
+                    :style="{
+                      color: 'var(--text)',
+                      fontWeight: 500,
+                    }"
+                  >
+                    {{ opt.label.split(' · ')[1]?.split(' (')[0] || opt.label }}
+                  </span>
+                </NTag>
+              </template>
+              {{ opt.label }}
+            </NTooltip>
           </NFlex>
         </div>
+        <NFlex :size="'small'" class="mt-2 items-center justify-between">
+          <span class="text-xs" :style="{ color: 'var(--muted)' }"
+            >已选 {{ selectedUserTags.length }} 人</span
+          >
+          <NButton size="tiny" @click="showUserPanel = false">收起</NButton>
+        </NFlex>
       </div>
-    </NFlex>
+    </div>
 
     <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
       <div
@@ -1274,25 +1283,39 @@ onUnmounted(() => {
 }
 
 /* Panel tooltips must not capture mouse — user may want to click a tag behind them */
-.tag-panel .n-popover {
+.tab-panel .n-popover {
   pointer-events: none;
 }
 
-.tag-ops-group {
+.tab-bar {
+  position: relative;
+  z-index: 1;
+}
+
+.tab-trigger {
   border: 1px solid transparent;
   border-radius: 6px;
   padding: 2px 6px;
   transition: border-color 0.15s;
 }
-.tag-ops-active {
-  border-color: var(--accent, #2563eb);
-  background: var(--surface-strong, #fff);
+
+.tab-trigger-active {
+  border: 1px solid var(--muted);
+  border-bottom: none;
+  background: var(--surface-strong);
+  border-radius: 6px 6px 0 0;
+  padding: 2px 6px;
+  position: relative;
+  z-index: 2;
 }
-.tag-panel-expand {
-  margin-top: 4px;
-  border: 1px solid var(--muted, #d1d5db);
+
+.tab-panel {
+  border: 1px solid var(--muted);
   border-radius: 0 6px 6px 6px;
   padding: 8px;
-  background: var(--surface-strong, #fff);
+  background: var(--surface-strong);
+  margin-top: -1px;
+  position: relative;
+  z-index: 1;
 }
 </style>
