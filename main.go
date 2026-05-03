@@ -19,23 +19,28 @@ var assets embed.FS
 
 func main() {
 	cfg := config.Load()
-	app := NewApp(cfg)
+	app := NewApp(cfg, nil, nil)
 
-	// Initialize DB singleton early so controllers can use it.
+	// Initialize database.
 	dbPath, _ := app.resolveDatabasePath()
-	if db, err := database.InitDB(dbPath); err == nil {
-		sqlDB, _ := db.DB()
-		database.SetDefaultDB(db)
-		defer sqlDB.Close()
+	db, dbErr := database.InitDB(dbPath)
+	if dbErr != nil {
+		slog.New(slog.NewTextHandler(os.Stderr, nil)).Error("initialize database", "error", dbErr)
+		os.Exit(1)
 	}
+	sqlDB, _ := db.DB()
+	defer sqlDB.Close()
 
-	// Controllers
-	memberCtrl := &MemberController{}
-	productCtrl := &ProductController{}
-	waveCtrl := &WaveController{}
-	systemCtrl := &SystemController{appCfg: cfg}
-	templateCtrl := &TemplateController{}
-	sysCtrl = systemCtrl // wire into startup() via app.go global
+	// Controllers — wire *gorm.DB via constructor injection.
+	waveCtrl := &WaveController{db: db}
+	systemCtrl := &SystemController{appCfg: cfg, db: db}
+	memberCtrl := &MemberController{db: db}
+	productCtrl := &ProductController{db: db}
+	templateCtrl := &TemplateController{db: db}
+
+	// Wire controllers into App for startup() SetContext injection.
+	app.waveCtrl = waveCtrl
+	app.systemCtrl = systemCtrl
 
 	zoom := LoadZoom()
 

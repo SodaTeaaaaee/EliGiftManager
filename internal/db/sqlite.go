@@ -13,14 +13,6 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-var defaultDB *gorm.DB
-
-// SetDefaultDB stores the app-wide DB instance for controllers.
-func SetDefaultDB(db *gorm.DB) { defaultDB = db }
-
-// GetDB returns the app-wide DB instance; nil before SetDefaultDB is called.
-func GetDB() *gorm.DB { return defaultDB }
-
 func InitDB(dbPath string) (*gorm.DB, error) {
 	if dbPath == "" {
 		return nil, fmt.Errorf("initialize SQLite database failed: database path is required")

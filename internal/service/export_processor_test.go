@@ -19,7 +19,7 @@ func TestExportFilterByProductPlatform(t *testing.T) {
 	db := newServiceTestDB(t)
 
 	// -- Seed data --
-	wave := model.Wave{WaveNo: "PLATFORM-FILTER-001", Name: "multi-platform wave", Status: "draft"}
+	wave := model.Wave{WaveNo: "PLATFORM-FILTER-001", Name: "multi-platform wave", Status: model.WaveStatusDraft}
 	productBili := model.Product{Platform: "BILIBILI", Factory: "factory-A", FactorySKU: "BILI-001", Name: "B站挂件", ExtraData: "{}"}
 	productRouzo := model.Product{Platform: "柔造", Factory: "factory-B", FactorySKU: "ROUZO-001", Name: "柔造立牌", ExtraData: "{}"}
 	member1 := model.Member{Platform: "BILIBILI", PlatformUID: "uid-bili-01", ExtraData: "{}"}
@@ -94,7 +94,7 @@ func TestExportFilterByProductPlatform(t *testing.T) {
 	}
 
 	// Reset wave status back to draft so the second export can proceed.
-	if err := db.Model(&model.Wave{}).Where("id = ?", wave.ID).Update("status", "draft").Error; err != nil {
+	if err := db.Model(&model.Wave{}).Where("id = ?", wave.ID).Update("status", model.WaveStatusDraft).Error; err != nil {
 		t.Fatalf("reset wave status failed: %v", err)
 	}
 
@@ -122,7 +122,7 @@ func TestExportOrderCSVErrorsOnEmptyPlatformFilter(t *testing.T) {
 	t.Parallel()
 	db := newServiceTestDB(t)
 
-	wave := model.Wave{WaveNo: "EMPTY-FILTER-001", Name: "single-platform wave", Status: "draft"}
+	wave := model.Wave{WaveNo: "EMPTY-FILTER-001", Name: "single-platform wave", Status: model.WaveStatusDraft}
 	productBili := model.Product{Platform: "BILIBILI", Factory: "factory-A", FactorySKU: "BILI-001", Name: "B站挂件", ExtraData: "{}"}
 	member1 := model.Member{Platform: "BILIBILI", PlatformUID: "uid-bili-01", ExtraData: "{}"}
 	for _, r := range []any{&wave, &productBili, &member1} {
@@ -177,7 +177,7 @@ func TestWaveIsolation(t *testing.T) {
 	}
 
 	// Wave A: higher gift level.
-	waveA := model.Wave{WaveNo: "ISO-A-001", Name: "Wave A - 提督级", Status: "draft"}
+	waveA := model.Wave{WaveNo: "ISO-A-001", Name: "Wave A - 提督级", Status: model.WaveStatusDraft}
 	if err := db.Create(&waveA).Error; err != nil {
 		t.Fatalf("seed wave A failed: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestWaveIsolation(t *testing.T) {
 	}
 
 	// Wave B: lower gift level, same member.
-	waveB := model.Wave{WaveNo: "ISO-B-001", Name: "Wave B - 舰长级", Status: "draft"}
+	waveB := model.Wave{WaveNo: "ISO-B-001", Name: "Wave B - 舰长级", Status: model.WaveStatusDraft}
 	if err := db.Create(&waveB).Error; err != nil {
 		t.Fatalf("seed wave B failed: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestWaveCascadeDelete(t *testing.T) {
 	db := newServiceTestDB(t)
 
 	// -- Seed: Wave, Member, WaveMember, Product, DispatchRecord, user ProductTag --
-	wave := model.Wave{WaveNo: "CASCADE-001", Name: "cascade test wave", Status: "draft"}
+	wave := model.Wave{WaveNo: "CASCADE-001", Name: "cascade test wave", Status: model.WaveStatusDraft}
 	member := model.Member{Platform: "BILIBILI", PlatformUID: "uid-cascade-01", ExtraData: "{}"}
 	product := model.Product{Platform: "BILIBILI", Factory: "factory-A", FactorySKU: "CAS-001", Name: "cascade产品", ExtraData: "{}"}
 	for _, r := range []any{&wave, &member, &product} {
@@ -308,7 +308,7 @@ func TestWaveCascadeDelete(t *testing.T) {
 
 	// Create a user tag (ProductTag with TagType="user") — this is
 	// application-level metadata tied to a product, not a wave.
-	userTag := model.ProductTag{ProductID: product.ID, Platform: member.Platform, TagName: member.PlatformUID, TagType: "user", Quantity: 1}
+	userTag := model.ProductTag{ProductID: product.ID, Platform: member.Platform, TagName: member.PlatformUID, TagType: model.TagTypeUser, Quantity: 1}
 	if err := db.Create(&userTag).Error; err != nil {
 		t.Fatalf("seed user tag failed: %v", err)
 	}
@@ -361,7 +361,7 @@ func TestExportWavePreviewUnchanged(t *testing.T) {
 	t.Parallel()
 	db := newServiceTestDB(t)
 
-	wave := model.Wave{WaveNo: "PREVIEW-001", Name: "preview test", Status: "draft"}
+	wave := model.Wave{WaveNo: "PREVIEW-001", Name: "preview test", Status: model.WaveStatusDraft}
 	product := model.Product{Platform: "BILIBILI", Factory: "f", FactorySKU: "SKU", Name: "X", ExtraData: "{}"}
 	member := model.Member{Platform: "BILIBILI", PlatformUID: "uid-pv", ExtraData: "{}"}
 	for _, r := range []any{&wave, &product, &member} {

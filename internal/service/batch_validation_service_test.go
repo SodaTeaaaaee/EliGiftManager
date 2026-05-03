@@ -9,7 +9,7 @@ import (
 func TestValidateBatchBindsActiveAddressAndMarksMissingMembers(t *testing.T) {
 	t.Parallel()
 	db := newServiceTestDB(t)
-	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "test dispatch task", Status: "draft"}
+	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "test dispatch task", Status: model.WaveStatusDraft}
 	memberWithAddress := model.Member{Platform: "douyin", PlatformUID: "uid-with-address", ExtraData: "{}"}
 	memberWithoutAddress := model.Member{Platform: "kuaishou", PlatformUID: "uid-without-address", ExtraData: "{}"}
 	product := model.Product{Platform: "douyin", Factory: "factory", FactorySKU: "sku-001", Name: "gift", ExtraData: "{}"}

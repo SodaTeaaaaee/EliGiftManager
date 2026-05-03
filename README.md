@@ -23,25 +23,25 @@ go test ./...                # 后端测试
 
 ## 核心流程
 
-1. 导入会员 (Bilibili CSV) → Member 表 + Wave.LevelTags
-2. 导入商品 (柔造 ZIP) → Product 表 + ProductImage 多图
-3. Tag 商品 → ProductTag 关联
-4. AllocateByTags → DispatchRecord 创建
+1. 导入会员 (Bilibili CSV) → Member 表 + WaveMember 快照 + Wave.LevelTags
+2. 导入商品 (柔造 ZIP/CSV) → Product 表 + ProductImage 多图（DynamicTemplateRules 模板驱动）
+3. Tag 商品 → Level Tag（按平台+等级）+ User Tag（按具体会员）
+4. ReconcileWave → 按 Tag 自动计算 DispatchRecord（SSOT，幂等调和）
 5. BindDefaultAddresses → 补全收件地址
-6. ExportOrderCSV → 工厂规格 CSV 导出
+6. ExportOrderCSV → 工厂规格 CSV 导出（按商品平台过滤）
 
 ## 目录结构
 
 ```
-├── main.go                       # Wails bootstrap, DB 单例, Controller 绑定
-├── app.go                        # 生命周期 + PickCSV/ZIP + 共享类型/函数
+├── main.go                       # Wails bootstrap, DB 初始化, Controller DI 注入
+├── app.go                        # 生命周期（含 Temp 清理） + PickCSV/ZIP + 共享类型/函数
 ├── controller_*.go               # 5 个领域 Controller (Member/Product/Wave/System/Template)
 ├── internal/
 │   ├── config/                   # 应用元数据
-│   ├── db/                       # SQLite 初始化 (WAL), 自动迁移, DB 单例
+│   ├── db/                       # SQLite 初始化 (WAL), 自动迁移
 │   ├── middleware/               # AssetServer Middleware (/local-images/)
-│   ├── model/                    # GORM 模型 (Member, Product, Wave, ProductTag, etc.)
-│   └── service/                  # 业务逻辑 (CSV 解析, 导入流水线, 图片存储, 智能路径)
+│   ├── model/                    # GORM 模型 + 常量 + DynamicTemplateRules schema + Dispatch 状态
+│   └── service/                  # 业务逻辑 (Dynamic Parser, 导入流水线, 波次调和, 导出, 图片存储, 智能路径)
 ├── frontend/
 │   ├── src/pages/                # 路由级 Vue 页面
 │   ├── src/shared/lib/wails/app.ts  # Wails 桥接层 (单一入口)
@@ -62,8 +62,10 @@ go test ./...                # 后端测试
 - Wails 桥接层收敛在 `app.ts`，导入自 6 个 Controller 绑定文件
 - Deno only — 前端工具链不用 npm/yarn/pnpm
 - Controller 按领域拆分，新增业务方法应加入对应 Controller
-- DB 访问通过 `database.GetDB()` 单例
+- Controller 通过 DI 持有 `*gorm.DB`（`main.go` 显式注入），不再使用全局单例
 - 路径解析统一使用 `service.ResolveDataDir()` / `ResolveAssetsDir()`
+- CSV 模板统一使用 `DynamicTemplateRules` JSON 格式（`internal/model/dynamic_mapping.go`），旧 flat/V2 格式不再兼容
+- 领域逻辑（ReconcileWave、导入流水线、导出）在 `internal/service/`，Controller 为 thin wrapper
 - 模板不自动写入 DB，用户通过「添加模板」弹窗从预设选择或自定义
 
 ## 生成与忽略

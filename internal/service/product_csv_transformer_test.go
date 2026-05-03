@@ -11,7 +11,7 @@ import (
 func TestParseProductCSVSuccess(t *testing.T) {
 	t.Parallel()
 	csvFile := writeTestCSVFile(t, []string{"平台,工厂,商品SKU,商品名称,主图路径,颜色,尺码", "抖音,华东工厂,sku-100,保温杯,E:\\images\\cup.png,白色,大号"})
-	template := model.TemplateConfig{Platform: "抖音", Type: model.TemplateTypeImportProduct, Name: "礼物导入模板", MappingRules: `{"platform":"平台","factory":"工厂","factory_sku":"商品SKU","name":"商品名称","cover_image":"主图路径"}`}
+	template := model.TemplateConfig{Platform: "抖音", Type: model.TemplateTypeImportProduct, Name: "礼物导入模板", MappingRules: `{"hasHeader":true,"mapping":{"platform":{"sourceColumn":"平台"},"factory":{"sourceColumn":"工厂"},"factory_sku":{"sourceColumn":"商品SKU","required":true},"name":{"sourceColumn":"商品名称","required":true},"cover_image":{"sourceColumn":"主图路径"}},"extraData":{"strategy":"catch_all"}}`}
 	products, err := ParseProductCSV(csvFile, template)
 	if err != nil {
 		t.Fatalf("ParseProductCSV returned unexpected error: %v", err)
@@ -38,12 +38,12 @@ func TestParseProductCSVSuccess(t *testing.T) {
 func TestParseProductCSVRejectsMissingRequiredField(t *testing.T) {
 	t.Parallel()
 	csvFile := writeTestCSVFile(t, []string{"平台,工厂,商品SKU,商品名称", "抖音,华东工厂,,保温杯"})
-	template := model.TemplateConfig{Platform: "抖音", Type: model.TemplateTypeImportProduct, Name: "礼物导入模板", MappingRules: `{"platform":"平台","factory":"工厂","factory_sku":"商品SKU","name":"商品名称"}`}
+	template := model.TemplateConfig{Platform: "抖音", Type: model.TemplateTypeImportProduct, Name: "礼物导入模板", MappingRules: `{"hasHeader":true,"mapping":{"platform":{"sourceColumn":"平台"},"factory":{"sourceColumn":"工厂"},"factory_sku":{"sourceColumn":"商品SKU","required":true},"name":{"sourceColumn":"商品名称","required":true}},"extraData":{"strategy":"catch_all"}}`}
 	_, err := ParseProductCSV(csvFile, template)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "FactorySKU") {
-		t.Fatalf("expected missing FactorySKU error, got %v", err)
+	if !strings.Contains(err.Error(), "factory_sku") {
+		t.Fatalf("expected missing factory_sku error, got %v", err)
 	}
 }

@@ -26,7 +26,7 @@ func TestBuildMemberItemsAggregatesDispatchCounts(t *testing.T) {
 	memberWithDispatches := model.Member{Platform: "douyin", PlatformUID: "uid-1", ExtraData: "{}"}
 	memberWithoutDispatches := model.Member{Platform: "kuaishou", PlatformUID: "uid-2", ExtraData: "{}"}
 	product := model.Product{Platform: "douyin", Factory: "factory-a", FactorySKU: "sku-1", Name: "gift-a", ExtraData: "{}"}
-	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "wave-a", Status: "draft"}
+	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "wave-a", Status: model.WaveStatusDraft}
 	for _, record := range []any{&memberWithDispatches, &memberWithoutDispatches, &product, &wave} {
 		if err := db.Create(record).Error; err != nil {
 			t.Fatalf("failed to seed test record: %v", err)
@@ -118,7 +118,7 @@ func TestBuildProductItemsAggregatesDispatchStats(t *testing.T) {
 	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	member := model.Member{Platform: "douyin", PlatformUID: "uid-1", ExtraData: "{}"}
-	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "wave-a", Status: "draft"}
+	wave := model.Wave{WaveNo: "TASK-TEST-001", Name: "wave-a", Status: model.WaveStatusDraft}
 	productWithDispatches := model.Product{Platform: "douyin", Factory: "factory-a", FactorySKU: "sku-1", Name: "gift-a", ExtraData: "{}"}
 	productWithoutDispatches := model.Product{Platform: "douyin", Factory: "factory-b", FactorySKU: "sku-2", Name: "gift-b", ExtraData: "{}"}
 	for _, record := range []any{&member, &wave, &productWithDispatches, &productWithoutDispatches} {

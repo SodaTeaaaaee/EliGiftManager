@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
-	dbpkg "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -21,9 +20,8 @@ import (
 type SystemController struct {
 	appCfg config.App
 	appCtx context.Context
+	db     *gorm.DB
 }
-
-func (c *SystemController) db() *gorm.DB { return dbpkg.GetDB() }
 
 // SetContext is called from App.startup once the Wails runtime context is available.
 func (c *SystemController) SetContext(ctx context.Context) { c.appCtx = ctx }
@@ -33,10 +31,7 @@ func (c *SystemController) Bootstrap() BootstrapPayload {
 }
 
 func (c *SystemController) PingDB() string {
-	db := c.db()
-	if db == nil {
-		return "database not available"
-	}
+	db := c.db
 	if err := db.Exec("SELECT 1").Error; err != nil {
 		return fmt.Sprintf("database probe failed: %v", err)
 	}
@@ -44,10 +39,7 @@ func (c *SystemController) PingDB() string {
 }
 
 func (c *SystemController) GetDashboard() (DashboardPayload, error) {
-	db := c.db()
-	if db == nil {
-		return DashboardPayload{}, fmt.Errorf("database not available")
-	}
+	db := c.db
 	dbPath, _ := appDatabasePath()
 	payload := DashboardPayload{DatabasePath: dbPath}
 	if err := db.Model(&model.Member{}).Count(&payload.MemberCount).Error; err != nil {

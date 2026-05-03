@@ -124,7 +124,7 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 	}
 
 	// 4. Update wave status to "exported".
-	if err := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("status", "exported").Error; err != nil {
+	if err := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("status", model.WaveStatusExported).Error; err != nil {
 		return fmt.Errorf("export order CSV failed: update wave status: %w", err)
 	}
 

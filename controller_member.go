@@ -4,21 +4,17 @@ import (
 	"fmt"
 	"strings"
 
-	dbpkg "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
 	"gorm.io/gorm"
 )
 
-type MemberController struct{}
-
-func (c *MemberController) db() *gorm.DB { return dbpkg.GetDB() }
+type MemberController struct {
+	db *gorm.DB
+}
 
 // ListMembers ...
 func (c *MemberController) ListMembers(page, pageSize int, keyword, platform string) (MemberListPayload, error) {
-	db := c.db()
-	if db == nil {
-		return MemberListPayload{}, fmt.Errorf("database not available")
-	}
+	db := c.db
 	page, pageSize = normalizePagination(page, pageSize)
 
 	countQuery := db.Model(&model.Member{})
@@ -62,10 +58,7 @@ func (c *MemberController) ListMembers(page, pageSize int, keyword, platform str
 }
 
 func (c *MemberController) SetDefaultAddress(memberID, addressID uint) error {
-	db := c.db()
-	if db == nil {
-		return fmt.Errorf("database not available")
-	}
+	db := c.db
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&model.MemberAddress{}).Where("member_id = ?", memberID).Update("is_default", false).Error; err != nil {
 			return err
@@ -83,10 +76,7 @@ func (c *MemberController) SetDefaultAddress(memberID, addressID uint) error {
 
 // ListWaveMembers returns members associated with a specific wave.
 func (c *MemberController) ListWaveMembers(waveID uint) ([]MemberItem, error) {
-	db := c.db()
-	if db == nil {
-		return nil, fmt.Errorf("database not available")
-	}
+	db := c.db
 
 	// 1. Load wave_members with snapshot fields + related Member.Addresses
 	var waveMembers []model.WaveMember
@@ -132,10 +122,7 @@ func (c *MemberController) ListWaveMembers(waveID uint) ([]MemberItem, error) {
 
 // AddMemberAddress creates a new address for a member.
 func (c *MemberController) AddMemberAddress(memberID uint, recipientName, phone, address string) (model.MemberAddress, error) {
-	db := c.db()
-	if db == nil {
-		return model.MemberAddress{}, fmt.Errorf("database not available")
-	}
+	db := c.db
 	recipientName = strings.TrimSpace(recipientName)
 	phone = strings.TrimSpace(phone)
 	address = strings.TrimSpace(address)
@@ -158,10 +145,7 @@ func (c *MemberController) AddMemberAddress(memberID uint, recipientName, phone,
 
 // UpdateMemberAddress updates an existing active address.
 func (c *MemberController) UpdateMemberAddress(addressID uint, recipientName, phone, address string) error {
-	db := c.db()
-	if db == nil {
-		return fmt.Errorf("database not available")
-	}
+	db := c.db
 	recipientName = strings.TrimSpace(recipientName)
 	phone = strings.TrimSpace(phone)
 	address = strings.TrimSpace(address)
@@ -185,10 +169,7 @@ func (c *MemberController) UpdateMemberAddress(addressID uint, recipientName, ph
 // DeleteMemberAddress soft-deletes an address. If it was the default, unsets
 // the default flag for the member first.
 func (c *MemberController) DeleteMemberAddress(addressID uint) error {
-	db := c.db()
-	if db == nil {
-		return fmt.Errorf("database not available")
-	}
+	db := c.db
 	return db.Transaction(func(tx *gorm.DB) error {
 		var addr model.MemberAddress
 		if err := tx.Where("id = ? AND is_deleted = ?", addressID, false).First(&addr).Error; err != nil {
@@ -204,10 +185,7 @@ func (c *MemberController) DeleteMemberAddress(addressID uint) error {
 }
 
 func (c *MemberController) RemoveMemberFromWave(waveID, waveMemberID uint) error {
-	db := c.db()
-	if db == nil {
-		return fmt.Errorf("database not available")
-	}
+	db := c.db
 	return db.Transaction(func(tx *gorm.DB) error {
 		// Find wave_member record to get the underlying member_id
 		var wm model.WaveMember
@@ -215,7 +193,7 @@ func (c *MemberController) RemoveMemberFromWave(waveID, waveMemberID uint) error
 			return fmt.Errorf("member not found in this wave")
 		}
 		// Delete user tags referencing this wave member (manual FK cascade).
-		if err := tx.Where("wave_member_id = ? AND tag_type = 'user'", wm.ID).Delete(&model.ProductTag{}).Error; err != nil {
+		if err := tx.Where("wave_member_id = ? AND tag_type = ?", wm.ID, model.TagTypeUser).Delete(&model.ProductTag{}).Error; err != nil {
 			return fmt.Errorf("clean user tags failed: %w", err)
 		}
 		// Clean up associated dispatch records by wave_id + member_id

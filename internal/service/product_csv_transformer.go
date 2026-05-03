@@ -20,10 +20,12 @@ func ParseProductCSV(csvFile string, template model.TemplateConfig) ([]model.Pro
 	if err := ensureTemplateType(template, model.TemplateTypeImportProduct, "product import"); err != nil {
 		return nil, fmt.Errorf("parse product CSV failed: %w", err)
 	}
-	mappingRules, err := parseTemplateMappingRules(template.MappingRules, normalizeProductFieldName)
-	if err != nil {
-		return nil, fmt.Errorf("parse product CSV failed: %w", err)
+
+	var rules model.DynamicTemplateRules
+	if err := json.Unmarshal([]byte(template.MappingRules), &rules); err != nil {
+		return nil, fmt.Errorf("parse product CSV failed: parse mapping rules: %w", err)
 	}
+
 	file, err := os.Open(csvFile)
 	if err != nil {
 		return nil, fmt.Errorf("parse product CSV failed: open %q failed: %w", csvFile, err)
@@ -40,14 +42,6 @@ func ParseProductCSV(csvFile string, template model.TemplateConfig) ([]model.Pro
 		}
 		return nil, fmt.Errorf("parse product CSV failed: read header failed: %w", err)
 	}
-	headerIndex, normalizedHeaders, err := buildHeaderIndex(headers)
-	if err != nil {
-		return nil, fmt.Errorf("parse product CSV failed: %w", err)
-	}
-	fieldColumns, consumedColumns, err := resolveFieldColumns(anyMapFromStringMap(mappingRules), headerIndex)
-	if err != nil {
-		return nil, fmt.Errorf("parse product CSV failed: %w", err)
-	}
 
 	products := make([]model.Product, 0)
 	for rowNumber := 2; ; rowNumber++ {
@@ -61,54 +55,46 @@ func ParseProductCSV(csvFile string, template model.TemplateConfig) ([]model.Pro
 		if isEmptyRecord(record) {
 			continue
 		}
-		product := model.Product{Platform: template.Platform, Factory: template.Platform, ExtraData: "{}"}
-		for fieldName, columnIndex := range fieldColumns {
-			value := readCSVCell(record, columnIndex)
-			switch fieldName {
-			case "platform":
-				product.Platform = value
-			case "factory":
-				product.Factory = value
-			case "factory_sku":
-				product.FactorySKU = value
-			case "name":
-				product.Name = value
-			case "cover_image":
-				product.CoverImage = value
-			default:
-				return nil, fmt.Errorf("parse product CSV failed: row %d has unsupported field %q", rowNumber, fieldName)
-			}
+
+		coreData, extraData, parseErr := ParseRowDynamically(record, headers, rules)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse product CSV failed: row %d: %w", rowNumber, parseErr)
 		}
+
+		product := model.Product{
+			Platform:    strings.TrimSpace(coreData["platform"]),
+			Factory:     strings.TrimSpace(coreData["factory"]),
+			FactorySKU:  strings.TrimSpace(coreData["factory_sku"]),
+			Name:        strings.TrimSpace(coreData["name"]),
+			CoverImage:  strings.TrimSpace(coreData["cover_image"]),
+			ExtraData:   "{}",
+		}
+
+		// Fallback: platform and factory default to template.Platform when
+		// the CSV column is absent or empty.
+		if product.Platform == "" {
+			product.Platform = template.Platform
+		}
+		if product.Factory == "" {
+			product.Factory = template.Platform
+		}
+
 		if err := validateProductRecord(product, rowNumber); err != nil {
 			return nil, fmt.Errorf("parse product CSV failed: %w", err)
 		}
-		extraDataJSON, err := buildExtraDataJSON(normalizedHeaders, record, consumedColumns)
-		if err != nil {
-			return nil, fmt.Errorf("parse product CSV failed: row %d build ExtraData failed: %w", rowNumber, err)
+
+		// Serialize extra data to JSON.
+		if len(extraData) > 0 {
+			encoded, jsonErr := json.Marshal(extraData)
+			if jsonErr != nil {
+				return nil, fmt.Errorf("parse product CSV failed: row %d serialize extra data: %w", rowNumber, jsonErr)
+			}
+			product.ExtraData = string(encoded)
 		}
-		product.ExtraData = extraDataJSON
+
 		products = append(products, product)
 	}
 	return products, nil
-}
-
-func normalizeProductFieldName(field string) (string, error) {
-	normalized := strings.ToLower(strings.TrimSpace(field))
-	normalized = strings.NewReplacer("_", "", "-", "", " ", "").Replace(normalized)
-	switch normalized {
-	case "platform", "平台", "平台名", "平台名称":
-		return "platform", nil
-	case "factory", "工厂", "工厂名", "工厂名称", "供应商", "供应商名称":
-		return "factory", nil
-	case "factorysku", "sku", "工厂sku", "平台sku", "商品sku", "货号":
-		return "factory_sku", nil
-	case "name", "productname", "商品名", "商品名称", "产品名", "产品名称":
-		return "name", nil
-	case "coverimage", "imagepath", "image", "imageurl", "图片", "图片路径", "主图", "主图路径":
-		return "cover_image", nil
-	default:
-		return "", fmt.Errorf("unsupported product field %q", field)
-	}
 }
 
 func validateProductRecord(product model.Product, rowNumber int) error {
@@ -124,12 +110,13 @@ func validateProductRecord(product model.Product, rowNumber int) error {
 	return nil
 }
 
-// productZIPTemplateConfig 从 ZIP 模板 MappingRules 中提取 ZIP 格式特有字段。
+// productZIPTemplateConfig extracts ZIP-format specific fields from the
+// template MappingRules.  It embeds DynamicTemplateRules so that the common
+// format/hasHeader/mapping/extraData fields are parsed once.
 type productZIPTemplateConfig struct {
-	Format     string            `json:"format"`
-	CSVPattern string            `json:"csvPattern"`
-	ImageDir   string            `json:"imageDir"`
-	Mapping    map[string]string `json:"mapping"`
+	model.DynamicTemplateRules
+	CSVPattern string `json:"csvPattern"`
+	ImageDir   string `json:"imageDir"`
 }
 
 // ParseProductZIP 解压 ZIP 文件，从中提取 CSV 并解析为 Product 列表。
@@ -138,7 +125,7 @@ type productZIPTemplateConfig struct {
 //  1. 创建临时解压目录
 //  2. archive/zip 解压
 //  3. 从 MappingRules 读取 csvPattern（如 "*.csv"）
-//  4. 找到匹配的 CSV 文件，调用现有 ParseProductCSV 逻辑
+//  4. 找到匹配的 CSV 文件，调用 ParseProductCSV
 //  5. 返回 products + 解压目录路径（后续传给 ProcessCoverImages）
 func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Product, string, error) {
 	if strings.TrimSpace(zipPath) == "" {
@@ -148,7 +135,8 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 		return nil, "", fmt.Errorf("parse product ZIP failed: %w", err)
 	}
 
-	// 解析模板配置
+	// Parse the template JSON as productZIPTemplateConfig, which embeds
+	// DynamicTemplateRules and adds csvPattern/imageDir.
 	var zipCfg productZIPTemplateConfig
 	if err := json.Unmarshal([]byte(template.MappingRules), &zipCfg); err != nil {
 		return nil, "", fmt.Errorf("parse product ZIP failed: parse MappingRules: %w", err)
@@ -156,17 +144,14 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 	if zipCfg.CSVPattern == "" {
 		zipCfg.CSVPattern = "*.csv"
 	}
-	if zipCfg.Mapping == nil {
-		zipCfg.Mapping = map[string]string{}
-	}
 
-	// 创建临时解压目录
+	// Create temp extract directory.
 	extractDir, err := os.MkdirTemp("", "eligift-product-zip-*")
 	if err != nil {
 		return nil, "", fmt.Errorf("parse product ZIP failed: create temp dir: %w", err)
 	}
 
-	// 解压
+	// Unzip.
 	archive, err := zip.OpenReader(zipPath)
 	if err != nil {
 		os.RemoveAll(extractDir)
@@ -181,7 +166,7 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 		}
 		// Sanitize filename for Windows compatibility (* → _)
 		destPath := filepath.Join(extractDir, strings.ReplaceAll(f.Name, "*", "_"))
-		// 防止目录遍历
+		// Prevent directory traversal.
 		cleanExtract, _ := filepath.Abs(extractDir)
 		cleanDest, _ := filepath.Abs(destPath)
 		if !strings.HasPrefix(cleanDest, cleanExtract+string(os.PathSeparator)) && cleanDest != cleanExtract {
@@ -207,7 +192,7 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 		}
 	}
 
-	// 找到匹配的 CSV 文件
+	// Find matching CSV file.
 	csvPattern := zipCfg.CSVPattern
 	matches, err := filepath.Glob(filepath.Join(extractDir, csvPattern))
 	if err != nil || len(matches) == 0 {
@@ -226,17 +211,16 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 	}
 	csvPath := matches[0]
 
-	// 构建一个临时 template 给 ParseProductCSV 使用（使用 ZIP 模板内的 mapping 段）
+	// Build a temporary TemplateConfig for ParseProductCSV using the embedded
+	// DynamicTemplateRules serialized as MappingRules JSON.
+	// Override format to "csv" so that ParseProductCSV treats it correctly.
+	zipCfg.Format = model.TemplateFormatCSV
+	rulesJSON, _ := json.Marshal(zipCfg.DynamicTemplateRules)
 	csvTemplate := model.TemplateConfig{
-		Platform: template.Platform,
-		Type:     template.Type,
-		Name:     template.Name,
-	}
-	if len(zipCfg.Mapping) > 0 {
-		mappingJSON, _ := json.Marshal(zipCfg.Mapping)
-		csvTemplate.MappingRules = string(mappingJSON)
-	} else {
-		csvTemplate.MappingRules = template.MappingRules
+		Platform:     template.Platform,
+		Type:         template.Type,
+		Name:         template.Name,
+		MappingRules: string(rulesJSON),
 	}
 
 	products, err := ParseProductCSV(csvPath, csvTemplate)

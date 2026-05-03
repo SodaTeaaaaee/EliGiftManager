@@ -26,31 +26,14 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		return 0, fmt.Errorf("import dispatch wave failed: %w", err)
 	}
 
-	mappingRules, err := parseTemplateMappingRulesV2(importTemplate.MappingRules, normalizeDispatchImportFieldName)
-	if err != nil {
-		return 0, fmt.Errorf("import dispatch wave failed: %w", err)
-	}
-
-	giftNameIdx, err := dispatchImportColumnIndex(mappingRules, "gift_name")
-	if err != nil {
-		return 0, fmt.Errorf("import dispatch wave failed: gift_name column index: %w", err)
-	}
-	platformUidIdx, err := dispatchImportColumnIndex(mappingRules, "platform_uid")
-	if err != nil {
-		return 0, fmt.Errorf("import dispatch wave failed: platform_uid column index: %w", err)
-	}
-	nicknameIdx, err := dispatchImportColumnIndex(mappingRules, "nickname")
-	if err != nil {
-		return 0, fmt.Errorf("import dispatch wave failed: nickname column index: %w", err)
-	}
-
-	platformIdx := -1
-	if idx, platformIdxErr := dispatchImportColumnIndex(mappingRules, "platform"); platformIdxErr == nil {
-		platformIdx = idx
+	// Parse template mapping rules to DynamicTemplateRules.
+	var rules model.DynamicTemplateRules
+	if err := json.Unmarshal([]byte(importTemplate.MappingRules), &rules); err != nil {
+		return 0, fmt.Errorf("import dispatch wave failed: parse mapping rules: %w", err)
 	}
 
 	type csvRow struct {
-		giftName    string
+		giftLevel   string
 		platformUid string
 		nickname    string
 		platform    string
@@ -59,7 +42,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 	// Parse CSV and deduplicate to unique (platform, platformUid) pairs.
 	// Last occurrence wins when the same member appears multiple times.
 	dedupMap := make(map[string]csvRow)  // key: platform + "||" + platformUid
-	levelTagMap := map[string]struct{}{} // key: platform + "::" + giftName
+	levelTagMap := map[string]struct{}{} // key: platform + "::" + giftLevel
 
 	file, oErr := os.Open(csvPath)
 	if oErr != nil {
@@ -83,20 +66,25 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 			continue
 		}
 
+		coreData, _, parseErr := ParseRowDynamically(record, nil, rules)
+		if parseErr != nil {
+			return 0, fmt.Errorf("import dispatch wave failed: line %d: %w", lineNo, parseErr)
+		}
+
 		row := csvRow{
-			giftName:    readCSVCell(record, giftNameIdx),
-			platformUid: readCSVCell(record, platformUidIdx),
-			nickname:    readCSVCell(record, nicknameIdx),
+			giftLevel:   coreData["gift_level"],
+			platformUid: coreData["platform_uid"],
+			nickname:    coreData["nickname"],
+			platform:    coreData["platform"],
 		}
-		if platformIdx >= 0 {
-			row.platform = readCSVCell(record, platformIdx)
-		}
+
+		// platform fallback when columnIndex is -1 (column absent by design).
 		if row.platform == "" {
 			row.platform = importTemplate.Platform
 		}
 
-		if row.giftName == "" || row.platformUid == "" {
-			return 0, fmt.Errorf("import dispatch wave failed: line %d missing required fields (giftName=%q, platformUid=%q)", lineNo, row.giftName, row.platformUid)
+		if row.giftLevel == "" || row.platformUid == "" {
+			return 0, fmt.Errorf("import dispatch wave failed: line %d missing required fields (giftLevel=%q, platformUid=%q)", lineNo, row.giftLevel, row.platformUid)
 		}
 
 		// Deduplicate: last row for a given (platform, uid) wins.
@@ -104,7 +92,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		dedupMap[dedupKey] = row
 
 		// Collect unique level tags.
-		ltKey := row.platform + "::" + row.giftName
+		ltKey := row.platform + "::" + row.giftLevel
 		levelTagMap[ltKey] = struct{}{}
 	}
 
@@ -115,7 +103,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 	// Transaction: upsert members, maintain nicknames, upsert wave_members, prune stale.
 	importedMemberIDs := make(map[uint]bool)
 
-	err = db.Transaction(func(tx *gorm.DB) error {
+	err := db.Transaction(func(tx *gorm.DB) error {
 		for _, row := range dedupMap {
 			// Upsert global member (platform + platform_uid only; no giftLevel in extra_data).
 			member := model.Member{
@@ -152,7 +140,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 			if updateErr := tx.Model(&wm).Updates(map[string]any{
 				"platform":        row.platform,
 				"platform_uid":    row.platformUid,
-				"gift_level":      row.giftName,
+				"gift_level":      row.giftLevel,
 				"latest_nickname": latestNick,
 			}).Error; updateErr != nil {
 				return fmt.Errorf("update wave member snapshot failed: %w", updateErr)
@@ -172,7 +160,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 				continue
 			}
 			// Delete user tags referencing this wave member.
-			if err := tx.Where("wave_member_id = ? AND tag_type = 'user'", wm.ID).Delete(&model.ProductTag{}).Error; err != nil {
+			if err := tx.Where("wave_member_id = ? AND tag_type = ?", wm.ID, model.TagTypeUser).Delete(&model.ProductTag{}).Error; err != nil {
 				return fmt.Errorf("delete user tags for removed wave member (id=%d) failed: %w", wm.ID, err)
 			}
 			// Delete dispatch records for this (wave, member) pair.
@@ -209,41 +197,4 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 	}
 
 	return len(dedupMap), nil
-}
-
-func normalizeDispatchImportFieldName(field string) (string, error) {
-	normalized := strings.ToLower(strings.TrimSpace(field))
-	normalized = strings.NewReplacer("_", "", "-", "", " ", "").Replace(normalized)
-	switch normalized {
-	case "giftname", "gift", "礼物名", "礼物名称", "gift_name":
-		return "gift_name", nil
-	case "platformuid", "uid", "用户id", "平台uid", "platform_uid":
-		return "platform_uid", nil
-	case "nickname", "nick", "昵称":
-		return "nickname", nil
-	case "platform", "平台":
-		return "platform", nil
-	default:
-		return "", fmt.Errorf("unsupported dispatch import field %q", field)
-	}
-}
-
-func dispatchImportColumnIndex(mappingRules map[string]any, fieldName string) (int, error) {
-	val, ok := mappingRules[fieldName]
-	if !ok {
-		return 0, fmt.Errorf("field %q not found in mapping rules", fieldName)
-	}
-	meta, ok := val.(map[string]interface{})
-	if !ok {
-		return 0, fmt.Errorf("expected mapping rule object for field %q, got %T (use new format with columnIndex)", fieldName, val)
-	}
-	ci, ok := meta["columnIndex"]
-	if !ok {
-		return 0, fmt.Errorf("field %q mapping rule missing columnIndex", fieldName)
-	}
-	idx, ok := ci.(float64)
-	if !ok {
-		return 0, fmt.Errorf("field %q columnIndex must be a number, got %T", fieldName, ci)
-	}
-	return int(idx), nil
 }

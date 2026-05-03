@@ -62,6 +62,10 @@ export function RemoveProductFromWave(arg1, arg2) {
   return window['go']['main']['WaveController']['RemoveProductFromWave'](arg1, arg2);
 }
 
+export function SetContext(arg1) {
+  return window['go']['main']['WaveController']['SetContext'](arg1);
+}
+
 export function SetDispatchAddress(arg1, arg2, arg3) {
   return window['go']['main']['WaveController']['SetDispatchAddress'](arg1, arg2, arg3);
 }

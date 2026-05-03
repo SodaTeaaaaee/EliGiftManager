@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	dbpkg "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
 	"gorm.io/gorm"
 )
 
-type TemplateController struct{}
-
-func (c *TemplateController) db() *gorm.DB { return dbpkg.GetDB() }
+type TemplateController struct {
+	db *gorm.DB
+}
 
 func (c *TemplateController) CreateTemplate(platform, templateType, name, mappingRules string) (TemplateItem, error) {
 	platform = strings.TrimSpace(platform)
@@ -29,10 +28,7 @@ func (c *TemplateController) CreateTemplate(platform, templateType, name, mappin
 	if err := json.Unmarshal([]byte(mappingRules), &probe); err != nil {
 		return TemplateItem{}, fmt.Errorf("mapping rules must be valid JSON: %w", err)
 	}
-	db := c.db()
-	if db == nil {
-		return TemplateItem{}, fmt.Errorf("database not available")
-	}
+	db := c.db
 	template := model.TemplateConfig{Platform: platform, Type: templateType, Name: name, MappingRules: mappingRules}
 	if err := db.Create(&template).Error; err != nil {
 		return TemplateItem{}, err
@@ -41,10 +37,7 @@ func (c *TemplateController) CreateTemplate(platform, templateType, name, mappin
 }
 
 func (c *TemplateController) ListTemplates() ([]TemplateItem, error) {
-	db := c.db()
-	if db == nil {
-		return nil, fmt.Errorf("database not available")
-	}
+	db := c.db
 	var templates []model.TemplateConfig
 	if err := db.Order("platform ASC, type ASC, updated_at DESC").Find(&templates).Error; err != nil {
 		return nil, err
@@ -69,13 +62,13 @@ func (c *TemplateController) ListDefaultTemplates() ([]TemplateItem, error) {
 			Platform:     "柔造",
 			Type:         model.TemplateTypeImportProduct,
 			Name:         "柔造 商品导入",
-			MappingRules: `{"format":"zip","csvPattern":"*.csv","imageDir":"主图","mapping":{"name":"商品名称","factorySku":"商家编码"}}`,
+			MappingRules: `{"format":"zip","hasHeader":true,"mapping":{"name":{"sourceColumn":"商品名称","required":true},"factory_sku":{"sourceColumn":"商家编码","required":true}},"extraData":{"strategy":"catch_all"}}`,
 		},
 		{
 			Platform:     "BILIBILI",
 			Type:         model.TemplateTypeImportDispatchRecord,
 			Name:         "BILIBILI 会员导入",
-			MappingRules: `{"hasHeader":false,"mapping":{"giftName":{"columnIndex":0},"platformUid":{"columnIndex":1,"required":true},"nickname":{"columnIndex":2}}}`,
+			MappingRules: `{"format":"csv","hasHeader":false,"mapping":{"gift_level":{"columnIndex":0,"required":true},"platform_uid":{"columnIndex":1,"required":true},"nickname":{"columnIndex":2},"platform":{"columnIndex":-1}},"extraData":{"strategy":"catch_all"}}`,
 		},
 		{
 			Platform:     "柔造",
@@ -111,10 +104,7 @@ func (c *TemplateController) UpdateTemplate(id uint, platform, templateType, nam
 	if err := json.Unmarshal([]byte(mappingRules), &probe); err != nil {
 		return fmt.Errorf("mapping rules must be valid JSON: %w", err)
 	}
-	db := c.db()
-	if db == nil {
-		return fmt.Errorf("database not available")
-	}
+	db := c.db
 	result := db.Model(&model.TemplateConfig{}).Where("id = ?", id).Updates(map[string]any{
 		"platform":      platform,
 		"type":          templateType,

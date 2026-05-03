@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ResolveDataDir 三级探测：
@@ -55,4 +56,30 @@ func ResolveAssetsDir() (string, error) {
 		return "", fmt.Errorf("resolve assets dir: %w", err)
 	}
 	return dir, nil
+}
+
+// CleanupTempDirs removes eligift-product-zip-* temporary directories that are
+// older than 1 hour.  Called once at app startup to prevent stale unpacked ZIP
+// directories from accumulating in the system temp folder.
+func CleanupTempDirs() {
+	dirs, err := os.ReadDir(os.TempDir())
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-1 * time.Hour)
+	for _, d := range dirs {
+		if !d.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(d.Name(), "eligift-product-zip-") {
+			continue
+		}
+		info, err := d.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			os.RemoveAll(filepath.Join(os.TempDir(), d.Name()))
+		}
+	}
 }

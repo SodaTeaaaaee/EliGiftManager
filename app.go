@@ -19,23 +19,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// ---- globals (init-time wiring) ----
-
-// controllerCtx is kept for controller_wave.go (ExportOrderCSV SaveFileDialog).
-// It will be migrated to an instance field in a follow-up.
-var controllerCtx context.Context
-
-// sysCtrl is set by main() so App.startup can feed it the Wails runtime context.
-var sysCtrl *SystemController
-
-// SetControllerContext stores the Wails context for controller use.
-func SetControllerContext(ctx context.Context) { controllerCtx = ctx }
-
 // ---- App struct ----
 
 type App struct {
-	ctx context.Context
-	cfg config.App
+	ctx        context.Context
+	cfg        config.App
+	waveCtrl   *WaveController
+	systemCtrl *SystemController
 }
 
 // ---- shared payload types (used by controllers) ----
@@ -175,14 +165,19 @@ type TemplateItem struct {
 
 // ---- App: lifecycle + file-picker ----
 
-func NewApp(cfg config.App) *App { return &App{cfg: cfg} }
+func NewApp(cfg config.App, waveCtrl *WaveController, systemCtrl *SystemController) *App {
+	return &App{cfg: cfg, waveCtrl: waveCtrl, systemCtrl: systemCtrl}
+}
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	controllerCtx = ctx
-	if sysCtrl != nil {
-		sysCtrl.appCtx = ctx
+	if a.waveCtrl != nil {
+		a.waveCtrl.SetContext(ctx)
 	}
+	if a.systemCtrl != nil {
+		a.systemCtrl.SetContext(ctx)
+	}
+	service.CleanupTempDirs()
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {

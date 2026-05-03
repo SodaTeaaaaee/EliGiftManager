@@ -4,21 +4,18 @@ import (
 	"fmt"
 	"strings"
 
-	dbpkg "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
-type ProductController struct{}
-
-func (c *ProductController) db() *gorm.DB { return dbpkg.GetDB() }
+type ProductController struct {
+	db *gorm.DB
+}
 
 func (c *ProductController) ListProducts(page, pageSize int, keyword, platform string) (ProductListPayload, error) {
-	db := c.db()
-	if db == nil {
-		return ProductListPayload{}, fmt.Errorf("database not available")
-	}
+	db := c.db
 	page, pageSize = normalizePagination(page, pageSize)
 
 	q := db.Model(&model.Product{})
@@ -49,10 +46,7 @@ func (c *ProductController) ListProducts(page, pageSize int, keyword, platform s
 }
 
 func (c *ProductController) UpdateProduct(product model.Product) error {
-	db := c.db()
-	if db == nil {
-		return fmt.Errorf("database not available")
-	}
+	db := c.db
 	if product.ID == 0 {
 		return fmt.Errorf("product id is required")
 	}
@@ -67,10 +61,7 @@ func (c *ProductController) UpdateProduct(product model.Product) error {
 }
 
 func (c *ProductController) ListProductsWithTags(waveID uint, platform string, page, pageSize int) (ProductListWithTagsPayload, error) {
-	db := c.db()
-	if db == nil {
-		return ProductListWithTagsPayload{}, fmt.Errorf("database not available")
-	}
+	db := c.db
 	page, pageSize = normalizePagination(page, pageSize)
 	q := db.Model(&model.Product{}).Preload("Tags")
 	if waveID != 0 {
@@ -97,7 +88,7 @@ func (c *ProductController) ListProductsWithTags(waveID uint, platform string, p
 		for _, t := range p.Tags {
 			tt := t.TagType
 			if tt == "" {
-				tt = "level"
+				tt = model.TagTypeLevel
 			}
 			ti := TagInfo{TagName: t.TagName, Quantity: t.Quantity, TagType: tt, Platform: t.Platform}
 			if t.WaveMemberID != nil {
@@ -112,10 +103,7 @@ func (c *ProductController) ListProductsWithTags(waveID uint, platform string, p
 }
 
 func (c *ProductController) ListProductTags(platform string) ([]string, error) {
-	db := c.db()
-	if db == nil {
-		return nil, fmt.Errorf("database not available")
-	}
+	db := c.db
 	var tags []string
 	if err := db.Model(&model.ProductTag{}).Where("platform = ?", strings.TrimSpace(platform)).Distinct().Order("tag_name ASC").Pluck("tag_name", &tags).Error; err != nil {
 		return nil, fmt.Errorf("list product tags failed: %w", err)
@@ -142,11 +130,11 @@ func (c *ProductController) UpsertLevelTag(productID uint, memberPlatform string
 		ProductID: productID,
 		Platform:  memberPlatform,
 		TagName:   levelName,
-		TagType:   "level",
+		TagType:   model.TagTypeLevel,
 		Quantity:  quantity,
 	}
 
-	if err := c.db().Clauses(clause.OnConflict{
+	if err := c.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "product_id"}, {Name: "platform"}, {Name: "tag_name"}, {Name: "tag_type"}},
 		DoUpdates: clause.AssignmentColumns([]string{"quantity", "updated_at"}),
 	}).Create(&tag).Error; err != nil {
@@ -155,9 +143,8 @@ func (c *ProductController) UpsertLevelTag(productID uint, memberPlatform string
 
 	// Trigger ReconcileWave if the product belongs to a wave.
 	var product model.Product
-	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
-		var wc WaveController
-		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
+	if err := c.db.First(&product, productID).Error; err == nil && product.WaveID != nil {
+		if _, err := service.ReconcileWave(c.db, *product.WaveID); err != nil {
 			return fmt.Errorf("reconcile wave after level tag upsert failed: %w", err)
 		}
 	}
@@ -175,17 +162,16 @@ func (c *ProductController) RemoveLevelTag(productID uint, platform string, tagN
 		return fmt.Errorf("remove level tag failed: productID, platform, and tagName are required")
 	}
 
-	result := c.db().Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = 'level'",
-		productID, platform, tagName).Delete(&model.ProductTag{})
+	result := c.db.Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = ?",
+		productID, platform, tagName, model.TagTypeLevel).Delete(&model.ProductTag{})
 	if result.Error != nil {
 		return fmt.Errorf("remove level tag failed: %w", result.Error)
 	}
 
 	// Idempotent: if the tag didn't exist, still trigger ReconcileWave to be safe.
 	var product model.Product
-	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
-		var wc WaveController
-		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
+	if err := c.db.First(&product, productID).Error; err == nil && product.WaveID != nil {
+		if _, err := service.ReconcileWave(c.db, *product.WaveID); err != nil {
 			return fmt.Errorf("reconcile wave after level tag removal failed: %w", err)
 		}
 	}
@@ -204,7 +190,7 @@ func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, qua
 	}
 	// Look up WaveMember to fill Platform and TagName for display.
 	var wm model.WaveMember
-	if err := c.db().First(&wm, waveMemberID).Error; err != nil {
+	if err := c.db.First(&wm, waveMemberID).Error; err != nil {
 		return fmt.Errorf("upsert user tag failed: wave member (id=%d) not found: %w", waveMemberID, err)
 	}
 
@@ -212,12 +198,12 @@ func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, qua
 		ProductID:    productID,
 		Platform:     wm.Platform,
 		TagName:      wm.PlatformUID,
-		TagType:      "user",
+		TagType:      model.TagTypeUser,
 		Quantity:     quantity,
 		WaveMemberID: &waveMemberID,
 	}
 
-	if err := c.db().Clauses(clause.OnConflict{
+	if err := c.db.Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "product_id"}, {Name: "wave_member_id"}, {Name: "tag_type"}},
 		DoUpdates: clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "updated_at"}),
 	}).Create(&tag).Error; err != nil {
@@ -225,9 +211,8 @@ func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, qua
 	}
 
 	var product model.Product
-	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
-		var wc WaveController
-		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
+	if err := c.db.First(&product, productID).Error; err == nil && product.WaveID != nil {
+		if _, err := service.ReconcileWave(c.db, *product.WaveID); err != nil {
 			return fmt.Errorf("reconcile wave after user tag upsert failed: %w", err)
 		}
 	}
@@ -242,17 +227,16 @@ func (c *ProductController) RemoveUserTag(productID uint, waveMemberID uint) err
 		return fmt.Errorf("remove user tag failed: productID and waveMemberID are required")
 	}
 
-	result := c.db().Where("product_id = ? AND wave_member_id = ? AND tag_type = 'user'",
-		productID, waveMemberID).Delete(&model.ProductTag{})
+	result := c.db.Where("product_id = ? AND wave_member_id = ? AND tag_type = ?",
+		productID, waveMemberID, model.TagTypeUser).Delete(&model.ProductTag{})
 	if result.Error != nil {
 		return fmt.Errorf("remove user tag failed: %w", result.Error)
 	}
 
 	// Idempotent: trigger ReconcileWave even if the tag didn't exist.
 	var product model.Product
-	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
-		var wc WaveController
-		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
+	if err := c.db.First(&product, productID).Error; err == nil && product.WaveID != nil {
+		if _, err := service.ReconcileWave(c.db, *product.WaveID); err != nil {
 			return fmt.Errorf("reconcile wave after user tag removal failed: %w", err)
 		}
 	}
@@ -274,20 +258,20 @@ func (c *ProductController) AssignProductTag(productID uint, platform, tagName s
 		return fmt.Errorf("assign product tag failed: invalid parameters")
 	}
 	if tagType == "" {
-		tagType = "level"
+		tagType = model.TagTypeLevel
 	}
 
-	if tagType == "user" {
+	if tagType == model.TagTypeUser {
 		// Resolve wave + wave_member from the product and (platform, tagName=platformUid).
 		var product model.Product
-		if err := c.db().First(&product, productID).Error; err != nil {
+		if err := c.db.First(&product, productID).Error; err != nil {
 			return fmt.Errorf("assign product tag failed: product not found: %w", err)
 		}
 		if product.WaveID == nil {
 			return fmt.Errorf("无法添加指定用户分配：商品未关联任何发货任务")
 		}
 		var wm model.WaveMember
-		if err := c.db().Where("wave_id = ? AND platform = ? AND platform_uid = ?",
+		if err := c.db.Where("wave_id = ? AND platform = ? AND platform_uid = ?",
 			*product.WaveID, platform, tagName).First(&wm).Error; err != nil {
 			return fmt.Errorf("无法添加指定用户分配：平台 [%s] UID [%s] 的会员不在当前 wave 中", platform, tagName)
 		}
@@ -305,19 +289,19 @@ func (c *ProductController) RemoveProductTag(productID uint, platform, tagName, 
 		return fmt.Errorf("remove product tag failed: productId, platform, and tagName are required")
 	}
 	if tagType == "" {
-		tagType = "level"
+		tagType = model.TagTypeLevel
 	}
 
-	if tagType == "user" {
+	if tagType == model.TagTypeUser {
 		var product model.Product
-		if err := c.db().First(&product, productID).Error; err != nil {
+		if err := c.db.First(&product, productID).Error; err != nil {
 			return fmt.Errorf("remove product tag failed: product not found: %w", err)
 		}
 		if product.WaveID == nil {
 			return fmt.Errorf("remove product tag failed: product not in any wave")
 		}
 		var wm model.WaveMember
-		if err := c.db().Where("wave_id = ? AND platform = ? AND platform_uid = ?",
+		if err := c.db.Where("wave_id = ? AND platform = ? AND platform_uid = ?",
 			*product.WaveID, platform, tagName).First(&wm).Error; err != nil {
 			return fmt.Errorf("remove product tag failed: wave member not found for user tag removal")
 		}
@@ -328,10 +312,7 @@ func (c *ProductController) RemoveProductTag(productID uint, platform, tagName, 
 }
 
 func (c *ProductController) GetProductImages(productID uint) ([]model.ProductImage, error) {
-	db := c.db()
-	if db == nil {
-		return nil, fmt.Errorf("database not available")
-	}
+	db := c.db
 	var images []model.ProductImage
 	if err := db.Where("product_id = ?", productID).Order("sort_order ASC").Find(&images).Error; err != nil {
 		return nil, fmt.Errorf("get product images failed: %w", err)

@@ -30,14 +30,14 @@ cd frontend && deno task preview      # preview production build
 
 | Path                                   | Purpose                                                                             |
 | -------------------------------------- | ----------------------------------------------------------------------------------- |
-| `main.go`                              | Wails bootstrap, DB singleton init, controller binding                              |
-| `app.go`                               | Lifecycle hooks (startup) + PickCSVFile/PickZIPFile + shared types/functions        |
+| `main.go`                              | Wails bootstrap, DB init, controller DI wiring                                      |
+| `app.go`                               | Lifecycle hooks (startup + temp cleanup) + PickCSVFile/PickZIPFile + shared types   |
 | `controller_*.go`                      | Domain-specific Wails bound methods (Member/Product/Wave/System/Template)           |
 | `internal/config/`                     | App metadata, window sizing                                                         |
-| `internal/db/`                         | SQLite init (WAL mode), auto-migration, DB singleton                                |
+| `internal/db/`                         | SQLite init (WAL mode), auto-migration                                              |
 | `internal/middleware/`                 | Wails AssetServer middleware for `/local-images/`                                   |
-| `internal/model/`                      | DB tables (GORM), enums, payload types                                              |
-| `internal/service/`                    | Business logic: CSV transformers, import pipeline, image storage, path resolution   |
+| `internal/model/`                      | DB tables (GORM), constants, enums, payload types, DynamicTemplateRules schema      |
+| `internal/service/`                    | Business logic: dynamic CSV parser, import pipeline, wave reconciliation, export, image storage, path resolution |
 | `frontend/src/app/`                    | App shell, layout, router                                                           |
 | `frontend/src/pages/`                  | Route-level screens                                                                 |
 | `frontend/src/shared/`                 | Reusable UI, types, Wails wrappers, composables                                     |
@@ -55,7 +55,7 @@ cd frontend && deno task preview      # preview production build
 4. **`.cache/`**: Use `.cache/` directories for local build/test caches. Already gitignored.
 5. **Generated vs authored**: `frontend/wailsjs/` is generated but committed. `frontend/dist/`, `frontend/node_modules/`, and `build/bin/` are generated and ignored.
 6. **Controller pattern**: All Wails bound methods live in `controller_*.go` files (package main). Each controller gets its own generated JS binding file. New business methods should be added to the appropriate controller.
-7. **DB access**: Controllers use `database.GetDB()` singleton (initialized in `main.go`). Do NOT open/close DB per request.
+7. **DB access**: Controllers hold `db *gorm.DB` via constructor injection (wired explicitly in `main.go`). Do NOT open/close DB per request. The `database.GetDB()` singleton no longer exists.
 8. **Path resolution**: Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths. Three tiers: dev (Temp→workdir), portable (`.portable` marker), system (`UserConfigDir`).
 9. **Context menu**: Use `useContextMenu` composable (`frontend/src/shared/composables/useContextMenu.ts`) — singleton with `register(key, handler)` for DOM-level right-click. Add `data-contextmenu="key"` to target elements, call `register('key', handler)` in `onMounted`. Global `contextmenu` listener in `App.vue` always calls `preventDefault()` — browser menu never appears.
 10. **Adaptive paging pattern**: Table panels use a flex-column parent (with `ref` for `ResizeObserver`), table wrapper (content height, no `flex-1`), indicator div (`flex-1` with dynamic `<`/`>` arrow chars), scaled pagination, and `-12` in the `packByHeights` formula for indicator margin. Three pages (WaveImport/WaveTag/WavePreview) share this pattern.
@@ -68,6 +68,8 @@ cd frontend && deno task preview      # preview production build
 17. **Font**: Noto Sans SC — local WOFF2 segments (101 files, unicode-range) served from `public/fonts/` via `index.html` `<link>`. Font stack: `'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif`. Base weight 500. `font-display: block`. Anti-aliasing: `-webkit-font-smoothing` is macOS-only (no effect on Windows); on Windows WebView2, text rendering is determined by Skia + ClearType, not CSS.
 18. **Text selection**: `body { user-select: none }` in `main.css`. Form elements exempted.
 19. **Formatting**: Deno + Prettier 3.x. Vue files: `--parser vue`. TypeScript files: `--parser typescript`. Config in `frontend/.prettierrc`. **Never run Prettier Vue parser on .ts files** — it compresses them to single lines.
+20. **CSV template format**: All templates use `DynamicTemplateRules` JSON schema (`internal/model/dynamic_mapping.go`). Header-based CSVs use `sourceColumn`; headless CSVs use `columnIndex`. Extra columns are captured via `extraData.strategy: "catch_all"`. Old flat/V2 JSON formats are no longer supported.
+21. **Service-layer domain logic**: Heavy business logic (reconciliation, import pipelines, export) lives in `internal/service/`. Controllers are thin Wails-binding wrappers that delegate to service functions. Service functions accept `db *gorm.DB` as first parameter.
 
 ## Code Style
 
