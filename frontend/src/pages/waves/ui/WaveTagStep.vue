@@ -157,6 +157,20 @@ function platformTagColor(platform: string): { color: string; textColor: string 
   return colors[platform] ?? { color: '#99999933', textColor: '#999999' }
 }
 
+const NEG_RED = '#EF4444'
+
+function tagColors(tag: TagInfo) {
+  const p = platformTagColor(tag.platform)
+  const neg = tag.quantity < 0
+  return {
+    bg: { color: p.color },
+    text: 'var(--text)',
+    accent: p.textColor,
+    number: neg ? NEG_RED : p.textColor,
+    border: neg ? `inset 0 0 0 2px ${NEG_RED}` : '',
+  }
+}
+
 // ── line-clamped cell renderer ──
 const MAX_LINES = 4
 const LINE_HEIGHT = 21
@@ -191,23 +205,14 @@ const wmNicknameMap = computed(() => {
 function renderTagChip(row: any, tag: TagInfo) {
   const displayName =
     tag.tagType === 'user' ? wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName : tag.tagName
-  const accent = platformTagColor(tag.platform).textColor || '#aaa'
+  const t = tagColors(tag)
   const content =
     tag.quantity === 1
-      ? h('span', { style: { color: accent, fontWeight: 500 } }, displayName)
+      ? h('span', { style: { color: t.text, fontWeight: 500 } }, displayName)
       : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
-          h('span', { style: { color: accent, fontWeight: 500 } }, displayName),
-          h('span', { style: { color: '#666', margin: '0 1px' } }, ':'),
-          h(
-            'span',
-            {
-              style: {
-                color: tag.quantity < 0 ? '#EF4444' : '#fff',
-                fontWeight: 600,
-              },
-            },
-            String(tag.quantity),
-          ),
+          h('span', { style: { color: t.text, fontWeight: 500 } }, displayName),
+          h('span', { style: { color: t.accent } }, ': '),
+          h('span', { style: { color: t.number, fontWeight: 600 } }, String(tag.quantity)),
         ])
   return h(
     NPopover,
@@ -230,11 +235,8 @@ function renderTagChip(row: any, tag: TagInfo) {
           {
             size: 'medium',
             round: true,
-            color:
-              tag.quantity < 0
-                ? { color: '#EF444433', textColor: '#EF4444' }
-                : platformTagColor(tag.platform),
-            style: { cursor: 'pointer' },
+            color: t.bg,
+            style: { cursor: 'pointer', boxShadow: t.border },
             onClick: (e: MouseEvent) => {
               e.stopPropagation()
               openTagEdit(row, tag)
@@ -1082,22 +1084,11 @@ onUnmounted(() => {
                   :key="tag.tagName + tag.tagType"
                   size="medium"
                   round
-                  :color="
-                    tag.quantity < 0
-                      ? { color: '#EF444433', textColor: '#EF4444' }
-                      : platformTagColor(tag.platform)
-                  "
+                  :color="tagColors(tag).bg"
+                  :style="{ boxShadow: tagColors(tag).border }"
                 >
                   <template v-if="tag.quantity === 1">
-                    <span
-                      :style="{
-                        color:
-                          tag.quantity < 0
-                            ? '#EF4444'
-                            : platformTagColor(tag.platform).textColor || '#aaa',
-                        fontWeight: 500,
-                      }"
-                    >
+                    <span :style="{ color: tagColors(tag).text, fontWeight: 500 }">
                       {{
                         tag.tagType === 'user'
                           ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
@@ -1106,29 +1097,17 @@ onUnmounted(() => {
                     </span>
                   </template>
                   <template v-else>
-                    <span
-                      :style="{
-                        color:
-                          tag.quantity < 0
-                            ? '#EF4444'
-                            : platformTagColor(tag.platform).textColor || '#aaa',
-                        fontWeight: 500,
-                      }"
-                    >
+                    <span :style="{ color: tagColors(tag).text, fontWeight: 500 }">
                       {{
                         tag.tagType === 'user'
                           ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
                           : tag.tagName
                       }}
                     </span>
-                    <span style="color: #666; margin: 0 1px">:</span>
-                    <span
-                      :style="{
-                        color: tag.quantity < 0 ? '#EF4444' : '#fff',
-                        fontWeight: 600,
-                      }"
-                      >{{ tag.quantity }}</span
-                    >
+                    <span :style="{ color: tagColors(tag).accent }">: </span>
+                    <span :style="{ color: tagColors(tag).number, fontWeight: 600 }">
+                      {{ tag.quantity }}
+                    </span>
                   </template>
                 </NTag>
               </NFlex>
