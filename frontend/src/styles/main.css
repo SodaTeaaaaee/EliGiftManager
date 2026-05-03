@@ -2,25 +2,22 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=block');
-
-/* local TTF fallback — kept for offline/air-gapped use later */
 @font-face {
-  font-family: 'Noto Sans SC Local';
+  font-family: 'Noto Sans SC';
   font-style: normal;
   font-weight: 400;
   src: url('/fonts/NotoSansSC-Regular.ttf') format('truetype');
   font-display: block;
 }
 @font-face {
-  font-family: 'Noto Sans SC Local';
+  font-family: 'Noto Sans SC';
   font-style: normal;
   font-weight: 500;
   src: url('/fonts/NotoSansSC-Medium.ttf') format('truetype');
   font-display: block;
 }
 @font-face {
-  font-family: 'Noto Sans SC Local';
+  font-family: 'Noto Sans SC';
   font-style: normal;
   font-weight: 700;
   src: url('/fonts/NotoSansSC-Bold.ttf') format('truetype');
