@@ -368,10 +368,11 @@ const tagColumns = computed<DataTableColumns>(() => {
         row.coverImage
           ? h('img', {
             src: '/local-images/' + row.coverImage,
-            style: { width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover', cursor: 'pointer' },
+            class: 'w-10 h-10 rounded object-cover',
+            style: { cursor: 'pointer' },
             onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
           })
-          : h('div', { style: { width: '40px', height: '40px', borderRadius: '4px', background: '#e5e7eb' } }),
+          : h('div', { class: 'w-10 h-10 rounded bg-gray-100' }),
     },
     {
       title: '商品名', key: 'name', minWidth: 120,
