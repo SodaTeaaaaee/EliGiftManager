@@ -467,8 +467,8 @@ onUnmounted(() => {
           :pagination="false" size="small"
           :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })" />
       </div>
-      <div v-if="memberTotalPages > 1" class="flex justify-center items-center shrink-0 rounded"
-        style="height: 12px; background: rgba(255,165,0,0.3);">
+      <div v-if="memberTotalPages > 1" class="flex-1 flex justify-center items-end rounded"
+        style="background: rgba(255,165,0,0.3); padding-bottom: 4px;">
         <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
       </div>
       <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
@@ -476,7 +476,6 @@ onUnmounted(() => {
         <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
           @update:page="handleMemberPageChange" />
       </div>
-      <div class="flex-1" />
     </div>
 
     <!-- Footer area (shrink-0) -->
