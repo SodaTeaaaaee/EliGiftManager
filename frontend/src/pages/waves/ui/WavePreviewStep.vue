@@ -476,6 +476,7 @@ onUnmounted(() => {
         <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
           @update:page="handleMemberPageChange" />
       </div>
+      <div class="flex-1" />
     </div>
 
     <!-- Footer area (shrink-0) -->
