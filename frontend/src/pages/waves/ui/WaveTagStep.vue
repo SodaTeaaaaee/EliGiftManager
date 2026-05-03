@@ -221,7 +221,7 @@ function renderTagChip(row: any, tag: TagInfo) {
           {
             size: 'medium',
             round: true,
-            color: platformTagColor(tag.platform).color,
+            color: platformTagColor(tag.platform),
             style: { cursor: 'pointer' },
             onClick: (e: MouseEvent) => {
               e.stopPropagation()
@@ -1050,7 +1050,7 @@ onUnmounted(() => {
                 :key="tag.tagName + tag.tagType"
                 size="medium"
                 round
-                :color="platformTagColor(tag.platform).color"
+                :color="platformTagColor(tag.platform)"
               >
                 <template v-if="tag.quantity === 1">
                   <span

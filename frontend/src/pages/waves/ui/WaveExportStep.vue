@@ -38,14 +38,7 @@ const records = ref<DispatchRecordItem[]>([])
 const isBindingAddresses = ref(false)
 const errorMessage = ref('')
 
-const exportTemplates = computed(() =>
-  templates.value.filter((t) => t.type === 'export_order').map(toOption),
-)
 const pendingAddressCount = computed(() => wave.value?.pendingAddressRecords ?? 0)
-
-function toOption(template: TemplateItem) {
-  return { label: `${template.platform || '通用'} / ${template.name}`, value: template.id }
-}
 
 const platformTemplateSelections = ref<Record<string, number | null>>({})
 

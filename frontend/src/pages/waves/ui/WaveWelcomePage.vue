@@ -121,7 +121,7 @@ async function load() {
   }
 }
 
-function openWave(row: WaveItem) {
+function openWave(row: { id: number }) {
   router.push({ name: 'waves-step-import', params: { waveId: String(row.id) } })
 }
 
