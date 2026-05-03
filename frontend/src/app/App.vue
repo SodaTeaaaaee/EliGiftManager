@@ -62,9 +62,8 @@ watchEffect(() => {
 const { handleEvent } = useContextMenu()
 
 function onGlobalContextMenu(event: MouseEvent) {
-  if (!handleEvent(event)) {
-    event.preventDefault()
-  }
+  event.preventDefault()
+  handleEvent(event)
 }
 
 onMounted(() => {
