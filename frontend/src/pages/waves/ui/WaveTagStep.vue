@@ -1301,13 +1301,12 @@ onUnmounted(() => {
 
 .tab-trigger-active {
   border: 1px solid var(--muted);
+  border-bottom-color: var(--surface-strong);
   background: var(--surface-strong);
   border-radius: 6px 6px 0 0;
   padding: 2px 6px;
-  margin-bottom: -1px;
   position: relative;
   z-index: 2;
-  box-shadow: 0 1px 0 0 var(--surface-strong);
 }
 
 .tab-panel {
@@ -1315,6 +1314,7 @@ onUnmounted(() => {
   border-radius: 0 6px 6px 6px;
   padding: 8px;
   background: var(--surface-strong);
+  margin-top: -1px;
   position: relative;
   z-index: 1;
 }
