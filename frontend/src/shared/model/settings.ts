@@ -6,13 +6,13 @@ export function useScrollMode() {
   return scrollMode
 }
 
-// Persist across page navigations by syncing to sessionStorage.
+// Persist across page navigations by syncing to localStorage.
 const STORAGE_KEY = 'eligift_scrollMode'
-const stored = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(STORAGE_KEY) : null
+const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
 if (stored === 'true') scrollMode.value = true
 
 watch(scrollMode, (v) => {
-  if (typeof sessionStorage !== 'undefined') {
-    sessionStorage.setItem(STORAGE_KEY, String(v))
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(STORAGE_KEY, String(v))
   }
 })
