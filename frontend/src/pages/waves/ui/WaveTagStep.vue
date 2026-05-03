@@ -234,7 +234,7 @@ let indicatorObserver: ResizeObserver | null = null
 const indicatorFontSize = computed(() => {
   const h = indicatorH.value
   if (h < 16) return 12
-  return Math.min(Math.floor(h * 0.78), 200)
+  return Math.min(Math.floor(h * 0.95), 200)
 })
 
 const indicatorContent = computed(() => {
@@ -721,12 +721,11 @@ onUnmounted(() => {
       </div>
       <div
         v-if="tagTotalPages > 1" ref="tagIndicatorRef"
-        class="flex-1 flex justify-center items-end select-none"
+        class="flex-1 flex justify-center items-center select-none"
         :style="{
           fontSize: indicatorFontSize + 'px',
           lineHeight: 1,
           color: 'rgba(128,128,128,0.10)',
-          paddingBottom: '2px',
           fontFamily: 'monospace',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
