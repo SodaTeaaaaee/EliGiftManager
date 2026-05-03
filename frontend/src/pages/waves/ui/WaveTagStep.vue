@@ -198,7 +198,16 @@ function renderTagChip(row: any, tag: TagInfo) {
       : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
           h('span', { style: { color: accent, fontWeight: 500 } }, displayName),
           h('span', { style: { color: '#666', margin: '0 1px' } }, ':'),
-          h('span', { style: { color: '#fff', fontWeight: 600 } }, String(tag.quantity)),
+          h(
+            'span',
+            {
+              style: {
+                color: tag.quantity < 0 ? '#EF4444' : '#fff',
+                fontWeight: 600,
+              },
+            },
+            String(tag.quantity),
+          ),
         ])
   return h(
     NPopover,
@@ -221,7 +230,10 @@ function renderTagChip(row: any, tag: TagInfo) {
           {
             size: 'medium',
             round: true,
-            color: platformTagColor(tag.platform),
+            color:
+              tag.quantity < 0
+                ? { color: '#EF444433', textColor: '#EF4444' }
+                : platformTagColor(tag.platform),
             style: { cursor: 'pointer' },
             onClick: (e: MouseEvent) => {
               e.stopPropagation()
@@ -1044,46 +1056,83 @@ onUnmounted(() => {
               <span class="text-sm text-gray-500">{{ drawerProduct.factorySku }}</span>
               <NTag size="small" round>{{ drawerProduct.platform }}</NTag>
             </div>
-            <NFlex :size="'small'" :wrap="true">
-              <NTag
-                v-for="tag in drawerProduct.tags"
-                :key="tag.tagName + tag.tagType"
-                size="medium"
-                round
-                :color="platformTagColor(tag.platform)"
+            <template
+              v-for="group in [
+                {
+                  label: '身份 Tag',
+                  tags: drawerProduct.tags.filter((t: TagInfo) => t.tagType === 'level'),
+                },
+                {
+                  label: '用户 Tag',
+                  tags: drawerProduct.tags.filter((t: TagInfo) => t.tagType === 'user'),
+                },
+              ]"
+              :key="group.label"
+            >
+              <div
+                v-if="group.tags.length"
+                class="text-xs text-gray-500 mb-1"
+                :class="{ 'mt-2': group.label === '用户 Tag' }"
               >
-                <template v-if="tag.quantity === 1">
-                  <span
-                    :style="{
-                      color: platformTagColor(tag.platform).textColor || '#aaa',
-                      fontWeight: 500,
-                    }"
-                  >
-                    {{
-                      tag.tagType === 'user'
-                        ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
-                        : tag.tagName
-                    }}
-                  </span>
-                </template>
-                <template v-else>
-                  <span
-                    :style="{
-                      color: platformTagColor(tag.platform).textColor || '#aaa',
-                      fontWeight: 500,
-                    }"
-                  >
-                    {{
-                      tag.tagType === 'user'
-                        ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
-                        : tag.tagName
-                    }}
-                  </span>
-                  <span style="color: #666; margin: 0 1px">:</span>
-                  <span style="color: #fff; font-weight: 600">{{ tag.quantity }}</span>
-                </template>
-              </NTag>
-            </NFlex>
+                {{ group.label }}
+              </div>
+              <NFlex v-if="group.tags.length" :size="'small'" :wrap="true">
+                <NTag
+                  v-for="tag in group.tags"
+                  :key="tag.tagName + tag.tagType"
+                  size="medium"
+                  round
+                  :color="
+                    tag.quantity < 0
+                      ? { color: '#EF444433', textColor: '#EF4444' }
+                      : platformTagColor(tag.platform)
+                  "
+                >
+                  <template v-if="tag.quantity === 1">
+                    <span
+                      :style="{
+                        color:
+                          tag.quantity < 0
+                            ? '#EF4444'
+                            : platformTagColor(tag.platform).textColor || '#aaa',
+                        fontWeight: 500,
+                      }"
+                    >
+                      {{
+                        tag.tagType === 'user'
+                          ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
+                          : tag.tagName
+                      }}
+                    </span>
+                  </template>
+                  <template v-else>
+                    <span
+                      :style="{
+                        color:
+                          tag.quantity < 0
+                            ? '#EF4444'
+                            : platformTagColor(tag.platform).textColor || '#aaa',
+                        fontWeight: 500,
+                      }"
+                    >
+                      {{
+                        tag.tagType === 'user'
+                          ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
+                          : tag.tagName
+                      }}
+                    </span>
+                    <span style="color: #666; margin: 0 1px">:</span>
+                    <span
+                      :style="{
+                        color: tag.quantity < 0 ? '#EF4444' : '#fff',
+                        fontWeight: 600,
+                      }"
+                      >{{ tag.quantity }}</span
+                    >
+                  </template>
+                </NTag>
+              </NFlex>
+            </template>
           </div>
           <template v-if="drawerProductImages.length">
             <NDivider>详情图片</NDivider>
