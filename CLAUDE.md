@@ -41,7 +41,8 @@ cd frontend && deno task preview      # preview production build
 | `frontend/src/app/`                    | App shell, layout, router                                                           |
 | `frontend/src/pages/`                  | Route-level screens                                                                 |
 | `frontend/src/shared/`                 | Reusable UI, types, Wails wrappers, composables                                     |
-| `frontend/src/shared/composables/`     | Vue 3 composables (useContextMenu — global right-click menu singleton)              |
+| `frontend/src/shared/composables/`     | Vue 3 composables (useContextMenu, useAdaptiveTable)                                |
+| `frontend/src/shared/model/`           | Reactive singletons (settings — scrollMode, zoom persistence; theme)                |
 | `frontend/src/shared/ui/`              | Shared UI components (ContextMenu.vue — floating right-click menu)                  |
 | `frontend/src/shared/lib/wails/app.ts` | **Single entry point for all Wails bridge calls** (imports from 6 controller files) |
 | `frontend/wailsjs/`                    | Generated Wails bindings (committed)                                                |
@@ -59,7 +60,14 @@ cd frontend && deno task preview      # preview production build
 9. **Context menu**: Use `useContextMenu` composable (`frontend/src/shared/composables/useContextMenu.ts`) — singleton with `register(key, handler)` for DOM-level right-click. Add `data-contextmenu="key"` to target elements, call `register('key', handler)` in `onMounted`. Global `contextmenu` listener in `App.vue` always calls `preventDefault()` — browser menu never appears.
 10. **Adaptive paging pattern**: Table panels use a flex-column parent (with `ref` for `ResizeObserver`), table wrapper (content height, no `flex-1`), indicator div (`flex-1` with dynamic `<`/`>` arrow chars), scaled pagination, and `-12` in the `packByHeights` formula for indicator margin. Three pages (WaveImport/WaveTag/WavePreview) share this pattern.
 11. **Tailwind in h() render functions**: Tailwind JIT does NOT scan Vue `h()` string literals. Use `<style>`-block CSS classes or inline styles instead of Tailwind utilities in render functions.
-12. **User tag display name**: `wmNicknameMap` (computed from `waveMembers`) maps `waveMemberId → latestNickname` for user tag chip rendering. Tag chips use 3-color text: name（accent）/ colon（#666）/ quantity（#fff bold）.
+12. **User tag display name**: `wmNicknameMap` (computed from `waveMembers`) maps `waveMemberId → latestNickname` for user tag chip rendering.
+13. **Tag color model**: `tagColors(tag)` in `WaveTagStep.vue` returns `{bg, text, accent, number, border}`. Three color roles: `bg` (platform@20%), `text` (var(--text)), `accent` (platform solid — colon + positive number). Negative tags add 2px red border + red number. Drawer tags share the same function.
+14. **Adaptive table composable**: `useAdaptiveTable<T>(items, {tableParentRef,tableWrapperRef,paginationRef,indicatorRef})` in `frontend/src/shared/composables/useAdaptiveTable.ts`. Encapsulates ResizeObserver, DOM row-height measurement, packByHeights, indicator arrow chars. Returns `{visibleItems, currentPage, totalPages, scrollMode, indicatorFontSize/Left/Right, init, remeasure, teardown, ...}`. `scrollMode` (Ref<boolean>) is a global singleton from `useScrollMode()` in `settings.ts`.
+15. **Scroll mode toggle**: SettingsPage radio group switches `scrollMode` global ref (persisted to localStorage). When true, table wrapper uses `overflow-y-auto flex-1 min-h-0`, pagination + indicator hidden via `v-if="!scrollMode"`.
+16. **Zoom persistence**: App startup — `main.go` reads `zoom.cfg` from data dir → `windows.Options{ZoomFactor}`. App shutdown — Go `OnBeforeClose` → `WindowExecJS("window.__persistZoom()")` → JS reads `devicePixelRatio`, computes `currentDPR/baseDPR` ratio, calls `saveZoom` Go binding → writes `zoom.cfg`. `localStorage` as backup. `IsZoomControlEnabled: true` must be explicit in Windows options (Go bool zero-value is false).
+17. **Font**: Noto Sans SC — local WOFF2 segments (101 files, unicode-range) served from `public/fonts/` via `index.html` `<link>`. Font stack: `'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif`. Base weight 500. `font-display: block`. Anti-aliasing: `-webkit-font-smoothing` is macOS-only (no effect on Windows); on Windows WebView2, text rendering is determined by Skia + ClearType, not CSS.
+18. **Text selection**: `body { user-select: none }` in `main.css`. Form elements exempted.
+19. **Formatting**: Deno + Prettier 3.x. Vue files: `--parser vue`. TypeScript files: `--parser typescript`. Config in `frontend/.prettierrc`. **Never run Prettier Vue parser on .ts files** — it compresses them to single lines.
 
 ## Code Style
 
