@@ -671,7 +671,7 @@ onUnmounted(() => {
           :pagination="false" size="medium"
           :row-props="rowProps" />
       </div>
-      <div v-if="tagTotalPages > 1" class="flex justify-center items-center shrink-0" style="height: 12px">
+      <div v-if="tagTotalPages > 1" class="flex justify-center items-center shrink-0 rounded" style="height: 12px; background: rgba(255,165,0,0.3);">
         <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
       </div>
       <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-1 shrink-0" style="transform: scale(1.5); transform-origin: top center;">
