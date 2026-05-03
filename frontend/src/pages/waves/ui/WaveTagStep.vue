@@ -4,6 +4,7 @@ import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
+  NCheckbox,
   NDataTable,
   NDrawer,
   NDrawerContent,
@@ -11,10 +12,10 @@ import {
   NEmpty,
   NFlex,
   NIcon,
+  NInput,
   NInputNumber,
   NPopover,
   NPagination,
-  NSelect,
   NTag,
   useMessage,
   type DataTableColumns,
@@ -64,10 +65,15 @@ const allTagProducts = ref<
   }[]
 >([])
 const checkedProductIds = ref<number[]>([])
-const selectedLevelTag = ref<string | null>(null)
+const selectedLevelTags = ref<string[]>([])
 const levelTagQuantity = ref(1)
-const selectedUserTagMember = ref<string | null>(null)
+const showLevelPanel = ref(false)
+const levelSearch = ref('')
+
+const selectedUserTags = ref<string[]>([])
 const userTagQuantity = ref(1)
+const showUserPanel = ref(false)
+const userSearch = ref('')
 const isTagLoading = ref(false)
 const errorMessage = ref('')
 
@@ -149,6 +155,12 @@ const batchTagOptions = computed(() =>
     value: `${t.platform}|${t.tagName}`,
   })),
 )
+
+const filteredLevelOptions = computed(() => {
+  const q = levelSearch.value.toLowerCase()
+  if (!q) return batchTagOptions.value
+  return batchTagOptions.value.filter((o) => o.label.toLowerCase().includes(q))
+})
 
 function platformTagColor(platform: string): { color: string; textColor: string } {
   const colors: Record<string, { color: string; textColor: string }> = {
@@ -544,13 +556,17 @@ async function loadTagProducts() {
 // ── batch operations ──
 
 async function handleBatchAddLevelTag() {
-  if (!selectedLevelTag.value || checkedProductIds.value.length === 0) return
-  const [platform, tagName] = selectedLevelTag.value.split('|')
+  if (selectedLevelTags.value.length === 0 || checkedProductIds.value.length === 0) return
   try {
-    for (const productId of checkedProductIds.value) {
-      await upsertLevelTag(productId, platform, tagName, levelTagQuantity.value)
+    for (const key of selectedLevelTags.value) {
+      const [platform, tagName] = key.split('|')
+      for (const productId of checkedProductIds.value) {
+        await upsertLevelTag(productId, platform, tagName, levelTagQuantity.value)
+      }
     }
-    message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签`)
+    message.success(
+      `已为 ${checkedProductIds.value.length} 件商品添加 ${selectedLevelTags.value.length} 个身份 Tag`,
+    )
     await loadTagProducts()
   } catch (e) {
     message.error(String(e))
@@ -558,13 +574,17 @@ async function handleBatchAddLevelTag() {
 }
 
 async function handleBatchRemoveLevelTag() {
-  if (!selectedLevelTag.value || checkedProductIds.value.length === 0) return
-  const [platform, tagName] = selectedLevelTag.value.split('|')
+  if (selectedLevelTags.value.length === 0 || checkedProductIds.value.length === 0) return
   try {
-    for (const productId of checkedProductIds.value) {
-      await removeLevelTag(productId, platform, tagName)
+    for (const key of selectedLevelTags.value) {
+      const [platform, tagName] = key.split('|')
+      for (const productId of checkedProductIds.value) {
+        await removeLevelTag(productId, platform, tagName)
+      }
     }
-    message.success(`已为 ${checkedProductIds.value.length} 件商品移除 ${platform}·${tagName} 标签`)
+    message.success(
+      `已为 ${checkedProductIds.value.length} 件商品移除 ${selectedLevelTags.value.length} 个身份 Tag`,
+    )
     await loadTagProducts()
   } catch (e) {
     message.error(String(e))
@@ -581,6 +601,12 @@ const memberOptions = computed(() =>
   })),
 )
 
+const filteredMemberOptions = computed(() => {
+  const q = userSearch.value.toLowerCase()
+  if (!q) return memberOptions.value
+  return memberOptions.value.filter((o) => o.label.toLowerCase().includes(q))
+})
+
 async function loadWaveMembers() {
   if (!waveId.value) return
   try {
@@ -591,14 +617,16 @@ async function loadWaveMembers() {
 }
 
 async function handleBatchAddUserTag() {
-  if (!selectedUserTagMember.value || checkedProductIds.value.length === 0) return
-  const waveMemberId = Number(selectedUserTagMember.value)
-  const quantity = userTagQuantity.value
+  if (selectedUserTags.value.length === 0 || checkedProductIds.value.length === 0) return
   try {
-    for (const productId of checkedProductIds.value) {
-      await upsertUserTag(productId, waveMemberId, quantity)
+    for (const id of selectedUserTags.value) {
+      for (const productId of checkedProductIds.value) {
+        await upsertUserTag(productId, Number(id), userTagQuantity.value)
+      }
     }
-    message.success(`已为 ${checkedProductIds.value.length} 件商品添加用户 Tag`)
+    message.success(
+      `已为 ${checkedProductIds.value.length} 件商品添加 ${selectedUserTags.value.length} 个用户 Tag`,
+    )
     await loadTagProducts()
   } catch (e) {
     message.error(String(e))
@@ -606,13 +634,16 @@ async function handleBatchAddUserTag() {
 }
 
 async function handleBatchRemoveUserTag() {
-  if (!selectedUserTagMember.value || checkedProductIds.value.length === 0) return
-  const waveMemberId = Number(selectedUserTagMember.value)
+  if (selectedUserTags.value.length === 0 || checkedProductIds.value.length === 0) return
   try {
-    for (const productId of checkedProductIds.value) {
-      await removeUserTag(productId, waveMemberId)
+    for (const id of selectedUserTags.value) {
+      for (const productId of checkedProductIds.value) {
+        await removeUserTag(productId, Number(id))
+      }
     }
-    message.success(`已为 ${checkedProductIds.value.length} 件商品移除用户 Tag`)
+    message.success(
+      `已为 ${checkedProductIds.value.length} 件商品移除 ${selectedUserTags.value.length} 个用户 Tag`,
+    )
     await loadTagProducts()
   } catch (e) {
     message.error(String(e))
@@ -766,75 +797,181 @@ onUnmounted(() => {
       </NFlex>
 
       <!-- Level tag row -->
-      <NFlex :size="'small'" :wrap="true" class="items-center">
-        <span class="text-xs shrink-0 font-medium" style="width: 52px">身份 Tag</span>
-        <NSelect
-          v-model:value="selectedLevelTag"
-          :options="batchTagOptions"
-          placeholder="选择等级"
-          size="small"
-          style="width: 180px"
-          clearable
-        />
-        <NInputNumber
-          v-model:value="levelTagQuantity"
-          :min="-999"
-          :max="999"
-          size="small"
-          style="width: 80px"
-        />
-        <NButton
-          size="small"
-          type="primary"
-          :disabled="!selectedLevelTag || checkedProductIds.length === 0"
-          @click="handleBatchAddLevelTag"
-          >添加</NButton
+      <div class="space-y-1">
+        <NFlex :size="'small'" :wrap="true" class="items-center">
+          <span class="text-xs shrink-0 font-medium" style="width: 52px">身份 Tag</span>
+          <NButton
+            size="small"
+            secondary
+            @click="
+              showLevelPanel = !showLevelPanel
+              showUserPanel = false
+            "
+          >
+            {{ selectedLevelTags.length ? `已选 ${selectedLevelTags.length} 项 ▾` : '选择等级 ▾' }}
+          </NButton>
+          <NInputNumber
+            v-model:value="levelTagQuantity"
+            :min="-999"
+            :max="999"
+            size="small"
+            style="width: 80px"
+          />
+          <NButton
+            size="small"
+            type="primary"
+            :disabled="selectedLevelTags.length === 0 || checkedProductIds.length === 0"
+            @click="handleBatchAddLevelTag"
+            >添加</NButton
+          >
+          <NButton
+            size="small"
+            type="error"
+            secondary
+            :disabled="selectedLevelTags.length === 0 || checkedProductIds.length === 0"
+            @click="handleBatchRemoveLevelTag"
+            >删除</NButton
+          >
+          <NButton
+            v-if="selectedLevelTags.length"
+            size="tiny"
+            quaternary
+            @click="selectedLevelTags = []"
+            >清空</NButton
+          >
+        </NFlex>
+
+        <!-- Level tag panel -->
+        <div
+          v-if="showLevelPanel"
+          class="border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-800"
         >
-        <NButton
-          size="small"
-          type="error"
-          secondary
-          :disabled="!selectedLevelTag || checkedProductIds.length === 0"
-          @click="handleBatchRemoveLevelTag"
-          >删除</NButton
-        >
-      </NFlex>
+          <NInput
+            v-if="batchTagOptions.length > 12"
+            v-model:value="levelSearch"
+            size="tiny"
+            placeholder="过滤..."
+            class="mb-2"
+            clearable
+          />
+          <NFlex :size="'small'" :wrap="true">
+            <NTag
+              v-for="opt in filteredLevelOptions"
+              :key="opt.value"
+              size="small"
+              round
+              :type="selectedLevelTags.includes(opt.value as string) ? 'primary' : 'default'"
+              :color="
+                selectedLevelTags.includes(opt.value as string)
+                  ? undefined
+                  : platformTagColor((opt.value as string).split('|')[0])
+              "
+              style="cursor: pointer"
+              @click="
+                selectedLevelTags.includes(opt.value as string)
+                  ? (selectedLevelTags = selectedLevelTags.filter((v) => v !== opt.value))
+                  : selectedLevelTags.push(opt.value as string)
+              "
+            >
+              {{ opt.label }}
+            </NTag>
+          </NFlex>
+          <NFlex :size="'small'" class="mt-2 items-center justify-between">
+            <span class="text-xs text-gray-400">已选 {{ selectedLevelTags.length }} 项</span>
+            <NButton size="tiny" @click="showLevelPanel = false">收起</NButton>
+          </NFlex>
+        </div>
+      </div>
 
       <!-- User tag row -->
-      <NFlex :size="'small'" :wrap="true" class="items-center">
-        <span class="text-xs shrink-0 font-medium" style="width: 52px">用户 Tag</span>
-        <NSelect
-          v-model:value="selectedUserTagMember"
-          :options="memberOptions"
-          placeholder="搜索会员"
-          size="small"
-          style="width: 180px"
-          clearable
-          filterable
-        />
-        <NInputNumber
-          v-model:value="userTagQuantity"
-          :min="-999"
-          :max="999"
-          size="small"
-          style="width: 80px"
-        />
-        <NButton
-          size="small"
-          type="primary"
-          :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
-          @click="handleBatchAddUserTag"
-          >添加</NButton
+      <div class="space-y-1">
+        <NFlex :size="'small'" :wrap="true" class="items-center">
+          <span class="text-xs shrink-0 font-medium" style="width: 52px">用户 Tag</span>
+          <NButton
+            size="small"
+            secondary
+            @click="
+              showUserPanel = !showUserPanel
+              showLevelPanel = false
+            "
+          >
+            {{ selectedUserTags.length ? `已选 ${selectedUserTags.length} 人 ▾` : '选择会员 ▾' }}
+          </NButton>
+          <NInputNumber
+            v-model:value="userTagQuantity"
+            :min="-999"
+            :max="999"
+            size="small"
+            style="width: 80px"
+          />
+          <NButton
+            size="small"
+            type="primary"
+            :disabled="selectedUserTags.length === 0 || checkedProductIds.length === 0"
+            @click="handleBatchAddUserTag"
+            >添加</NButton
+          >
+          <NButton
+            size="small"
+            type="error"
+            secondary
+            :disabled="selectedUserTags.length === 0 || checkedProductIds.length === 0"
+            @click="handleBatchRemoveUserTag"
+            >删除</NButton
+          >
+          <NButton
+            v-if="selectedUserTags.length"
+            size="tiny"
+            quaternary
+            @click="selectedUserTags = []"
+            >清空</NButton
+          >
+        </NFlex>
+
+        <!-- User tag panel -->
+        <div
+          v-if="showUserPanel"
+          class="border border-gray-200 dark:border-gray-700 rounded-lg p-2 bg-white dark:bg-gray-800"
         >
-        <NButton
-          size="small"
-          type="error"
-          secondary
-          :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
-          @click="handleBatchRemoveUserTag"
-          >删除
-        </NButton>
-      </NFlex>
+          <NInput
+            v-model:value="userSearch"
+            size="tiny"
+            placeholder="搜索会员名或 UID..."
+            class="mb-2"
+            clearable
+          />
+          <div class="max-h-48 overflow-y-auto space-y-1">
+            <div
+              v-for="opt in filteredMemberOptions"
+              :key="opt.value"
+              class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm"
+              @click="
+                selectedUserTags.includes(String(opt.value))
+                  ? (selectedUserTags = selectedUserTags.filter((v) => v !== String(opt.value)))
+                  : selectedUserTags.push(String(opt.value))
+              "
+            >
+              <NCheckbox
+                :checked="selectedUserTags.includes(String(opt.value))"
+                size="small"
+                @click.stop
+                @update:checked="
+                  (v: boolean) => {
+                    v
+                      ? selectedUserTags.push(String(opt.value))
+                      : (selectedUserTags = selectedUserTags.filter((x) => x !== String(opt.value)))
+                  }
+                "
+              />
+              <span class="truncate">{{ opt.label }}</span>
+            </div>
+          </div>
+          <NFlex :size="'small'" class="mt-2 items-center justify-between">
+            <span class="text-xs text-gray-400">已选 {{ selectedUserTags.length }} 人</span>
+            <NButton size="tiny" @click="showUserPanel = false">收起</NButton>
+          </NFlex>
+        </div>
+      </div>
     </div>
 
     <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
