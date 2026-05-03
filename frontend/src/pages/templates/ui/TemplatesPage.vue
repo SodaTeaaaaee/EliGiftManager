@@ -569,7 +569,7 @@ onMounted(async () => {
                   <div class="text-xs text-gray-500 mb-1">导出表头（按顺序）</div>
                   <div class="space-y-1">
                     <div
-                      v-for="(h, i) in guiExportHeaders"
+                      v-for="(_h, i) in guiExportHeaders"
                       :key="i"
                       class="flex items-center gap-1"
                     >

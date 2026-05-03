@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { NAlert, NCard, NDataTable } from 'naive-ui'
+import { NAlert, NCard } from 'naive-ui'
 import type { DynamicTemplateRules } from './types'
 
 const props = defineProps<{ templateConfig: DynamicTemplateRules }>()
@@ -49,7 +49,7 @@ function parseRowDynamicallyJS(record: string[], headers: string[], rules: Dynam
       idx = headers.findIndex(
         (h) =>
           h.toLowerCase().replace(/[ _-]/g, '') ===
-          mapping.sourceColumn.toLowerCase().replace(/[ _-]/g, ''),
+          mapping.sourceColumn!.toLowerCase().replace(/[ _-]/g, ''),
       )
     } else {
       idx = -1
@@ -95,10 +95,6 @@ const previewResult = computed<PreviewRow[]>(() => {
   }))
 })
 
-const previewColumns = computed(() => {
-  const keys = Object.keys(props.templateConfig.mapping)
-  return keys.map((k) => ({ title: k, key: k, width: 100 }))
-})
 </script>
 
 <template>
