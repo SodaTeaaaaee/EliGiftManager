@@ -41,9 +41,6 @@ const waveMembers = ref<MemberItem[]>([])
 const isMembersLoading = ref(false)
 const errorMessage = ref('')
 
-const importTemplates = computed(() =>
-  templates.value.filter((t) => t.type.startsWith('import_')).map(toOption),
-)
 const productTemplates = computed(() =>
   templates.value.filter((t) => t.type === 'import_product').map(toOption),
 )

@@ -149,12 +149,12 @@ const batchTagOptions = computed(() =>
   })),
 )
 
-function platformTagColor(platform: string) {
+function platformTagColor(platform: string): { color: string; textColor: string } {
   const colors: Record<string, { color: string; textColor: string }> = {
     BILIBILI: { color: '#00A1D633', textColor: '#00A1D6' },
     DOUYIN: { color: '#FE2C5533', textColor: '#FE2C55' },
   }
-  return colors[platform] || { color: '#99999933', textColor: '#999999' }
+  return colors[platform] ?? { color: '#99999933', textColor: '#999999' }
 }
 
 // ── line-clamped cell renderer ──
@@ -443,7 +443,7 @@ function rowProps(row: any) {
       if (idx >= 0) lastClickedIndex.value = idx
       checkedProductIds.value = [row.id]
     },
-    onContextmenu: (e: MouseEvent) => {
+    onContextmenu: (_e: MouseEvent) => {
       // Windows Explorer behavior: if target is not in selection, select it alone.
       if (!checkedProductIds.value.includes(row.id)) {
         const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
@@ -1080,7 +1080,7 @@ onUnmounted(() => {
                     }}
                   </span>
                   <span style="color: #666; margin: 0 1px">:</span>
-                  <span style="color: #fff; fontweight: 600">{{ tag.quantity }}</span>
+                  <span style="color: #fff; font-weight: 600">{{ tag.quantity }}</span>
                 </template>
               </NTag>
             </NFlex>

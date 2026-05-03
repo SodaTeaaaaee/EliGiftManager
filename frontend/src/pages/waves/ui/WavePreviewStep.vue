@@ -39,7 +39,6 @@ const waveId = computed(() => Number(route.params.waveId) || 0)
 
 const templates = ref<TemplateItem[]>([])
 const records = ref<DispatchRecordItem[]>([])
-const quantityEdits = ref<Record<number, number>>({})
 const previewExportResult = ref<{ totalRecords: number; missingAddressCount: number } | null>(null)
 const isPreviewLoading = ref(false)
 const errorMessage = ref('')
@@ -71,14 +70,6 @@ const selectedAddressId = ref<number | null>(null)
 const productCoverMap = ref<Record<number, string>>({})
 
 // ---- computed ----
-const exportTemplates = computed(() =>
-  templates.value.filter((t) => t.type === 'export_order').map(toOption),
-)
-
-function toOption(template: TemplateItem) {
-  return { label: `${template.platform || '通用'} / ${template.name}`, value: template.id }
-}
-
 const platformTemplateSelections = ref<Record<string, number | null>>({})
 
 const exportPlatforms = computed(() => {
@@ -548,12 +539,13 @@ async function handleAddAddress() {
 }
 
 async function handleSetAddress(addressId: number) {
-  if (!selectedMember.value || !waveId.value) return
+  const member = selectedMember.value
+  if (!member || !waveId.value) return
   try {
-    await setDispatchAddress(waveId.value, selectedMember.value.memberId, addressId)
+    await setDispatchAddress(waveId.value, member.memberId, addressId)
     message.success('地址已更新')
     records.value = await listDispatchRecords(waveId.value)
-    const group = memberGroups.value.find((g) => g.memberId === selectedMember.value.memberId)
+    const group = memberGroups.value.find((g) => g.memberId === member.memberId)
     if (group) memberRecords.value = group.records
   } catch (e) {
     message.error(String(e))
