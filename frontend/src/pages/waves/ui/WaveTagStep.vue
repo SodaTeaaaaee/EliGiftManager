@@ -1289,7 +1289,7 @@ onUnmounted(() => {
 
 .tab-bar {
   position: relative;
-  z-index: 1;
+  z-index: 2;
 }
 
 .tab-trigger {
@@ -1305,8 +1305,6 @@ onUnmounted(() => {
   background: var(--surface-strong);
   border-radius: 6px 6px 0 0;
   padding: 2px 6px;
-  position: relative;
-  z-index: 2;
 }
 
 .tab-panel {
