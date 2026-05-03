@@ -1,13 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import { useContextMenu, type ContextMenuItem } from '@/shared/composables/useContextMenu'
 
 const { state, hide } = useContextMenu()
-
-const menuRef = ref<HTMLElement | null>(null)
-
-const xStyle = ref('0px')
-const yStyle = ref('0px')
 
 const adjustedStyle = computed(() => {
   const x = state.x
@@ -60,7 +55,6 @@ onUnmounted(() => {
   <!-- menu -->
   <div
     v-if="state.visible"
-    ref="menuRef"
     class="fixed z-[9999] py-1 min-w-[160px] rounded-lg shadow-lg border border-gray-200 dark:border-gray-700"
     :style="{
       left: adjustedStyle.left,

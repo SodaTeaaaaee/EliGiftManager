@@ -16,7 +16,6 @@ import {
   NPagination,
   NSelect,
   NTag,
-  useMessage,
   type DataTableColumns,
 } from 'naive-ui'
 import {
@@ -27,7 +26,6 @@ import {
   type ProductItem,
 } from '@/shared/lib/wails/app'
 
-const message = useMessage()
 const products = ref<ProductItem[]>([])
 const keyword = ref('')
 const platform = ref('')

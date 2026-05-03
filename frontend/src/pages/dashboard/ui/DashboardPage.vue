@@ -167,7 +167,7 @@ onMounted(loadDashboard)
           <NAlert
             v-for="warning in dashboard?.warnings"
             :key="warning.title"
-            :type="warning.type"
+            :type="(warning.type as 'info' | 'success' | 'warning' | 'error' | 'default')"
             :title="warning.title"
             :show-icon="false"
             >{{ warning.detail }}</NAlert
