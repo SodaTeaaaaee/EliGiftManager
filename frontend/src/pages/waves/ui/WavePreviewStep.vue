@@ -244,7 +244,7 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
 const giftColumns: DataTableColumns = [
   { title: '', key: 'productImage', width: 56, render: (row: any) => {
       const cover = productCoverMap.value[row.productId]
-      return cover ? h('img', { src: '/local-images/' + cover, class: 'w-10 h-10 rounded object-cover' }) : h('div', { class: 'w-10 h-10 rounded bg-gray-100' })
+      return cover ? h('div', { class: 'gift-thumb-cell' }, [h('img', { src: '/local-images/' + cover, class: 'gift-thumb-img rounded' })]) : h('div', { class: 'gift-thumb-cell' }, [h('div', { class: 'gift-thumb-placeholder rounded' })])
     }
   },
   { title: '礼物', key: 'productName', minWidth: 140 },
@@ -519,4 +519,23 @@ onUnmounted(() => {
       </div>
     </NModal>
   </div>
+</template>
+
+<style>
+.gift-thumb-cell {
+  display: flex;
+  align-items: center;
+  height: 40px;
+}
+.gift-thumb-img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+}
+.gift-thumb-placeholder {
+  width: 40px;
+  height: 40px;
+  background: #e5e7eb;
+}
+</style>
 </template>

@@ -366,13 +366,16 @@ const tagColumns = computed<DataTableColumns>(() => {
       title: '', key: 'coverImage', width: 56,
       render: (row: any) =>
         row.coverImage
-          ? h('img', {
-            src: '/local-images/' + row.coverImage,
-            class: 'w-10 h-10 rounded object-cover',
-            style: { cursor: 'pointer' },
-            onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
-          })
-          : h('div', { class: 'w-10 h-10 rounded bg-gray-100' }),
+          ? h('div', { class: 'thumb-cell' }, [
+              h('img', {
+                src: '/local-images/' + row.coverImage,
+                class: 'thumb-img rounded',
+                onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
+              }),
+            ])
+          : h('div', { class: 'thumb-cell' }, [
+              h('div', { class: 'thumb-placeholder rounded' }),
+            ]),
     },
     {
       title: '商品名', key: 'name', minWidth: 120,
@@ -658,5 +661,21 @@ onUnmounted(() => {
 }
 .row-selected td {
   background: rgba(32, 128, 240, 0.12) !important;
+}
+.thumb-cell {
+  display: flex;
+  align-items: center;
+  height: 40px;
+}
+.thumb-img {
+  max-height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  cursor: pointer;
+}
+.thumb-placeholder {
+  width: 40px;
+  height: 40px;
+  background: #e5e7eb;
 }
 </style>
