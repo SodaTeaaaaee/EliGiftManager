@@ -94,7 +94,6 @@ const previewResult = computed<PreviewRow[]>(() => {
     ...parseRowDynamicallyJS(row, headers, props.templateConfig),
   }))
 })
-
 </script>
 
 <template>
