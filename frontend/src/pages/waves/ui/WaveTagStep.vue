@@ -469,13 +469,13 @@ const tagColumns = computed<DataTableColumns>(() => {
     {
       title: '商品名',
       key: 'name',
-      minWidth: 120,
+      width: 120,
       render: (row: any) => clampedText(row.name),
     },
     {
       title: '身份 Tag',
       key: 'levelTags',
-      minWidth: 160,
+      width: 160,
       render: (row: any) =>
         h(
           NFlex,
@@ -495,7 +495,7 @@ const tagColumns = computed<DataTableColumns>(() => {
     {
       title: '用户 Tag',
       key: 'userTags',
-      minWidth: 160,
+      width: 160,
       render: (row: any) =>
         h(
           NFlex,

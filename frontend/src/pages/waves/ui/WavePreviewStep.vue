@@ -200,7 +200,7 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
     {
       title: '会员',
       key: 'nickname',
-      minWidth: 140,
+      width: 140,
       render: (row: any) => clampedText(row.nickname),
     },
     { title: '平台', key: 'platform', width: 100 },
@@ -209,7 +209,7 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
     cols.push({
       title: 'UID',
       key: 'platformUid',
-      minWidth: 140,
+      width: 140,
       render: (row: any) => clampedText(row.platformUid),
     })
   }
@@ -263,7 +263,7 @@ const giftColumns: DataTableColumns = [
           ])
     },
   },
-  { title: '礼物', key: 'productName', minWidth: 140 },
+  { title: '礼物', key: 'productName', width: 140 },
   { title: 'SKU', key: 'factorySku', width: 100 },
   {
     title: '数量',

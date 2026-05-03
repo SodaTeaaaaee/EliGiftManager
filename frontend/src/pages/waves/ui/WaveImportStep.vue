@@ -179,14 +179,14 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
     {
       title: '昵称',
       key: 'latestNickname',
-      minWidth: 90,
+      width: 90,
       render: (row) => clampedText(row.latestNickname || row.platformUid),
     },
     { title: '平台', key: 'platform', width: 71, render: (row) => clampedText(row.platform) },
     {
       title: 'UID',
       key: 'platformUid',
-      minWidth: 90,
+      width: 90,
       render: (row) => clampedText(row.platformUid),
     },
   ]
@@ -230,13 +230,13 @@ const productDataColumns = computed<DataTableColumns>(() => {
       render: (row: any) =>
         h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
     },
-    { title: '商品名', key: 'name', minWidth: 140, render: (row: any) => clampedText(row.name) },
+    { title: '商品名', key: 'name', width: 140, render: (row: any) => clampedText(row.name) },
   ]
   if (showSkuColumn.value) {
     cols.push({
       title: 'SKU',
       key: 'factorySku',
-      minWidth: 160,
+      width: 160,
       render: (row: any) =>
         h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
     })
