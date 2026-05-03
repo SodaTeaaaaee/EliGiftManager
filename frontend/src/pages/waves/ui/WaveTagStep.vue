@@ -34,6 +34,7 @@ import {
   type WaveItem,
 } from '@/shared/lib/wails/app'
 import { useContextMenu } from '@/shared/composables/useContextMenu'
+import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 
 const message = useMessage()
 const route = useRoute()
@@ -290,14 +291,10 @@ const paginationRef = ref<HTMLElement | null>(null)
 const indicatorRef = ref<HTMLElement | null>(null)
 
 const {
-  headerH,
-  paginationH,
-  availableH,
   currentPage,
   totalPages,
   visibleItems,
   scrollMode,
-  lastW,
   indicatorFontSize,
   indicatorLeft,
   indicatorRight,

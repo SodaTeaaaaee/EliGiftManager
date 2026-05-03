@@ -154,9 +154,6 @@ const paginationRef = ref<HTMLElement | null>(null)
 const indicatorRef = ref<HTMLElement | null>(null)
 
 const {
-  headerH,
-  paginationH,
-  availableH,
   currentPage,
   totalPages,
   visibleItems,

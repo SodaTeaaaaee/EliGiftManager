@@ -115,9 +115,6 @@ const productPaginationRef = ref<HTMLElement | null>(null)
 const productIndicatorRef = ref<HTMLElement | null>(null)
 
 const {
-  headerH: productHeaderH,
-  paginationH: productPaginationH,
-  availableH: productAvailableH,
   currentPage: productCurrentPage,
   totalPages: productTotalPages,
   visibleItems: visibleProducts,
@@ -145,9 +142,6 @@ const memberPaginationRef = ref<HTMLElement | null>(null)
 const memberIndicatorRef = ref<HTMLElement | null>(null)
 
 const {
-  headerH: memberHeaderH,
-  paginationH: memberPaginationH,
-  availableH: memberAvailableH,
   currentPage: memberCurrentPage,
   totalPages: memberTotalPages,
   visibleItems: visibleMembers,
