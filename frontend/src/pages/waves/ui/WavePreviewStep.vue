@@ -167,21 +167,33 @@ let memberIndicatorObserver: ResizeObserver | null = null
 const memberIndicatorFontSize = computed(() => {
   const h = memberIndicatorH.value
   if (h < 16) return 12
-  return Math.min(Math.floor(h * 0.95), 200)
+  return Math.min(Math.floor(h * 0.95), 800)
 })
 
-const memberIndicatorContent = computed(() => {
+const memberIndicatorLeft = computed(() => {
   const current = memberCurrentPage.value
   const total = memberTotalPages.value
   if (total <= 1) return ""
   const w = memberIndicatorW.value
   const size = memberIndicatorFontSize.value
   const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(1, Math.floor(w / charW))
-  if (current === 1) return ">".repeat(count)
-  if (current === total) return "<".repeat(count)
-  const half = Math.floor(count / 2)
-  return "<".repeat(half) + ">".repeat(count - half)
+  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
+  const half = count / 2
+  if (current === 1) return ""
+  return "<".repeat(current === total ? count : half)
+})
+
+const memberIndicatorRight = computed(() => {
+  const current = memberCurrentPage.value
+  const total = memberTotalPages.value
+  if (total <= 1) return ""
+  const w = memberIndicatorW.value
+  const size = memberIndicatorFontSize.value
+  const charW = Math.max(size * 0.6, 6)
+  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
+  const half = count / 2
+  if (current === total) return ""
+  return ">".repeat(current === 1 ? count : half)
 })
 
 const visibleMemberGroups = computed(() => {
@@ -518,13 +530,11 @@ onUnmounted(() => {
         :style="{
           fontSize: memberIndicatorFontSize + 'px',
           lineHeight: 1,
-          color: 'rgba(128,128,128,0.10)',
           fontFamily: 'monospace',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
-          background: 'rgba(255,165,0,0.3)',
         }"
-      >{{ memberIndicatorContent }}</div>
+      ><span style="color: rgba(96,165,250,0.10)">{{ memberIndicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ memberIndicatorRight }}</span></div>
       <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
         style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
