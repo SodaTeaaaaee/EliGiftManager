@@ -82,9 +82,9 @@ interface PreviewRow {
 }
 
 const previewResult = computed<PreviewRow[]>(() => {
-  if (!props.sampleRows.value.length) return []
-  const headers = props.sampleRows.value[0] || []
-  return props.sampleRows.value.slice(1).map((row, i) => ({
+  if (!props.sampleRows.length) return []
+  const headers = props.sampleRows[0] || []
+  return props.sampleRows.slice(1).map((row: string[], i: number) => ({
     row: i + 1,
     ...parseRowDynamicallyJS(row, headers, props.templateConfig),
   }))
@@ -112,7 +112,7 @@ const previewResult = computed<PreviewRow[]>(() => {
           <thead>
             <tr>
               <th
-                v-for="(h, i) in props.sampleRows[0] || []"
+                v-for="(h, i) in sampleRows[0] || []"
                 :key="i"
                 class="text-left px-1 py-0.5 border-b"
               >
@@ -121,7 +121,7 @@ const previewResult = computed<PreviewRow[]>(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, ri) in props.sampleRows.slice(1)" :key="ri">
+            <tr v-for="(row, ri) in sampleRows.slice(1)" :key="ri">
               <td
                 v-for="(cell, ci) in row"
                 :key="ci"

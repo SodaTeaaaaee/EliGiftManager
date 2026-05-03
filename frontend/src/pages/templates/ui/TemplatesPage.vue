@@ -72,7 +72,7 @@ function typeLabel(type: string) {
   }
   return typeOptions[type] ?? type
 }
-function openCreateModal(platform?: string) {
+function openCreateModal(_platform?: string) {
   router.push({ name: 'templates-builder' })
 }
 function openEditModal(row: TemplateItem) {
