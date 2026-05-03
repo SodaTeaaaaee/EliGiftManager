@@ -671,7 +671,10 @@ onUnmounted(() => {
           :pagination="false" size="medium"
           :row-props="rowProps" />
       </div>
-      <div ref="tagPaginationRef" class="flex justify-center mt-2 shrink-0">
+      <div v-if="tagTotalPages > 1" class="flex justify-center items-center shrink-0" style="height: 12px">
+        <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
+      </div>
+      <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-1 shrink-0" style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"
           @update:page="handleTagPageChange" />
       </div>
