@@ -24,7 +24,17 @@ import {
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
-import { addMemberAddress, deleteMemberAddress, getDashboard, isWailsRuntimeAvailable, listMembers, setDefaultAddress, updateMemberAddress, WAILS_PREVIEW_MESSAGE, type MemberItem } from '@/shared/lib/wails/app'
+import {
+  addMemberAddress,
+  deleteMemberAddress,
+  getDashboard,
+  isWailsRuntimeAvailable,
+  listMembers,
+  setDefaultAddress,
+  updateMemberAddress,
+  WAILS_PREVIEW_MESSAGE,
+  type MemberItem,
+} from '@/shared/lib/wails/app'
 import type { model } from '../../../../wailsjs/go/models'
 
 const message = useMessage()
@@ -51,7 +61,7 @@ const platformOptions = computed(() =>
   platformCatalog.value.map((value) => ({ label: value, value })),
 )
 const filteredMembers = computed(() =>
-  showMissingOnly.value ? members.value.filter(m => m.activeAddressCount === 0) : members.value
+  showMissingOnly.value ? members.value.filter((m) => m.activeAddressCount === 0) : members.value,
 )
 
 const columns: DataTableColumns<MemberItem> = [
@@ -89,9 +99,28 @@ const columns: DataTableColumns<MemberItem> = [
         { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') },
       ),
   },
-  { title: '默认收件人', key: 'latestRecipient', minWidth: 100, sorter: true, render: (row) => row.latestRecipient || '-' },
-  { title: '手机', key: 'latestPhone', minWidth: 100, sorter: true, render: (row) => row.latestPhone || '-' },
-  { title: '地址', key: 'latestAddress', minWidth: 180, sorter: true, ellipsis: { tooltip: true }, render: (row) => row.latestAddress || '-' },
+  {
+    title: '默认收件人',
+    key: 'latestRecipient',
+    minWidth: 100,
+    sorter: true,
+    render: (row) => row.latestRecipient || '-',
+  },
+  {
+    title: '手机',
+    key: 'latestPhone',
+    minWidth: 100,
+    sorter: true,
+    render: (row) => row.latestPhone || '-',
+  },
+  {
+    title: '地址',
+    key: 'latestAddress',
+    minWidth: 180,
+    sorter: true,
+    ellipsis: { tooltip: true },
+    render: (row) => row.latestAddress || '-',
+  },
 ]
 
 async function loadDashboardStats() {
@@ -187,7 +216,11 @@ function openAddAddress() {
 
 function openEditAddress(addr: model.MemberAddress) {
   editingAddress.value = addr
-  addressForm.value = { recipientName: addr.recipientName, phone: addr.phone, address: addr.address }
+  addressForm.value = {
+    recipientName: addr.recipientName,
+    phone: addr.phone,
+    address: addr.address,
+  }
   showAddressModal.value = true
 }
 
@@ -196,10 +229,20 @@ async function saveAddress() {
   isSavingAddress.value = true
   try {
     if (editingAddress.value) {
-      await updateMemberAddress(editingAddress.value.id, addressForm.value.recipientName, addressForm.value.phone, addressForm.value.address)
+      await updateMemberAddress(
+        editingAddress.value.id,
+        addressForm.value.recipientName,
+        addressForm.value.phone,
+        addressForm.value.address,
+      )
       message.success('地址已更新')
     } else {
-      await addMemberAddress(selectedMember.value.id, addressForm.value.recipientName, addressForm.value.phone, addressForm.value.address)
+      await addMemberAddress(
+        selectedMember.value.id,
+        addressForm.value.recipientName,
+        addressForm.value.phone,
+        addressForm.value.address,
+      )
       message.success('地址已添加')
     }
     showAddressModal.value = false
@@ -278,22 +321,37 @@ onBeforeUnmount(() => {
       </NCard>
       <NCard>
         <p class="app-copy">缺失地址会员</p>
-        <p class="mt-1 text-2xl font-semibold text-amber-600">{{ dashboardStats.missingAddresses }}</p>
+        <p class="mt-1 text-2xl font-semibold text-amber-600">
+          {{ dashboardStats.missingAddresses }}
+        </p>
       </NCard>
     </div>
 
     <NCard ref="tableCardRef" title="会员列表" size="medium" class="flex-1 min-h-0 overflow-auto">
       <template #header-extra>
         <div class="flex gap-2 items-center">
-          <NInput v-model:value="keyword" clearable placeholder="搜索昵称 / UID" style="width: 240px" @keyup.enter="searchMembers">
+          <NInput
+            v-model:value="keyword"
+            clearable
+            placeholder="搜索昵称 / UID"
+            style="width: 240px"
+            @keyup.enter="searchMembers"
+          >
             <template #prefix>
               <NIcon><SearchOutline /></NIcon>
             </template>
           </NInput>
-          <NSelect v-model:value="platform" clearable :options="platformOptions" placeholder="平台" style="width: 150px" @update:value="searchMembers" />
+          <NSelect
+            v-model:value="platform"
+            clearable
+            :options="platformOptions"
+            placeholder="平台"
+            style="width: 150px"
+            @update:value="searchMembers"
+          />
           <NButton @click="searchMembers">搜索</NButton>
           <div class="flex items-center gap-2 ml-2">
-            <span class="text-xs text-gray-500" style="white-space: nowrap;">仅显示缺地址</span>
+            <span class="text-xs text-gray-500" style="white-space: nowrap">仅显示缺地址</span>
             <NSwitch v-model:value="showMissingOnly" size="small" @update:value="searchMembers" />
           </div>
         </div>
@@ -326,16 +384,24 @@ onBeforeUnmount(() => {
     </NCard>
 
     <NDrawer :show="!!selectedMember" :width="460" @update:show="handleDrawerVisibility">
-      <NDrawerContent :title="selectedMember?.latestNickname || selectedMember?.platformUid" closable>
+      <NDrawerContent
+        :title="selectedMember?.latestNickname || selectedMember?.platformUid"
+        closable
+      >
         <div class="space-y-5">
           <NCard title="历史地址" size="small">
             <template #header-extra>
               <NButton size="small" type="primary" @click="openAddAddress">
-                <template #icon><NIcon><AddOutline /></NIcon></template>
+                <template #icon
+                  ><NIcon><AddOutline /></NIcon
+                ></template>
                 添加地址
               </NButton>
             </template>
-            <div v-if="selectedMember?.addresses?.filter((item) => !item.isDeleted).length" class="space-y-3">
+            <div
+              v-if="selectedMember?.addresses?.filter((item) => !item.isDeleted).length"
+              class="space-y-3"
+            >
               <div
                 v-for="address in selectedMember.addresses.filter((item) => !item.isDeleted)"
                 :key="address.id"
@@ -348,15 +414,29 @@ onBeforeUnmount(() => {
                 <p class="app-copy mt-1">{{ address.phone }}</p>
                 <p class="app-copy mt-1">{{ address.address }}</p>
                 <div class="mt-2 flex gap-2">
-                  <NButton v-if="!address.isDefault" size="small" secondary @click="handleDefault(address.id)">
+                  <NButton
+                    v-if="!address.isDefault"
+                    size="small"
+                    secondary
+                    @click="handleDefault(address.id)"
+                  >
                     设为默认
                   </NButton>
                   <NButton size="small" secondary @click="openEditAddress(address)">
-                    <template #icon><NIcon><CreateOutline /></NIcon></template>
+                    <template #icon
+                      ><NIcon><CreateOutline /></NIcon
+                    ></template>
                     编辑
                   </NButton>
-                  <NButton size="small" secondary type="error" @click="handleDeleteAddress(address.id)">
-                    <template #icon><NIcon><TrashOutline /></NIcon></template>
+                  <NButton
+                    size="small"
+                    secondary
+                    type="error"
+                    @click="handleDeleteAddress(address.id)"
+                  >
+                    <template #icon
+                      ><NIcon><TrashOutline /></NIcon
+                    ></template>
                     删除
                   </NButton>
                 </div>
@@ -380,7 +460,12 @@ onBeforeUnmount(() => {
       </NDrawerContent>
     </NDrawer>
 
-    <NModal v-model:show="showAddressModal" preset="card" :title="editingAddress ? '编辑地址' : '添加地址'" style="max-width: 480px">
+    <NModal
+      v-model:show="showAddressModal"
+      preset="card"
+      :title="editingAddress ? '编辑地址' : '添加地址'"
+      style="max-width: 480px"
+    >
       <NForm label-placement="top">
         <NFormItem label="收件人" required>
           <NInput v-model:value="addressForm.recipientName" placeholder="收件人姓名" />

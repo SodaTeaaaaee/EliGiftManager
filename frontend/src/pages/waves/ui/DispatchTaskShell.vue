@@ -25,32 +25,61 @@ const currentStep = computed(() => {
 const isEditing = computed(() => !!selectedWaveId.value)
 
 function statusLabel(s: string) {
-  return ({ draft: '草稿', allocating: '分配中', pending_address: '待补全', exported: '已导出' } as Record<string, string>)[s] ?? s
+  return (
+    (
+      {
+        draft: '草稿',
+        allocating: '分配中',
+        pending_address: '待补全',
+        exported: '已导出',
+      } as Record<string, string>
+    )[s] ?? s
+  )
 }
 function statusTagType(s: string) {
-  return s === 'exported' ? 'success' : s === 'pending_address' ? 'warning' : s === 'allocating' ? 'info' : 'default'
+  return s === 'exported'
+    ? 'success'
+    : s === 'pending_address'
+      ? 'warning'
+      : s === 'allocating'
+        ? 'info'
+        : 'default'
 }
 
 async function loadWave() {
-  if (!selectedWaveId.value) { wave.value = null; return }
+  if (!selectedWaveId.value) {
+    wave.value = null
+    return
+  }
   try {
     const waves = await listWaves()
-    wave.value = waves.find(w => w.id === selectedWaveId.value) ?? null
-  } catch { wave.value = null }
+    wave.value = waves.find((w) => w.id === selectedWaveId.value) ?? null
+  } catch {
+    wave.value = null
+  }
 }
 
-function closeWave() { router.push({ name: 'waves-welcome' }) }
+function closeWave() {
+  router.push({ name: 'waves-welcome' })
+}
 
 onMounted(loadWave)
 
-watch(() => route.params.waveId, () => loadWave())
+watch(
+  () => route.params.waveId,
+  () => loadWave(),
+)
 </script>
 <template>
   <div class="h-full flex flex-col">
     <!-- 编辑模式顶栏 -->
     <div v-if="isEditing && wave" class="flex flex-wrap items-center gap-3 px-1 py-2 shrink-0">
-      <span class="font-semibold text-lg min-w-0 break-all">{{ wave.waveNo }} · {{ wave.name }}</span>
-      <NTag :type="statusTagType(wave.status)" size="small" round>{{ statusLabel(wave.status) }}</NTag>
+      <span class="font-semibold text-lg min-w-0 break-all"
+        >{{ wave.waveNo }} · {{ wave.name }}</span
+      >
+      <NTag :type="statusTagType(wave.status)" size="small" round>{{
+        statusLabel(wave.status)
+      }}</NTag>
       <div class="ml-auto">
         <NButton size="small" secondary @click="closeWave">关闭任务</NButton>
       </div>

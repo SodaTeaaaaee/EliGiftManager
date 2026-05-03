@@ -52,7 +52,7 @@ const router = useRouter()
 const selectedKey = computed(() => {
   for (const m of route.matched) {
     const name = m.name?.toString() ?? ''
-    if (mainItems.some(i => i.name === name)) return name
+    if (mainItems.some((i) => i.name === name)) return name
     if (name === settingsItem.name) return name
   }
   return route.name?.toString() ?? 'dashboard'

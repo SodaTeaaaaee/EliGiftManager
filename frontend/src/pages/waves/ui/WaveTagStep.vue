@@ -2,8 +2,37 @@
 import { PlayOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NButton, NDataTable, NDrawer, NDrawerContent, NDivider, NEmpty, NFlex, NIcon, NInputNumber, NPopover, NPagination, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
-import { getProductImages, isWailsRuntimeAvailable, listProductsWithTags, listWaveMembers, listWaves, removeLevelTag, removeUserTag, upsertLevelTag, upsertUserTag, WAILS_PREVIEW_MESSAGE, type MemberItem, type WaveItem } from '@/shared/lib/wails/app'
+import {
+  NButton,
+  NDataTable,
+  NDrawer,
+  NDrawerContent,
+  NDivider,
+  NEmpty,
+  NFlex,
+  NIcon,
+  NInputNumber,
+  NPopover,
+  NPagination,
+  NSelect,
+  NTag,
+  useMessage,
+  type DataTableColumns,
+} from 'naive-ui'
+import {
+  getProductImages,
+  isWailsRuntimeAvailable,
+  listProductsWithTags,
+  listWaveMembers,
+  listWaves,
+  removeLevelTag,
+  removeUserTag,
+  upsertLevelTag,
+  upsertUserTag,
+  WAILS_PREVIEW_MESSAGE,
+  type MemberItem,
+  type WaveItem,
+} from '@/shared/lib/wails/app'
 import { useContextMenu } from '@/shared/composables/useContextMenu'
 
 const message = useMessage()
@@ -13,11 +42,26 @@ const router = useRouter()
 const waveId = computed(() => Number(route.params.waveId) || 0)
 
 // ── types ──
-type TagInfo = { tagName: string; quantity: number; tagType: string; platform: string; waveMemberId: number }
+type TagInfo = {
+  tagName: string
+  quantity: number
+  tagType: string
+  platform: string
+  waveMemberId: number
+}
 
 // ── state ──
 const wave = ref<WaveItem | null>(null)
-const allTagProducts = ref<{ id: number; name: string; factorySku: string; platform: string; tags: TagInfo[]; coverImage: string }[]>([])
+const allTagProducts = ref<
+  {
+    id: number
+    name: string
+    factorySku: string
+    platform: string
+    tags: TagInfo[]
+    coverImage: string
+  }[]
+>([])
 const checkedProductIds = ref<number[]>([])
 const selectedLevelTag = ref<string | null>(null)
 const levelTagQuantity = ref(1)
@@ -28,7 +72,9 @@ const errorMessage = ref('')
 
 const showProductDrawer = ref(false)
 const drawerProduct = ref<any>(null)
-const drawerProductImages = ref<{ id: number; path: string; sortOrder: number; sourceDir: string }[]>([])
+const drawerProductImages = ref<
+  { id: number; path: string; sortOrder: number; sourceDir: string }[]
+>([])
 
 // ── tag edit popover ──
 const editTagProduct = ref<any>(null)
@@ -51,14 +97,20 @@ async function handleUpdateTagQuantity() {
 
   try {
     if (newQty === 0) {
-      await (tag.tagType === 'level' ? removeLevelTag(row.id, tag.platform, tag.tagName) : removeUserTag(row.id, tag.waveMemberId))
+      await (tag.tagType === 'level'
+        ? removeLevelTag(row.id, tag.platform, tag.tagName)
+        : removeUserTag(row.id, tag.waveMemberId))
     } else {
-      await (tag.tagType === 'level' ? upsertLevelTag(row.id, tag.platform, tag.tagName, newQty) : upsertUserTag(row.id, tag.waveMemberId, newQty))
+      await (tag.tagType === 'level'
+        ? upsertLevelTag(row.id, tag.platform, tag.tagName, newQty)
+        : upsertUserTag(row.id, tag.waveMemberId, newQty))
     }
     await loadTagProducts()
     showTagPopover.value = false
     message.success('标签数量已更新')
-  } catch (e) { message.error(String(e)) }
+  } catch (e) {
+    message.error(String(e))
+  }
 }
 
 async function handleDeleteTag() {
@@ -74,19 +126,27 @@ async function handleDeleteTag() {
     await loadTagProducts()
     showTagPopover.value = false
     message.success('标签已删除')
-  } catch (e) { message.error(String(e)) }
+  } catch (e) {
+    message.error(String(e))
+  }
 }
 
 // ── wave level tags ──
 type LevelTag = { platform: string; tagName: string }
 const waveLevelTags = computed<LevelTag[]>(() => {
   if (!wave.value?.levelTags) return []
-  try { return JSON.parse(wave.value.levelTags) as LevelTag[] }
-  catch { return [] }
+  try {
+    return JSON.parse(wave.value.levelTags) as LevelTag[]
+  } catch {
+    return []
+  }
 })
 
 const batchTagOptions = computed(() =>
-  waveLevelTags.value.map(t => ({ label: `${t.platform}·${t.tagName}`, value: `${t.platform}|${t.tagName}` }))
+  waveLevelTags.value.map((t) => ({
+    label: `${t.platform}·${t.tagName}`,
+    value: `${t.platform}|${t.tagName}`,
+  })),
 )
 
 function platformTagColor(platform: string) {
@@ -102,16 +162,20 @@ const MAX_LINES = 4
 const LINE_HEIGHT = 21
 
 function clampedText(text: string, lines = MAX_LINES) {
-  return h('div', {
-    style: {
-      display: '-webkit-box',
-      '-webkit-line-clamp': String(lines),
-      '-webkit-box-orient': 'vertical',
-      overflow: 'hidden',
-      wordBreak: 'break-all',
-      lineHeight: String(LINE_HEIGHT) + 'px',
+  return h(
+    'div',
+    {
+      style: {
+        display: '-webkit-box',
+        '-webkit-line-clamp': String(lines),
+        '-webkit-box-orient': 'vertical',
+        overflow: 'hidden',
+        wordBreak: 'break-all',
+        lineHeight: String(LINE_HEIGHT) + 'px',
+      },
     },
-  }, String(text ?? ''))
+    String(text ?? ''),
+  )
 }
 
 // ── wave member lookup for user tag display ──
@@ -125,49 +189,79 @@ const wmNicknameMap = computed(() => {
 
 // ── tag chip renderer (with NPopover for quantity editing + delete) ──
 function renderTagChip(row: any, tag: TagInfo) {
-  const displayName = tag.tagType === 'user'
-    ? (wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName)
-    : tag.tagName
+  const displayName =
+    tag.tagType === 'user' ? wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName : tag.tagName
   const accent = platformTagColor(tag.platform).textColor || '#aaa'
-  const content = tag.quantity === 1
-    ? h('span', { style: { color: accent, fontWeight: 500 } }, displayName)
-    : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
-      h('span', { style: { color: accent, fontWeight: 500 } }, displayName),
-      h('span', { style: { color: '#666', margin: '0 1px' } }, ':'),
-      h('span', { style: { color: '#fff', fontWeight: 600 } }, String(tag.quantity)),
-    ])
-  return h(NPopover, {
-    trigger: 'click',
-    show: showTagPopover.value && editTagProduct.value?.id === row.id && editTagInfo.value?.tagName === tag.tagName && editTagInfo.value?.tagType === tag.tagType,
-    'onUpdate:show': (v: boolean) => { if (!v) showTagPopover.value = false },
-    placement: 'bottom',
-  }, {
-    trigger: () => h(NTag, {
-      size: 'medium', round: true,
-      color: platformTagColor(tag.platform).color,
-      style: { cursor: 'pointer' },
-      onClick: (e: MouseEvent) => {
-        e.stopPropagation()
-        openTagEdit(row, tag)
+  const content =
+    tag.quantity === 1
+      ? h('span', { style: { color: accent, fontWeight: 500 } }, displayName)
+      : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
+          h('span', { style: { color: accent, fontWeight: 500 } }, displayName),
+          h('span', { style: { color: '#666', margin: '0 1px' } }, ':'),
+          h('span', { style: { color: '#fff', fontWeight: 600 } }, String(tag.quantity)),
+        ])
+  return h(
+    NPopover,
+    {
+      trigger: 'click',
+      show:
+        showTagPopover.value &&
+        editTagProduct.value?.id === row.id &&
+        editTagInfo.value?.tagName === tag.tagName &&
+        editTagInfo.value?.tagType === tag.tagType,
+      'onUpdate:show': (v: boolean) => {
+        if (!v) showTagPopover.value = false
       },
-    }, { default: () => content }),
-    default: () => h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px' } }, [
-      h(NInputNumber, {
-        value: editTagNewQty.value,
-        size: 'small',
-        style: { width: '100px' },
-        'onUpdate:value': (v: number | null) => { if (v != null) editTagNewQty.value = v },
-      }),
-      h(NButton, {
-        size: 'tiny', type: 'primary',
-        onClick: () => handleUpdateTagQuantity(),
-      }, { default: () => '确定' }),
-      h(NButton, {
-        size: 'tiny', type: 'error', secondary: true,
-        onClick: () => handleDeleteTag(),
-      }, { default: () => '删除' }),
-    ]),
-  })
+      placement: 'bottom',
+    },
+    {
+      trigger: () =>
+        h(
+          NTag,
+          {
+            size: 'medium',
+            round: true,
+            color: platformTagColor(tag.platform).color,
+            style: { cursor: 'pointer' },
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
+              openTagEdit(row, tag)
+            },
+          },
+          { default: () => content },
+        ),
+      default: () =>
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px' } }, [
+          h(NInputNumber, {
+            value: editTagNewQty.value,
+            size: 'small',
+            style: { width: '100px' },
+            'onUpdate:value': (v: number | null) => {
+              if (v != null) editTagNewQty.value = v
+            },
+          }),
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              type: 'primary',
+              onClick: () => handleUpdateTagQuantity(),
+            },
+            { default: () => '确定' },
+          ),
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              type: 'error',
+              secondary: true,
+              onClick: () => handleDeleteTag(),
+            },
+            { default: () => '删除' },
+          ),
+        ]),
+    },
+  )
 }
 
 // ── measured header & pagination heights (DOM, updated on resize) ──
@@ -185,7 +279,11 @@ function measurePaginationHeight(el: HTMLElement | null): number {
 }
 
 // ── page packing: accumulate DOM-measured row heights, break at overflow ──
-function packByHeights(heights: number[], availableH: number, headerH: number): Array<{ start: number; end: number }> {
+function packByHeights(
+  heights: number[],
+  availableH: number,
+  headerH: number,
+): Array<{ start: number; end: number }> {
   const pages: Array<{ start: number; end: number }> = []
   if (heights.length === 0) return pages
   const bodyH = availableH - headerH
@@ -220,8 +318,11 @@ const tagNeedsMeasure = ref(true)
 const tagMeasuredHeights = ref<number[]>([])
 
 const tagPages = computed(() =>
-  packByHeights(tagMeasuredHeights.value,
-    tagAvailableH.value - tagPaginationH.value * 2 - 12, tagHeaderH.value),
+  packByHeights(
+    tagMeasuredHeights.value,
+    tagAvailableH.value - tagPaginationH.value * 2 - 12,
+    tagHeaderH.value,
+  ),
 )
 
 const tagTotalPages = computed(() => tagPages.value.length || 1)
@@ -240,27 +341,27 @@ const indicatorFontSize = computed(() => {
 const indicatorLeft = computed(() => {
   const current = tagCurrentPage.value
   const total = tagTotalPages.value
-  if (total <= 1) return ""
+  if (total <= 1) return ''
   const w = indicatorW.value
   const size = indicatorFontSize.value
   const charW = Math.max(size * 0.6, 6)
   const count = Math.max(2, Math.floor(w / charW / 2) * 2)
   const half = count / 2
-  if (current === 1) return ""
-  return "<".repeat(current === total ? count : half)
+  if (current === 1) return ''
+  return '<'.repeat(current === total ? count : half)
 })
 
 const indicatorRight = computed(() => {
   const current = tagCurrentPage.value
   const total = tagTotalPages.value
-  if (total <= 1) return ""
+  if (total <= 1) return ''
   const w = indicatorW.value
   const size = indicatorFontSize.value
   const charW = Math.max(size * 0.6, 6)
   const count = Math.max(2, Math.floor(w / charW / 2) * 2)
   const half = count / 2
-  if (current === total) return ""
-  return ">".repeat(current === 1 ? count : half)
+  if (current === total) return ''
+  return '>'.repeat(current === 1 ? count : half)
 })
 
 const visibleTagProducts = computed(() => {
@@ -275,13 +376,16 @@ async function remeasureTags() {
   await nextTick()
   const trs = tagTableWrapper.value?.querySelectorAll('tbody tr')
   if (trs && trs.length > 0) {
-    tagMeasuredHeights.value = Array.from(trs).map(tr => (tr as HTMLElement).offsetHeight)
+    tagMeasuredHeights.value = Array.from(trs).map((tr) => (tr as HTMLElement).offsetHeight)
   }
   tagNeedsMeasure.value = false
   if (tagCurrentPage.value > tagPages.value.length) tagCurrentPage.value = 1
 }
 
-function handleTagPageChange(p: number) { tagCurrentPage.value = p; lastClickedIndex.value = -1 }
+function handleTagPageChange(p: number) {
+  tagCurrentPage.value = p
+  lastClickedIndex.value = -1
+}
 
 // ── row props: multi-select with Ctrl/Shift, highlight selected ──
 const lastClickedIndex = ref(-1)
@@ -318,7 +422,7 @@ function rowProps(row: any) {
         const idx = visibleTagProducts.value.findIndex((p: any) => p.id === id)
         if (idx >= 0) lastClickedIndex.value = idx
         if (checkedProductIds.value.includes(id)) {
-          checkedProductIds.value = checkedProductIds.value.filter(x => x !== id)
+          checkedProductIds.value = checkedProductIds.value.filter((x) => x !== id)
         } else {
           checkedProductIds.value = [...checkedProductIds.value, id]
         }
@@ -352,28 +456,38 @@ function rowProps(row: any) {
 }
 
 // ── selection buttons ──
-const allSelected = computed(() => allTagProducts.value.length > 0 && checkedProductIds.value.length === allTagProducts.value.length)
+const allSelected = computed(
+  () =>
+    allTagProducts.value.length > 0 &&
+    checkedProductIds.value.length === allTagProducts.value.length,
+)
 const pageAllSelected = computed(() => {
   if (visibleTagProducts.value.length === 0) return false
-  return visibleTagProducts.value.every(p => checkedProductIds.value.includes(p.id))
+  return visibleTagProducts.value.every((p) => checkedProductIds.value.includes(p.id))
 })
 
 function handleSelectAll() {
-  if (allSelected.value) { checkedProductIds.value = []; lastClickedIndex.value = -1 }
-  else { checkedProductIds.value = allTagProducts.value.map(p => p.id) }
+  if (allSelected.value) {
+    checkedProductIds.value = []
+    lastClickedIndex.value = -1
+  } else {
+    checkedProductIds.value = allTagProducts.value.map((p) => p.id)
+  }
 }
 function handleSelectPage() {
-  const pageIds = visibleTagProducts.value.map(p => p.id)
+  const pageIds = visibleTagProducts.value.map((p) => p.id)
   if (pageAllSelected.value) {
-    checkedProductIds.value = checkedProductIds.value.filter(id => !pageIds.includes(id))
+    checkedProductIds.value = checkedProductIds.value.filter((id) => !pageIds.includes(id))
   } else {
     checkedProductIds.value = [...new Set([...checkedProductIds.value, ...pageIds])]
   }
 }
 function handleInvertPage() {
-  const pageIds = new Set(visibleTagProducts.value.map(p => p.id))
-  const toAdd = visibleTagProducts.value.filter(p => !checkedProductIds.value.includes(p.id)).map(p => p.id)
-  checkedProductIds.value = checkedProductIds.value.filter(id => !pageIds.has(id)).concat(toAdd)
+  const pageIds = new Set(visibleTagProducts.value.map((p) => p.id))
+  const toAdd = visibleTagProducts.value
+    .filter((p) => !checkedProductIds.value.includes(p.id))
+    .map((p) => p.id)
+  checkedProductIds.value = checkedProductIds.value.filter((id) => !pageIds.has(id)).concat(toAdd)
 }
 
 // ── ResizeObserver: track wrapper height & width → remeasure row heights → repack ──
@@ -381,7 +495,7 @@ let resizeObserver: ResizeObserver | null = null
 const lastTagW = ref(0)
 
 function setupResizeObserver() {
-  resizeObserver = new ResizeObserver(entries => {
+  resizeObserver = new ResizeObserver((entries) => {
     for (const entry of entries) {
       if (entry.target === tagTableParent.value) {
         const w = entry.contentRect.width
@@ -394,7 +508,10 @@ function setupResizeObserver() {
           lastTagW.value = w
           remeasureTags()
         }
-        if (hChanged) { tagAvailableH.value = h; tagCurrentPage.value = 1 }
+        if (hChanged) {
+          tagAvailableH.value = h
+          tagCurrentPage.value = 1
+        }
       }
     }
   })
@@ -412,45 +529,75 @@ const tagColumns = computed<DataTableColumns>(() => {
   const cols: DataTableColumns = [
     { type: 'selection' as const },
     {
-      title: '#', key: '__index', width: 50,
-      render: (row: any) => h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
+      title: '#',
+      key: '__index',
+      width: 50,
+      render: (row: any) =>
+        h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
     },
     {
-      title: '', key: 'coverImage', width: 56,
+      title: '',
+      key: 'coverImage',
+      width: 56,
       render: (row: any) =>
         row.coverImage
           ? h('div', { class: 'thumb-cell' }, [
-            h('img', {
-              src: '/local-images/' + row.coverImage,
-              class: 'thumb-img rounded',
-              onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
-            }),
-          ])
-          : h('div', { class: 'thumb-cell' }, [
-            h('div', { class: 'thumb-placeholder rounded' }),
-          ]),
+              h('img', {
+                src: '/local-images/' + row.coverImage,
+                class: 'thumb-img rounded',
+                onClick: (e: MouseEvent) => {
+                  e.stopPropagation()
+                  openProductDrawer(row)
+                },
+              }),
+            ])
+          : h('div', { class: 'thumb-cell' }, [h('div', { class: 'thumb-placeholder rounded' })]),
     },
     {
-      title: '商品名', key: 'name', minWidth: 120,
+      title: '商品名',
+      key: 'name',
+      minWidth: 120,
       render: (row: any) => clampedText(row.name),
     },
     {
-      title: '身份 Tag', key: 'levelTags', minWidth: 160,
-      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
-        default: () => (row.tags as TagInfo[])
-          .filter((t: TagInfo) => t.tagType === 'level')
-          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
-          .map((t: TagInfo) => renderTagChip(row, t)),
-      }),
+      title: '身份 Tag',
+      key: 'levelTags',
+      minWidth: 160,
+      render: (row: any) =>
+        h(
+          NFlex,
+          { size: 'small', wrap: true },
+          {
+            default: () =>
+              (row.tags as TagInfo[])
+                .filter((t: TagInfo) => t.tagType === 'level')
+                .sort(
+                  (a, b) =>
+                    a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName),
+                )
+                .map((t: TagInfo) => renderTagChip(row, t)),
+          },
+        ),
     },
     {
-      title: '用户 Tag', key: 'userTags', minWidth: 160,
-      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
-        default: () => (row.tags as TagInfo[])
-          .filter((t: TagInfo) => t.tagType === 'user')
-          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
-          .map((t: TagInfo) => renderTagChip(row, t)),
-      }),
+      title: '用户 Tag',
+      key: 'userTags',
+      minWidth: 160,
+      render: (row: any) =>
+        h(
+          NFlex,
+          { size: 'small', wrap: true },
+          {
+            default: () =>
+              (row.tags as TagInfo[])
+                .filter((t: TagInfo) => t.tagType === 'user')
+                .sort(
+                  (a, b) =>
+                    a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName),
+                )
+                .map((t: TagInfo) => renderTagChip(row, t)),
+          },
+        ),
     },
   ]
   return cols
@@ -458,7 +605,10 @@ const tagColumns = computed<DataTableColumns>(() => {
 
 // ── data loading ──
 async function guardRuntime() {
-  if (!isWailsRuntimeAvailable()) { errorMessage.value = WAILS_PREVIEW_MESSAGE; return false }
+  if (!isWailsRuntimeAvailable()) {
+    errorMessage.value = WAILS_PREVIEW_MESSAGE
+    return false
+  }
   return true
 }
 
@@ -466,8 +616,10 @@ async function loadWave() {
   if (!(await guardRuntime())) return
   try {
     const waves = await listWaves()
-    wave.value = waves.find(w => w.id === waveId.value) ?? null
-  } catch (e) { console.error('加载波次失败', e) }
+    wave.value = waves.find((w) => w.id === waveId.value) ?? null
+  } catch (e) {
+    console.error('加载波次失败', e)
+  }
 }
 
 async function loadTagProducts() {
@@ -475,12 +627,19 @@ async function loadTagProducts() {
   isTagLoading.value = true
   try {
     const result = await listProductsWithTags(waveId.value, '', 1, 10000)
-    allTagProducts.value = result.items.map(item => ({
-      id: item.id, name: item.name, factorySku: item.factorySku,
-      platform: item.platform, tags: (item.tags as any as TagInfo[]), coverImage: (item as any).coverImage || '',
+    allTagProducts.value = result.items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      factorySku: item.factorySku,
+      platform: item.platform,
+      tags: item.tags as any as TagInfo[],
+      coverImage: (item as any).coverImage || '',
     }))
-  } catch (e) { console.error('加载商品标签失败', e) }
-  finally { isTagLoading.value = false }
+  } catch (e) {
+    console.error('加载商品标签失败', e)
+  } finally {
+    isTagLoading.value = false
+  }
 }
 
 // ── batch operations ──
@@ -494,7 +653,9 @@ async function handleBatchAddLevelTag() {
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品打上 ${platform}·${tagName} 标签`)
     await loadTagProducts()
-  } catch (e) { message.error(String(e)) }
+  } catch (e) {
+    message.error(String(e))
+  }
 }
 
 async function handleBatchRemoveLevelTag() {
@@ -506,23 +667,28 @@ async function handleBatchRemoveLevelTag() {
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除 ${platform}·${tagName} 标签`)
     await loadTagProducts()
-  } catch (e) { message.error(String(e)) }
+  } catch (e) {
+    message.error(String(e))
+  }
 }
 
 // ── user tag batch ──
 const waveMembers = ref<MemberItem[]>([])
 
 const memberOptions = computed(() =>
-  waveMembers.value.map(m => ({
+  waveMembers.value.map((m) => ({
     label: `${m.platform} · ${m.latestNickname} (${m.platformUid})`,
     value: m.id,
-  }))
+  })),
 )
 
 async function loadWaveMembers() {
   if (!waveId.value) return
-  try { waveMembers.value = await listWaveMembers(waveId.value) }
-  catch (e) { console.error('加载波次会员失败', e) }
+  try {
+    waveMembers.value = await listWaveMembers(waveId.value)
+  } catch (e) {
+    console.error('加载波次会员失败', e)
+  }
 }
 
 async function handleBatchAddUserTag() {
@@ -535,7 +701,9 @@ async function handleBatchAddUserTag() {
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品添加用户 Tag`)
     await loadTagProducts()
-  } catch (e) { message.error(String(e)) }
+  } catch (e) {
+    message.error(String(e))
+  }
 }
 
 async function handleBatchRemoveUserTag() {
@@ -547,15 +715,20 @@ async function handleBatchRemoveUserTag() {
     }
     message.success(`已为 ${checkedProductIds.value.length} 件商品移除用户 Tag`)
     await loadTagProducts()
-  } catch (e) { message.error(String(e)) }
+  } catch (e) {
+    message.error(String(e))
+  }
 }
 
 // ── product drawer ──
-async function openProductDrawer(product: typeof allTagProducts.value[0]) {
+async function openProductDrawer(product: (typeof allTagProducts.value)[0]) {
   drawerProduct.value = product
   showProductDrawer.value = true
-  try { drawerProductImages.value = await getProductImages(product.id) }
-  catch { drawerProductImages.value = [] }
+  try {
+    drawerProductImages.value = await getProductImages(product.id)
+  } catch {
+    drawerProductImages.value = []
+  }
 }
 
 function goPrev() {
@@ -583,17 +756,22 @@ onMounted(async () => {
     if (!tr) return []
     const productId = Number(tr.dataset.productId)
     if (!productId) return []
-    const product = allTagProducts.value.find(p => p.id === productId)
+    const product = allTagProducts.value.find((p) => p.id === productId)
     if (!product) return []
     const levelTags = product.tags.filter((t: TagInfo) => t.tagType === 'level')
     const userTags = product.tags.filter((t: TagInfo) => t.tagType === 'user')
     const items: Array<{ label: string; key: string; action: () => void; divider?: boolean }> = []
     if (levelTags.length > 0 || userTags.length > 0) {
       items.push({
-        label: '清空全部 Tag', key: 'clear-all',
+        label: '清空全部 Tag',
+        key: 'clear-all',
         action: async () => {
-          for (const t of levelTags) { await removeLevelTag(product.id, t.platform, t.tagName) }
-          for (const t of userTags) { await removeUserTag(product.id, t.waveMemberId) }
+          for (const t of levelTags) {
+            await removeLevelTag(product.id, t.platform, t.tagName)
+          }
+          for (const t of userTags) {
+            await removeUserTag(product.id, t.waveMemberId)
+          }
           await loadTagProducts()
           message.success('已清空全部 Tag')
         },
@@ -601,9 +779,12 @@ onMounted(async () => {
     }
     if (levelTags.length > 0) {
       items.push({
-        label: '清空身份 Tag', key: 'clear-level',
+        label: '清空身份 Tag',
+        key: 'clear-level',
         action: async () => {
-          for (const t of levelTags) { await removeLevelTag(product.id, t.platform, t.tagName) }
+          for (const t of levelTags) {
+            await removeLevelTag(product.id, t.platform, t.tagName)
+          }
           await loadTagProducts()
           message.success('已清空身份 Tag')
         },
@@ -612,9 +793,12 @@ onMounted(async () => {
     }
     if (userTags.length > 0) {
       items.push({
-        label: '清空用户 Tag', key: 'clear-user',
+        label: '清空用户 Tag',
+        key: 'clear-user',
         action: async () => {
-          for (const t of userTags) { await removeUserTag(product.id, t.waveMemberId) }
+          for (const t of userTags) {
+            await removeUserTag(product.id, t.waveMemberId)
+          }
           await loadTagProducts()
           message.success('已清空用户 Tag')
         },
@@ -684,101 +868,219 @@ onUnmounted(() => {
     <div class="shrink-0 px-1 space-y-2">
       <div v-if="waveLevelTags.length > 0">
         <NFlex :size="'small'" :wrap="true">
-          <NTag v-for="tag in waveLevelTags" :key="`${tag.platform}|${tag.tagName}`" size="small" round
-            :color="platformTagColor(tag.platform)">{{ tag.platform }}·{{ tag.tagName }}</NTag>
+          <NTag
+            v-for="tag in waveLevelTags"
+            :key="`${tag.platform}|${tag.tagName}`"
+            size="small"
+            round
+            :color="platformTagColor(tag.platform)"
+            >{{ tag.platform }}·{{ tag.tagName }}</NTag
+          >
         </NFlex>
       </div>
       <NEmpty v-else description="当前波次无等级 Tag，导入会员数据后将自动提取" size="small" />
 
       <NFlex :size="'small'" :wrap="true" class="items-center">
         <span class="text-xs shrink-0">选择：</span>
-        <NButton size="small" secondary @click="handleSelectAll">{{ allSelected ? '取消全选' : '全选所有' }}</NButton>
-        <NButton size="small" secondary @click="handleSelectPage">{{ pageAllSelected ? '取消本页' : '本页全选' }}</NButton>
+        <NButton size="small" secondary @click="handleSelectAll">{{
+          allSelected ? '取消全选' : '全选所有'
+        }}</NButton>
+        <NButton size="small" secondary @click="handleSelectPage">{{
+          pageAllSelected ? '取消本页' : '本页全选'
+        }}</NButton>
         <NButton size="small" secondary @click="handleInvertPage">本页反选</NButton>
-        <NTag size="small" round :bordered="false">已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}
+        <NTag size="small" round :bordered="false"
+          >已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}
         </NTag>
       </NFlex>
 
       <!-- Level tag row -->
       <NFlex :size="'small'" :wrap="true" class="items-center">
         <span class="text-xs shrink-0 font-medium" style="width: 52px">身份 Tag</span>
-        <NSelect v-model:value="selectedLevelTag" :options="batchTagOptions" placeholder="选择等级" size="small"
-          style="width: 180px" clearable />
-        <NInputNumber v-model:value="levelTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
-        <NButton size="small" type="primary" :disabled="!selectedLevelTag || checkedProductIds.length === 0"
-          @click="handleBatchAddLevelTag">添加</NButton>
-        <NButton size="small" type="error" secondary :disabled="!selectedLevelTag || checkedProductIds.length === 0"
-          @click="handleBatchRemoveLevelTag">删除</NButton>
+        <NSelect
+          v-model:value="selectedLevelTag"
+          :options="batchTagOptions"
+          placeholder="选择等级"
+          size="small"
+          style="width: 180px"
+          clearable
+        />
+        <NInputNumber
+          v-model:value="levelTagQuantity"
+          :min="-999"
+          :max="999"
+          size="small"
+          style="width: 80px"
+        />
+        <NButton
+          size="small"
+          type="primary"
+          :disabled="!selectedLevelTag || checkedProductIds.length === 0"
+          @click="handleBatchAddLevelTag"
+          >添加</NButton
+        >
+        <NButton
+          size="small"
+          type="error"
+          secondary
+          :disabled="!selectedLevelTag || checkedProductIds.length === 0"
+          @click="handleBatchRemoveLevelTag"
+          >删除</NButton
+        >
       </NFlex>
 
       <!-- User tag row -->
       <NFlex :size="'small'" :wrap="true" class="items-center">
         <span class="text-xs shrink-0 font-medium" style="width: 52px">用户 Tag</span>
-        <NSelect v-model:value="selectedUserTagMember" :options="memberOptions" placeholder="搜索会员" size="small"
-          style="width: 180px" clearable filterable />
-        <NInputNumber v-model:value="userTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
-        <NButton size="small" type="primary" :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
-          @click="handleBatchAddUserTag">添加</NButton>
-        <NButton size="small" type="error" secondary
-          :disabled="!selectedUserTagMember || checkedProductIds.length === 0" @click="handleBatchRemoveUserTag">删除
+        <NSelect
+          v-model:value="selectedUserTagMember"
+          :options="memberOptions"
+          placeholder="搜索会员"
+          size="small"
+          style="width: 180px"
+          clearable
+          filterable
+        />
+        <NInputNumber
+          v-model:value="userTagQuantity"
+          :min="-999"
+          :max="999"
+          size="small"
+          style="width: 80px"
+        />
+        <NButton
+          size="small"
+          type="primary"
+          :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
+          @click="handleBatchAddUserTag"
+          >添加</NButton
+        >
+        <NButton
+          size="small"
+          type="error"
+          secondary
+          :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
+          @click="handleBatchRemoveUserTag"
+          >删除
         </NButton>
       </NFlex>
     </div>
 
     <div ref="tagTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
       <div ref="tagTableWrapper" class="overflow-hidden">
-        <NDataTable :columns="tagColumns" :data="visibleTagProducts" :loading="isTagLoading" :bordered="false"
-          :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds" :pagination="false" size="medium"
-          :row-props="rowProps" />
+        <NDataTable
+          :columns="tagColumns"
+          :data="visibleTagProducts"
+          :loading="isTagLoading"
+          :bordered="false"
+          :row-key="(row: any) => row.id"
+          v-model:checked-row-keys="checkedProductIds"
+          :pagination="false"
+          size="medium"
+          :row-props="rowProps"
+        />
       </div>
-      <div ref="tagIndicatorRef" class="flex-1 flex justify-center items-center select-none" :style="{
-        fontSize: indicatorFontSize + 'px',
-        lineHeight: 1,
-        fontFamily: 'monospace',
-        whiteSpace: 'nowrap',
-        overflow: 'hidden',
-        marginBottom: '12px',
-      }"><span style="color: rgba(96,165,250,0.10)">{{ indicatorLeft }}</span><span
-          style="color: rgba(251,191,36,0.10)">{{ indicatorRight }}</span></div>
-      <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
-        style="transform: scale(1.5); transform-origin: top center;">
-        <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"
-          @update:page="handleTagPageChange" />
+      <div
+        ref="tagIndicatorRef"
+        class="flex-1 flex justify-center items-center select-none"
+        :style="{
+          fontSize: indicatorFontSize + 'px',
+          lineHeight: 1,
+          fontFamily: 'monospace',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          marginBottom: '12px',
+        }"
+      >
+        <span style="color: rgba(96, 165, 250, 0.1)">{{ indicatorLeft }}</span
+        ><span style="color: rgba(251, 191, 36, 0.1)">{{ indicatorRight }}</span>
+      </div>
+      <div
+        ref="tagPaginationRef"
+        class="flex justify-center mt-0 mb-6 shrink-0"
+        style="transform: scale(1.5); transform-origin: top center"
+      >
+        <NPagination
+          :page="tagCurrentPage"
+          :page-count="tagTotalPages"
+          size="small"
+          @update:page="handleTagPageChange"
+        />
       </div>
     </div>
 
-    <div class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700">
+    <div
+      class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700"
+    >
       <NButton @click="goPrev">上一步</NButton>
       <NButton type="primary" @click="goNext">下一步</NButton>
     </div>
 
     <!-- Product Detail Drawer -->
-    <NDrawer :show="showProductDrawer" :width="560"
-      @update:show="(v: boolean) => { if (!v) { showProductDrawer = false; drawerProduct = null; drawerProductImages = [] } }">
+    <NDrawer
+      :show="showProductDrawer"
+      :width="560"
+      @update:show="
+        (v: boolean) => {
+          if (!v) {
+            showProductDrawer = false
+            drawerProduct = null
+            drawerProductImages = []
+          }
+        }
+      "
+    >
       <NDrawerContent title="商品详情" closable>
         <template v-if="drawerProduct">
           <div class="space-y-3">
-            <img v-if="drawerProduct.coverImage" :src="'/local-images/' + drawerProduct.coverImage"
-              class="w-full rounded-lg object-contain" style="max-height:50vh" />
+            <img
+              v-if="drawerProduct.coverImage"
+              :src="'/local-images/' + drawerProduct.coverImage"
+              class="w-full rounded-lg object-contain"
+              style="max-height: 50vh"
+            />
             <h2 class="text-xl font-semibold">{{ drawerProduct.name }}</h2>
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-sm text-gray-500">{{ drawerProduct.factorySku }}</span>
               <NTag size="small" round>{{ drawerProduct.platform }}</NTag>
             </div>
             <NFlex :size="'small'" :wrap="true">
-              <NTag v-for="tag in drawerProduct.tags" :key="tag.tagName + tag.tagType" size="medium" round
-                :color="platformTagColor(tag.platform).color">
+              <NTag
+                v-for="tag in drawerProduct.tags"
+                :key="tag.tagName + tag.tagType"
+                size="medium"
+                round
+                :color="platformTagColor(tag.platform).color"
+              >
                 <template v-if="tag.quantity === 1">
-                  <span :style="{ color: platformTagColor(tag.platform).textColor || '#aaa', fontWeight: 500 }">
-                    {{ tag.tagType === 'user' ? (wmNicknameMap.get(tag.waveMemberId) || tag.tagName) : tag.tagName }}
+                  <span
+                    :style="{
+                      color: platformTagColor(tag.platform).textColor || '#aaa',
+                      fontWeight: 500,
+                    }"
+                  >
+                    {{
+                      tag.tagType === 'user'
+                        ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
+                        : tag.tagName
+                    }}
                   </span>
                 </template>
                 <template v-else>
-                  <span :style="{ color: platformTagColor(tag.platform).textColor || '#aaa', fontWeight: 500 }">
-                    {{ tag.tagType === 'user' ? (wmNicknameMap.get(tag.waveMemberId) || tag.tagName) : tag.tagName }}
+                  <span
+                    :style="{
+                      color: platformTagColor(tag.platform).textColor || '#aaa',
+                      fontWeight: 500,
+                    }"
+                  >
+                    {{
+                      tag.tagType === 'user'
+                        ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
+                        : tag.tagName
+                    }}
                   </span>
                   <span style="color: #666; margin: 0 1px">:</span>
-                  <span style="color: #fff; fontWeight: 600">{{ tag.quantity }}</span>
+                  <span style="color: #fff; fontweight: 600">{{ tag.quantity }}</span>
                 </template>
               </NTag>
             </NFlex>
@@ -786,14 +1088,17 @@ onUnmounted(() => {
           <template v-if="drawerProductImages.length">
             <NDivider>详情图片</NDivider>
             <div class="space-y-3">
-              <img v-for="img in drawerProductImages" :key="img.id" :src="'/local-images/' + img.path"
-                class="w-full rounded-lg object-contain" />
+              <img
+                v-for="img in drawerProductImages"
+                :key="img.id"
+                :src="'/local-images/' + img.path"
+                class="w-full rounded-lg object-contain"
+              />
             </div>
           </template>
         </template>
       </NDrawerContent>
     </NDrawer>
-
   </div>
 </template>
 

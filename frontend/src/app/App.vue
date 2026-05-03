@@ -1,6 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, watchEffect } from 'vue'
-import { NConfigProvider, NDialogProvider, NGlobalStyle, NMessageProvider, darkTheme, useOsTheme, type GlobalThemeOverrides } from 'naive-ui'
+import {
+  NConfigProvider,
+  NDialogProvider,
+  NGlobalStyle,
+  NMessageProvider,
+  darkTheme,
+  useOsTheme,
+  type GlobalThemeOverrides,
+} from 'naive-ui'
 import { RouterView } from 'vue-router'
 import { useThemeStore } from '@/shared/model/theme'
 import { useContextMenu } from '@/shared/composables/useContextMenu'
@@ -48,7 +56,9 @@ const resolvedTheme = computed<'light' | 'dark'>(() => {
 })
 
 const naiveTheme = computed(() => (resolvedTheme.value === 'dark' ? darkTheme : null))
-const themeOverrides = computed(() => (resolvedTheme.value === 'dark' ? darkThemeOverrides : lightThemeOverrides))
+const themeOverrides = computed(() =>
+  resolvedTheme.value === 'dark' ? darkThemeOverrides : lightThemeOverrides,
+)
 
 watchEffect(() => {
   if (typeof document === 'undefined') {

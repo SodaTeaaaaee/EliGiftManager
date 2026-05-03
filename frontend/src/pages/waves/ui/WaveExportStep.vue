@@ -2,8 +2,29 @@
 import { DownloadOutline } from '@vicons/ionicons5'
 import { computed, h, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NCard, NButton, NDataTable, NIcon, NSelect, NTag, useMessage, type DataTableColumns } from 'naive-ui'
-import { bindDefaultAddresses, exportOrderCSV, isWailsRuntimeAvailable, listDispatchRecords, listTemplates, listWaves, previewExport, WAILS_PREVIEW_MESSAGE, type DispatchRecordItem, type TemplateItem, type WaveItem } from '@/shared/lib/wails/app'
+import {
+  NCard,
+  NButton,
+  NDataTable,
+  NIcon,
+  NSelect,
+  NTag,
+  useMessage,
+  type DataTableColumns,
+} from 'naive-ui'
+import {
+  bindDefaultAddresses,
+  exportOrderCSV,
+  isWailsRuntimeAvailable,
+  listDispatchRecords,
+  listTemplates,
+  listWaves,
+  previewExport,
+  WAILS_PREVIEW_MESSAGE,
+  type DispatchRecordItem,
+  type TemplateItem,
+  type WaveItem,
+} from '@/shared/lib/wails/app'
 
 const message = useMessage()
 const route = useRoute()
@@ -17,7 +38,9 @@ const records = ref<DispatchRecordItem[]>([])
 const isBindingAddresses = ref(false)
 const errorMessage = ref('')
 
-const exportTemplates = computed(() => templates.value.filter(t => t.type === 'export_order').map(toOption))
+const exportTemplates = computed(() =>
+  templates.value.filter((t) => t.type === 'export_order').map(toOption),
+)
 const pendingAddressCount = computed(() => wave.value?.pendingAddressRecords ?? 0)
 
 function toOption(template: TemplateItem) {
@@ -27,34 +50,62 @@ function toOption(template: TemplateItem) {
 const platformTemplateSelections = ref<Record<string, number | null>>({})
 
 const exportPlatforms = computed(() => {
-  const platforms = [...new Set(records.value.map(r => r.productPlatform))]
+  const platforms = [...new Set(records.value.map((r) => r.productPlatform))]
   for (const platform of platforms) {
     if (!(platform in platformTemplateSelections.value)) {
-      const candidates = templates.value.filter(t => t.type === 'export_order' && t.platform === platform)
+      const candidates = templates.value.filter(
+        (t) => t.type === 'export_order' && t.platform === platform,
+      )
       platformTemplateSelections.value[platform] = candidates.length === 1 ? candidates[0].id : null
     }
   }
-  return platforms.map(platform => {
-    const candidates = templates.value.filter(t => t.type === 'export_order' && t.platform === platform)
+  return platforms.map((platform) => {
+    const candidates = templates.value.filter(
+      (t) => t.type === 'export_order' && t.platform === platform,
+    )
     return {
       platform,
       templateId: platformTemplateSelections.value[platform] ?? null,
-      options: candidates.map(t => ({ label: t.name, value: t.id })),
+      options: candidates.map((t) => ({ label: t.name, value: t.id })),
     }
   })
 })
 
 const recordColumns: DataTableColumns<DispatchRecordItem> = [
-  { title: '会员', key: 'memberNickname', minWidth: 120, render: (row) => row.memberNickname || row.platformUid },
+  {
+    title: '会员',
+    key: 'memberNickname',
+    minWidth: 120,
+    render: (row) => row.memberNickname || row.platformUid,
+  },
   { title: '平台', key: 'memberPlatform', width: 100 },
   { title: '礼物', key: 'productName', minWidth: 140 },
   { title: '数量', key: 'quantity', width: 80 },
-  { title: '地址', key: 'hasAddress', width: 110, render: (row) => h(NTag, { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.hasAddress ? '已绑定' : '待补全' }) },
-  { title: '收件信息', key: 'address', minWidth: 180, ellipsis: { tooltip: true }, render: (row) => row.address || '-' },
+  {
+    title: '地址',
+    key: 'hasAddress',
+    width: 110,
+    render: (row) =>
+      h(
+        NTag,
+        { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
+        { default: () => (row.hasAddress ? '已绑定' : '待补全') },
+      ),
+  },
+  {
+    title: '收件信息',
+    key: 'address',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (row) => row.address || '-',
+  },
 ]
 
 async function guardRuntime() {
-  if (!isWailsRuntimeAvailable()) { errorMessage.value = WAILS_PREVIEW_MESSAGE; return false }
+  if (!isWailsRuntimeAvailable()) {
+    errorMessage.value = WAILS_PREVIEW_MESSAGE
+    return false
+  }
   return true
 }
 
@@ -62,20 +113,28 @@ async function loadWave() {
   if (!(await guardRuntime())) return
   try {
     const waves = await listWaves()
-    wave.value = waves.find(w => w.id === waveId.value) ?? null
-  } catch (e) { console.error('加载波次失败', e) }
+    wave.value = waves.find((w) => w.id === waveId.value) ?? null
+  } catch (e) {
+    console.error('加载波次失败', e)
+  }
 }
 
 async function loadTemplates() {
   if (!(await guardRuntime())) return
-  try { templates.value = await listTemplates() }
-  catch (e) { console.error('加载模板失败', e) }
+  try {
+    templates.value = await listTemplates()
+  } catch (e) {
+    console.error('加载模板失败', e)
+  }
 }
 
 async function loadRecords() {
   if (!waveId.value) return
-  try { records.value = await listDispatchRecords(waveId.value) }
-  catch (e) { console.error('加载发货记录失败', e) }
+  try {
+    records.value = await listDispatchRecords(waveId.value)
+  } catch (e) {
+    console.error('加载发货记录失败', e)
+  }
 }
 
 async function handleBindAddresses() {
@@ -83,11 +142,16 @@ async function handleBindAddresses() {
   isBindingAddresses.value = true
   try {
     const result = await bindDefaultAddresses(waveId.value)
-    message.success('补全完成：' + result.updated + ' 条已绑定默认地址，' + result.skipped + ' 条无默认地址跳过')
+    message.success(
+      '补全完成：' + result.updated + ' 条已绑定默认地址，' + result.skipped + ' 条无默认地址跳过',
+    )
     await loadWave()
     await loadRecords()
-  } catch (e) { message.error(String(e)) }
-  finally { isBindingAddresses.value = false }
+  } catch (e) {
+    message.error(String(e))
+  } finally {
+    isBindingAddresses.value = false
+  }
 }
 
 async function handleExport() {
@@ -99,16 +163,24 @@ async function handleExport() {
       return
     }
     const platforms = exportPlatforms.value
-    if (!platforms.length) { message.warning('无导出数据'); return }
-    const missingTemplate = platforms.find(ep => !ep.templateId)
-    if (missingTemplate) { message.warning(`平台 ${missingTemplate.platform} 未选择导出模板`); return }
+    if (!platforms.length) {
+      message.warning('无导出数据')
+      return
+    }
+    const missingTemplate = platforms.find((ep) => !ep.templateId)
+    if (missingTemplate) {
+      message.warning(`平台 ${missingTemplate.platform} 未选择导出模板`)
+      return
+    }
     for (const ep of platforms) {
       if (!ep.templateId) continue
       const path = await exportOrderCSV(waveId.value, ep.templateId)
       message.success(`${ep.platform} 清单已导出：${path}`)
     }
     await loadWave()
-  } catch (e) { message.error(String(e)) }
+  } catch (e) {
+    message.error(String(e))
+  }
 }
 
 function goPrev() {
@@ -126,26 +198,52 @@ onMounted(async () => {
     <template #header>
       <span class="flex items-center gap-2">
         <span>步骤四：异常检查与导出</span>
-        <NTag v-if="pendingAddressCount > 0" type="warning" size="small" round>{{ pendingAddressCount }} 条待补全</NTag>
+        <NTag v-if="pendingAddressCount > 0" type="warning" size="small" round
+          >{{ pendingAddressCount }} 条待补全</NTag
+        >
       </span>
     </template>
     <template #header-extra>
-      <NButton v-if="wave && pendingAddressCount > 0" size="small" type="warning"
-        :loading="isBindingAddresses" @click="handleBindAddresses">一键补全默认地址</NButton>
+      <NButton
+        v-if="wave && pendingAddressCount > 0"
+        size="small"
+        type="warning"
+        :loading="isBindingAddresses"
+        @click="handleBindAddresses"
+        >一键补全默认地址</NButton
+      >
     </template>
-    <NDataTable :columns="recordColumns" :data="records" :bordered="false" :pagination="{ pageSize: 10 }" class="mb-4" />
+    <NDataTable
+      :columns="recordColumns"
+      :data="records"
+      :bordered="false"
+      :pagination="{ pageSize: 10 }"
+      class="mb-4"
+    />
     <div class="p-3 border border-gray-100 dark:border-gray-700 rounded-lg">
       <span class="text-xs text-gray-500 block mb-2 font-medium">导出发货清单</span>
       <div v-if="exportPlatforms.length" class="space-y-2 mb-3">
         <div class="text-xs text-gray-400">导出模板（已自动匹配）</div>
         <div v-for="ep in exportPlatforms" :key="ep.platform" class="flex items-center gap-2">
           <NTag size="small" round>{{ ep.platform }}</NTag>
-          <NSelect :value="ep.templateId" :options="ep.options" size="small" style="width:220px" placeholder="选择导出模板"
-            @update:value="(v: number) => { platformTemplateSelections[ep.platform] = v }" />
+          <NSelect
+            :value="ep.templateId"
+            :options="ep.options"
+            size="small"
+            style="width: 220px"
+            placeholder="选择导出模板"
+            @update:value="
+              (v: number) => {
+                platformTemplateSelections[ep.platform] = v
+              }
+            "
+          />
         </div>
       </div>
       <NButton block type="success" @click="handleExport">
-        <template #icon><NIcon><DownloadOutline /></NIcon></template>
+        <template #icon
+          ><NIcon><DownloadOutline /></NIcon
+        ></template>
         生成发货清单
       </NButton>
     </div>

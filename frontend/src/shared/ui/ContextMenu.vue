@@ -68,10 +68,7 @@ onUnmounted(() => {
       background: 'var(--surface-strong, #fff)',
     }"
   >
-    <div
-      v-for="item in state.items"
-      :key="item.key"
-    >
+    <div v-for="item in state.items" :key="item.key">
       <div v-if="item.divider" class="my-1 border-t border-gray-100 dark:border-gray-700" />
       <div
         class="px-3 py-2 text-sm cursor-pointer transition-colors hover:bg-black/5 dark:hover:bg-white/5"
