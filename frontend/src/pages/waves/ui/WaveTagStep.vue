@@ -212,6 +212,7 @@ function packByHeights(heights: number[], availableH: number, headerH: number): 
 const tagTableParent = ref<HTMLElement | null>(null)
 const tagTableWrapper = ref<HTMLElement | null>(null)
 const tagPaginationRef = ref<HTMLElement | null>(null)
+const tagIndicatorRef = ref<HTMLElement | null>(null)
 const tagAvailableH = ref(400)
 const tagCurrentPage = ref(1)
 
@@ -224,6 +225,31 @@ const tagPages = computed(() =>
 )
 
 const tagTotalPages = computed(() => tagPages.value.length || 1)
+
+// ── indicator content ──
+const indicatorW = ref(0)
+const indicatorH = ref(0)
+let indicatorObserver: ResizeObserver | null = null
+
+const indicatorFontSize = computed(() => {
+  const h = indicatorH.value
+  if (h < 16) return 10
+  return Math.min(Math.floor(h * 0.4), 64)
+})
+
+const indicatorContent = computed(() => {
+  const current = tagCurrentPage.value
+  const total = tagTotalPages.value
+  if (total <= 1) return ""
+  const w = indicatorW.value
+  const size = indicatorFontSize.value
+  const charW = Math.max(size * 0.5, 4)
+  const count = Math.max(1, Math.floor(w / charW))
+  if (current === 1) return ">".repeat(count)
+  if (current === total) return "<".repeat(count)
+  const half = Math.floor(count / 2)
+  return "<".repeat(half) + ">".repeat(count - half)
+})
 
 const visibleTagProducts = computed(() => {
   if (tagNeedsMeasure.value) return allTagProducts.value
@@ -595,6 +621,7 @@ onMounted(async () => {
   }
   await remeasureTags()
   setupResizeObserver()
+  setupIndicatorObserver()
 })
 
 watch([() => allTagProducts.value.length], async () => {
@@ -609,8 +636,27 @@ watch([() => allTagProducts.value.length], async () => {
   await remeasureTags()
 })
 
+function setupIndicatorObserver() {
+  indicatorObserver?.disconnect()
+  if (tagIndicatorRef.value) {
+    indicatorObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        indicatorW.value = entry.contentRect.width
+        indicatorH.value = entry.contentRect.height
+      }
+    })
+    indicatorObserver.observe(tagIndicatorRef.value)
+  }
+}
+
+// Re-observe indicator after page change (v-if may recreate element)
+watch([tagCurrentPage, tagTotalPages], () => {
+  nextTick(() => setupIndicatorObserver())
+})
+
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  indicatorObserver?.disconnect()
   if (unregisterCtxMenu) unregisterCtxMenu()
 })
 </script>
@@ -673,10 +719,19 @@ onUnmounted(() => {
           :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds" :pagination="false" size="medium"
           :row-props="rowProps" />
       </div>
-      <div v-if="tagTotalPages > 1" class="flex-1 flex justify-center items-end rounded"
-        style="background: rgba(255,165,0,0.3); padding-bottom: 4px;">
-        <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
-      </div>
+      <div
+        v-if="tagTotalPages > 1" ref="tagIndicatorRef"
+        class="flex-1 flex justify-center items-end select-none"
+        :style="{
+          fontSize: indicatorFontSize + 'px',
+          lineHeight: 1,
+          color: 'rgba(128,128,128,0.12)',
+          paddingBottom: '2px',
+          fontFamily: 'monospace',
+          wordBreak: 'break-all',
+          overflow: 'hidden',
+        }"
+      >{{ indicatorContent }}</div>
       <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
         style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"

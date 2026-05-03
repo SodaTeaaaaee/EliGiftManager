@@ -158,6 +158,32 @@ const memberPages = computed(() =>
 
 const memberTotalPages = computed(() => memberPages.value.length || 1)
 
+// ── indicator content ──
+const memberIndicatorRef = ref<HTMLElement | null>(null)
+const memberIndicatorW = ref(0)
+const memberIndicatorH = ref(0)
+let memberIndicatorObserver: ResizeObserver | null = null
+
+const memberIndicatorFontSize = computed(() => {
+  const h = memberIndicatorH.value
+  if (h < 16) return 10
+  return Math.min(Math.floor(h * 0.4), 64)
+})
+
+const memberIndicatorContent = computed(() => {
+  const current = memberCurrentPage.value
+  const total = memberTotalPages.value
+  if (total <= 1) return ""
+  const w = memberIndicatorW.value
+  const size = memberIndicatorFontSize.value
+  const charW = Math.max(size * 0.5, 4)
+  const count = Math.max(1, Math.floor(w / charW))
+  if (current === 1) return ">".repeat(count)
+  if (current === total) return "<".repeat(count)
+  const half = Math.floor(count / 2)
+  return "<".repeat(half) + ">".repeat(count - half)
+})
+
 const visibleMemberGroups = computed(() => {
   if (memberNeedsMeasure.value) return memberGroups.value
   const page = memberPages.value[memberCurrentPage.value - 1]
@@ -414,6 +440,7 @@ onMounted(async () => {
   }
   await remeasureMembers()
   setupResizeObserver()
+  setupMemberIndicatorObserver()
 })
 
 watch([() => memberGroups.value.length], async () => {
@@ -428,8 +455,26 @@ watch([() => memberGroups.value.length], async () => {
   await remeasureMembers()
 })
 
+function setupMemberIndicatorObserver() {
+  memberIndicatorObserver?.disconnect()
+  if (memberIndicatorRef.value) {
+    memberIndicatorObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        memberIndicatorW.value = entry.contentRect.width
+        memberIndicatorH.value = entry.contentRect.height
+      }
+    })
+    memberIndicatorObserver.observe(memberIndicatorRef.value)
+  }
+}
+
+watch([memberCurrentPage, memberTotalPages], () => {
+  nextTick(() => setupMemberIndicatorObserver())
+})
+
 onUnmounted(() => {
   resizeObserver?.disconnect()
+  memberIndicatorObserver?.disconnect()
 })
 </script>
 <template>
@@ -467,10 +512,19 @@ onUnmounted(() => {
           :pagination="false" size="small"
           :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })" />
       </div>
-      <div v-if="memberTotalPages > 1" class="flex-1 flex justify-center items-end rounded"
-        style="background: rgba(255,165,0,0.3); padding-bottom: 4px;">
-        <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
-      </div>
+      <div
+        v-if="memberTotalPages > 1" ref="memberIndicatorRef"
+        class="flex-1 flex justify-center items-end select-none"
+        :style="{
+          fontSize: memberIndicatorFontSize + 'px',
+          lineHeight: 1,
+          color: 'rgba(128,128,128,0.12)',
+          paddingBottom: '2px',
+          fontFamily: 'monospace',
+          wordBreak: 'break-all',
+          overflow: 'hidden',
+        }"
+      >{{ memberIndicatorContent }}</div>
       <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
         style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
