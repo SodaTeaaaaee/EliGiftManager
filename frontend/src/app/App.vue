@@ -87,7 +87,11 @@ function persistZoom() {
   const zoom = Math.round((current / baseDPR) * 100)
   if (zoom < 25 || zoom > 500) return
   saveZoom(zoom) // Go → zoom.cfg
-  try { localStorage.setItem('eligift_zoom', String(zoom)) } catch { /* ok */ }
+  try {
+    localStorage.setItem('eligift_zoom', String(zoom))
+  } catch {
+    /* ok */
+  }
 }
 
 // Exposed for Go OnBeforeClose → WindowExecJS call.

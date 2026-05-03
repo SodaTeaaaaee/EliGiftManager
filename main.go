@@ -54,8 +54,8 @@ func main() {
 			ZoomFactor:           zoom / 100.0,
 			IsZoomControlEnabled: true,
 		},
-		OnStartup:        app.startup,
-		OnBeforeClose:    app.beforeClose,
+		OnStartup:     app.startup,
+		OnBeforeClose: app.beforeClose,
 		Bind: []any{
 			app,
 			memberCtrl,
