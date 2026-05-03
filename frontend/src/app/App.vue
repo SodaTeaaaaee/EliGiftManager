@@ -12,6 +12,7 @@ import {
 import { RouterView } from 'vue-router'
 import { useThemeStore } from '@/shared/model/theme'
 import { useContextMenu } from '@/shared/composables/useContextMenu'
+import { useZoom, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/shared/model/settings'
 import ContextMenu from '@/shared/ui/ContextMenu.vue'
 
 const lightThemeOverrides: GlobalThemeOverrides = {
@@ -70,18 +71,28 @@ watchEffect(() => {
 })
 
 const { handleEvent } = useContextMenu()
+const zoom = useZoom()
 
 function onGlobalContextMenu(event: MouseEvent) {
   event.preventDefault()
   handleEvent(event)
 }
 
+function onGlobalWheel(event: WheelEvent) {
+  if (!event.ctrlKey) return
+  event.preventDefault()
+  const delta = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
+  zoom.value = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom.value + delta))
+}
+
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
+  document.addEventListener('wheel', onGlobalWheel, { passive: false })
 })
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', onGlobalContextMenu)
+  document.removeEventListener('wheel', onGlobalWheel)
 })
 </script>
 

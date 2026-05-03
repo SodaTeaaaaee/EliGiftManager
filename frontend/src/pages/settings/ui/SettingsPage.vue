@@ -8,6 +8,7 @@ import {
   NIcon,
   NRadioButton,
   NRadioGroup,
+  NSlider,
   useDialog,
   useMessage,
 } from 'naive-ui'
@@ -22,12 +23,13 @@ import {
   type DashboardPayload,
 } from '@/shared/lib/wails/app'
 import { themePreferenceOptions, useThemeStore, type ThemePreference } from '@/shared/model/theme'
-import { useScrollMode } from '@/shared/model/settings'
+import { useScrollMode, useZoom, ZOOM_MIN, ZOOM_MAX, ZOOM_STEP } from '@/shared/model/settings'
 
 const message = useMessage()
 const dialog = useDialog()
 const themeStore = useThemeStore()
 const scrollMode = useScrollMode()
+const zoom = useZoom()
 
 function setScrollMode(v: string | number | boolean) {
   scrollMode.value = v === 'scroll'
@@ -107,6 +109,16 @@ onMounted(loadSettings)
           <NRadioButton value="paginated">自适应分页</NRadioButton>
           <NRadioButton value="scroll">滚动模式</NRadioButton>
         </NRadioGroup>
+      </NCard>
+      <NCard title="全局缩放" size="medium">
+        <p class="app-copy mb-3">当前 {{ zoom }}%（Ctrl + 滚轮 也可调整）。</p>
+        <NSlider
+          :value="zoom"
+          :min="ZOOM_MIN"
+          :max="ZOOM_MAX"
+          :step="ZOOM_STEP"
+          @update:value="(v: number) => { zoom = v }"
+        />
       </NCard>
       <NCard title="数据库状态" size="medium">
         <p class="app-copy">{{ dbStatus }}</p>
