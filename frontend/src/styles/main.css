@@ -7,21 +7,21 @@
   font-style: normal;
   font-weight: 400;
   src: url('/fonts/NotoSansSC-Regular.ttf') format('truetype');
-  font-display: swap;
+  font-display: block;
 }
 @font-face {
   font-family: 'Noto Sans SC';
   font-style: normal;
   font-weight: 500;
   src: url('/fonts/NotoSansSC-Medium.ttf') format('truetype');
-  font-display: swap;
+  font-display: block;
 }
 @font-face {
   font-family: 'Noto Sans SC';
   font-style: normal;
   font-weight: 700;
   src: url('/fonts/NotoSansSC-Bold.ttf') format('truetype');
-  font-display: swap;
+  font-display: block;
 }
 
 :root {
@@ -36,8 +36,9 @@
   --code-bg: rgba(191, 219, 254, 0.42);
   --code-text: #1d4ed8;
   font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  font-weight: 500;
   font-size: 16px;
-  text-rendering: optimizeLegibility;
+  text-rendering: auto;
   -moz-osx-font-smoothing: grayscale;
   font-optical-sizing: auto;
 }
