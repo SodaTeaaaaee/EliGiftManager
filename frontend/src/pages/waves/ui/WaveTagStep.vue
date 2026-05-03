@@ -866,7 +866,11 @@ onUnmounted(() => {
         <!-- Level tag panel -->
         <div
           v-if="showLevelPanel"
-          class="tag-panel border rounded-lg p-2" :style="{ background: 'var(--surface-strong, #fff)', borderColor: 'var(--muted, #d1d5db)' }"
+          class="tag-panel border rounded-lg p-2"
+          :style="{
+            background: 'var(--surface-strong, #fff)',
+            borderColor: 'var(--muted, #d1d5db)',
+          }"
         >
           <NInput
             v-if="batchTagOptions.length > 12"
@@ -886,8 +890,7 @@ onUnmounted(() => {
               :style="{
                 cursor: 'pointer',
                 border: selectedLevelTags.includes(opt.value as string)
-                  ? '2.5px solid ' +
-                    platformTagColor((opt.value as string).split('|')[0]).textColor
+                  ? '2.5px solid ' + platformTagColor((opt.value as string).split('|')[0]).textColor
                   : '2.5px solid transparent',
               }"
               @click="toggleLevelTagSelection(opt.value as string)"
@@ -950,7 +953,11 @@ onUnmounted(() => {
         <!-- User tag panel -->
         <div
           v-if="showUserPanel"
-          class="tag-panel border rounded-lg p-2" :style="{ background: 'var(--surface-strong, #fff)', borderColor: 'var(--muted, #d1d5db)' }"
+          class="tag-panel border rounded-lg p-2"
+          :style="{
+            background: 'var(--surface-strong, #fff)',
+            borderColor: 'var(--muted, #d1d5db)',
+          }"
         >
           <NInput
             v-model:value="userSearch"
