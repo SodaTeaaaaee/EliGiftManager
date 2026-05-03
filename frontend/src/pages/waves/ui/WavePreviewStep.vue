@@ -550,10 +550,7 @@ onUnmounted(() => {
 
     <!-- Content area (flex-1, min-h-0) -->
     <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div
-        ref="tableWrapperRef"
-        class="flex-1 min-h-0 overflow-hidden"
-      >
+      <div ref="tableWrapperRef" class="flex-1 min-h-0 overflow-hidden">
         <NDataTable
           :columns="memberGroupColumnsComputed"
           :data="visibleItems"

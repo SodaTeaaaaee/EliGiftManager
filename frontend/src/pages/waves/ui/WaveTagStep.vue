@@ -440,18 +440,18 @@ const productIndexMap = computed(() => {
 
 const tagColumns = computed<DataTableColumns>(() => {
   const cols: DataTableColumns = [
-    { type: 'selection' as const },
+    { type: 'selection' as const, width: 25 },
     {
       title: '#',
       key: '__index',
-      width: 50,
+      width: 25,
       render: (row: any) =>
         h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
     },
     {
       title: '',
       key: 'coverImage',
-      width: 56,
+      width: 50,
       render: (row: any) =>
         row.coverImage
           ? h('div', { class: 'thumb-cell' }, [
@@ -469,13 +469,13 @@ const tagColumns = computed<DataTableColumns>(() => {
     {
       title: '商品名',
       key: 'name',
-      width: 120,
+      width: 160,
       render: (row: any) => clampedText(row.name),
     },
     {
       title: '身份 Tag',
       key: 'levelTags',
-      width: 160,
+      width: 80,
       render: (row: any) =>
         h(
           NFlex,
@@ -495,7 +495,7 @@ const tagColumns = computed<DataTableColumns>(() => {
     {
       title: '用户 Tag',
       key: 'userTags',
-      width: 160,
+      width: 320,
       render: (row: any) =>
         h(
           NFlex,
@@ -1278,7 +1278,7 @@ onUnmounted(() => {
 }
 
 .thumb-placeholder {
-  width: 40px;
+  width: 80px;
   height: 40px;
   background: #e5e7eb;
 }
