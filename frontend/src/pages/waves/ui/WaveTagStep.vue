@@ -298,6 +298,15 @@ function rowProps(row: any) {
       if (idx >= 0) lastClickedIndex.value = idx
       checkedProductIds.value = [row.id]
     },
+    onContextmenu: (e: MouseEvent) => {
+      // Windows Explorer behavior: if target is not in selection, select it alone.
+      if (!checkedProductIds.value.includes(row.id)) {
+        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        if (idx >= 0) lastClickedIndex.value = idx
+        checkedProductIds.value = [row.id]
+      }
+      // If already selected, keep the multi-selection as-is.
+    },
   }
 }
 
@@ -726,6 +735,10 @@ onUnmounted(() => {
   justify-content: center;
   transform: scale(1.5);
   transform-origin: center center;
+}
+.row-selected {
+  outline: 2px solid rgba(32, 128, 240, 0.55);
+  outline-offset: -2px;
 }
 .row-selected td {
   background: rgba(32, 128, 240, 0.12) !important;
