@@ -732,7 +732,7 @@ onUnmounted(() => {
           :row-props="rowProps" />
       </div>
       <div
-        v-if="tagTotalPages > 1" ref="tagIndicatorRef"
+        ref="tagIndicatorRef"
         class="flex-1 flex justify-center items-center select-none"
         :style="{
           fontSize: indicatorFontSize + 'px',

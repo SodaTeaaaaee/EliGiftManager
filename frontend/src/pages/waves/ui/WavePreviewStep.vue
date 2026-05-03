@@ -525,7 +525,7 @@ onUnmounted(() => {
           :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })" />
       </div>
       <div
-        v-if="memberTotalPages > 1" ref="memberIndicatorRef"
+        ref="memberIndicatorRef"
         class="flex-1 flex justify-center items-center select-none"
         :style="{
           fontSize: memberIndicatorFontSize + 'px',
