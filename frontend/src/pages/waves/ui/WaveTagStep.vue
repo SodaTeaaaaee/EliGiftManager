@@ -679,6 +679,60 @@ async function handleBatchRemoveUserTag() {
   }
 }
 
+// ── clear all tags for checked products ──
+
+async function handleClearAllTags() {
+  if (checkedProductIds.value.length === 0) return message.warning('请先选择商品')
+  try {
+    for (const pid of checkedProductIds.value) {
+      const product = allTagProducts.value.find((p) => p.id === pid)
+      if (!product) continue
+      for (const t of product.tags) {
+        if (t.tagType === 'level') await removeLevelTag(pid, t.platform, t.tagName)
+        else await removeUserTag(pid, t.waveMemberId)
+      }
+    }
+    message.success(`已清空 ${checkedProductIds.value.length} 件商品的全部 Tag`)
+    await loadTagProducts()
+  } catch (e) {
+    message.error(String(e))
+  }
+}
+
+async function handleClearLevelTags() {
+  if (checkedProductIds.value.length === 0) return message.warning('请先选择商品')
+  try {
+    for (const pid of checkedProductIds.value) {
+      const product = allTagProducts.value.find((p) => p.id === pid)
+      if (!product) continue
+      for (const t of product.tags) {
+        if (t.tagType === 'level') await removeLevelTag(pid, t.platform, t.tagName)
+      }
+    }
+    message.success(`已清空 ${checkedProductIds.value.length} 件商品的身份 Tag`)
+    await loadTagProducts()
+  } catch (e) {
+    message.error(String(e))
+  }
+}
+
+async function handleClearUserTags() {
+  if (checkedProductIds.value.length === 0) return message.warning('请先选择商品')
+  try {
+    for (const pid of checkedProductIds.value) {
+      const product = allTagProducts.value.find((p) => p.id === pid)
+      if (!product) continue
+      for (const t of product.tags) {
+        if (t.tagType === 'user') await removeUserTag(pid, t.waveMemberId)
+      }
+    }
+    message.success(`已清空 ${checkedProductIds.value.length} 件商品的用户 Tag`)
+    await loadTagProducts()
+  } catch (e) {
+    message.error(String(e))
+  }
+}
+
 // ── product drawer ──
 async function openProductDrawer(product: (typeof allTagProducts.value)[0]) {
   drawerProduct.value = product
@@ -789,55 +843,69 @@ onUnmounted(() => {
 </script>
 <template>
   <div class="h-full flex flex-col">
-    <div class="flex items-center gap-2 shrink-0 px-1 py-2">
-      <NIcon size="18">
-        <PlayOutline />
-      </NIcon>
-      <span class="font-semibold text-sm">步骤二：Tag 管理与分配</span>
-    </div>
-
-    <div class="shrink-0 px-1 space-y-2">
-      <div v-if="waveLevelTags.length > 0">
+    <!-- Row 1: selection + clear actions -->
+    <div class="shrink-0 px-1 py-2">
+      <NFlex :size="'small'" :wrap="true" class="items-center justify-between">
+        <NFlex :size="'small'" :wrap="true" class="items-center">
+          <span class="text-xs shrink-0 font-medium">选择</span>
+          <NButton size="tiny" secondary @click="handleSelectAll">{{
+            allSelected ? '取消全选' : '全选所有'
+          }}</NButton>
+          <NButton size="tiny" secondary @click="handleSelectPage">{{
+            pageAllSelected ? '取消本页' : '本页全选'
+          }}</NButton>
+          <NButton size="tiny" secondary @click="handleInvertPage">本页反选</NButton>
+          <NTag size="small" round :bordered="false"
+            >已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}
+          </NTag>
+        </NFlex>
         <NFlex :size="'small'" :wrap="true">
-          <NTag
-            v-for="tag in waveLevelTags"
-            :key="`${tag.platform}|${tag.tagName}`"
-            size="small"
-            round
-            :color="platformTagColor(tag.platform)"
-            >{{ tag.platform }}·{{ tag.tagName }}</NTag
+          <NButton
+            size="tiny"
+            type="error"
+            secondary
+            :disabled="checkedProductIds.length === 0"
+            @click="handleClearAllTags"
+            >清空全部</NButton
+          >
+          <NButton
+            size="tiny"
+            type="warning"
+            secondary
+            :disabled="checkedProductIds.length === 0"
+            @click="handleClearLevelTags"
+            >清空身份</NButton
+          >
+          <NButton
+            size="tiny"
+            type="warning"
+            secondary
+            :disabled="checkedProductIds.length === 0"
+            @click="handleClearUserTags"
+            >清空用户</NButton
           >
         </NFlex>
-      </div>
-      <NEmpty v-else description="当前波次无等级 Tag，导入会员数据后将自动提取" size="small" />
-
-      <NFlex :size="'small'" :wrap="true" class="items-center">
-        <span class="text-xs shrink-0">选择：</span>
-        <NButton size="small" secondary @click="handleSelectAll">{{
-          allSelected ? '取消全选' : '全选所有'
-        }}</NButton>
-        <NButton size="small" secondary @click="handleSelectPage">{{
-          pageAllSelected ? '取消本页' : '本页全选'
-        }}</NButton>
-        <NButton size="small" secondary @click="handleInvertPage">本页反选</NButton>
-        <NTag size="small" round :bordered="false"
-          >已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}
-        </NTag>
       </NFlex>
-
-      <!-- Level tag row -->
-      <div class="space-y-1">
+    </div>
+    <!-- Row 2: Tag operations (tabbed panels) -->
+    <NFlex :size="'small'" class="items-start">
+      <!-- 身份 Tag ops group -->
+      <div :class="['tag-ops-group', { 'tag-ops-active': showLevelPanel }]">
         <NFlex :size="'small'" :wrap="true" class="items-center">
-          <span class="text-xs shrink-0 font-medium" style="width: 52px">身份 Tag</span>
-          <NButton size="small" secondary @click="toggleLevelPanel">
-            {{ selectedLevelTags.length ? `已选 ${selectedLevelTags.length} 项 ▾` : '选择等级 ▾' }}
+          <NButton
+            size="small"
+            :type="showLevelPanel ? 'primary' : 'default'"
+            :secondary="!showLevelPanel"
+            @click="toggleLevelPanel"
+          >
+            {{ selectedLevelTags.length ? `已选 ${selectedLevelTags.length} 项 ▾` : '身份 Tag ▾' }}
           </NButton>
           <NInputNumber
             v-model:value="levelTagQuantity"
             :min="-999"
             :max="999"
             size="small"
-            style="width: 80px"
+            style="width: 72px"
           />
           <NButton
             size="small"
@@ -864,14 +932,7 @@ onUnmounted(() => {
         </NFlex>
 
         <!-- Level tag panel -->
-        <div
-          v-if="showLevelPanel"
-          class="tag-panel border rounded-lg p-2"
-          :style="{
-            background: 'var(--surface-strong, #fff)',
-            borderColor: 'var(--muted, #d1d5db)',
-          }"
-        >
+        <div v-if="showLevelPanel" class="tag-panel-expand tag-panel">
           <NInput
             v-if="batchTagOptions.length > 12"
             v-model:value="levelSearch"
@@ -906,25 +967,31 @@ onUnmounted(() => {
             </NTag>
           </NFlex>
           <NFlex :size="'small'" class="mt-2 items-center justify-between">
-            <span class="text-xs text-gray-400">已选 {{ selectedLevelTags.length }} 项</span>
+            <span class="text-xs" :style="{ color: 'var(--muted)' }"
+              >已选 {{ selectedLevelTags.length }} 项</span
+            >
             <NButton size="tiny" @click="showLevelPanel = false">收起</NButton>
           </NFlex>
         </div>
       </div>
 
-      <!-- User tag row -->
-      <div class="space-y-1">
+      <!-- 用户 Tag ops group -->
+      <div :class="['tag-ops-group', { 'tag-ops-active': showUserPanel }]">
         <NFlex :size="'small'" :wrap="true" class="items-center">
-          <span class="text-xs shrink-0 font-medium" style="width: 52px">用户 Tag</span>
-          <NButton size="small" secondary @click="toggleUserPanel">
-            {{ selectedUserTags.length ? `已选 ${selectedUserTags.length} 人 ▾` : '选择会员 ▾' }}
+          <NButton
+            size="small"
+            :type="showUserPanel ? 'primary' : 'default'"
+            :secondary="!showUserPanel"
+            @click="toggleUserPanel"
+          >
+            {{ selectedUserTags.length ? `已选 ${selectedUserTags.length} 人 ▾` : '用户 Tag ▾' }}
           </NButton>
           <NInputNumber
             v-model:value="userTagQuantity"
             :min="-999"
             :max="999"
             size="small"
-            style="width: 80px"
+            style="width: 72px"
           />
           <NButton
             size="small"
@@ -951,14 +1018,7 @@ onUnmounted(() => {
         </NFlex>
 
         <!-- User tag panel -->
-        <div
-          v-if="showUserPanel"
-          class="tag-panel border rounded-lg p-2"
-          :style="{
-            background: 'var(--surface-strong, #fff)',
-            borderColor: 'var(--muted, #d1d5db)',
-          }"
-        >
+        <div v-if="showUserPanel" class="tag-panel-expand tag-panel">
           <NInput
             v-model:value="userSearch"
             size="tiny"
@@ -1004,12 +1064,14 @@ onUnmounted(() => {
             </NFlex>
           </div>
           <NFlex :size="'small'" class="mt-2 items-center justify-between">
-            <span class="text-xs text-gray-400">已选 {{ selectedUserTags.length }} 人</span>
+            <span class="text-xs" :style="{ color: 'var(--muted)' }"
+              >已选 {{ selectedUserTags.length }} 人</span
+            >
             <NButton size="tiny" @click="showUserPanel = false">收起</NButton>
           </NFlex>
         </div>
       </div>
-    </div>
+    </NFlex>
 
     <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
       <div
@@ -1214,5 +1276,23 @@ onUnmounted(() => {
 /* Panel tooltips must not capture mouse — user may want to click a tag behind them */
 .tag-panel .n-popover {
   pointer-events: none;
+}
+
+.tag-ops-group {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 2px 6px;
+  transition: border-color 0.15s;
+}
+.tag-ops-active {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-strong, #fff);
+}
+.tag-panel-expand {
+  margin-top: 4px;
+  border: 1px solid var(--muted, #d1d5db);
+  border-radius: 0 6px 6px 6px;
+  padding: 8px;
+  background: var(--surface-strong, #fff);
 }
 </style>
