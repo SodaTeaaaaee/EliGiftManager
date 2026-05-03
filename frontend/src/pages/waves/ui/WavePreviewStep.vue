@@ -142,6 +142,7 @@ function measurePaginationHeight(el: HTMLElement | null): number {
 }
 
 // ── member table: all data client-side ──
+const memberTableParent = ref<HTMLElement | null>(null)
 const memberTableWrapper = ref<HTMLElement | null>(null)
 const memberPaginationRef = ref<HTMLElement | null>(null)
 const memberAvailableH = ref(400)
@@ -184,7 +185,7 @@ const lastMemberW = ref(0)
 function setupResizeObserver() {
   resizeObserver = new ResizeObserver(entries => {
     for (const entry of entries) {
-      if (entry.target === memberTableWrapper.value) {
+      if (entry.target === memberTableParent.value) {
         const w = entry.contentRect.width
         const h = entry.contentRect.height
         if (h <= 0) continue
@@ -199,7 +200,7 @@ function setupResizeObserver() {
       }
     }
   })
-  if (memberTableWrapper.value) resizeObserver.observe(memberTableWrapper.value)
+  if (memberTableParent.value) resizeObserver.observe(memberTableParent.value)
 }
 
 // ── column definitions ──
@@ -231,7 +232,7 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
   }
   cols.push(
     { title: '礼物种类', key: 'records', width: 80, render: (row: any) => String(row.records.length) },
-	    { title: '礼物数量', key: 'totalQty', width: 80, render: (row: any) => String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)) },
+    { title: '礼物数量', key: 'totalQty', width: 80, render: (row: any) => String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)) },
     {
       title: '地址', key: 'addressStatus', width: 80,
       render: (row: any) => h(NTag, { type: row.addressStatus === '已绑定' ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.addressStatus }),
@@ -242,7 +243,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
 
 // ── giftColumns: modal 内表格，完全不动 ──
 const giftColumns: DataTableColumns = [
-  { title: '', key: 'productImage', width: 56, render: (row: any) => {
+  {
+    title: '', key: 'productImage', width: 56, render: (row: any) => {
       const cover = productCoverMap.value[row.productId]
       return cover ? h('div', { class: 'gift-thumb-cell' }, [h('img', { src: '/local-images/' + cover, class: 'gift-thumb-img rounded' })]) : h('div', { class: 'gift-thumb-cell' }, [h('div', { class: 'gift-thumb-placeholder rounded' })])
     }
@@ -405,10 +407,10 @@ onMounted(async () => {
   await nextTick()
   memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
   memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  if (memberTableWrapper.value) {
-    const h = memberTableWrapper.value.clientHeight
+  if (memberTableParent.value) {
+    const h = memberTableParent.value.clientHeight
     if (h > 0) memberAvailableH.value = h
-    lastMemberW.value = memberTableWrapper.value.clientWidth
+    lastMemberW.value = memberTableParent.value.clientWidth
   }
   await remeasureMembers()
   setupResizeObserver()
@@ -418,9 +420,9 @@ watch([() => memberGroups.value.length], async () => {
   await nextTick()
   memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
   memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  if (memberTableWrapper.value) {
-    resizeObserver?.observe(memberTableWrapper.value)
-    const h = memberTableWrapper.value.clientHeight
+  if (memberTableParent.value) {
+    resizeObserver?.observe(memberTableParent.value)
+    const h = memberTableParent.value.clientHeight
     if (h > 0) memberAvailableH.value = h
   }
   await remeasureMembers()
@@ -452,27 +454,26 @@ onUnmounted(() => {
       </div>
       <NAlert v-if="previewExportResult" type="info" :show-icon="false">
         共 {{ previewExportResult.totalRecords }} 条记录
-        <span v-if="previewExportResult.missingAddressCount > 0">，{{ previewExportResult.missingAddressCount }} 条缺失地址</span>
+        <span v-if="previewExportResult.missingAddressCount > 0">，{{ previewExportResult.missingAddressCount }}
+          条缺失地址</span>
       </NAlert>
       <p class="text-xs text-gray-400">点击会员行查看该会员的礼物明细</p>
     </div>
 
     <!-- Content area (flex-1, min-h-0) -->
-    <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div ref="memberTableWrapper" class="flex-1 min-h-0 overflow-hidden">
-        <NDataTable
-          :columns="memberGroupColumnsComputed"
-          :data="visibleMemberGroups"
-          :bordered="false"
-          :pagination="false"
-          size="small"
-          :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })"
-        />
+    <div ref="memberTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div ref="memberTableWrapper" class="overflow-hidden">
+        <NDataTable :columns="memberGroupColumnsComputed" :data="visibleMemberGroups" :bordered="false"
+          :pagination="false" size="small"
+          :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })" />
       </div>
-      <div v-if="memberTotalPages > 1" class="flex justify-center items-center shrink-0 rounded" style="height: 12px; background: rgba(255,165,0,0.3);">
+      <div class="flex-1" />
+      <div v-if="memberTotalPages > 1" class="flex justify-center items-center shrink-0 rounded"
+        style="height: 12px; background: rgba(255,165,0,0.3);">
         <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
       </div>
-      <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-1 shrink-0" style="transform: scale(1.5); transform-origin: top center;">
+      <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
+        style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
           @update:page="handleMemberPageChange" />
       </div>
@@ -491,10 +492,12 @@ onUnmounted(() => {
         <div class="mb-4 p-3 border rounded-lg">
           <div class="text-xs text-gray-500 mb-1">收件地址</div>
           <div class="flex items-center gap-2 mb-2">
-            <NSelect :value="selectedAddressId" :options="memberAddresses.map(a => ({ label: `${a.recipientName} ${a.phone} ${a.address}`, value: a.id }))"
+            <NSelect :value="selectedAddressId"
+              :options="memberAddresses.map(a => ({ label: `${a.recipientName} ${a.phone} ${a.address}`, value: a.id }))"
               placeholder="选择地址" size="small" style="flex:1; min-width: 200px" clearable
               @update:value="(v: number) => { selectedAddressId = v; if (v) handleSetAddress(v) }" />
-            <NButton size="tiny" secondary @click="showAddAddressForm = !showAddAddressForm">{{ showAddAddressForm ? '取消' : '添加地址' }}</NButton>
+            <NButton size="tiny" secondary @click="showAddAddressForm = !showAddAddressForm">{{ showAddAddressForm ?
+              '取消' : '添加地址' }}</NButton>
           </div>
           <div v-if="showAddAddressForm" class="mt-2 space-y-2">
             <NInput v-model:value="newAddressForm.recipientName" size="small" placeholder="收件人" />
@@ -509,7 +512,8 @@ onUnmounted(() => {
           <span class="text-sm font-medium">礼物清单（{{ memberRecords.length }} 件）</span>
           <NButton size="small" type="primary" @click="openAddGiftModal">添加礼物</NButton>
         </div>
-        <NDataTable :columns="giftColumns" :data="memberRecords" :bordered="false" :pagination="{ pageSize: 10 }" size="small" />
+        <NDataTable :columns="giftColumns" :data="memberRecords" :bordered="false" :pagination="{ pageSize: 10 }"
+          size="small" />
       </NCard>
     </NModal>
 
@@ -530,11 +534,13 @@ onUnmounted(() => {
   align-items: center;
   height: 40px;
 }
+
 .gift-thumb-img {
   max-height: 100%;
   max-width: 100%;
   object-fit: contain;
 }
+
 .gift-thumb-placeholder {
   width: 40px;
   height: 40px;

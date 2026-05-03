@@ -132,10 +132,10 @@ function renderTagChip(row: any, tag: TagInfo) {
   const content = tag.quantity === 1
     ? h('span', { style: { color: accent, fontWeight: 500 } }, displayName)
     : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
-        h('span', { style: { color: accent, fontWeight: 500 } }, displayName),
-        h('span', { style: { color: '#666', margin: '0 1px' } }, ':'),
-        h('span', { style: { color: '#fff', fontWeight: 600 } }, String(tag.quantity)),
-      ])
+      h('span', { style: { color: accent, fontWeight: 500 } }, displayName),
+      h('span', { style: { color: '#666', margin: '0 1px' } }, ':'),
+      h('span', { style: { color: '#fff', fontWeight: 600 } }, String(tag.quantity)),
+    ])
   return h(NPopover, {
     trigger: 'click',
     show: showTagPopover.value && editTagProduct.value?.id === row.id && editTagInfo.value?.tagName === tag.tagName && editTagInfo.value?.tagType === tag.tagType,
@@ -209,6 +209,7 @@ function packByHeights(heights: number[], availableH: number, headerH: number): 
 }
 
 // ── tag table: fetch all at once, paginate client-side ──
+const tagTableParent = ref<HTMLElement | null>(null)
 const tagTableWrapper = ref<HTMLElement | null>(null)
 const tagPaginationRef = ref<HTMLElement | null>(null)
 const tagAvailableH = ref(400)
@@ -344,7 +345,7 @@ const lastTagW = ref(0)
 function setupResizeObserver() {
   resizeObserver = new ResizeObserver(entries => {
     for (const entry of entries) {
-      if (entry.target === tagTableWrapper.value) {
+      if (entry.target === tagTableParent.value) {
         const w = entry.contentRect.width
         const h = entry.contentRect.height
         if (h <= 0) continue
@@ -359,7 +360,7 @@ function setupResizeObserver() {
       }
     }
   })
-  if (tagTableWrapper.value) resizeObserver.observe(tagTableWrapper.value)
+  if (tagTableParent.value) resizeObserver.observe(tagTableParent.value)
 }
 
 // ── column definitions ──
@@ -381,15 +382,15 @@ const tagColumns = computed<DataTableColumns>(() => {
       render: (row: any) =>
         row.coverImage
           ? h('div', { class: 'thumb-cell' }, [
-              h('img', {
-                src: '/local-images/' + row.coverImage,
-                class: 'thumb-img rounded',
-                onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
-              }),
-            ])
+            h('img', {
+              src: '/local-images/' + row.coverImage,
+              class: 'thumb-img rounded',
+              onClick: (e: MouseEvent) => { e.stopPropagation(); openProductDrawer(row) },
+            }),
+          ])
           : h('div', { class: 'thumb-cell' }, [
-              h('div', { class: 'thumb-placeholder rounded' }),
-            ]),
+            h('div', { class: 'thumb-placeholder rounded' }),
+          ]),
     },
     {
       title: '商品名', key: 'name', minWidth: 120,
@@ -587,10 +588,10 @@ onMounted(async () => {
 
   tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
   tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
-  if (tagTableWrapper.value) {
-    const h = tagTableWrapper.value.clientHeight
+  if (tagTableParent.value) {
+    const h = tagTableParent.value.clientHeight
     if (h > 0) tagAvailableH.value = h
-    lastTagW.value = tagTableWrapper.value.clientWidth
+    lastTagW.value = tagTableParent.value.clientWidth
   }
   await remeasureTags()
   setupResizeObserver()
@@ -600,9 +601,9 @@ watch([() => allTagProducts.value.length], async () => {
   await nextTick()
   tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
   tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
-  if (tagTableWrapper.value) {
-    resizeObserver?.observe(tagTableWrapper.value)
-    const h = tagTableWrapper.value.clientHeight
+  if (tagTableParent.value) {
+    resizeObserver?.observe(tagTableParent.value)
+    const h = tagTableParent.value.clientHeight
     if (h > 0) tagAvailableH.value = h
   }
   await remeasureTags()
@@ -636,7 +637,8 @@ onUnmounted(() => {
         <NButton size="small" secondary @click="handleSelectAll">{{ allSelected ? '取消全选' : '全选所有' }}</NButton>
         <NButton size="small" secondary @click="handleSelectPage">{{ pageAllSelected ? '取消本页' : '本页全选' }}</NButton>
         <NButton size="small" secondary @click="handleInvertPage">本页反选</NButton>
-        <NTag size="small" round :bordered="false">已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}</NTag>
+        <NTag size="small" round :bordered="false">已选 {{ checkedProductIds.length }} / {{ allTagProducts.length }}
+        </NTag>
       </NFlex>
 
       <!-- Level tag row -->
@@ -659,22 +661,25 @@ onUnmounted(() => {
         <NInputNumber v-model:value="userTagQuantity" :min="-999" :max="999" size="small" style="width: 80px" />
         <NButton size="small" type="primary" :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
           @click="handleBatchAddUserTag">添加</NButton>
-        <NButton size="small" type="error" secondary :disabled="!selectedUserTagMember || checkedProductIds.length === 0"
-          @click="handleBatchRemoveUserTag">删除</NButton>
+        <NButton size="small" type="error" secondary
+          :disabled="!selectedUserTagMember || checkedProductIds.length === 0" @click="handleBatchRemoveUserTag">删除
+        </NButton>
       </NFlex>
     </div>
 
-    <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div ref="tagTableWrapper" class="flex-1 min-h-0 overflow-hidden">
+    <div ref="tagTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div ref="tagTableWrapper" class="overflow-hidden">
         <NDataTable :columns="tagColumns" :data="visibleTagProducts" :loading="isTagLoading" :bordered="false"
-          :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds"
-          :pagination="false" size="medium"
+          :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds" :pagination="false" size="medium"
           :row-props="rowProps" />
       </div>
-      <div v-if="tagTotalPages > 1" class="flex justify-center items-center shrink-0 rounded" style="height: 12px; background: rgba(255,165,0,0.3);">
+      <div class="flex-1" />
+      <div v-if="tagTotalPages > 1" class="flex justify-center items-center shrink-0 rounded"
+        style="height: 12px; background: rgba(255,165,0,0.3);">
         <span class="text-xs text-gray-300 dark:text-gray-600 tracking-widest select-none">···</span>
       </div>
-      <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-1 shrink-0" style="transform: scale(1.5); transform-origin: top center;">
+      <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
+        style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"
           @update:page="handleTagPageChange" />
       </div>
@@ -686,11 +691,13 @@ onUnmounted(() => {
     </div>
 
     <!-- Product Detail Drawer -->
-    <NDrawer :show="showProductDrawer" :width="560" @update:show="(v: boolean) => { if (!v) { showProductDrawer = false; drawerProduct = null; drawerProductImages = [] } }">
+    <NDrawer :show="showProductDrawer" :width="560"
+      @update:show="(v: boolean) => { if (!v) { showProductDrawer = false; drawerProduct = null; drawerProductImages = [] } }">
       <NDrawerContent title="商品详情" closable>
         <template v-if="drawerProduct">
           <div class="space-y-3">
-            <img v-if="drawerProduct.coverImage" :src="'/local-images/' + drawerProduct.coverImage" class="w-full rounded-lg object-contain" style="max-height:50vh" />
+            <img v-if="drawerProduct.coverImage" :src="'/local-images/' + drawerProduct.coverImage"
+              class="w-full rounded-lg object-contain" style="max-height:50vh" />
             <h2 class="text-xl font-semibold">{{ drawerProduct.name }}</h2>
             <div class="flex flex-wrap items-center gap-2">
               <span class="text-sm text-gray-500">{{ drawerProduct.factorySku }}</span>
@@ -717,7 +724,8 @@ onUnmounted(() => {
           <template v-if="drawerProductImages.length">
             <NDivider>详情图片</NDivider>
             <div class="space-y-3">
-              <img v-for="img in drawerProductImages" :key="img.id" :src="'/local-images/' + img.path" class="w-full rounded-lg object-contain" />
+              <img v-for="img in drawerProductImages" :key="img.id" :src="'/local-images/' + img.path"
+                class="w-full rounded-lg object-contain" />
             </div>
           </template>
         </template>
@@ -731,9 +739,11 @@ onUnmounted(() => {
 .n-data-table-th--selection .n-checkbox {
   display: none;
 }
+
 .n-data-table-td--selection {
   vertical-align: middle;
 }
+
 .n-data-table-td--selection .n-checkbox {
   display: inline-flex;
   align-items: center;
@@ -741,24 +751,29 @@ onUnmounted(() => {
   transform: scale(1.5);
   transform-origin: center center;
 }
+
 .row-selected td {
   background: rgba(32, 128, 240, 0.12) !important;
 }
+
 .row-anchor {
   outline: 2px solid rgba(32, 128, 240, 0.55);
   outline-offset: -2px;
 }
+
 .thumb-cell {
   display: flex;
   align-items: center;
   height: 40px;
 }
+
 .thumb-img {
   max-height: 100%;
   max-width: 100%;
   object-fit: contain;
   cursor: pointer;
 }
+
 .thumb-placeholder {
   width: 40px;
   height: 40px;
