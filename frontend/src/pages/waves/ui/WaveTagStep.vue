@@ -4,7 +4,6 @@ import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
-  NCheckbox,
   NDataTable,
   NDrawer,
   NDrawerContent,
@@ -17,6 +16,7 @@ import {
   NPopover,
   NPagination,
   NTag,
+  NTooltip,
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
@@ -829,11 +829,7 @@ onUnmounted(() => {
       <div class="space-y-1">
         <NFlex :size="'small'" :wrap="true" class="items-center">
           <span class="text-xs shrink-0 font-medium" style="width: 52px">身份 Tag</span>
-          <NButton
-            size="small"
-            secondary
-            @click="toggleLevelPanel"
-          >
+          <NButton size="small" secondary @click="toggleLevelPanel">
             {{ selectedLevelTags.length ? `已选 ${selectedLevelTags.length} 项 ▾` : '选择等级 ▾' }}
           </NButton>
           <NInputNumber
@@ -884,18 +880,26 @@ onUnmounted(() => {
             <NTag
               v-for="opt in filteredLevelOptions"
               :key="opt.value"
-              size="small"
+              size="medium"
               round
-              :type="selectedLevelTags.includes(opt.value as string) ? 'primary' : 'default'"
-              :color="
-                selectedLevelTags.includes(opt.value as string)
-                  ? undefined
-                  : platformTagColor((opt.value as string).split('|')[0])
-              "
-              style="cursor: pointer"
+              :color="platformTagColor((opt.value as string).split('|')[0])"
+              :style="{
+                cursor: 'pointer',
+                boxShadow: selectedLevelTags.includes(opt.value as string)
+                  ? 'inset 0 0 0 2px ' +
+                    platformTagColor((opt.value as string).split('|')[0]).textColor
+                  : '',
+              }"
               @click="toggleLevelTagSelection(opt.value as string)"
             >
-              {{ opt.label }}
+              <span
+                :style="{
+                  color: platformTagColor((opt.value as string).split('|')[0]).textColor,
+                  fontWeight: 500,
+                }"
+              >
+                {{ opt.label }}
+              </span>
             </NTag>
           </NFlex>
           <NFlex :size="'small'" class="mt-2 items-center justify-between">
@@ -909,11 +913,7 @@ onUnmounted(() => {
       <div class="space-y-1">
         <NFlex :size="'small'" :wrap="true" class="items-center">
           <span class="text-xs shrink-0 font-medium" style="width: 52px">用户 Tag</span>
-          <NButton
-            size="small"
-            secondary
-            @click="toggleUserPanel"
-          >
+          <NButton size="small" secondary @click="toggleUserPanel">
             {{ selectedUserTags.length ? `已选 ${selectedUserTags.length} 人 ▾` : '选择会员 ▾' }}
           </NButton>
           <NInputNumber
@@ -959,21 +959,41 @@ onUnmounted(() => {
             class="mb-2"
             clearable
           />
-          <div class="max-h-48 overflow-y-auto space-y-1">
-            <div
-              v-for="opt in filteredMemberOptions"
-              :key="opt.value"
-              class="flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 text-sm"
-              @click="toggleUserTagSelection(String(opt.value))"
-            >
-              <NCheckbox
-                :checked="selectedUserTags.includes(String(opt.value))"
-                size="small"
-                @click.stop
-                @update:checked="setUserTagChecked(String(opt.value))"
-              />
-              <span class="truncate">{{ opt.label }}</span>
-            </div>
+          <div class="max-h-48 overflow-y-auto">
+            <NFlex :size="'small'" :wrap="true">
+              <NTooltip
+                v-for="opt in filteredMemberOptions"
+                :key="opt.value"
+                trigger="hover"
+                :delay="500"
+              >
+                <template #trigger>
+                  <NTag
+                    size="medium"
+                    round
+                    :color="platformTagColor(opt.label.split(' · ')[0] || '')"
+                    :style="{
+                      cursor: 'pointer',
+                      boxShadow: selectedUserTags.includes(String(opt.value))
+                        ? 'inset 0 0 0 2px ' +
+                          platformTagColor(opt.label.split(' · ')[0] || '').textColor
+                        : '',
+                    }"
+                    @click="toggleUserTagSelection(String(opt.value))"
+                  >
+                    <span
+                      :style="{
+                        color: platformTagColor(opt.label.split(' · ')[0] || '').textColor,
+                        fontWeight: 500,
+                      }"
+                    >
+                      {{ opt.label.split(' · ')[1]?.split(' (')[0] || opt.label }}
+                    </span>
+                  </NTag>
+                </template>
+                {{ opt.label }}
+              </NTooltip>
+            </NFlex>
           </div>
           <NFlex :size="'small'" class="mt-2 items-center justify-between">
             <span class="text-xs text-gray-400">已选 {{ selectedUserTags.length }} 人</span>
