@@ -1,7 +1,7 @@
 import {
   PickCSVFile as pickCSVFileBinding,
   PickZIPFile as pickZIPFileBinding,
-  PreviewCSVHeaders as previewCSVHeadersBinding,
+  PreviewCSVSample as previewCSVSampleBinding,
 } from "../../../../wailsjs/go/main/App";
 import {
   AddMemberAddress as addMemberAddressBinding,
@@ -338,9 +338,9 @@ export function pickZIPFile(): Promise<string> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve("");
   return pickZIPFileBinding();
 }
-export function previewCSVHeaders(path: string): Promise<string[]> {
+export function previewCSVSample(path: string): Promise<string[][]> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
-  return previewCSVHeadersBinding(path);
+  return previewCSVSampleBinding(path);
 }
 export function restoreDatabase(): Promise<void> {
   assertWailsRuntime();

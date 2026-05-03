@@ -1,26 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { NAlert, NButton, NSelect } from 'naive-ui'
-import { pickCSVFile, previewCSVHeaders } from '@/shared/lib/wails/app'
 import type { DynamicTemplateRules } from './types'
 
-const props = defineProps<{ templateConfig: DynamicTemplateRules }>()
+const props = defineProps<{ templateConfig: DynamicTemplateRules; csvHeaders: string[] }>()
+defineEmits<{ upload: [] }>()
 
-const csvHeaders = ref<string[]>([])
-const headerLoaded = ref(false)
+const headerLoaded = computed(() => props.csvHeaders.length > 0)
 const csvError = ref('')
-
-async function handleUploadCSV() {
-  csvError.value = ''
-  const path = await pickCSVFile()
-  if (!path) return
-  try {
-    csvHeaders.value = await previewCSVHeaders(path)
-    headerLoaded.value = true
-  } catch (e) {
-    csvError.value = String(e)
-  }
-}
 
 function getOptions(currentFieldKey: string) {
   const usedHeaders = new Set<string>()
@@ -29,7 +16,7 @@ function getOptions(currentFieldKey: string) {
       usedHeaders.add(mapping.sourceColumn)
     }
   }
-  return csvHeaders.value.map((h) => ({
+  return props.csvHeaders.map((h) => ({
     label: h,
     value: h,
     disabled: usedHeaders.has(h),
@@ -53,9 +40,9 @@ const shippingFields = [
   <div class="border rounded-lg p-4 space-y-4">
     <div>
       <p class="text-sm font-medium mb-2">Step 1：上传示例 CSV</p>
-      <NButton @click="handleUploadCSV">上传示例 CSV</NButton>
+      <NButton @click="$emit('upload')">上传示例 CSV</NButton>
       <NAlert v-if="headerLoaded" type="info" class="mt-2">
-        已检测到 {{ csvHeaders.length }} 个列：{{ csvHeaders.join(', ') }}
+        已检测到 {{ props.csvHeaders.length }} 个列：{{ props.csvHeaders.join(', ') }}
       </NAlert>
       <NAlert v-if="csvError" type="error" class="mt-2">
         {{ csvError }}
@@ -71,17 +58,20 @@ const shippingFields = [
           <div v-for="field in coreFields" :key="field.key" class="flex items-center gap-2">
             <label class="text-sm w-20 shrink-0">
               {{ field.label }}
-              <span v-if="field.required" class="text-red-500">*</span>
+              <span v-if="templateConfig.mapping[field.key]?.required" class="text-red-500">*</span>
             </label>
             <NSelect
-              :value="templateConfig.mapping[field.key].sourceColumn"
+              :value="templateConfig.mapping[field.key]?.sourceColumn || ''"
               :options="getOptions(field.key)"
               :placeholder="field.label"
-              :required="field.required"
+              :required="templateConfig.mapping[field.key]?.required"
               class="flex-1"
               clearable
               @update:value="
-                (v: string) => (templateConfig.mapping[field.key].sourceColumn = v || '')
+                (v: string) => {
+                  if (templateConfig.mapping[field.key])
+                    templateConfig.mapping[field.key].sourceColumn = v
+                }
               "
             />
           </div>
@@ -94,13 +84,16 @@ const shippingFields = [
           <div v-for="field in shippingFields" :key="field.key" class="flex items-center gap-2">
             <label class="text-sm w-20 shrink-0">{{ field.label }}</label>
             <NSelect
-              :value="templateConfig.mapping[field.key].sourceColumn"
+              :value="templateConfig.mapping[field.key]?.sourceColumn || ''"
               :options="getOptions(field.key)"
               :placeholder="field.label"
               class="flex-1"
               clearable
               @update:value="
-                (v: string) => (templateConfig.mapping[field.key].sourceColumn = v || '')
+                (v: string) => {
+                  if (templateConfig.mapping[field.key])
+                    templateConfig.mapping[field.key].sourceColumn = v
+                }
               "
             />
           </div>

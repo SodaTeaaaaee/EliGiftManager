@@ -201,18 +201,34 @@ func (a *App) PickCSVFile() (string, error) {
 	return "", fmt.Errorf("pick CSV file: context not available")
 }
 
-func (a *App) PreviewCSVHeaders(path string) ([]string, error) {
+func (a *App) PreviewCSVSample(path string) ([][]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open CSV: %w", err)
+		return nil, fmt.Errorf("preview CSV sample failed: open %q: %w", path, err)
 	}
 	defer f.Close()
 	reader := csv.NewReader(f)
-	headers, err := reader.Read()
-	if err != nil {
-		return nil, fmt.Errorf("read CSV headers: %w", err)
+	reader.FieldsPerRecord = -1
+	reader.TrimLeadingSpace = true
+	var rows [][]string
+	for i := 0; i < 5; i++ {
+		record, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("preview CSV sample failed: %w", err)
+		}
+		// Strip BOM from first cell of first row
+		if i == 0 && len(record) > 0 {
+			record[0] = strings.TrimPrefix(record[0], string(rune(0xFEFF)))
+		}
+		for j := range record {
+			record[j] = strings.TrimSpace(record[j])
+		}
+		rows = append(rows, record)
 	}
-	return headers, nil
+	return rows, nil
 }
 
 func (a *App) PickZIPFile() (string, error) {

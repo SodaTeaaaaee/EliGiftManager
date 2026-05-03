@@ -10,6 +10,6 @@ export function PickZIPFile() {
   return window['go']['main']['App']['PickZIPFile']();
 }
 
-export function PreviewCSVHeaders(arg1) {
-  return window['go']['main']['App']['PreviewCSVHeaders'](arg1);
+export function PreviewCSVSample(arg1) {
+  return window['go']['main']['App']['PreviewCSVSample'](arg1);
 }

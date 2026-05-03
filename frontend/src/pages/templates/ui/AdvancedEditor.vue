@@ -3,15 +3,10 @@ import { computed, ref, watch } from 'vue'
 import { NAlert, NCard } from 'naive-ui'
 import type { DynamicTemplateRules } from './types'
 
-const props = defineProps<{ templateConfig: DynamicTemplateRules }>()
+const props = defineProps<{ templateConfig: DynamicTemplateRules; sampleRows: string[][] }>()
 
 const jsonText = ref(JSON.stringify(props.templateConfig, null, 2))
 const jsonError = ref('')
-const sampleCsv = ref<string[][]>([
-  ['platform_uid', 'gift_level', 'nickname', 'recipient_name', 'phone', 'address', 'extra_field'],
-  ['12345', '总督', '小明', '张三', '13800138000', '上海市浦东新区', 'some extra'],
-  ['67890', '提督', '小红', '李四', '13900139000', '北京市朝阳区', 'more extra'],
-])
 
 // JSON text → templateConfig
 watch(jsonText, (val) => {
@@ -87,9 +82,9 @@ interface PreviewRow {
 }
 
 const previewResult = computed<PreviewRow[]>(() => {
-  if (!sampleCsv.value.length) return []
-  const headers = sampleCsv.value[0] || []
-  return sampleCsv.value.slice(1).map((row, i) => ({
+  if (!props.sampleRows.value.length) return []
+  const headers = props.sampleRows.value[0] || []
+  return props.sampleRows.value.slice(1).map((row, i) => ({
     row: i + 1,
     ...parseRowDynamicallyJS(row, headers, props.templateConfig),
   }))
@@ -117,7 +112,7 @@ const previewResult = computed<PreviewRow[]>(() => {
           <thead>
             <tr>
               <th
-                v-for="(h, i) in sampleCsv[0] || []"
+                v-for="(h, i) in props.sampleRows[0] || []"
                 :key="i"
                 class="text-left px-1 py-0.5 border-b"
               >
@@ -126,7 +121,7 @@ const previewResult = computed<PreviewRow[]>(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(row, ri) in sampleCsv.slice(1)" :key="ri">
+            <tr v-for="(row, ri) in props.sampleRows.slice(1)" :key="ri">
               <td
                 v-for="(cell, ci) in row"
                 :key="ci"
