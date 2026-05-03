@@ -233,8 +233,8 @@ let indicatorObserver: ResizeObserver | null = null
 
 const indicatorFontSize = computed(() => {
   const h = indicatorH.value
-  if (h < 16) return 10
-  return Math.min(Math.floor(h * 0.4), 64)
+  if (h < 16) return 12
+  return Math.min(Math.floor(h * 0.78), 200)
 })
 
 const indicatorContent = computed(() => {
@@ -243,7 +243,7 @@ const indicatorContent = computed(() => {
   if (total <= 1) return ""
   const w = indicatorW.value
   const size = indicatorFontSize.value
-  const charW = Math.max(size * 0.5, 4)
+  const charW = Math.max(size * 0.6, 6)
   const count = Math.max(1, Math.floor(w / charW))
   if (current === 1) return ">".repeat(count)
   if (current === total) return "<".repeat(count)
@@ -725,11 +725,12 @@ onUnmounted(() => {
         :style="{
           fontSize: indicatorFontSize + 'px',
           lineHeight: 1,
-          color: 'rgba(128,128,128,0.12)',
+          color: 'rgba(128,128,128,0.10)',
           paddingBottom: '2px',
           fontFamily: 'monospace',
-          wordBreak: 'break-all',
+          whiteSpace: 'nowrap',
           overflow: 'hidden',
+          background: 'rgba(255,165,0,0.3)',
         }"
       >{{ indicatorContent }}</div>
       <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"

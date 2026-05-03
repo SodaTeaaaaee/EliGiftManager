@@ -166,8 +166,8 @@ let memberIndicatorObserver: ResizeObserver | null = null
 
 const memberIndicatorFontSize = computed(() => {
   const h = memberIndicatorH.value
-  if (h < 16) return 10
-  return Math.min(Math.floor(h * 0.4), 64)
+  if (h < 16) return 12
+  return Math.min(Math.floor(h * 0.78), 200)
 })
 
 const memberIndicatorContent = computed(() => {
@@ -176,7 +176,7 @@ const memberIndicatorContent = computed(() => {
   if (total <= 1) return ""
   const w = memberIndicatorW.value
   const size = memberIndicatorFontSize.value
-  const charW = Math.max(size * 0.5, 4)
+  const charW = Math.max(size * 0.6, 6)
   const count = Math.max(1, Math.floor(w / charW))
   if (current === 1) return ">".repeat(count)
   if (current === total) return "<".repeat(count)
@@ -518,11 +518,12 @@ onUnmounted(() => {
         :style="{
           fontSize: memberIndicatorFontSize + 'px',
           lineHeight: 1,
-          color: 'rgba(128,128,128,0.12)',
+          color: 'rgba(128,128,128,0.10)',
           paddingBottom: '2px',
           fontFamily: 'monospace',
-          wordBreak: 'break-all',
+          whiteSpace: 'nowrap',
           overflow: 'hidden',
+          background: 'rgba(255,165,0,0.3)',
         }"
       >{{ memberIndicatorContent }}</div>
       <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
