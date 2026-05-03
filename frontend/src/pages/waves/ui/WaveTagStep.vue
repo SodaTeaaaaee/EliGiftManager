@@ -1082,10 +1082,10 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+    <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1 mt-2">
       <div
         ref="tableWrapperRef"
-        :class="scrollMode ? 'overflow-y-auto flex-1 min-h-0' : 'overflow-hidden'"
+        class="flex-1 min-h-0 overflow-hidden"
       >
         <NDataTable
           :columns="tagColumns"
@@ -1295,7 +1295,7 @@ onUnmounted(() => {
 .tab-trigger {
   border: 1px solid transparent;
   border-radius: 6px;
-  padding: 2px 6px;
+  padding: 6px 6px;
   transition: border-color 0.15s;
 }
 
@@ -1304,13 +1304,13 @@ onUnmounted(() => {
   border-bottom-color: var(--surface-strong);
   background: var(--surface-strong);
   border-radius: 6px 6px 0 0;
-  padding: 2px 6px;
+  padding: 6px 6px;
 }
 
 .tab-panel {
   border: 1px solid var(--muted);
-  border-radius: 0 6px 6px 6px;
-  padding: 8px;
+  border-radius: 0px 6px 6px 6px;
+  padding: 8px 8px 8px 8px;
   background: var(--surface-strong);
   margin-top: -1px;
   position: relative;

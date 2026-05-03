@@ -420,7 +420,7 @@ onUnmounted(() => {
         >
           <div
             ref="productTableWrapper"
-            :class="scrollMode ? 'overflow-y-auto flex-1 min-h-0 mt-2' : 'overflow-hidden mt-2'"
+            class="flex-1 min-h-0 overflow-hidden mt-2"
           >
             <NDataTable
               :columns="productDataColumns"
@@ -485,7 +485,7 @@ onUnmounted(() => {
         >
           <div
             ref="memberTableWrapper"
-            :class="scrollMode ? 'overflow-y-auto flex-1 min-h-0 mt-2' : 'overflow-hidden mt-2'"
+            class="flex-1 min-h-0 overflow-hidden mt-2"
           >
             <NDataTable
               :columns="memberColumns"
