@@ -55,6 +55,7 @@ func main() {
 			IsZoomControlEnabled: true,
 		},
 		OnStartup:        app.startup,
+		OnBeforeClose:    app.beforeClose,
 		Bind: []any{
 			app,
 			memberCtrl,

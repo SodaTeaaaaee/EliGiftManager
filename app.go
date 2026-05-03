@@ -185,6 +185,12 @@ func (a *App) startup(ctx context.Context) {
 	}
 }
 
+func (a *App) beforeClose(ctx context.Context) bool {
+	// Trigger JS-side zoom persistence before WebView2 shuts down.
+	wailsruntime.WindowExecJS(ctx, "if(window.__persistZoom)window.__persistZoom()")
+	return false // false = allow close
+}
+
 func (a *App) PickCSVFile() (string, error) {
 	if a.ctx != nil {
 		selected, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
