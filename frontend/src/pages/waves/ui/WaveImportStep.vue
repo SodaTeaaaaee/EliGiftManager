@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CloudUploadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
@@ -89,132 +90,11 @@ function clampedText(text: string, lines = MAX_LINES) {
   )
 }
 
-// ── measured header & pagination heights (DOM, updated on resize) ──
-const productHeaderH = ref(38)
-const memberHeaderH = ref(38)
-const productPaginationH = ref(32)
-const memberPaginationH = ref(32)
+// ══════════════════════════════════════════════
+// adaptive paging — product + member tables
+// ══════════════════════════════════════════════
 
-function measureHeaderHeight(wrapper: HTMLElement | null): number {
-  if (!wrapper) return 38
-  const thead = wrapper.querySelector('.n-data-table-thead')
-  return thead instanceof HTMLElement ? thead.offsetHeight : 40
-}
-
-function measurePaginationHeight(el: HTMLElement | null): number {
-  return el ? el.offsetHeight : 32
-}
-
-// ── page packing: accumulate DOM-measured row heights, break at overflow ──
-
-function packByHeights(
-  heights: number[],
-  availableH: number,
-  headerH: number,
-): Array<{ start: number; end: number }> {
-  const pages: Array<{ start: number; end: number }> = []
-  if (heights.length === 0) return pages
-  const bodyH = availableH - headerH
-  if (bodyH <= 0) {
-    for (let i = 0; i < heights.length; i++) pages.push({ start: i, end: i })
-    return pages
-  }
-  let pageStart = 0
-  let used = 0
-  for (let i = 0; i < heights.length; i++) {
-    if (used + heights[i] > bodyH && i > pageStart) {
-      pages.push({ start: pageStart, end: i - 1 })
-      pageStart = i
-      used = heights[i]
-    } else {
-      used += heights[i]
-    }
-  }
-  pages.push({ start: pageStart, end: heights.length - 1 })
-  return pages
-}
-
-// ── member table: all data client-side ──
-const memberTableParent = ref<HTMLElement | null>(null)
-const memberTableWrapper = ref<HTMLElement | null>(null)
-const memberPaginationRef = ref<HTMLElement | null>(null)
-const memberIndicatorRef = ref<HTMLElement | null>(null)
-const memberAvailableH = ref(400)
-const memberCurrentPage = ref(1)
-
-const memberNeedsMeasure = ref(true)
-const memberMeasuredHeights = ref<number[]>([])
-
-const memberPages = computed(() =>
-  packByHeights(
-    memberMeasuredHeights.value,
-    memberAvailableH.value - memberPaginationH.value * 2 - 12,
-    memberHeaderH.value,
-  ),
-)
-
-const memberTotalPages = computed(() => memberPages.value.length || 1)
-
-// ── member indicator content ──
-const memberIndicatorW = ref(0)
-const memberIndicatorH = ref(0)
-let memberIndicatorObs: ResizeObserver | null = null
-
-const memberIndicatorFontSize = computed(() => {
-  const h = memberIndicatorH.value
-  if (h < 16) return 12
-  return Math.min(Math.floor(h * 0.95), 800)
-})
-
-const memberIndicatorLeft = computed(() => {
-  const current = memberCurrentPage.value
-  const total = memberTotalPages.value
-  if (total <= 1) return ''
-  const w = memberIndicatorW.value
-  const size = memberIndicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === 1) return ''
-  return '<'.repeat(current === total ? count : half)
-})
-
-const memberIndicatorRight = computed(() => {
-  const current = memberCurrentPage.value
-  const total = memberTotalPages.value
-  if (total <= 1) return ''
-  const w = memberIndicatorW.value
-  const size = memberIndicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === total) return ''
-  return '>'.repeat(current === 1 ? count : half)
-})
-
-const visibleMembers = computed(() => {
-  if (memberNeedsMeasure.value) return waveMembers.value
-  const page = memberPages.value[memberCurrentPage.value - 1]
-  if (!page) return waveMembers.value
-  return waveMembers.value.slice(page.start, page.end + 1)
-})
-
-function handleMemberPageChange(p: number) {
-  memberCurrentPage.value = p
-}
-
-async function remeasureMembers() {
-  memberNeedsMeasure.value = true
-  await nextTick()
-  const trs = memberTableWrapper.value?.querySelectorAll('tbody tr')
-  if (trs && trs.length > 0) {
-    memberMeasuredHeights.value = Array.from(trs).map((tr) => (tr as HTMLElement).offsetHeight)
-  }
-  memberNeedsMeasure.value = false
-  if (memberCurrentPage.value > memberPages.value.length) memberCurrentPage.value = 1
-}
-
-// ── product table: fetch all at once, paginate client-side ──
+// ── data refs ──
 const allProducts = ref<{ id: number; name: string; factorySku: string }[]>([])
 const productIndexMap = computed(() => {
   const map = new Map<number, number>()
@@ -226,153 +106,66 @@ const memberIndexMap = computed(() => {
   waveMembers.value.forEach((m, i) => map.set(m.id, i + 1))
   return map
 })
+const isProductLoading = ref(false)
+
+// ── product table composable ──
 const productTableParent = ref<HTMLElement | null>(null)
 const productTableWrapper = ref<HTMLElement | null>(null)
 const productPaginationRef = ref<HTMLElement | null>(null)
 const productIndicatorRef = ref<HTMLElement | null>(null)
-const productAvailableH = ref(400)
-const productCurrentPage = ref(1)
-const isProductLoading = ref(false)
 
-const productNeedsMeasure = ref(true)
-const productMeasuredHeights = ref<number[]>([])
-
-const productPages = computed(() =>
-  packByHeights(
-    productMeasuredHeights.value,
-    productAvailableH.value - productPaginationH.value * 2 - 12,
-    productHeaderH.value,
-  ),
-)
-
-const productTotalPages = computed(() => productPages.value.length || 1)
-
-// ── product indicator content ──
-const productIndicatorW = ref(0)
-const productIndicatorH = ref(0)
-let productIndicatorObs: ResizeObserver | null = null
-
-const productIndicatorFontSize = computed(() => {
-  const h = productIndicatorH.value
-  if (h < 16) return 12
-  return Math.min(Math.floor(h * 0.95), 800)
+const {
+  headerH: productHeaderH,
+  paginationH: productPaginationH,
+  availableH: productAvailableH,
+  currentPage: productCurrentPage,
+  totalPages: productTotalPages,
+  visibleItems: visibleProducts,
+  scrollMode,
+  lastW: lastProductW,
+  indicatorFontSize: productIndicatorFontSize,
+  indicatorLeft: productIndicatorLeft,
+  indicatorRight: productIndicatorRight,
+  handlePageChange: handleProductPageChange,
+  remeasure: remeasureProducts,
+  setupIndicatorObserver: setupProductIndicatorObserver,
+  teardown: teardownProduct,
+  init: initProduct,
+} = useAdaptiveTable(allProducts, {
+  tableParentRef: productTableParent,
+  tableWrapperRef: productTableWrapper,
+  paginationRef: productPaginationRef,
+  indicatorRef: productIndicatorRef,
 })
 
-const productIndicatorLeft = computed(() => {
-  const current = productCurrentPage.value
-  const total = productTotalPages.value
-  if (total <= 1) return ''
-  const w = productIndicatorW.value
-  const size = productIndicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === 1) return ''
-  return '<'.repeat(current === total ? count : half)
+// ── member table composable ──
+const memberTableParent = ref<HTMLElement | null>(null)
+const memberTableWrapper = ref<HTMLElement | null>(null)
+const memberPaginationRef = ref<HTMLElement | null>(null)
+const memberIndicatorRef = ref<HTMLElement | null>(null)
+
+const {
+  headerH: memberHeaderH,
+  paginationH: memberPaginationH,
+  availableH: memberAvailableH,
+  currentPage: memberCurrentPage,
+  totalPages: memberTotalPages,
+  visibleItems: visibleMembers,
+  lastW: lastMemberW,
+  indicatorFontSize: memberIndicatorFontSize,
+  indicatorLeft: memberIndicatorLeft,
+  indicatorRight: memberIndicatorRight,
+  handlePageChange: handleMemberPageChange,
+  remeasure: remeasureMembers,
+  setupIndicatorObserver: setupMemberIndicatorObserver,
+  teardown: teardownMember,
+  init: initMember,
+} = useAdaptiveTable(waveMembers, {
+  tableParentRef: memberTableParent,
+  tableWrapperRef: memberTableWrapper,
+  paginationRef: memberPaginationRef,
+  indicatorRef: memberIndicatorRef,
 })
-
-const productIndicatorRight = computed(() => {
-  const current = productCurrentPage.value
-  const total = productTotalPages.value
-  if (total <= 1) return ''
-  const w = productIndicatorW.value
-  const size = productIndicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === total) return ''
-  return '>'.repeat(current === 1 ? count : half)
-})
-
-const visibleProducts = computed(() => {
-  if (productNeedsMeasure.value) return allProducts.value
-  const page = productPages.value[productCurrentPage.value - 1]
-  if (!page) return allProducts.value
-  return allProducts.value.slice(page.start, page.end + 1)
-})
-
-function handleProductPageChange(p: number) {
-  productCurrentPage.value = p
-}
-
-async function remeasureProducts() {
-  productNeedsMeasure.value = true
-  await nextTick()
-  const trs = productTableWrapper.value?.querySelectorAll('tbody tr')
-  if (trs && trs.length > 0) {
-    productMeasuredHeights.value = Array.from(trs).map((tr) => (tr as HTMLElement).offsetHeight)
-  }
-  productNeedsMeasure.value = false
-  if (productCurrentPage.value > productPages.value.length) productCurrentPage.value = 1
-}
-
-// ── ResizeObserver: track wrapper height & width → re-measure row heights → repack ──
-let resizeObserver: ResizeObserver | null = null
-const lastProductW = ref(0)
-const lastMemberW = ref(0)
-
-function setupResizeObserver() {
-  resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.target === productTableParent.value) {
-        const w = entry.contentRect.width
-        const h = entry.contentRect.height
-        if (h <= 0) continue
-        const wChanged = w !== lastProductW.value
-        const hChanged = h !== productAvailableH.value
-        if (!wChanged && !hChanged) continue
-        if (wChanged) {
-          lastProductW.value = w
-          remeasureProducts()
-        }
-        if (hChanged) {
-          productAvailableH.value = h
-          productCurrentPage.value = 1
-        }
-      } else if (entry.target === memberTableParent.value) {
-        const w = entry.contentRect.width
-        const h = entry.contentRect.height
-        if (h <= 0) continue
-        const wChanged = w !== lastMemberW.value
-        const hChanged = h !== memberAvailableH.value
-        if (!wChanged && !hChanged) continue
-        if (wChanged) {
-          lastMemberW.value = w
-          remeasureMembers()
-        }
-        if (hChanged) {
-          memberAvailableH.value = h
-          memberCurrentPage.value = 1
-        }
-      }
-    }
-  })
-  if (productTableParent.value) resizeObserver.observe(productTableParent.value)
-  if (memberTableParent.value) resizeObserver.observe(memberTableParent.value)
-}
-
-function setupIndicatorObservers() {
-  productIndicatorObs?.disconnect()
-  memberIndicatorObs?.disconnect()
-  if (productIndicatorRef.value) {
-    productIndicatorObs = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        productIndicatorW.value = entry.contentRect.width
-        productIndicatorH.value = entry.contentRect.height
-      }
-    })
-    productIndicatorObs.observe(productIndicatorRef.value)
-  }
-  if (memberIndicatorRef.value) {
-    memberIndicatorObs = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        memberIndicatorW.value = entry.contentRect.width
-        memberIndicatorH.value = entry.contentRect.height
-      }
-    })
-    memberIndicatorObs.observe(memberIndicatorRef.value)
-  }
-}
 
 // ── column definitions ──
 const showSkuColumn = computed(() => lastProductW.value === 0 || lastProductW.value >= 400)
@@ -579,51 +372,27 @@ onMounted(async () => {
   await loadTemplates()
   await loadWaveMembers()
   await loadAllProducts()
-  await nextTick()
-  productHeaderH.value = measureHeaderHeight(productTableWrapper.value)
-  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
-  productPaginationH.value = measurePaginationHeight(productPaginationRef.value)
-  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  if (productTableParent.value) {
-    const h = productTableParent.value.clientHeight
-    if (h > 0) productAvailableH.value = h
-    lastProductW.value = productTableParent.value.clientWidth
-  }
-  if (memberTableParent.value) {
-    const h = memberTableParent.value.clientHeight
-    if (h > 0) memberAvailableH.value = h
-    lastMemberW.value = memberTableParent.value.clientWidth
-  }
-  await remeasureProducts()
-  await remeasureMembers()
-  setupResizeObserver()
-  setupIndicatorObservers()
+  await initProduct()
+  await initMember()
 })
 
 watch([() => allProducts.value.length, () => waveMembers.value.length], async () => {
   await nextTick()
-  productHeaderH.value = measureHeaderHeight(productTableWrapper.value)
-  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
-  productPaginationH.value = measurePaginationHeight(productPaginationRef.value)
-  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  if (productTableParent.value) {
-    resizeObserver?.observe(productTableParent.value)
-    const h = productTableParent.value.clientHeight
-    if (h > 0) productAvailableH.value = h
-  }
-  if (memberTableParent.value) {
-    resizeObserver?.observe(memberTableParent.value)
-    const h = memberTableParent.value.clientHeight
-    if (h > 0) memberAvailableH.value = h
-  }
   await remeasureProducts()
   await remeasureMembers()
 })
 
+watch(scrollMode, async (v) => {
+  if (!v) {
+    await nextTick()
+    setupProductIndicatorObserver()
+    setupMemberIndicatorObserver()
+  }
+})
+
 onUnmounted(() => {
-  resizeObserver?.disconnect()
-  productIndicatorObs?.disconnect()
-  memberIndicatorObs?.disconnect()
+  teardownProduct()
+  teardownMember()
 })
 </script>
 <template>
@@ -655,7 +424,10 @@ onUnmounted(() => {
           ref="productTableParent"
           class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3"
         >
-          <div ref="productTableWrapper" class="overflow-hidden mt-2">
+          <div
+            ref="productTableWrapper"
+            :class="scrollMode ? 'overflow-y-auto flex-1 min-h-0 mt-2' : 'overflow-hidden mt-2'"
+          >
             <NDataTable
               :columns="productDataColumns"
               :data="visibleProducts"
@@ -666,6 +438,7 @@ onUnmounted(() => {
             />
           </div>
           <div
+            v-if="!scrollMode"
             ref="productIndicatorRef"
             class="flex-1 flex justify-center items-center select-none"
             :style="{
@@ -681,6 +454,7 @@ onUnmounted(() => {
             ><span style="color: rgba(251, 191, 36, 0.1)">{{ productIndicatorRight }}</span>
           </div>
           <div
+            v-if="!scrollMode"
             ref="productPaginationRef"
             class="flex justify-center mt-0 mb-3 shrink-0"
             style="transform: scale(1.3); transform-origin: top center"
@@ -715,7 +489,10 @@ onUnmounted(() => {
           ref="memberTableParent"
           class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3"
         >
-          <div ref="memberTableWrapper" class="overflow-hidden mt-2">
+          <div
+            ref="memberTableWrapper"
+            :class="scrollMode ? 'overflow-y-auto flex-1 min-h-0 mt-2' : 'overflow-hidden mt-2'"
+          >
             <NDataTable
               :columns="memberColumns"
               :data="visibleMembers"
@@ -726,6 +503,7 @@ onUnmounted(() => {
             />
           </div>
           <div
+            v-if="!scrollMode"
             ref="memberIndicatorRef"
             class="flex-1 flex justify-center items-center select-none"
             :style="{
@@ -741,6 +519,7 @@ onUnmounted(() => {
             ><span style="color: rgba(251, 191, 36, 0.1)">{{ memberIndicatorRight }}</span>
           </div>
           <div
+            v-if="!scrollMode"
             ref="memberPaginationRef"
             class="flex justify-center mt-0 mb-3 shrink-0"
             style="transform: scale(1.3); transform-origin: top center"

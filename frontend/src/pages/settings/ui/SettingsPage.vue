@@ -22,10 +22,16 @@ import {
   type DashboardPayload,
 } from '@/shared/lib/wails/app'
 import { themePreferenceOptions, useThemeStore, type ThemePreference } from '@/shared/model/theme'
+import { useScrollMode } from '@/shared/model/settings'
 
 const message = useMessage()
 const dialog = useDialog()
 const themeStore = useThemeStore()
+const scrollMode = useScrollMode()
+
+function setScrollMode(v: string | number | boolean) {
+  scrollMode.value = v === 'scroll'
+}
 const dashboard = ref<DashboardPayload | null>(null)
 const dbStatus = ref('等待检测')
 const errorMessage = ref('')
@@ -95,6 +101,13 @@ onMounted(loadSettings)
           >
         </NRadioGroup>
       </NCard>
+      <NCard title="表格模式" size="medium">
+        <p class="app-copy mb-3">自适应分页或传统滚动。</p>
+        <NRadioGroup :value="scrollMode ? 'scroll' : 'paginated'" @update:value="setScrollMode">
+          <NRadioButton value="paginated">自适应分页</NRadioButton>
+          <NRadioButton value="scroll">滚动模式</NRadioButton>
+        </NRadioGroup>
+      </NCard>
       <NCard title="数据库状态" size="medium">
         <p class="app-copy">{{ dbStatus }}</p>
         <p class="app-copy mt-3 break-all">{{ dashboard?.databasePath ?? '等待连接' }}</p>
@@ -118,9 +131,7 @@ onMounted(loadSettings)
         </div>
         <NAlert class="mt-4" type="warning" :show-icon="false"
           ><span class="inline-flex items-center gap-2">
-            <NIcon>
-              <AlertCircleOutline /> </NIcon
-            >恢复前会自动生成带时间戳的防灾副本。
+            <NIcon> <AlertCircleOutline /> </NIcon>恢复前会自动生成带时间戳的防灾副本。
           </span></NAlert
         >
       </NCard>

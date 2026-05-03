@@ -278,135 +278,51 @@ function renderTagChip(row: any, tag: TagInfo) {
   )
 }
 
-// ── measured header & pagination heights (DOM, updated on resize) ──
-const tagHeaderH = ref(38)
-const tagPaginationH = ref(32)
+// ══════════════════════════════════════════════
+// adaptive paging — tag products table
+// ══════════════════════════════════════════════
 
-function measureHeaderHeight(wrapper: HTMLElement | null): number {
-  if (!wrapper) return 38
-  const thead = wrapper.querySelector('.n-data-table-thead')
-  return thead instanceof HTMLElement ? thead.offsetHeight : 40
-}
+const lastClickedIndex = ref(-1)
 
-function measurePaginationHeight(el: HTMLElement | null): number {
-  return el ? el.offsetHeight : 32
-}
+const tableParentRef = ref<HTMLElement | null>(null)
+const tableWrapperRef = ref<HTMLElement | null>(null)
+const paginationRef = ref<HTMLElement | null>(null)
+const indicatorRef = ref<HTMLElement | null>(null)
 
-// ── page packing: accumulate DOM-measured row heights, break at overflow ──
-function packByHeights(
-  heights: number[],
-  availableH: number,
-  headerH: number,
-): Array<{ start: number; end: number }> {
-  const pages: Array<{ start: number; end: number }> = []
-  if (heights.length === 0) return pages
-  const bodyH = availableH - headerH
-  if (bodyH <= 0) {
-    for (let i = 0; i < heights.length; i++) pages.push({ start: i, end: i })
-    return pages
-  }
-  let pageStart = 0
-  let used = 0
-  for (let i = 0; i < heights.length; i++) {
-    if (used + heights[i] > bodyH && i > pageStart) {
-      pages.push({ start: pageStart, end: i - 1 })
-      pageStart = i
-      used = heights[i]
-    } else {
-      used += heights[i]
-    }
-  }
-  pages.push({ start: pageStart, end: heights.length - 1 })
-  return pages
-}
-
-// ── tag table: fetch all at once, paginate client-side ──
-const tagTableParent = ref<HTMLElement | null>(null)
-const tagTableWrapper = ref<HTMLElement | null>(null)
-const tagPaginationRef = ref<HTMLElement | null>(null)
-const tagIndicatorRef = ref<HTMLElement | null>(null)
-const tagAvailableH = ref(400)
-const tagCurrentPage = ref(1)
-
-const tagNeedsMeasure = ref(true)
-const tagMeasuredHeights = ref<number[]>([])
-
-const tagPages = computed(() =>
-  packByHeights(
-    tagMeasuredHeights.value,
-    tagAvailableH.value - tagPaginationH.value * 2 - 12,
-    tagHeaderH.value,
-  ),
-)
-
-const tagTotalPages = computed(() => tagPages.value.length || 1)
-
-// ── indicator content ──
-const indicatorW = ref(0)
-const indicatorH = ref(0)
-let indicatorObserver: ResizeObserver | null = null
-
-const indicatorFontSize = computed(() => {
-  const h = indicatorH.value
-  if (h < 16) return 12
-  return Math.min(Math.floor(h * 0.95), 800)
+const {
+  headerH,
+  paginationH,
+  availableH,
+  currentPage,
+  totalPages,
+  visibleItems,
+  scrollMode,
+  lastW,
+  indicatorFontSize,
+  indicatorLeft,
+  indicatorRight,
+  handlePageChange: rawHandlePageChange,
+  remeasure,
+  setupIndicatorObserver,
+  teardown,
+  init,
+} = useAdaptiveTable(allTagProducts, {
+  tableParentRef,
+  tableWrapperRef,
+  paginationRef,
+  indicatorRef,
 })
 
-const indicatorLeft = computed(() => {
-  const current = tagCurrentPage.value
-  const total = tagTotalPages.value
-  if (total <= 1) return ''
-  const w = indicatorW.value
-  const size = indicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === 1) return ''
-  return '<'.repeat(current === total ? count : half)
-})
-
-const indicatorRight = computed(() => {
-  const current = tagCurrentPage.value
-  const total = tagTotalPages.value
-  if (total <= 1) return ''
-  const w = indicatorW.value
-  const size = indicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === total) return ''
-  return '>'.repeat(current === 1 ? count : half)
-})
-
-const visibleTagProducts = computed(() => {
-  if (tagNeedsMeasure.value) return allTagProducts.value
-  const page = tagPages.value[tagCurrentPage.value - 1]
-  if (!page) return allTagProducts.value
-  return allTagProducts.value.slice(page.start, page.end + 1)
-})
-
-async function remeasureTags() {
-  tagNeedsMeasure.value = true
-  await nextTick()
-  const trs = tagTableWrapper.value?.querySelectorAll('tbody tr')
-  if (trs && trs.length > 0) {
-    tagMeasuredHeights.value = Array.from(trs).map((tr) => (tr as HTMLElement).offsetHeight)
-  }
-  tagNeedsMeasure.value = false
-  if (tagCurrentPage.value > tagPages.value.length) tagCurrentPage.value = 1
-}
-
-function handleTagPageChange(p: number) {
-  tagCurrentPage.value = p
+function handlePageChange(p: number) {
+  rawHandlePageChange(p)
   lastClickedIndex.value = -1
 }
 
 // ── row props: multi-select with Ctrl/Shift, highlight selected ──
-const lastClickedIndex = ref(-1)
 
 function rowProps(row: any) {
   const selected = checkedProductIds.value.includes(row.id)
-  const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+  const idx = visibleItems.value.findIndex((p: any) => p.id === row.id)
   const isAnchor = selected && idx >= 0 && idx === lastClickedIndex.value
   return {
     class: [selected ? 'row-selected' : '', isAnchor ? 'row-anchor' : ''].filter(Boolean).join(' '),
@@ -415,17 +331,17 @@ function rowProps(row: any) {
     'data-product-id': row.id,
     onClick: (e: MouseEvent) => {
       if ((e.target as HTMLElement).closest('.n-checkbox')) {
-        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        const idx = visibleItems.value.findIndex((p: any) => p.id === row.id)
         if (idx >= 0) lastClickedIndex.value = idx
         return
       }
       // Ctrl+Shift: additive range select
       if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
-        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        const idx = visibleItems.value.findIndex((p: any) => p.id === row.id)
         if (lastClickedIndex.value >= 0 && idx >= 0) {
           const lo = Math.min(lastClickedIndex.value, idx)
           const hi = Math.max(lastClickedIndex.value, idx)
-          const rangeIds = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
+          const rangeIds = visibleItems.value.slice(lo, hi + 1).map((p: any) => p.id)
           checkedProductIds.value = [...new Set([...checkedProductIds.value, ...rangeIds])]
         }
         return
@@ -433,7 +349,7 @@ function rowProps(row: any) {
       // Ctrl: toggle single row
       if (e.ctrlKey || e.metaKey) {
         const id = row.id
-        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === id)
+        const idx = visibleItems.value.findIndex((p: any) => p.id === id)
         if (idx >= 0) lastClickedIndex.value = idx
         if (checkedProductIds.value.includes(id)) {
           checkedProductIds.value = checkedProductIds.value.filter((x) => x !== id)
@@ -444,23 +360,23 @@ function rowProps(row: any) {
       }
       // Shift: replacement range select
       if (e.shiftKey) {
-        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        const idx = visibleItems.value.findIndex((p: any) => p.id === row.id)
         if (lastClickedIndex.value >= 0 && idx >= 0) {
           const lo = Math.min(lastClickedIndex.value, idx)
           const hi = Math.max(lastClickedIndex.value, idx)
-          checkedProductIds.value = visibleTagProducts.value.slice(lo, hi + 1).map((p: any) => p.id)
+          checkedProductIds.value = visibleItems.value.slice(lo, hi + 1).map((p: any) => p.id)
         }
         return
       }
       // Plain click: select single row
-      const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+      const idx = visibleItems.value.findIndex((p: any) => p.id === row.id)
       if (idx >= 0) lastClickedIndex.value = idx
       checkedProductIds.value = [row.id]
     },
     onContextmenu: (_e: MouseEvent) => {
       // Windows Explorer behavior: if target is not in selection, select it alone.
       if (!checkedProductIds.value.includes(row.id)) {
-        const idx = visibleTagProducts.value.findIndex((p: any) => p.id === row.id)
+        const idx = visibleItems.value.findIndex((p: any) => p.id === row.id)
         if (idx >= 0) lastClickedIndex.value = idx
         checkedProductIds.value = [row.id]
       }
@@ -476,8 +392,8 @@ const allSelected = computed(
     checkedProductIds.value.length === allTagProducts.value.length,
 )
 const pageAllSelected = computed(() => {
-  if (visibleTagProducts.value.length === 0) return false
-  return visibleTagProducts.value.every((p) => checkedProductIds.value.includes(p.id))
+  if (visibleItems.value.length === 0) return false
+  return visibleItems.value.every((p) => checkedProductIds.value.includes(p.id))
 })
 
 function handleSelectAll() {
@@ -489,7 +405,7 @@ function handleSelectAll() {
   }
 }
 function handleSelectPage() {
-  const pageIds = visibleTagProducts.value.map((p) => p.id)
+  const pageIds = visibleItems.value.map((p) => p.id)
   if (pageAllSelected.value) {
     checkedProductIds.value = checkedProductIds.value.filter((id) => !pageIds.includes(id))
   } else {
@@ -497,39 +413,11 @@ function handleSelectPage() {
   }
 }
 function handleInvertPage() {
-  const pageIds = new Set(visibleTagProducts.value.map((p) => p.id))
-  const toAdd = visibleTagProducts.value
+  const pageIds = new Set(visibleItems.value.map((p) => p.id))
+  const toAdd = visibleItems.value
     .filter((p) => !checkedProductIds.value.includes(p.id))
     .map((p) => p.id)
   checkedProductIds.value = checkedProductIds.value.filter((id) => !pageIds.has(id)).concat(toAdd)
-}
-
-// ── ResizeObserver: track wrapper height & width → remeasure row heights → repack ──
-let resizeObserver: ResizeObserver | null = null
-const lastTagW = ref(0)
-
-function setupResizeObserver() {
-  resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.target === tagTableParent.value) {
-        const w = entry.contentRect.width
-        const h = entry.contentRect.height
-        if (h <= 0) continue
-        const wChanged = w !== lastTagW.value
-        const hChanged = h !== tagAvailableH.value
-        if (!wChanged && !hChanged) continue
-        if (wChanged) {
-          lastTagW.value = w
-          remeasureTags()
-        }
-        if (hChanged) {
-          tagAvailableH.value = h
-          tagCurrentPage.value = 1
-        }
-      }
-    }
-  })
-  if (tagTableParent.value) resizeObserver.observe(tagTableParent.value)
 }
 
 // ── column definitions ──
@@ -822,51 +710,23 @@ onMounted(async () => {
     return items
   })
 
-  tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
-  tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
-  if (tagTableParent.value) {
-    const h = tagTableParent.value.clientHeight
-    if (h > 0) tagAvailableH.value = h
-    lastTagW.value = tagTableParent.value.clientWidth
-  }
-  await remeasureTags()
-  setupResizeObserver()
-  setupIndicatorObserver()
+  await init()
 })
 
 watch([() => allTagProducts.value.length], async () => {
   await nextTick()
-  tagHeaderH.value = measureHeaderHeight(tagTableWrapper.value)
-  tagPaginationH.value = measurePaginationHeight(tagPaginationRef.value)
-  if (tagTableParent.value) {
-    resizeObserver?.observe(tagTableParent.value)
-    const h = tagTableParent.value.clientHeight
-    if (h > 0) tagAvailableH.value = h
-  }
-  await remeasureTags()
+  await remeasure()
 })
 
-function setupIndicatorObserver() {
-  indicatorObserver?.disconnect()
-  if (tagIndicatorRef.value) {
-    indicatorObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        indicatorW.value = entry.contentRect.width
-        indicatorH.value = entry.contentRect.height
-      }
-    })
-    indicatorObserver.observe(tagIndicatorRef.value)
+watch(scrollMode, async (v) => {
+  if (!v) {
+    await nextTick()
+    setupIndicatorObserver()
   }
-}
-
-// Re-observe indicator after page change (v-if may recreate element)
-watch([tagCurrentPage, tagTotalPages], () => {
-  nextTick(() => setupIndicatorObserver())
 })
 
 onUnmounted(() => {
-  resizeObserver?.disconnect()
-  indicatorObserver?.disconnect()
+  teardown()
   if (unregisterCtxMenu) unregisterCtxMenu()
 })
 </script>
@@ -980,11 +840,14 @@ onUnmounted(() => {
       </NFlex>
     </div>
 
-    <div ref="tagTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div ref="tagTableWrapper" class="overflow-hidden">
+    <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div
+        ref="tableWrapperRef"
+        :class="scrollMode ? 'overflow-y-auto flex-1 min-h-0' : 'overflow-hidden'"
+      >
         <NDataTable
           :columns="tagColumns"
-          :data="visibleTagProducts"
+          :data="visibleItems"
           :loading="isTagLoading"
           :bordered="false"
           :row-key="(row: any) => row.id"
@@ -995,7 +858,8 @@ onUnmounted(() => {
         />
       </div>
       <div
-        ref="tagIndicatorRef"
+        v-if="!scrollMode"
+        ref="indicatorRef"
         class="flex-1 flex justify-center items-center select-none"
         :style="{
           fontSize: indicatorFontSize + 'px',
@@ -1010,15 +874,16 @@ onUnmounted(() => {
         ><span style="color: rgba(251, 191, 36, 0.1)">{{ indicatorRight }}</span>
       </div>
       <div
-        ref="tagPaginationRef"
+        v-if="!scrollMode"
+        ref="paginationRef"
         class="flex justify-center mt-0 mb-6 shrink-0"
         style="transform: scale(1.5); transform-origin: top center"
       >
         <NPagination
-          :page="tagCurrentPage"
-          :page-count="tagTotalPages"
+          :page="currentPage"
+          :page-count="totalPages"
           size="small"
-          @update:page="handleTagPageChange"
+          @update:page="handlePageChange"
         />
       </div>
     </div>

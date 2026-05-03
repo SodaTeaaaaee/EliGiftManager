@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { DownloadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NAlert,
@@ -122,10 +123,6 @@ const memberGroups = computed(() => {
   return [...map.values()]
 })
 
-// ══════════════════════════════════════════════
-// adaptive paging — memberGroupColumns table
-// ══════════════════════════════════════════════
-
 // ── line-clamped cell renderer ──
 const MAX_LINES = 4
 const LINE_HEIGHT = 21
@@ -147,158 +144,41 @@ function clampedText(text: string, lines = MAX_LINES) {
   )
 }
 
-// ── pack rows by measured DOM heights ──
-function packByHeights(
-  heights: number[],
-  availableH: number,
-  headerH: number,
-): Array<{ start: number; end: number }> {
-  const pages: Array<{ start: number; end: number }> = []
-  if (heights.length === 0) return pages
-  const bodyH = availableH - headerH
-  if (bodyH <= 0) {
-    for (let i = 0; i < heights.length; i++) pages.push({ start: i, end: i })
-    return pages
-  }
-  let pageStart = 0
-  let used = 0
-  for (let i = 0; i < heights.length; i++) {
-    if (used + heights[i] > bodyH && i > pageStart) {
-      pages.push({ start: pageStart, end: i - 1 })
-      pageStart = i
-      used = heights[i]
-    } else {
-      used += heights[i]
-    }
-  }
-  pages.push({ start: pageStart, end: heights.length - 1 })
-  return pages
-}
+// ══════════════════════════════════════════════
+// adaptive paging — memberGroupColumns table
+// ══════════════════════════════════════════════
 
-// ── measured header & pagination heights (DOM, updated on resize) ──
-const memberHeaderH = ref(38)
-const memberPaginationH = ref(32)
+const tableParentRef = ref<HTMLElement | null>(null)
+const tableWrapperRef = ref<HTMLElement | null>(null)
+const paginationRef = ref<HTMLElement | null>(null)
+const indicatorRef = ref<HTMLElement | null>(null)
 
-function measureHeaderHeight(wrapper: HTMLElement | null): number {
-  if (!wrapper) return 38
-  const thead = wrapper.querySelector('.n-data-table-thead')
-  return thead instanceof HTMLElement ? thead.offsetHeight : 40
-}
-
-function measurePaginationHeight(el: HTMLElement | null): number {
-  return el ? el.offsetHeight : 32
-}
-
-// ── member table: all data client-side ──
-const memberTableParent = ref<HTMLElement | null>(null)
-const memberTableWrapper = ref<HTMLElement | null>(null)
-const memberPaginationRef = ref<HTMLElement | null>(null)
-const memberAvailableH = ref(400)
-const memberCurrentPage = ref(1)
-
-const memberNeedsMeasure = ref(true)
-const memberMeasuredHeights = ref<number[]>([])
-
-const memberPages = computed(() =>
-  packByHeights(
-    memberMeasuredHeights.value,
-    memberAvailableH.value - memberPaginationH.value * 2 - 12,
-    memberHeaderH.value,
-  ),
-)
-
-const memberTotalPages = computed(() => memberPages.value.length || 1)
-
-// ── indicator content ──
-const memberIndicatorRef = ref<HTMLElement | null>(null)
-const memberIndicatorW = ref(0)
-const memberIndicatorH = ref(0)
-let memberIndicatorObserver: ResizeObserver | null = null
-
-const memberIndicatorFontSize = computed(() => {
-  const h = memberIndicatorH.value
-  if (h < 16) return 12
-  return Math.min(Math.floor(h * 0.95), 800)
+const {
+  headerH,
+  paginationH,
+  availableH,
+  currentPage,
+  totalPages,
+  visibleItems,
+  scrollMode,
+  lastW,
+  indicatorFontSize,
+  indicatorLeft,
+  indicatorRight,
+  handlePageChange,
+  remeasure,
+  setupIndicatorObserver,
+  teardown,
+  init,
+} = useAdaptiveTable(memberGroups, {
+  tableParentRef,
+  tableWrapperRef,
+  paginationRef,
+  indicatorRef,
 })
-
-const memberIndicatorLeft = computed(() => {
-  const current = memberCurrentPage.value
-  const total = memberTotalPages.value
-  if (total <= 1) return ''
-  const w = memberIndicatorW.value
-  const size = memberIndicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === 1) return ''
-  return '<'.repeat(current === total ? count : half)
-})
-
-const memberIndicatorRight = computed(() => {
-  const current = memberCurrentPage.value
-  const total = memberTotalPages.value
-  if (total <= 1) return ''
-  const w = memberIndicatorW.value
-  const size = memberIndicatorFontSize.value
-  const charW = Math.max(size * 0.6, 6)
-  const count = Math.max(2, Math.floor(w / charW / 2) * 2)
-  const half = count / 2
-  if (current === total) return ''
-  return '>'.repeat(current === 1 ? count : half)
-})
-
-const visibleMemberGroups = computed(() => {
-  if (memberNeedsMeasure.value) return memberGroups.value
-  const page = memberPages.value[memberCurrentPage.value - 1]
-  if (!page) return memberGroups.value
-  return memberGroups.value.slice(page.start, page.end + 1)
-})
-
-async function remeasureMembers() {
-  memberNeedsMeasure.value = true
-  await nextTick()
-  const trs = memberTableWrapper.value?.querySelectorAll('tbody tr')
-  if (trs && trs.length > 0) {
-    memberMeasuredHeights.value = Array.from(trs).map((tr) => (tr as HTMLElement).offsetHeight)
-  }
-  memberNeedsMeasure.value = false
-  if (memberCurrentPage.value > memberPages.value.length) memberCurrentPage.value = 1
-}
-
-function handleMemberPageChange(p: number) {
-  memberCurrentPage.value = p
-}
-
-// ── ResizeObserver: track wrapper height & width → re-measure row heights → repack ──
-let resizeObserver: ResizeObserver | null = null
-const lastMemberW = ref(0)
-
-function setupResizeObserver() {
-  resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.target === memberTableParent.value) {
-        const w = entry.contentRect.width
-        const h = entry.contentRect.height
-        if (h <= 0) continue
-        const wChanged = w !== lastMemberW.value
-        const hChanged = h !== memberAvailableH.value
-        if (!wChanged && !hChanged) continue
-        if (wChanged) {
-          lastMemberW.value = w
-          remeasureMembers()
-        }
-        if (hChanged) {
-          memberAvailableH.value = h
-          memberCurrentPage.value = 1
-        }
-      }
-    }
-  })
-  if (memberTableParent.value) resizeObserver.observe(memberTableParent.value)
-}
 
 // ── column definitions ──
-const showExtraColumns = computed(() => lastMemberW.value === 0 || lastMemberW.value >= 500)
+const showExtraColumns = computed(() => lastW.value === 0 || lastW.value >= 500)
 
 const memberIndexMap = computed(() => {
   const map = new Map<number, number>()
@@ -612,51 +492,23 @@ onMounted(async () => {
       isPreviewLoading.value = false
     }
   }
-  await nextTick()
-  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
-  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  if (memberTableParent.value) {
-    const h = memberTableParent.value.clientHeight
-    if (h > 0) memberAvailableH.value = h
-    lastMemberW.value = memberTableParent.value.clientWidth
-  }
-  await remeasureMembers()
-  setupResizeObserver()
-  setupMemberIndicatorObserver()
+  await init()
 })
 
 watch([() => memberGroups.value.length], async () => {
   await nextTick()
-  memberHeaderH.value = measureHeaderHeight(memberTableWrapper.value)
-  memberPaginationH.value = measurePaginationHeight(memberPaginationRef.value)
-  if (memberTableParent.value) {
-    resizeObserver?.observe(memberTableParent.value)
-    const h = memberTableParent.value.clientHeight
-    if (h > 0) memberAvailableH.value = h
-  }
-  await remeasureMembers()
+  await remeasure()
 })
 
-function setupMemberIndicatorObserver() {
-  memberIndicatorObserver?.disconnect()
-  if (memberIndicatorRef.value) {
-    memberIndicatorObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        memberIndicatorW.value = entry.contentRect.width
-        memberIndicatorH.value = entry.contentRect.height
-      }
-    })
-    memberIndicatorObserver.observe(memberIndicatorRef.value)
+watch(scrollMode, async (v) => {
+  if (!v) {
+    await nextTick()
+    setupIndicatorObserver()
   }
-}
-
-watch([memberCurrentPage, memberTotalPages], () => {
-  nextTick(() => setupMemberIndicatorObserver())
 })
 
 onUnmounted(() => {
-  resizeObserver?.disconnect()
-  memberIndicatorObserver?.disconnect()
+  teardown()
 })
 </script>
 <template>
@@ -699,11 +551,14 @@ onUnmounted(() => {
     </div>
 
     <!-- Content area (flex-1, min-h-0) -->
-    <div ref="memberTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div ref="memberTableWrapper" class="overflow-hidden">
+    <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div
+        ref="tableWrapperRef"
+        :class="scrollMode ? 'overflow-y-auto flex-1 min-h-0' : 'overflow-hidden'"
+      >
         <NDataTable
           :columns="memberGroupColumnsComputed"
-          :data="visibleMemberGroups"
+          :data="visibleItems"
           :bordered="false"
           :pagination="false"
           size="small"
@@ -713,10 +568,11 @@ onUnmounted(() => {
         />
       </div>
       <div
-        ref="memberIndicatorRef"
+        v-if="!scrollMode"
+        ref="indicatorRef"
         class="flex-1 flex justify-center items-center select-none"
         :style="{
-          fontSize: memberIndicatorFontSize + 'px',
+          fontSize: indicatorFontSize + 'px',
           lineHeight: 1,
           fontFamily: 'monospace',
           whiteSpace: 'nowrap',
@@ -724,19 +580,20 @@ onUnmounted(() => {
           marginBottom: '12px',
         }"
       >
-        <span style="color: rgba(96, 165, 250, 0.1)">{{ memberIndicatorLeft }}</span
-        ><span style="color: rgba(251, 191, 36, 0.1)">{{ memberIndicatorRight }}</span>
+        <span style="color: rgba(96, 165, 250, 0.1)">{{ indicatorLeft }}</span
+        ><span style="color: rgba(251, 191, 36, 0.1)">{{ indicatorRight }}</span>
       </div>
       <div
-        ref="memberPaginationRef"
+        v-if="!scrollMode"
+        ref="paginationRef"
         class="flex justify-center mt-0 mb-6 shrink-0"
         style="transform: scale(1.5); transform-origin: top center"
       >
         <NPagination
-          :page="memberCurrentPage"
-          :page-count="memberTotalPages"
+          :page="currentPage"
+          :page-count="totalPages"
           size="small"
-          @update:page="handleMemberPageChange"
+          @update:page="handlePageChange"
         />
       </div>
     </div>
