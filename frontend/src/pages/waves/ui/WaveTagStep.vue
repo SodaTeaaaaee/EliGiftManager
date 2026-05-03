@@ -626,9 +626,20 @@ onUnmounted(() => {
               <NTag size="small" round>{{ drawerProduct.platform }}</NTag>
             </div>
             <NFlex :size="'small'" :wrap="true">
-              <NTag v-for="tag in drawerProduct.tags" :key="tag.tagName + tag.tagType" size="small" round
+              <NTag v-for="tag in drawerProduct.tags" :key="tag.tagName + tag.tagType" size="medium" round
                 :color="platformTagColor(tag.platform).color">
-                {{ tag.quantity === 1 ? tag.tagName : `${tag.tagName}:${tag.quantity}` }}
+                <template v-if="tag.quantity === 1">
+                  <span :style="{ color: platformTagColor(tag.platform).textColor || '#aaa', fontWeight: 500 }">
+                    {{ tag.tagType === 'user' ? (wmNicknameMap.get(tag.waveMemberId) || tag.tagName) : tag.tagName }}
+                  </span>
+                </template>
+                <template v-else>
+                  <span :style="{ color: platformTagColor(tag.platform).textColor || '#aaa', fontWeight: 500 }">
+                    {{ tag.tagType === 'user' ? (wmNicknameMap.get(tag.waveMemberId) || tag.tagName) : tag.tagName }}
+                  </span>
+                  <span style="color: #666; margin: 0 1px">:</span>
+                  <span style="color: #fff; fontWeight: 600">{{ tag.quantity }}</span>
+                </template>
               </NTag>
             </NFlex>
           </div>
