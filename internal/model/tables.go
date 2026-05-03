@@ -68,9 +68,12 @@ type ProductImage struct {
 // TagType distinguishes level tags from user-specific tags.
 //
 // Level tags (tag_type='level'): unique on (product_id, platform, tag_name, tag_type).
-//   WaveMemberID is NULL.
+//
+//	WaveMemberID is NULL.
+//
 // User tags (tag_type='user'): unique on (product_id, wave_member_id, tag_type).
-//   WaveMemberID points to the specific wave member.
+//
+//	WaveMemberID points to the specific wave member.
 type ProductTag struct {
 	ID           uint        `gorm:"primaryKey" json:"id"`
 	ProductID    uint        `gorm:"not null;uniqueIndex:idx_prod_platform_tag" json:"productId"`

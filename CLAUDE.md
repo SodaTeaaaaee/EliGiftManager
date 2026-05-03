@@ -40,7 +40,9 @@ cd frontend && deno task preview      # preview production build
 | `internal/service/`                    | Business logic: CSV transformers, import pipeline, image storage, path resolution   |
 | `frontend/src/app/`                    | App shell, layout, router                                                           |
 | `frontend/src/pages/`                  | Route-level screens                                                                 |
-| `frontend/src/shared/`                 | Reusable UI, types, Wails wrappers                                                  |
+| `frontend/src/shared/`                 | Reusable UI, types, Wails wrappers, composables                                     |
+| `frontend/src/shared/composables/`     | Vue 3 composables (useContextMenu — global right-click menu singleton)              |
+| `frontend/src/shared/ui/`              | Shared UI components (ContextMenu.vue — floating right-click menu)                  |
 | `frontend/src/shared/lib/wails/app.ts` | **Single entry point for all Wails bridge calls** (imports from 6 controller files) |
 | `frontend/wailsjs/`                    | Generated Wails bindings (committed)                                                |
 
@@ -54,6 +56,10 @@ cd frontend && deno task preview      # preview production build
 6. **Controller pattern**: All Wails bound methods live in `controller_*.go` files (package main). Each controller gets its own generated JS binding file. New business methods should be added to the appropriate controller.
 7. **DB access**: Controllers use `database.GetDB()` singleton (initialized in `main.go`). Do NOT open/close DB per request.
 8. **Path resolution**: Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths. Three tiers: dev (Temp→workdir), portable (`.portable` marker), system (`UserConfigDir`).
+9. **Context menu**: Use `useContextMenu` composable (`frontend/src/shared/composables/useContextMenu.ts`) — singleton with `register(key, handler)` for DOM-level right-click. Add `data-contextmenu="key"` to target elements, call `register('key', handler)` in `onMounted`. Global `contextmenu` listener in `App.vue` always calls `preventDefault()` — browser menu never appears.
+10. **Adaptive paging pattern**: Table panels use a flex-column parent (with `ref` for `ResizeObserver`), table wrapper (content height, no `flex-1`), indicator div (`flex-1` with dynamic `<`/`>` arrow chars), scaled pagination, and `-12` in the `packByHeights` formula for indicator margin. Three pages (WaveImport/WaveTag/WavePreview) share this pattern.
+11. **Tailwind in h() render functions**: Tailwind JIT does NOT scan Vue `h()` string literals. Use `<style>`-block CSS classes or inline styles instead of Tailwind utilities in render functions.
+12. **User tag display name**: `wmNicknameMap` (computed from `waveMembers`) maps `waveMemberId → latestNickname` for user tag chip rendering. Tag chips use 3-color text: name（accent）/ colon（#666）/ quantity（#fff bold）.
 
 ## Code Style
 

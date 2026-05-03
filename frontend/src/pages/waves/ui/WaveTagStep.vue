@@ -731,18 +731,15 @@ onUnmounted(() => {
           :row-key="(row: any) => row.id" v-model:checked-row-keys="checkedProductIds" :pagination="false" size="medium"
           :row-props="rowProps" />
       </div>
-      <div
-        ref="tagIndicatorRef"
-        class="flex-1 flex justify-center items-center select-none"
-        :style="{
-          fontSize: indicatorFontSize + 'px',
-          lineHeight: 1,
-          fontFamily: 'monospace',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          marginBottom: '12px',
-        }"
-      ><span style="color: rgba(96,165,250,0.10)">{{ indicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ indicatorRight }}</span></div>
+      <div ref="tagIndicatorRef" class="flex-1 flex justify-center items-center select-none" :style="{
+        fontSize: indicatorFontSize + 'px',
+        lineHeight: 1,
+        fontFamily: 'monospace',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        marginBottom: '12px',
+      }"><span style="color: rgba(96,165,250,0.10)">{{ indicatorLeft }}</span><span
+          style="color: rgba(251,191,36,0.10)">{{ indicatorRight }}</span></div>
       <div ref="tagPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
         style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="tagCurrentPage" :page-count="tagTotalPages" size="small"

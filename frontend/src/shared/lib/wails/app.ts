@@ -127,7 +127,12 @@ export function syncUserTagForTargetQuantity(
   targetQty: number,
 ): Promise<void> {
   assertWailsRuntime();
-  return syncUserTagForTargetQuantityBinding(waveId, memberId, productId, targetQty);
+  return syncUserTagForTargetQuantityBinding(
+    waveId,
+    memberId,
+    productId,
+    targetQty,
+  );
 }
 export function addDispatchToMember(
   waveId: number,

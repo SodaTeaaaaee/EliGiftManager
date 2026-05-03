@@ -524,18 +524,15 @@ onUnmounted(() => {
           :pagination="false" size="small"
           :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })" />
       </div>
-      <div
-        ref="memberIndicatorRef"
-        class="flex-1 flex justify-center items-center select-none"
-        :style="{
-          fontSize: memberIndicatorFontSize + 'px',
-          lineHeight: 1,
-          fontFamily: 'monospace',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          marginBottom: '12px',
-        }"
-      ><span style="color: rgba(96,165,250,0.10)">{{ memberIndicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ memberIndicatorRight }}</span></div>
+      <div ref="memberIndicatorRef" class="flex-1 flex justify-center items-center select-none" :style="{
+        fontSize: memberIndicatorFontSize + 'px',
+        lineHeight: 1,
+        fontFamily: 'monospace',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden',
+        marginBottom: '12px',
+      }"><span style="color: rgba(96,165,250,0.10)">{{ memberIndicatorLeft }}</span><span
+          style="color: rgba(251,191,36,0.10)">{{ memberIndicatorRight }}</span></div>
       <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-6 shrink-0"
         style="transform: scale(1.5); transform-origin: top center;">
         <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"

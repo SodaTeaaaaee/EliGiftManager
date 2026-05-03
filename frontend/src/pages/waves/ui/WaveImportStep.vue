@@ -518,13 +518,18 @@ onUnmounted(() => {
           <NSelect v-model:value="productTemplateId" :options="productTemplates" placeholder="选择商品导入模板" class="mb-2" />
           <NButton block secondary @click="handleImportProduct">导入商品</NButton>
         </div>
-        <div v-if="allProducts.length" ref="productTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
+        <div v-if="allProducts.length" ref="productTableParent"
+          class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
           <div ref="productTableWrapper" class="overflow-hidden mt-2">
             <NDataTable :columns="productDataColumns" :data="visibleProducts" :loading="isProductLoading"
               :bordered="false" :pagination="false" size="small" />
           </div>
-          <div ref="productIndicatorRef" class="flex-1 flex justify-center items-center select-none" :style="{ fontSize: productIndicatorFontSize + 'px', lineHeight: 1, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', marginBottom: '12px' }"><span style="color: rgba(96,165,250,0.10)">{{ productIndicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ productIndicatorRight }}</span></div>
-          <div ref="productPaginationRef" class="flex justify-center mt-0 mb-3 shrink-0" style="transform: scale(1.3); transform-origin: top center;">
+          <div ref="productIndicatorRef" class="flex-1 flex justify-center items-center select-none"
+            :style="{ fontSize: productIndicatorFontSize + 'px', lineHeight: 1, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', marginBottom: '12px' }">
+            <span style="color: rgba(96,165,250,0.10)">{{ productIndicatorLeft }}</span><span
+              style="color: rgba(251,191,36,0.10)">{{ productIndicatorRight }}</span></div>
+          <div ref="productPaginationRef" class="flex justify-center mt-0 mb-3 shrink-0"
+            style="transform: scale(1.3); transform-origin: top center;">
             <NPagination :page="productCurrentPage" :page-count="productTotalPages" size="small"
               @update:page="handleProductPageChange" />
           </div>
@@ -539,13 +544,18 @@ onUnmounted(() => {
           <NSelect v-model:value="importTemplateId" :options="dispatchTemplates" placeholder="选择会员导入模板" class="mb-2" />
           <NButton block type="primary" @click="handleImportDispatch">导入会员数据</NButton>
         </div>
-        <div v-if="waveMembers.length" ref="memberTableParent" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
+        <div v-if="waveMembers.length" ref="memberTableParent"
+          class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3">
           <div ref="memberTableWrapper" class="overflow-hidden mt-2">
             <NDataTable :columns="memberColumns" :data="visibleMembers" :loading="isMembersLoading" :bordered="false"
               :pagination="false" size="small" />
           </div>
-          <div ref="memberIndicatorRef" class="flex-1 flex justify-center items-center select-none" :style="{ fontSize: memberIndicatorFontSize + 'px', lineHeight: 1, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', marginBottom: '12px' }"><span style="color: rgba(96,165,250,0.10)">{{ memberIndicatorLeft }}</span><span style="color: rgba(251,191,36,0.10)">{{ memberIndicatorRight }}</span></div>
-          <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-3 shrink-0" style="transform: scale(1.3); transform-origin: top center;">
+          <div ref="memberIndicatorRef" class="flex-1 flex justify-center items-center select-none"
+            :style="{ fontSize: memberIndicatorFontSize + 'px', lineHeight: 1, fontFamily: 'monospace', whiteSpace: 'nowrap', overflow: 'hidden', marginBottom: '12px' }">
+            <span style="color: rgba(96,165,250,0.10)">{{ memberIndicatorLeft }}</span><span
+              style="color: rgba(251,191,36,0.10)">{{ memberIndicatorRight }}</span></div>
+          <div ref="memberPaginationRef" class="flex justify-center mt-0 mb-3 shrink-0"
+            style="transform: scale(1.3); transform-origin: top center;">
             <NPagination :page="memberCurrentPage" :page-count="memberTotalPages" size="small"
               @update:page="handleMemberPageChange" />
           </div>
