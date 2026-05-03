@@ -24,7 +24,7 @@ const lightThemeOverrides: GlobalThemeOverrides = {
     successColor: '#16a34a',
     warningColor: '#d97706',
     errorColor: '#dc2626',
-    fontFamily: "'Aptos', 'Segoe UI', 'Helvetica Neue', sans-serif",
+    fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif",
   },
 }
 
@@ -38,7 +38,7 @@ const darkThemeOverrides: GlobalThemeOverrides = {
     successColor: '#4ade80',
     warningColor: '#fbbf24',
     errorColor: '#f87171',
-    fontFamily: "'Aptos', 'Segoe UI', 'Helvetica Neue', sans-serif",
+    fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif",
   },
 }
 
