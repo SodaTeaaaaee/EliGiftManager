@@ -79,29 +79,10 @@ function onGlobalContextMenu(event: MouseEvent) {
 
 // ── zoom persistence via devicePixelRatio ──
 // WebView2 native zoom changes devicePixelRatio proportionally.
-// Capture the ratio at startup (before any zoom), compare to get real zoom %.
+// Only save on shutdown — the ratio is read precisely at close time.
 let baseDPR = 1
 
-let zoomSaveTimer: ReturnType<typeof setTimeout> | null = null
-
-function saveZoomFromDPR() {
-  const current = window.devicePixelRatio
-  const zoom = Math.round((current / baseDPR) * 100)
-  if (zoom >= 25 && zoom <= 500) {
-    if (zoomSaveTimer) clearTimeout(zoomSaveTimer)
-    zoomSaveTimer = setTimeout(() => saveZoom(zoom), 400)
-  }
-}
-
-// Save on every Ctrl+wheel. With passive listener, native zoom has
-// already updated devicePixelRatio before this handler runs.
-function onZoomWheel(event: WheelEvent) {
-  if (!event.ctrlKey) return
-  saveZoomFromDPR()
-}
-
-function onBeforeUnload() {
-  if (zoomSaveTimer) clearTimeout(zoomSaveTimer)
+function saveZoomOnClose() {
   const current = window.devicePixelRatio
   const zoom = Math.round((current / baseDPR) * 100)
   if (zoom >= 25 && zoom <= 500) saveZoom(zoom)
@@ -110,15 +91,13 @@ function onBeforeUnload() {
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
   baseDPR = window.devicePixelRatio
-  document.addEventListener('wheel', onZoomWheel, { passive: true })
-  window.addEventListener('beforeunload', onBeforeUnload)
+  window.addEventListener('beforeunload', saveZoomOnClose)
 })
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', onGlobalContextMenu)
-  document.removeEventListener('wheel', onZoomWheel)
-  window.removeEventListener('beforeunload', onBeforeUnload)
-  onBeforeUnload()
+  window.removeEventListener('beforeunload', saveZoomOnClose)
+  saveZoomOnClose()
 })
 </script>
 
