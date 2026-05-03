@@ -560,6 +560,7 @@ onUnmounted(() => {
           :bordered="false"
           :pagination="false"
           :max-height="availableH"
+          :table-layout="'auto'"
           size="small"
           :row-props="
             (row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })

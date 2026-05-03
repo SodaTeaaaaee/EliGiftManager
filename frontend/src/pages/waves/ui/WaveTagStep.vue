@@ -1085,16 +1085,14 @@ onUnmounted(() => {
     </div>
 
     <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1 mt-2">
-      <div
-        ref="tableWrapperRef"
-        class="flex-1 min-h-0 overflow-hidden"
-      >
+      <div ref="tableWrapperRef" class="flex-1 min-h-0 overflow-hidden">
         <NDataTable
           :columns="tagColumns"
           :data="visibleItems"
           :loading="isTagLoading"
           :bordered="false"
           :max-height="availableH"
+          :table-layout="'auto'"
           :row-key="(row: any) => row.id"
           v-model:checked-row-keys="checkedProductIds"
           :pagination="false"

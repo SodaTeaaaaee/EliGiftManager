@@ -182,7 +182,7 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
       minWidth: 90,
       render: (row) => clampedText(row.latestNickname || row.platformUid),
     },
-    { title: '平台', key: 'platform', width: 70, render: (row) => clampedText(row.platform) },
+    { title: '平台', key: 'platform', width: 71, render: (row) => clampedText(row.platform) },
     {
       title: 'UID',
       key: 'platformUid',
@@ -236,7 +236,7 @@ const productDataColumns = computed<DataTableColumns>(() => {
     cols.push({
       title: 'SKU',
       key: 'factorySku',
-      minWidth: 120,
+      minWidth: 160,
       render: (row: any) =>
         h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
     })
@@ -420,15 +420,13 @@ onUnmounted(() => {
           ref="productTableParent"
           class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3"
         >
-          <div
-            ref="productTableWrapper"
-            class="flex-1 min-h-0 overflow-hidden mt-2"
-          >
+          <div ref="productTableWrapper" class="flex-1 min-h-0 overflow-hidden mt-2">
             <NDataTable
               :columns="productDataColumns"
               :data="visibleProducts"
               :loading="isProductLoading"
               :max-height="productAvailableH"
+              :table-layout="'auto'"
               :bordered="false"
               :pagination="false"
               size="small"
@@ -486,15 +484,13 @@ onUnmounted(() => {
           ref="memberTableParent"
           class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3"
         >
-          <div
-            ref="memberTableWrapper"
-            class="flex-1 min-h-0 overflow-hidden mt-2"
-          >
+          <div ref="memberTableWrapper" class="flex-1 min-h-0 overflow-hidden mt-2">
             <NDataTable
               :columns="memberColumns"
               :data="visibleMembers"
               :loading="isMembersLoading"
               :max-height="memberAvailableH"
+              :table-layout="'auto'"
               :bordered="false"
               :pagination="false"
               size="small"
