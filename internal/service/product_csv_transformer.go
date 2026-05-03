@@ -62,12 +62,12 @@ func ParseProductCSV(csvFile string, template model.TemplateConfig) ([]model.Pro
 		}
 
 		product := model.Product{
-			Platform:    strings.TrimSpace(coreData["platform"]),
-			Factory:     strings.TrimSpace(coreData["factory"]),
-			FactorySKU:  strings.TrimSpace(coreData["factory_sku"]),
-			Name:        strings.TrimSpace(coreData["name"]),
-			CoverImage:  strings.TrimSpace(coreData["cover_image"]),
-			ExtraData:   "{}",
+			Platform:   strings.TrimSpace(coreData["platform"]),
+			Factory:    strings.TrimSpace(coreData["factory"]),
+			FactorySKU: strings.TrimSpace(coreData["factory_sku"]),
+			Name:       strings.TrimSpace(coreData["name"]),
+			CoverImage: strings.TrimSpace(coreData["cover_image"]),
+			ExtraData:  "{}",
 		}
 
 		// Fallback: platform and factory default to template.Platform when
