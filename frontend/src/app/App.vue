@@ -12,6 +12,7 @@ import {
 import { RouterView } from 'vue-router'
 import { useThemeStore } from '@/shared/model/theme'
 import { useContextMenu } from '@/shared/composables/useContextMenu'
+import { saveZoom } from '@/shared/lib/wails/app'
 import ContextMenu from '@/shared/ui/ContextMenu.vue'
 
 const lightThemeOverrides: GlobalThemeOverrides = {
@@ -76,12 +77,31 @@ function onGlobalContextMenu(event: MouseEvent) {
   handleEvent(event)
 }
 
+// ── zoom tracking ──
+let zoomPercent = 100
+let zoomSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+function persistZoom() {
+  if (zoomSaveTimer) clearTimeout(zoomSaveTimer)
+  zoomSaveTimer = setTimeout(() => saveZoom(zoomPercent), 500)
+}
+
+function onGlobalWheel(event: WheelEvent) {
+  if (!event.ctrlKey) return
+  // Don't preventDefault — let native WebView2 zoom happen.
+  zoomPercent += event.deltaY > 0 ? -10 : 10
+  zoomPercent = Math.min(500, Math.max(25, zoomPercent))
+  persistZoom()
+}
+
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
+  document.addEventListener('wheel', onGlobalWheel, { passive: true })
 })
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', onGlobalContextMenu)
+  document.removeEventListener('wheel', onGlobalWheel)
 })
 </script>
 

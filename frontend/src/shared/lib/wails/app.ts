@@ -46,6 +46,7 @@ import {
   GetDashboard as getDashboardBinding,
   PingDB as pingDatabaseBinding,
   RestoreDatabase as restoreDatabaseBinding,
+  SaveZoom as saveZoomBinding,
 } from '../../../../wailsjs/go/main/SystemController'
 import {
   CreateTemplate as createTemplateBinding,
@@ -303,6 +304,11 @@ export function pickZIPFile(): Promise<string> {
 export function restoreDatabase(): Promise<void> {
   assertWailsRuntime()
   return restoreDatabaseBinding()
+}
+
+export function saveZoom(percent: number): Promise<void> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve()
+  return saveZoomBinding(percent)
 }
 
 export type AddressBindingResult = { updated: number; skipped: number }

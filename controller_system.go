@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	goruntime "runtime"
+	"strconv"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
@@ -155,4 +156,38 @@ func appDatabasePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dataDir, "eligiftmanager.db"), nil
+}
+
+func zoomFilePath() (string, error) {
+	dataDir, err := service.ResolveDataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dataDir, "zoom.cfg"), nil
+}
+
+// SaveZoom persists the UI zoom percentage to a config file.
+func (c *SystemController) SaveZoom(percent float64) error {
+	path, err := zoomFilePath()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(strconv.FormatFloat(percent, 'f', 1, 64)), 0o644)
+}
+
+// LoadZoom reads the saved zoom percentage. Returns 100 if no saved value.
+func LoadZoom() float64 {
+	path, err := zoomFilePath()
+	if err != nil {
+		return 100
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 100
+	}
+	v, err := strconv.ParseFloat(string(data), 64)
+	if err != nil || v < 25 || v > 500 {
+		return 100
+	}
+	return v
 }

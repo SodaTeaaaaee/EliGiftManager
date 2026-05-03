@@ -11,6 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	wailsWindows "github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
 //go:embed all:frontend/dist
@@ -36,6 +37,8 @@ func main() {
 	templateCtrl := &TemplateController{}
 	sysCtrl = systemCtrl // wire into startup() via app.go global
 
+	zoom := LoadZoom()
+
 	err := wails.Run(&options.App{
 		Title:     cfg.Name,
 		Width:     cfg.WindowWidth,
@@ -47,6 +50,9 @@ func main() {
 			Middleware: middleware.LocalAssetsMiddleware("/local-images/"),
 		},
 		BackgroundColour: &options.RGBA{R: 20, G: 18, B: 16, A: 1},
+		Windows: &wailsWindows.Options{
+			ZoomFactor: zoom / 100.0,
+		},
 		OnStartup:        app.startup,
 		Bind: []any{
 			app,
