@@ -53,7 +53,7 @@ func TestExportFilterByProductPlatform(t *testing.T) {
 		Platform:     "BILIBILI",
 		Type:         model.TemplateTypeExportOrder,
 		Name:         "B站发货单模板",
-		MappingRules: `{"headers":["订单号","收件人","电话","地址","SKU","数量"],"prefix":"BILI-"}`,
+		MappingRules: `{"format":"csv","hasHeader":true,"columns":[{"headerName":"订单号","valueType":"order_no","prefix":"BILI-"},{"headerName":"收件人","valueType":"recipient"},{"headerName":"电话","valueType":"phone"},{"headerName":"地址","valueType":"address"},{"headerName":"SKU","valueType":"sku"},{"headerName":"数量","valueType":"quantity"}]}`,
 	}
 	if err := db.Create(&biliTemplate).Error; err != nil {
 		t.Fatalf("seed BILIBILI template failed: %v", err)
@@ -87,7 +87,7 @@ func TestExportFilterByProductPlatform(t *testing.T) {
 		Platform:     "柔造",
 		Type:         model.TemplateTypeExportOrder,
 		Name:         "柔造发货单模板",
-		MappingRules: `{"headers":["订单号","收件人","电话","地址","SKU","数量"],"prefix":"ROUZO-"}`,
+		MappingRules: `{"format":"csv","hasHeader":true,"columns":[{"headerName":"订单号","valueType":"order_no","prefix":"ROUZO-"},{"headerName":"收件人","valueType":"recipient"},{"headerName":"电话","valueType":"phone"},{"headerName":"地址","valueType":"address"},{"headerName":"SKU","valueType":"sku"},{"headerName":"数量","valueType":"quantity"}]}`,
 	}
 	if err := db.Create(&rouzoTemplate).Error; err != nil {
 		t.Fatalf("seed 柔造 template failed: %v", err)
@@ -144,7 +144,7 @@ func TestExportOrderCSVErrorsOnEmptyPlatformFilter(t *testing.T) {
 		Platform:     "柔造",
 		Type:         model.TemplateTypeExportOrder,
 		Name:         "柔造发货单模板",
-		MappingRules: `{"headers":["订单号","收件人","电话","地址","SKU","数量"],"prefix":"ROUZO-"}`,
+		MappingRules: `{"format":"csv","hasHeader":true,"columns":[{"headerName":"订单号","valueType":"order_no","prefix":"ROUZO-"},{"headerName":"收件人","valueType":"recipient"},{"headerName":"电话","valueType":"phone"},{"headerName":"地址","valueType":"address"},{"headerName":"SKU","valueType":"sku"},{"headerName":"数量","valueType":"quantity"}]}`,
 	}
 	if err := db.Create(&rouzoTemplate).Error; err != nil {
 		t.Fatalf("seed template failed: %v", err)
@@ -252,7 +252,7 @@ func TestWaveIsolation(t *testing.T) {
 		Platform:     "BILIBILI",
 		Type:         model.TemplateTypeExportOrder,
 		Name:         "B站发货单模板",
-		MappingRules: `{"headers":["订单号","收件人","电话","地址","SKU","数量"],"prefix":"BILI-"}`,
+		MappingRules: `{"format":"csv","hasHeader":true,"columns":[{"headerName":"订单号","valueType":"order_no","prefix":"BILI-"},{"headerName":"收件人","valueType":"recipient"},{"headerName":"电话","valueType":"phone"},{"headerName":"地址","valueType":"address"},{"headerName":"SKU","valueType":"sku"},{"headerName":"数量","valueType":"quantity"}]}`,
 	}
 	if err := db.Create(&templateA).Error; err != nil {
 		t.Fatalf("seed template failed: %v", err)
@@ -394,6 +394,87 @@ func TestExportWavePreviewUnchanged(t *testing.T) {
 	}
 	if missing != 1 {
 		t.Fatalf("expected 1 missing address, got %d", missing)
+	}
+}
+
+// TestExportDynamicColumns verifies that ExportOrderCSV respects the column order
+// defined in DynamicExportRules, including static-value columns.
+func TestExportDynamicColumns(t *testing.T) {
+	t.Parallel()
+	db := newServiceTestDB(t)
+
+	// -- Seed data --
+	wave := model.Wave{WaveNo: "DYNAMIC-COL-001", Name: "dynamic column test", Status: model.WaveStatusDraft}
+	product := model.Product{Platform: "BILIBILI", Factory: "factory-A", FactorySKU: "SKU-DYN-001", Name: "动态导出产品", ExtraData: "{}"}
+	member := model.Member{Platform: "BILIBILI", PlatformUID: "uid-dyn-01", ExtraData: "{}"}
+	for _, r := range []any{&wave, &product, &member} {
+		if err := db.Create(r).Error; err != nil {
+			t.Fatalf("seed failed: %v", err)
+		}
+	}
+	addr := model.MemberAddress{MemberID: member.ID, RecipientName: "动态测试", Phone: "13800003333", Address: "测试地址"}
+	if err := db.Create(&addr).Error; err != nil {
+		t.Fatalf("seed address failed: %v", err)
+	}
+	dr := model.DispatchRecord{WaveID: wave.ID, MemberID: member.ID, ProductID: product.ID, MemberAddressID: &addr.ID, Quantity: 7, Status: model.DispatchStatusPending}
+	if err := db.Create(&dr).Error; err != nil {
+		t.Fatalf("seed dispatch record failed: %v", err)
+	}
+
+	// Columns intentionally out of the conventional order:
+	// SKU -> 数量 -> 收件人 -> 备注(static) -> 订单号
+	dynTemplate := model.TemplateConfig{
+		Platform:     "BILIBILI",
+		Type:         model.TemplateTypeExportOrder,
+		Name:         "动态排序导出模板",
+		MappingRules: `{"format":"csv","hasHeader":true,"columns":[{"headerName":"SKU","valueType":"sku"},{"headerName":"数量","valueType":"quantity"},{"headerName":"收件人","valueType":"recipient"},{"headerName":"备注","valueType":"static","defaultValue":"测试"},{"headerName":"订单号","valueType":"order_no","prefix":"DYN-"}]}`,
+	}
+	if err := db.Create(&dynTemplate).Error; err != nil {
+		t.Fatalf("seed dynamic template failed: %v", err)
+	}
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "dynamic-export.csv")
+	if err := ExportOrderCSV(db, wave.ID, outputPath, dynTemplate); err != nil {
+		t.Fatalf("ExportOrderCSV (dynamic columns) failed: %v", err)
+	}
+
+	lines := readCSVRecords(t, outputPath)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 CSV lines (header + 1 record), got %d", len(lines))
+	}
+
+	// Verify header row matches column order.
+	header := lines[0]
+	expectedHeaders := []string{"SKU", "数量", "收件人", "备注", "订单号"}
+	if len(header) != len(expectedHeaders) {
+		t.Fatalf("header row has %d columns, expected %d", len(header), len(expectedHeaders))
+	}
+	for i, expected := range expectedHeaders {
+		if header[i] != expected {
+			t.Fatalf("header[%d]: expected %q, got %q", i, expected, header[i])
+		}
+	}
+
+	// Verify data row order matches column definition.
+	row := lines[1]
+	if len(row) != 5 {
+		t.Fatalf("expected 5 columns in data row, got %d", len(row))
+	}
+	if row[0] != "SKU-DYN-001" {
+		t.Fatalf("column SKU: expected SKU-DYN-001, got %q", row[0])
+	}
+	if row[1] != "7" {
+		t.Fatalf("column 数量: expected 7, got %q", row[1])
+	}
+	if row[2] != "动态测试" {
+		t.Fatalf("column 收件人: expected 动态测试, got %q", row[2])
+	}
+	if row[3] != "测试" {
+		t.Fatalf("column 备注 (static): expected 测试, got %q", row[3])
+	}
+	if !strings.HasPrefix(row[4], "DYN-") {
+		t.Fatalf("column 订单号: expected prefix DYN-, got %q", row[4])
 	}
 }
 

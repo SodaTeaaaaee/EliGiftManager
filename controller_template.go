@@ -74,7 +74,7 @@ func (c *TemplateController) ListDefaultTemplates() ([]TemplateItem, error) {
 			Platform:     "柔造",
 			Type:         model.TemplateTypeExportOrder,
 			Name:         "柔造 工厂导出",
-			MappingRules: `{"headers":["第三方订单号","收件人","联系电话","收件地址","商家编码","下单数量"],"prefix":"ROUZAO-"}`,
+			MappingRules: `{"format":"csv","hasHeader":true,"columns":[{"headerName":"订单号","valueType":"order_no","prefix":"ROUZAO-"},{"headerName":"收件人","valueType":"recipient"},{"headerName":"手机号","valueType":"phone"},{"headerName":"收件地址","valueType":"address"},{"headerName":"SKU","valueType":"sku"},{"headerName":"数量","valueType":"quantity"}]}`,
 		},
 	}
 	items := make([]TemplateItem, 0, len(presets))

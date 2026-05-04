@@ -11,11 +11,6 @@ import (
 	"gorm.io/gorm"
 )
 
-type exportTemplateConfig struct {
-	Headers []string `json:"headers"`
-	Prefix  string   `json:"prefix"`
-}
-
 // ExportOrderCSV writes a factory-ready batch mini-order CSV for the given wave.
 // Headers and order-number prefix are driven by the export_order template.
 // It aborts if any record still has no address, and updates the wave
@@ -28,15 +23,12 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 		return fmt.Errorf("export order CSV failed: wave ID is required")
 	}
 
-	var cfg exportTemplateConfig
-	if err := json.Unmarshal([]byte(template.MappingRules), &cfg); err != nil {
+	var rules model.DynamicExportRules
+	if err := json.Unmarshal([]byte(template.MappingRules), &rules); err != nil {
 		return fmt.Errorf("export order CSV failed: parse template mapping rules: %w", err)
 	}
-	if len(cfg.Headers) == 0 {
-		return fmt.Errorf("export order CSV failed: template headers are empty")
-	}
-	if cfg.Prefix == "" {
-		cfg.Prefix = template.Platform + "-"
+	if len(rules.Columns) == 0 {
+		return fmt.Errorf("export order CSV failed: template has no columns defined")
 	}
 
 	// 1. Precheck: abort if any record still has NULL member_address_id.
@@ -83,8 +75,14 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
 
-	if err := writer.Write(cfg.Headers); err != nil {
-		return fmt.Errorf("export order CSV failed: write header: %w", err)
+	if rules.HasHeader {
+		headers := make([]string, len(rules.Columns))
+		for i, col := range rules.Columns {
+			headers[i] = col.HeaderName
+		}
+		if err := writer.Write(headers); err != nil {
+			return fmt.Errorf("export order CSV failed: write header: %w", err)
+		}
 	}
 
 	for _, record := range records {
@@ -92,27 +90,35 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 			return fmt.Errorf("export order CSV failed: record %d has nil MemberAddress (precheck should have caught this)", record.ID)
 		}
 
-		recipient := record.MemberAddress.RecipientName
-		phone := record.MemberAddress.Phone
-		address := record.MemberAddress.Address
-		sku := record.Product.FactorySKU
-
-		// Validate required fields per row.
-		if recipient == "" {
-			return fmt.Errorf("export order CSV failed: record %d has empty recipient name", record.ID)
+		row := make([]string, len(rules.Columns))
+		for i, col := range rules.Columns {
+			var val string
+			switch col.ValueType {
+			case "order_no":
+				val = col.Prefix + strconv.Itoa(int(record.ID))
+			case "recipient":
+				if record.MemberAddress != nil {
+					val = record.MemberAddress.RecipientName
+				}
+			case "phone":
+				if record.MemberAddress != nil {
+					val = record.MemberAddress.Phone
+				}
+			case "address":
+				if record.MemberAddress != nil {
+					val = record.MemberAddress.Address
+				}
+			case "sku":
+				val = record.Product.FactorySKU
+			case "quantity":
+				val = strconv.Itoa(record.Quantity)
+			case "static":
+				val = col.DefaultValue
+			default:
+				val = ""
+			}
+			row[i] = val
 		}
-		if phone == "" {
-			return fmt.Errorf("export order CSV failed: record %d has empty phone", record.ID)
-		}
-		if address == "" {
-			return fmt.Errorf("export order CSV failed: record %d has empty address", record.ID)
-		}
-		if sku == "" {
-			return fmt.Errorf("export order CSV failed: record %d has empty factory SKU", record.ID)
-		}
-
-		orderNo := cfg.Prefix + strconv.Itoa(int(record.ID))
-		row := []string{orderNo, recipient, phone, address, sku, strconv.Itoa(record.Quantity)}
 		if err := writer.Write(row); err != nil {
 			return fmt.Errorf("export order CSV failed: write row %d: %w", record.ID, err)
 		}

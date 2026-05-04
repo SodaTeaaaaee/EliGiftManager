@@ -31,3 +31,19 @@ type DynamicTemplateRules struct {
 	Mapping   map[string]DynamicFieldMapping `json:"mapping"`
 	ExtraData ExtraDataConfig                `json:"extraData"`
 }
+
+// ExportColumnMapping defines how a single column in an export CSV is generated.
+type ExportColumnMapping struct {
+	HeaderName   string `json:"headerName"`
+	ValueType    string `json:"valueType"` // "order_no", "recipient", "phone", "address", "sku", "quantity", "static"
+	Prefix       string `json:"prefix"`
+	DefaultValue string `json:"defaultValue"`
+}
+
+// DynamicExportRules replaces the legacy export template config with a
+// column-oriented mapping that supports arbitrary column order and static values.
+type DynamicExportRules struct {
+	Format    string                `json:"format"`
+	HasHeader bool                  `json:"hasHeader"`
+	Columns   []ExportColumnMapping `json:"columns"`
+}
