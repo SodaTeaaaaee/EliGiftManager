@@ -5,4 +5,4 @@ export function PickCSVFile():Promise<string>;
 
 export function PickZIPFile():Promise<string>;
 
-export function PreviewCSVSample(arg1:string):Promise<Array<Array<string>>>;
+export function PreviewCSVSample(arg1:string):Promise<Array<any>>;

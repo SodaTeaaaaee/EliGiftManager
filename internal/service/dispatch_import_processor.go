@@ -145,7 +145,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 				return fmt.Errorf("upsert member failed for platform_uid=%q: %w", row.platformUid, upsertErr)
 			}
 
-			// Address insertion (3-tuple present → dedup + insert).
+			// Address insertion (3-tuple present → dedup + insert, or promote existing to default).
 			if row.recipient != "" && row.phone != "" && row.address != "" {
 				var existingAddr model.MemberAddress
 				findErr := tx.Where("member_id = ? AND recipient_name = ? AND phone = ? AND address = ? AND is_deleted = ?",
@@ -166,8 +166,13 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 					if setDefault {
 						tx.Model(&model.MemberAddress{}).Where("member_id = ? AND id != ?", member.ID, newAddr.ID).Update("is_default", false)
 					}
+				} else if setDefault && !existingAddr.IsDefault {
+					existingAddr.IsDefault = true
+					if saveErr := tx.Save(&existingAddr).Error; saveErr != nil {
+						return fmt.Errorf("update existing address default flag failed: %w", saveErr)
+					}
+					tx.Model(&model.MemberAddress{}).Where("member_id = ? AND id != ?", member.ID, existingAddr.ID).Update("is_default", false)
 				}
-				// If exact match found, skip (already exists).
 			}
 
 			// Maintain nickname history.
