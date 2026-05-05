@@ -245,6 +245,43 @@ func (a *App) PickZIPFile() (string, error) {
 	return "", fmt.Errorf("pick ZIP file: context not available")
 }
 
+func (a *App) PickFolder() (string, error) {
+	if a.ctx != nil {
+		selected, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
+			Title: "选择文件夹",
+		})
+		if err != nil {
+			return "", err
+		}
+		return selected, nil
+	}
+	return "", fmt.Errorf("pick folder: context not available")
+}
+
+type ArchivePreview struct {
+	CSVFile string                `json:"csvFile"`
+	Dirs    []service.ArchiveDirInfo `json:"dirs"`
+}
+
+func (a *App) PreviewArchive(path string) (*ArchivePreview, error) {
+	extractDir, err := service.ExtractArchive(path)
+	if err != nil {
+		return nil, err
+	}
+	// Don't clean up — the caller needs to keep the extract for later import.
+
+	csvPath, _ := service.FindCSVInDir(extractDir, "*.csv")
+	csvFile := ""
+	if csvPath != "" {
+		csvFile = filepath.Base(csvPath)
+		// Read first few rows for preview (handled by PreviewCSVSample separately)
+		_ = csvPath
+	}
+
+	dirs := service.ListArchiveDirs(extractDir)
+	return &ArchivePreview{CSVFile: csvFile, Dirs: dirs}, nil
+}
+
 func (a *App) resolveDatabasePath() (string, error) {
 	dataDir, err := service.ResolveDataDir()
 	if err != nil {

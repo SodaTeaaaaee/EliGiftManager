@@ -1,6 +1,8 @@
 import {
   PickCSVFile as pickCSVFileBinding,
+  PickFolder as pickFolderBinding,
   PickZIPFile as pickZIPFileBinding,
+  PreviewArchive as previewArchiveBinding,
   PreviewCSVSample as previewCSVSampleBinding,
 } from "../../../../wailsjs/go/main/App";
 import {
@@ -353,6 +355,15 @@ export function pickZIPFile(): Promise<string> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve("");
   return pickZIPFileBinding();
 }
+export function pickFolder(): Promise<string> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve("");
+  return pickFolderBinding();
+}
+export type ArchivePreview = { csvFile?: string; dirs: { name: string; fileCount: number }[] };
+export function previewArchive(path: string): Promise<ArchivePreview | null> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve(null);
+  return previewArchiveBinding(path);
+}
 export function previewCSVSample(path: string): Promise<string[][]> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
   return previewCSVSampleBinding(path);
@@ -412,5 +423,5 @@ export type PresetContent = {
   platform: string;
   type: string;
   name: string;
-  mappingRules: Record<string, unknown>;
+  mappingRules: any;
 };

@@ -231,3 +231,71 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 
 	return products, extractDir, nil
 }
+
+// ParseProductArchive extracts an archive (zip/tar/tar.gz), finds a CSV inside,
+// and parses it as products. Returns products and the extraction directory.
+func ParseProductArchive(archivePath string, template model.TemplateConfig) ([]model.Product, string, error) {
+	extractDir, err := ExtractArchive(archivePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("parse product archive failed: %w", err)
+	}
+
+	var zipCfg productZIPTemplateConfig
+	if err := json.Unmarshal([]byte(template.MappingRules), &zipCfg); err != nil {
+		os.RemoveAll(extractDir)
+		return nil, "", fmt.Errorf("parse product archive failed: parse MappingRules: %w", err)
+	}
+
+	csvPath, err := FindCSVInDir(extractDir, zipCfg.CSVPattern)
+	if err != nil {
+		os.RemoveAll(extractDir)
+		return nil, "", fmt.Errorf("parse product archive failed: %w", err)
+	}
+
+	zipCfg.Format = model.TemplateFormatCSV
+	rulesJSON, _ := json.Marshal(zipCfg.DynamicTemplateRules)
+	csvTemplate := model.TemplateConfig{
+		Platform:     template.Platform,
+		Type:         template.Type,
+		Name:         template.Name,
+		MappingRules: string(rulesJSON),
+	}
+
+	products, err := ParseProductCSV(csvPath, csvTemplate)
+	if err != nil {
+		os.RemoveAll(extractDir)
+		return nil, "", fmt.Errorf("parse product archive failed: %w", err)
+	}
+
+	return products, extractDir, nil
+}
+
+// ParseProductDir scans a directory for a CSV file and parses it as products.
+// Returns products and the directory path (for subsequent image processing).
+func ParseProductDir(dirPath string, template model.TemplateConfig) ([]model.Product, error) {
+	var zipCfg productZIPTemplateConfig
+	if err := json.Unmarshal([]byte(template.MappingRules), &zipCfg); err != nil {
+		return nil, fmt.Errorf("parse product dir failed: parse MappingRules: %w", err)
+	}
+
+	csvPath, err := FindCSVInDir(dirPath, zipCfg.CSVPattern)
+	if err != nil {
+		return nil, fmt.Errorf("parse product dir failed: %w", err)
+	}
+
+	zipCfg.Format = model.TemplateFormatCSV
+	rulesJSON, _ := json.Marshal(zipCfg.DynamicTemplateRules)
+	csvTemplate := model.TemplateConfig{
+		Platform:     template.Platform,
+		Type:         template.Type,
+		Name:         template.Name,
+		MappingRules: string(rulesJSON),
+	}
+
+	products, err := ParseProductCSV(csvPath, csvTemplate)
+	if err != nil {
+		return nil, fmt.Errorf("parse product dir failed: %w", err)
+	}
+
+	return products, nil
+}

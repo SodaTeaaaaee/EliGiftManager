@@ -6,16 +6,17 @@ import {
   createTemplate,
   listTemplates,
   pickCSVFile,
+  pickFolder,
+  previewArchive,
   previewCSVSample,
   updateTemplate,
 } from '@/shared/lib/wails/app'
 import { usePlatformCatalog } from '@/shared/composables/usePlatformCatalog'
-import BasicMapper from './BasicMapper.vue'
+import BasicMapper, { type FieldGroup } from './BasicMapper.vue'
 import AdvancedEditor from './AdvancedEditor.vue'
 import type {
   DynamicExportRules,
   DynamicTemplateRules,
-  ExportColumnMapping,
   DynamicFieldMapping,
 } from './types'
 
@@ -51,6 +52,13 @@ onMounted(async () => {
 })
 
 const { platformOptions, addPlatform, getPlatform } = usePlatformCatalog()
+
+const platformOptionsTyped = computed(() =>
+  platformOptions.value.map((o) => ({
+    ...o,
+    label: `${o.label} · ${o.type === 'member' ? '会员平台' : '工厂平台'}`,
+  })),
+)
 const showAddPlatform = ref(false)
 const newPlatformName = ref('')
 const newPlatformType = ref<'member' | 'factory'>('member')
@@ -92,6 +100,81 @@ const typeShortLabel: Record<string, string> = {
   import_product: '礼物导入',
   import_dispatch_record: '会员数据导入',
   export_order: '发货清单导出',
+}
+
+const memberFieldGroups: FieldGroup[] = [
+  {
+    label: '核心身份',
+    fields: [
+      { key: 'platform_uid', label: '平台 UID', required: true },
+      { key: 'gift_level', label: '等级', required: true },
+      { key: 'nickname', label: '昵称' },
+    ],
+  },
+  {
+    label: '发货信息（可选）',
+    fields: [
+      { key: 'recipient_name', label: '收件人' },
+      { key: 'phone', label: '电话' },
+      { key: 'address', label: '地址' },
+    ],
+  },
+]
+
+const productFieldGroups: FieldGroup[] = [
+  {
+    label: '商品信息',
+    fields: [
+      { key: 'name', label: '商品名称', required: true },
+      { key: 'factory_sku', label: 'SKU/编码', required: true },
+    ],
+  },
+  {
+    label: '补充信息（可选）',
+    fields: [
+      { key: 'factory', label: '工厂名' },
+      { key: 'cover_image', label: '封面图路径' },
+    ],
+  },
+]
+
+const csvPattern = ref('*.csv')
+const imageDir = ref('主图')
+const productSampleFile = ref('')
+const archivePreview = ref<{ csvFile?: string; dirs: { name: string; fileCount: number }[] } | null>(null)
+const productFormat = computed<'csv' | 'zip'>(() => {
+  if (!productSampleFile.value) return 'zip'
+  return productSampleFile.value.toLowerCase().endsWith('.csv') ? 'csv' : 'zip'
+})
+
+async function handlePickProductFile() {
+  const csvPath = await pickCSVFile()
+  if (!csvPath) return
+  try {
+    const lower = csvPath.toLowerCase()
+    if (lower.endsWith('.csv')) {
+      sampleRows.value = await previewCSVSample(csvPath)
+    } else {
+      // Archive: preview structure + find CSV inside
+      const preview = await previewArchive(csvPath)
+      archivePreview.value = preview
+      if (preview?.csvFile) {
+        sampleRows.value = []
+        message.info(`检测到压缩包内 CSV: ${preview.csvFile}`)
+      }
+    }
+    productSampleFile.value = csvPath.split(/[/\\]/).pop() || csvPath
+  } catch (e) {
+    message.error('读取文件失败: ' + String(e))
+  }
+}
+async function handlePickProductDir() {
+  const dir = await pickFolder()
+  if (!dir) return
+  productSampleFile.value = dir
+  // For directories, user still needs to pick a sample CSV for field mapping
+  // The directory is used at import time, not for template preview
+  message.info('已选择文件夹，请上传其中的示例 CSV 以配置字段映射')
 }
 
 // Auto-generate default name: "{platform} {typeShortLabel}"
@@ -177,10 +260,17 @@ async function handleSave() {
     return
   }
   try {
-    const mappingRules =
-      templateType.value === 'export_order'
-        ? JSON.stringify(exportConfig)
-        : JSON.stringify(templateConfig)
+    let mappingRules: string
+    if (templateType.value === 'export_order') {
+      mappingRules = JSON.stringify(exportConfig)
+    } else if (templateType.value === 'import_product' && productFormat.value === 'zip') {
+      // Merge csvPattern + imageDir into template config for ZIP mode
+      const zipCfg = { ...templateConfig, format: 'zip', csvPattern: csvPattern.value, imageDir: imageDir.value }
+      mappingRules = JSON.stringify(zipCfg)
+    } else {
+      templateConfig.format = 'csv'
+      mappingRules = JSON.stringify(templateConfig)
+    }
     const typeParam = templateType.value
     if (editingId.value) {
       await updateTemplate(
@@ -249,10 +339,10 @@ watch(
       <NInput v-model:value="templateName" placeholder="模板名称" style="max-width: 240px" />
       <NSelect
         v-model:value="templatePlatform"
-        :options="platformOptions"
+        :options="platformOptionsTyped"
         placeholder="选择平台"
         filterable
-        style="max-width: 160px"
+        style="max-width: 210px"
       />
       <NButton size="small" secondary @click="showAddPlatform = !showAddPlatform">+</NButton>
     </div>
@@ -277,7 +367,7 @@ watch(
       <NButton size="small" @click="showAddPlatform = false">取消</NButton>
     </div>
 
-    <div class="flex items-center gap-3">
+    <div v-if="templatePlatform" class="flex items-center gap-3">
       <span class="text-sm">模板类型：</span>
       <NSelect v-model:value="templateType" :options="filteredTypeOptions" style="width: 200px" />
     </div>
@@ -294,9 +384,44 @@ watch(
         v-if="!isAdvanced"
         :template-config="templateConfig"
         :csv-headers="csvHeaders"
+        :field-groups="memberFieldGroups"
         @upload="handleUploadCSV"
       />
       <AdvancedEditor v-else :template-config="templateConfig" :sample-rows="sampleRows" />
+    </div>
+
+    <div v-if="templateType === 'import_product'" class="space-y-4">
+      <div class="flex items-center gap-3">
+        <NButton @click="handlePickProductFile">选择文件</NButton>
+        <NButton @click="handlePickProductDir">选择文件夹</NButton>
+        <span v-if="productSampleFile" class="text-xs text-gray-400">{{ productSampleFile }}</span>
+      </div>
+
+      <BasicMapper
+        v-if="csvHeaders.length"
+        :template-config="templateConfig"
+        :csv-headers="csvHeaders"
+        :field-groups="productFieldGroups"
+        @upload="handleUploadCSV"
+      />
+
+      <div v-if="csvHeaders.length || productSampleFile" class="flex items-center gap-4">
+        <div>
+          <label class="text-xs text-gray-500 block mb-0.5">CSV 文件名模式</label>
+          <NInput v-model:value="csvPattern" size="small" style="width: 160px" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 block mb-0.5">图片目录名（可选）</label>
+          <NInput v-model:value="imageDir" size="small" style="width: 120px" />
+        </div>
+      </div>
+
+      <div v-if="archivePreview" class="border rounded p-2 text-xs space-y-1">
+        <p v-if="archivePreview.csvFile">CSV: {{ archivePreview.csvFile }}</p>
+        <div v-for="d in archivePreview.dirs" :key="d.name">
+          {{ d.name }}/（{{ d.fileCount }} 个文件）
+        </div>
+      </div>
     </div>
 
     <div v-if="templateType === 'export_order'" class="space-y-3">

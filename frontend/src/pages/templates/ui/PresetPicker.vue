@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { DownloadOutline, LibraryOutline, PersonOutline } from '@vicons/ionicons5'
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import {
   NButton,
   NIcon,
   NModal,
-  NSelect,
   NTag,
   NTabs,
   NTabPane,
@@ -23,7 +22,7 @@ import {
 } from '@/shared/lib/wails/app'
 
 const props = defineProps<{ visible: boolean }>()
-const emit = defineEmits<{ 'update:visible': (v: boolean) => void; added: [] }>()
+const emit = defineEmits<{ 'update:visible': [v: boolean]; added: [] }>()
 
 const message = useMessage()
 const builtinPresets = ref<PresetInfo[]>([])
@@ -163,8 +162,8 @@ function typeLabel(type: string) {
   }
   return m[type] ?? type
 }
-function typeColor(type: string) {
-  const m: Record<string, string> = {
+function typeColor(type: string): 'info' | 'success' | 'warning' | 'default' {
+  const m: Record<string, 'info' | 'success' | 'warning'> = {
     import_product: 'info',
     import_dispatch_record: 'success',
     export_order: 'warning',
@@ -172,10 +171,9 @@ function typeColor(type: string) {
   return m[type] ?? 'default'
 }
 
-const show = computed({
-  get: () => props.visible,
-  set: (v) => emit('update:visible', v),
-})
+const show = ref(props.visible)
+watch(() => props.visible, (v) => { show.value = v })
+watch(show, (v) => { emit('update:visible', v) })
 </script>
 
 <template>

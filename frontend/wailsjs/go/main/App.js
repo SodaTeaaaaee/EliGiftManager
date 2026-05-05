@@ -6,8 +6,16 @@ export function PickCSVFile() {
   return window['go']['main']['App']['PickCSVFile']();
 }
 
+export function PickFolder() {
+  return window['go']['main']['App']['PickFolder']();
+}
+
 export function PickZIPFile() {
   return window['go']['main']['App']['PickZIPFile']();
+}
+
+export function PreviewArchive(arg1) {
+  return window['go']['main']['App']['PreviewArchive'](arg1);
 }
 
 export function PreviewCSVSample(arg1) {

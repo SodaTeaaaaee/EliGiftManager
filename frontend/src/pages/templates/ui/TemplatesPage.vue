@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AddOutline, BusinessOutline, LibraryOutline, PeopleOutline } from '@vicons/ionicons5'
-import { computed, h, onMounted, ref } from 'vue'
+import { h, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NAlert,
@@ -34,7 +34,6 @@ const {
   platforms,
   memberPlatforms,
   factoryPlatforms,
-  platformOptions,
   addPlatform,
   updatePlatform,
   removePlatform,
@@ -46,6 +45,8 @@ const platformTemplates = (p: string) => templates.value.filter((t) => (t.platfo
 const platformTypeTemplates = (p: string, type: string) =>
   platformTemplates(p).filter((t) => t.type === type)
 const platformTemplateCount = (p: string) => platformTemplates(p).length
+const hasImportProduct = (p: string) => platformTemplates(p).some((t) => t.type === 'import_product')
+const hasExportOrder = (p: string) => platformTemplates(p).some((t) => t.type === 'export_order')
 
 function typeLabel(type: string) {
   const typeOptions: Record<string, string> = {
@@ -60,7 +61,7 @@ const typeColors: Record<string, string> = {
   import_dispatch_record: 'success',
   export_order: 'warning',
 }
-function typeColor(type: string) {
+function typeColor(type: string): 'info' | 'success' | 'warning' | 'default' {
   return (typeColors[type] ?? 'default') as 'info' | 'success' | 'warning' | 'default'
 }
 
@@ -242,15 +243,6 @@ onMounted(async () => {
                 <NButton size="tiny" secondary @click="openEditPlatform(p.name)">编辑平台</NButton>
               </div>
             </template>
-            <NAlert
-              v-if="platformTemplateCount(p.name) === 1
-                && platformTemplates(p.name)[0]?.type === 'import_product'"
-              type="warning"
-              :show-icon="false"
-              class="mb-3"
-            >
-              此平台有商品导入模板但缺少订单导出模板，建议补全。
-            </NAlert>
             <template v-if="platformTemplateCount(p.name)">
               <div v-for="t in templateTypes" :key="t" class="mb-3 last:mb-0">
                 <NTag :type="typeColor(t)" size="small" round class="mb-1">
@@ -290,6 +282,14 @@ onMounted(async () => {
                 <NButton size="tiny" secondary @click="openEditPlatform(p.name)">编辑平台</NButton>
               </div>
             </template>
+            <NAlert
+              v-if="hasImportProduct(p.name) && !hasExportOrder(p.name)"
+              type="warning"
+              :show-icon="false"
+              class="mb-3"
+            >
+              此平台有商品导入模板但缺少订单导出模板，建议补全。
+            </NAlert>
             <template v-if="platformTemplateCount(p.name)">
               <div v-for="t in templateTypes" :key="t" class="mb-3 last:mb-0">
                 <NTag :type="typeColor(t)" size="small" round class="mb-1">
