@@ -1065,6 +1065,22 @@ export namespace service {
 	        this.name = source["name"];
 	    }
 	}
+	export class TemplateValidationResult {
+	    valid: boolean;
+	    errors: string[];
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TemplateValidationResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.valid = source["valid"];
+	        this.errors = source["errors"];
+	        this.warnings = source["warnings"];
+	    }
+	}
 
 }
 

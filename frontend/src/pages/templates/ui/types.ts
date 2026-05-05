@@ -24,7 +24,9 @@ export interface ExportColumnMapping {
     | "address"
     | "sku"
     | "quantity"
-    | "static";
+    | "static"
+    | "member_uid"
+    | "member_nickname";
   prefix?: string;
   defaultValue?: string;
 }

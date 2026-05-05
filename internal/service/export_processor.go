@@ -4,6 +4,7 @@ import (
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 
@@ -51,6 +52,9 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 	if err := db.
 		Preload("MemberAddress").
 		Preload("Product").
+		Preload("Member.Nicknames", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at DESC")
+		}).
 		Preload("Member").
 		Where("wave_id = ? AND product_id IN (SELECT id FROM products WHERE platform = ?)", waveID, template.Platform).
 		Find(&records).Error; err != nil {
@@ -112,6 +116,15 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 				val = record.Product.FactorySKU
 			case "quantity":
 				val = strconv.Itoa(record.Quantity)
+			case "member_uid":
+				val = record.Member.PlatformUID
+			case "member_nickname":
+				val = record.Member.PlatformUID
+				if len(record.Member.Nicknames) > 0 {
+					val = record.Member.Nicknames[0].Nickname
+				} else {
+					log.Printf("[WARNING] ExportOrderCSV: member %d has no nicknames, fallback to PlatformUID", record.MemberID)
+				}
 			case "static":
 				val = col.DefaultValue
 			default:

@@ -61,6 +61,7 @@ import {
   ListTemplates as listTemplatesBinding,
   ListUserPresets as listUserPresetsBinding,
   UpdateTemplate as updateTemplateBinding,
+  ValidateTemplate as validateTemplateBinding,
 } from "../../../../wailsjs/go/main/TemplateController";
 import type { BootstrapPayload } from "@/shared/types/app";
 import { model } from "../../../../wailsjs/go/models";
@@ -294,6 +295,18 @@ export function updateTemplate(
 ): Promise<void> {
   assertWailsRuntime();
   return updateTemplateBinding(id, platform, templateType, name, mappingRules);
+}
+export type TemplateValidationResult = {
+  valid: boolean
+  errors: string[]
+  warnings: string[]
+}
+export function validateTemplate(
+  templateType: string,
+  mappingRules: string,
+): Promise<TemplateValidationResult> {
+  assertWailsRuntime();
+  return validateTemplateBinding(templateType, mappingRules);
 }
 export function setDefaultAddress(
   memberId: number,

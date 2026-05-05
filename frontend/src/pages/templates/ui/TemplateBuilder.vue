@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
-import { NButton, NInput, NSelect, NSwitch, useMessage } from 'naive-ui'
+import { NAlert, NButton, NInput, NSelect, NSwitch, useDialog, useMessage } from 'naive-ui'
 import { useRoute, useRouter } from 'vue-router'
 import {
   createTemplate,
@@ -11,6 +11,8 @@ import {
   previewArchive,
   previewCSVSample,
   updateTemplate,
+  validateTemplate,
+  type TemplateValidationResult,
 } from '@/shared/lib/wails/app'
 import { usePlatformCatalog } from '@/shared/composables/usePlatformCatalog'
 import BasicMapper, { type FieldGroup } from './BasicMapper.vue'
@@ -22,9 +24,11 @@ import type {
 } from './types'
 
 const message = useMessage()
+const dialog = useDialog()
 const router = useRouter()
 const route = useRoute()
 const editingId = ref<number | null>(null)
+const validationResult = ref<TemplateValidationResult | null>(null)
 
 onMounted(async () => {
   const idStr = route.query.id
@@ -241,6 +245,8 @@ const valueTypeOptions = [
   { label: 'SKU', value: 'sku' },
   { label: '数量', value: 'quantity' },
   { label: '固定值', value: 'static' },
+  { label: '会员UID', value: 'member_uid' },
+  { label: '会员昵称', value: 'member_nickname' },
 ]
 
 const exportConfig = reactive<DynamicExportRules>({
@@ -276,28 +282,20 @@ function onAdvancedChange(val: boolean) {
   }
 }
 
-async function handleSave() {
-  if (!templateName.value.trim()) {
-    message.warning('请输入模板名称')
-    return
+function buildMappingRules(): string {
+  if (templateType.value === 'export_order') {
+    return JSON.stringify(exportConfig)
+  } else if (templateType.value === 'import_product' && productFormat.value === 'zip') {
+    const zipCfg = { ...templateConfig, format: 'zip', csvPattern: csvPattern.value, imageDir: imageDir.value }
+    return JSON.stringify(zipCfg)
+  } else {
+    templateConfig.format = 'csv'
+    return JSON.stringify(templateConfig)
   }
-  if (!templatePlatform.value.trim()) {
-    message.warning('请选择平台')
-    return
-  }
+}
+
+async function performSave(typeParam: string, mappingRules: string) {
   try {
-    let mappingRules: string
-    if (templateType.value === 'export_order') {
-      mappingRules = JSON.stringify(exportConfig)
-    } else if (templateType.value === 'import_product' && productFormat.value === 'zip') {
-      // Merge csvPattern + imageDir into template config for ZIP mode
-      const zipCfg = { ...templateConfig, format: 'zip', csvPattern: csvPattern.value, imageDir: imageDir.value }
-      mappingRules = JSON.stringify(zipCfg)
-    } else {
-      templateConfig.format = 'csv'
-      mappingRules = JSON.stringify(templateConfig)
-    }
-    const typeParam = templateType.value
     if (editingId.value) {
       await updateTemplate(
         editingId.value,
@@ -314,6 +312,47 @@ async function handleSave() {
   } catch (e) {
     message.error(String(e))
   }
+}
+
+async function handleSave() {
+  if (!templateName.value.trim()) {
+    message.warning('请输入模板名称')
+    return
+  }
+  if (!templatePlatform.value.trim()) {
+    message.warning('请选择平台')
+    return
+  }
+  const mappingRules = buildMappingRules()
+  const typeParam = templateType.value
+  validationResult.value = null
+  try {
+    const result = await validateTemplate(typeParam, mappingRules)
+    validationResult.value = result
+    if (result.errors?.length) {
+      return
+    }
+    if (result.warnings?.length) {
+      dialog.warning({
+        title: '模板校验警告',
+        content: () =>
+          result.warnings
+            .map((w: string) => `• ${w}`)
+            .join('\n'),
+        positiveText: '仍然保存',
+        negativeText: '返回修改',
+        onPositiveClick: () => {
+          validationResult.value = null
+          performSave(typeParam, mappingRules)
+        },
+      })
+      return
+    }
+  } catch (e) {
+    message.error('模板校验失败：' + String(e))
+    return
+  }
+  await performSave(typeParam, mappingRules)
 }
 
 function handleCancel() {
@@ -543,6 +582,16 @@ watch(
       </NButton>
     </div>
 
+    <NAlert
+      v-if="validationResult?.errors.length"
+      type="error"
+      class="mb-2"
+      title="模板校验失败，请修正后重试："
+    >
+      <ul class="list-disc ml-4">
+        <li v-for="(err, i) in validationResult.errors" :key="i">{{ err }}</li>
+      </ul>
+    </NAlert>
     <div class="flex gap-2 pt-2">
       <NButton type="primary" @click="handleSave">保存模板</NButton>
       <NButton secondary @click="handleCancel">取消</NButton>

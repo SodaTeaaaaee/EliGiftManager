@@ -29,25 +29,24 @@ watch(
 )
 
 // JS approximation of Go ParseRowDynamically — for sandbox preview only.
-// Known differences: columnIndex priority reversed vs Go, header normalisation is simpler (no BOM strip).
+// Kept in sync with Go normalizeDynamicKey() in internal/service/dynamic_parser.go.
+// When changing normalize rules, update this implementation AND the Go comment too.
 function parseRowDynamicallyJS(record: string[], headers: string[], rules: DynamicTemplateRules) {
   const coreData: Record<string, string> = {}
   const extraData: Record<string, string> = {}
   const errors: string[] = []
   const usedIndices = new Set<number>()
 
+  function normalizeKey(key: string): string {
+    return key.replace(/^﻿/, '').toLowerCase().replace(/[ _-]/g, '')
+  }
+
   for (const [key, mapping] of Object.entries(rules.mapping)) {
     let idx: number
-    if (mapping.columnIndex !== undefined && mapping.columnIndex >= 0) {
-      idx = mapping.columnIndex
-    } else if (rules.hasHeader && mapping.sourceColumn) {
-      idx = headers.findIndex(
-        (h) =>
-          h.toLowerCase().replace(/[ _-]/g, '') ===
-          mapping.sourceColumn!.toLowerCase().replace(/[ _-]/g, ''),
-      )
+    if (rules.hasHeader && mapping.sourceColumn) {
+      idx = headers.findIndex((h) => normalizeKey(h) === normalizeKey(mapping.sourceColumn!))
     } else {
-      idx = -1
+      idx = mapping.columnIndex ?? -1
     }
 
     const value = idx >= 0 && idx < record.length ? record[idx].trim() : ''
@@ -135,6 +134,7 @@ const previewResult = computed<PreviewRow[]>(() => {
       </NCard>
 
       <NCard title="实时预览" size="small">
+        <p class="text-xs text-gray-400 mb-2">预览解析逻辑已与导入引擎对齐</p>
         <div
           v-for="(r, i) in previewResult"
           :key="i"

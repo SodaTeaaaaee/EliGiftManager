@@ -4,6 +4,9 @@ package model
 // logical field during import.  ColumnIndex is zero-based, SourceColumn is the
 // original header text, and Required/DefaultValue control validation behaviour.
 type DynamicFieldMapping struct {
+	// 0-based column position. -1 means "not present in source CSV" (value comes
+	// from template platform or defaults). JSON omission → Go zero-value (0 = first
+	// column), not nil-absent — verify intent when sourceColumn is also empty.
 	ColumnIndex  int    `json:"columnIndex"`
 	SourceColumn string `json:"sourceColumn"`
 	Required     bool   `json:"required"`

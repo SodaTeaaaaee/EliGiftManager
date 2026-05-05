@@ -31,6 +31,11 @@ func (c *TemplateController) CreateTemplate(platform, templateType, name, mappin
 	if err := json.Unmarshal([]byte(mappingRules), &probe); err != nil {
 		return TemplateItem{}, fmt.Errorf("mapping rules must be valid JSON: %w", err)
 	}
+	if validation, err := service.ValidateTemplateRules(templateType, mappingRules); err != nil {
+		return TemplateItem{}, err
+	} else if !validation.Valid {
+		return TemplateItem{}, fmt.Errorf("template validation failed: %s", strings.Join(validation.Errors, "; "))
+	}
 	db := c.db
 	template := model.TemplateConfig{Platform: platform, Type: templateType, Name: name, MappingRules: mappingRules}
 	if err := db.Create(&template).Error; err != nil {
@@ -104,6 +109,11 @@ func (c *TemplateController) UpdateTemplate(id uint, platform, templateType, nam
 	if err := json.Unmarshal([]byte(mappingRules), &probe); err != nil {
 		return fmt.Errorf("mapping rules must be valid JSON: %w", err)
 	}
+	if validation, err := service.ValidateTemplateRules(templateType, mappingRules); err != nil {
+		return err
+	} else if !validation.Valid {
+		return fmt.Errorf("template validation failed: %s", strings.Join(validation.Errors, "; "))
+	}
 	db := c.db
 	result := db.Model(&model.TemplateConfig{}).Where("id = ?", id).Updates(map[string]any{
 		"platform":      platform,
@@ -120,6 +130,11 @@ func (c *TemplateController) UpdateTemplate(id uint, platform, templateType, nam
 	return nil
 }
 
+
+// ValidateTemplate checks the mapping rules for a template type without saving.
+func (c *TemplateController) ValidateTemplate(templateType, mappingRules string) (*service.TemplateValidationResult, error) {
+	return service.ValidateTemplateRules(templateType, mappingRules)
+}
 
 func (c *TemplateController) DeleteTemplate(id uint) error {
 	result := c.db.Delete(&model.TemplateConfig{}, id)

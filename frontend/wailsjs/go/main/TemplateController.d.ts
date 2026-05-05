@@ -18,3 +18,5 @@ export function ListTemplates():Promise<Array<main.TemplateItem>>;
 export function ListUserPresets():Promise<Array<service.PresetInfo>>;
 
 export function UpdateTemplate(arg1:number,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+
+export function ValidateTemplate(arg1:string,arg2:string):Promise<service.TemplateValidationResult>;

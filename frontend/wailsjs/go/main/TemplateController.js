@@ -33,3 +33,7 @@ export function ListUserPresets() {
 export function UpdateTemplate(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['TemplateController']['UpdateTemplate'](arg1, arg2, arg3, arg4, arg5);
 }
+
+export function ValidateTemplate(arg1, arg2) {
+  return window['go']['main']['TemplateController']['ValidateTemplate'](arg1, arg2);
+}
