@@ -50,9 +50,12 @@ import {
   SaveZoom as saveZoomBinding,
 } from "../../../../wailsjs/go/main/SystemController";
 import {
+  AddFromPreset as addFromPresetBinding,
   CreateTemplate as createTemplateBinding,
-  ListDefaultTemplates as listDefaultTemplatesBinding,
+  GetPresetContent as getPresetContentBinding,
+  ListBuiltinPresets as listBuiltinPresetsBinding,
   ListTemplates as listTemplatesBinding,
+  ListUserPresets as listUserPresetsBinding,
   UpdateTemplate as updateTemplateBinding,
 } from "../../../../wailsjs/go/main/TemplateController";
 import type { BootstrapPayload } from "@/shared/types/app";
@@ -258,9 +261,21 @@ export function listTemplates(): Promise<main.TemplateItem[]> {
   assertWailsRuntime();
   return listTemplatesBinding();
 }
-export function listDefaultTemplates(): Promise<main.TemplateItem[]> {
+export function listBuiltinPresets(): Promise<PresetInfo[]> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
-  return listDefaultTemplatesBinding();
+  return listBuiltinPresetsBinding();
+}
+export function listUserPresets(): Promise<PresetInfo[]> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
+  return listUserPresetsBinding();
+}
+export function getPresetContent(source: string, id: string): Promise<PresetContent> {
+  assertWailsRuntime();
+  return getPresetContentBinding(source, id);
+}
+export function addFromPreset(source: string, id: string): Promise<main.TemplateItem> {
+  assertWailsRuntime();
+  return addFromPresetBinding(source, id);
 }
 export function updateTemplate(
   id: number,
@@ -391,3 +406,11 @@ export type ProductItem = main.ProductItem;
 export type ProductListPayload = main.ProductListPayload;
 export type DispatchRecordItem = main.DispatchRecordItem;
 export type TemplateItem = main.TemplateItem;
+export type PresetInfo = { id: string; platform: string; type: string; name: string };
+export type PresetContent = {
+  id: string;
+  platform: string;
+  type: string;
+  name: string;
+  mappingRules: Record<string, unknown>;
+};

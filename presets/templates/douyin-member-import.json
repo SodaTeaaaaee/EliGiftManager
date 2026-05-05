@@ -1,0 +1,15 @@
+{
+  "platform": "DOUYIN",
+  "type": "import_dispatch_record",
+  "name": "抖音粉丝团导入",
+  "mappingRules": {
+    "format": "csv",
+    "hasHeader": true,
+    "mapping": {
+      "gift_level": { "sourceColumn": "粉丝团等级", "required": true },
+      "platform_uid": { "sourceColumn": "抖音号", "required": true },
+      "nickname": { "sourceColumn": "昵称" }
+    },
+    "extraData": { "strategy": "catch_all" }
+  }
+}

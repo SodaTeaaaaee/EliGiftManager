@@ -1,0 +1,17 @@
+{
+  "platform": "柔造",
+  "type": "export_order",
+  "name": "柔造工厂订单导出",
+  "mappingRules": {
+    "format": "csv",
+    "hasHeader": true,
+    "columns": [
+      { "headerName": "订单号", "valueType": "order_no", "prefix": "ROUZAO-" },
+      { "headerName": "收件人", "valueType": "recipient" },
+      { "headerName": "手机号", "valueType": "phone" },
+      { "headerName": "收件地址", "valueType": "address" },
+      { "headerName": "SKU", "valueType": "sku" },
+      { "headerName": "数量", "valueType": "quantity" }
+    ]
+  }
+}

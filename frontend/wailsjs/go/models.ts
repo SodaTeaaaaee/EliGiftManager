@@ -977,3 +977,46 @@ export namespace model {
 
 }
 
+export namespace service {
+	
+	export class PresetContent {
+	    id: string;
+	    platform: string;
+	    type: string;
+	    name: string;
+	    mappingRules: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PresetContent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.platform = source["platform"];
+	        this.type = source["type"];
+	        this.name = source["name"];
+	        this.mappingRules = source["mappingRules"];
+	    }
+	}
+	export class PresetInfo {
+	    id: string;
+	    platform: string;
+	    type: string;
+	    name: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PresetInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.platform = source["platform"];
+	        this.type = source["type"];
+	        this.name = source["name"];
+	    }
+	}
+
+}
+

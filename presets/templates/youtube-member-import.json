@@ -1,0 +1,15 @@
+{
+  "platform": "YOUTUBE",
+  "type": "import_dispatch_record",
+  "name": "YouTube 会员导入",
+  "mappingRules": {
+    "format": "csv",
+    "hasHeader": true,
+    "mapping": {
+      "gift_level": { "sourceColumn": "Level", "required": true },
+      "platform_uid": { "sourceColumn": "Channel URL", "required": true },
+      "nickname": { "sourceColumn": "Display Name" }
+    },
+    "extraData": { "strategy": "catch_all" }
+  }
+}

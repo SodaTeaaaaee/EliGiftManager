@@ -1,0 +1,15 @@
+{
+  "platform": "BILIBILI",
+  "type": "import_product",
+  "name": "B站魔力赏周边导入",
+  "mappingRules": {
+    "format": "csv",
+    "hasHeader": true,
+    "mapping": {
+      "name": { "sourceColumn": "商品名称", "required": true },
+      "factory_sku": { "sourceColumn": "SKU编码", "required": true },
+      "platform": { "sourceColumn": "", "required": false, "defaultValue": "BILIBILI" }
+    },
+    "extraData": { "strategy": "catch_all" }
+  }
+}

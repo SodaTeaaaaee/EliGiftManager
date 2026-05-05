@@ -1,0 +1,15 @@
+{
+  "platform": "BILIBILI",
+  "type": "import_dispatch_record",
+  "name": "B站舰长大航海导入",
+  "mappingRules": {
+    "format": "csv",
+    "hasHeader": false,
+    "mapping": {
+      "gift_level": { "columnIndex": 0, "required": true },
+      "platform_uid": { "columnIndex": 1, "required": true },
+      "nickname": { "columnIndex": 2 }
+    },
+    "extraData": { "strategy": "catch_all" }
+  }
+}

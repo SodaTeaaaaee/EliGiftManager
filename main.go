@@ -17,6 +17,9 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+//go:embed presets/templates/*.json
+var presetFS embed.FS
+
 func main() {
 	cfg := config.Load()
 	app := NewApp(cfg, nil, nil)
@@ -36,7 +39,7 @@ func main() {
 	systemCtrl := &SystemController{appCfg: cfg, db: db}
 	memberCtrl := &MemberController{db: db}
 	productCtrl := &ProductController{db: db}
-	templateCtrl := &TemplateController{db: db}
+	templateCtrl := &TemplateController{db: db, presetFS: presetFS}
 
 	// Wire controllers into App for startup() SetContext injection.
 	app.waveCtrl = waveCtrl

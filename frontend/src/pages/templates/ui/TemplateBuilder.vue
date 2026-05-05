@@ -9,6 +9,7 @@ import {
   previewCSVSample,
   updateTemplate,
 } from '@/shared/lib/wails/app'
+import { usePlatformCatalog } from '@/shared/composables/usePlatformCatalog'
 import BasicMapper from './BasicMapper.vue'
 import AdvancedEditor from './AdvancedEditor.vue'
 import type {
@@ -44,20 +45,23 @@ onMounted(async () => {
     } catch (e) {
       message.error('加载模板失败')
     }
+  } else if (route.query.platform) {
+    templatePlatform.value = String(route.query.platform)
   }
 })
 
-const platformOptions = [
-  { label: 'BILIBILI', value: 'BILIBILI' },
-  { label: 'DOUYIN', value: 'DOUYIN' },
-  { label: 'KUAISHOU', value: 'KUAISHOU' },
-  { label: 'XIAOHONGSHU', value: 'XIAOHONGSHU' },
-  { label: 'WEIBO', value: 'WEIBO' },
-  { label: 'ACFUN', value: 'ACFUN' },
-  { label: 'YOUTUBE', value: 'YOUTUBE' },
-  { label: 'TWITCH', value: 'TWITCH' },
-  { label: 'OTHER', value: 'OTHER' },
-]
+const { platformOptions, addPlatform, getPlatform } = usePlatformCatalog()
+const showAddPlatform = ref(false)
+const newPlatformName = ref('')
+const newPlatformType = ref<'member' | 'factory'>('member')
+
+function handleAddPlatform() {
+  if (addPlatform(newPlatformName.value, newPlatformType.value)) {
+    templatePlatform.value = newPlatformName.value
+    newPlatformName.value = ''
+    showAddPlatform.value = false
+  }
+}
 
 const templateConfig = reactive<DynamicTemplateRules>({
   format: 'csv',
@@ -76,12 +80,49 @@ const templateConfig = reactive<DynamicTemplateRules>({
 const isAdvanced = ref(false)
 const templateName = ref('')
 const templatePlatform = ref('')
-const templateType = ref<'import_dispatch_record' | 'export_order'>('import_dispatch_record')
+const templateType = ref<'import_product' | 'import_dispatch_record' | 'export_order'>('import_dispatch_record')
 
 const typeOptions = [
+  { label: '礼物导入模板', value: 'import_product' },
   { label: '会员数据导入模板', value: 'import_dispatch_record' },
   { label: '发货清单导出模板', value: 'export_order' },
 ]
+
+const typeShortLabel: Record<string, string> = {
+  import_product: '礼物导入',
+  import_dispatch_record: '会员数据导入',
+  export_order: '发货清单导出',
+}
+
+// Auto-generate default name: "{platform} {typeShortLabel}"
+watch([templatePlatform, templateType], ([plat, type]) => {
+  if (!templateName.value && plat && type) {
+    templateName.value = `${plat} ${typeShortLabel[type] || type}`
+  }
+})
+
+const filteredTypeOptions = computed(() => {
+  const p = getPlatform(templatePlatform.value)
+  if (!p) return typeOptions
+  if (p.type === 'member') {
+    return typeOptions.filter((o) => o.value === 'import_dispatch_record')
+  }
+  return typeOptions.filter((o) => o.value === 'import_product' || o.value === 'export_order')
+})
+
+watch(templatePlatform, (newPlatform) => {
+  if (!newPlatform) return
+  const p = getPlatform(newPlatform)
+  if (!p) return
+  if (p.type === 'member' && templateType.value !== 'import_dispatch_record') {
+    templateType.value = 'import_dispatch_record'
+  } else if (
+    p.type === 'factory' &&
+    templateType.value === 'import_dispatch_record'
+  ) {
+    templateType.value = 'import_product'
+  }
+})
 
 const valueTypeOptions = [
   { label: '订单号', value: 'order_no' },
@@ -204,19 +245,41 @@ watch(
       </p>
     </header>
 
-    <div class="flex items-center gap-3">
+    <div class="flex items-center gap-2">
       <NInput v-model:value="templateName" placeholder="模板名称" style="max-width: 240px" />
       <NSelect
         v-model:value="templatePlatform"
         :options="platformOptions"
         placeholder="选择平台"
-        style="max-width: 180px"
+        filterable
+        style="max-width: 160px"
       />
+      <NButton size="small" secondary @click="showAddPlatform = !showAddPlatform">+</NButton>
+    </div>
+    <div v-if="showAddPlatform" class="flex items-center gap-2">
+      <NInput
+        v-model:value="newPlatformName"
+        placeholder="新平台名称"
+        size="small"
+        style="max-width: 120px"
+        @keyup.enter="handleAddPlatform"
+      />
+      <NSelect
+        v-model:value="newPlatformType"
+        :options="[
+          { label: '会员平台', value: 'member' },
+          { label: '工厂平台', value: 'factory' },
+        ]"
+        size="small"
+        style="width: 110px"
+      />
+      <NButton size="small" type="primary" @click="handleAddPlatform">添加</NButton>
+      <NButton size="small" @click="showAddPlatform = false">取消</NButton>
     </div>
 
     <div class="flex items-center gap-3">
       <span class="text-sm">模板类型：</span>
-      <NSelect v-model:value="templateType" :options="typeOptions" style="width: 200px" />
+      <NSelect v-model:value="templateType" :options="filteredTypeOptions" style="width: 200px" />
     </div>
 
     <div v-if="templateType === 'import_dispatch_record'">

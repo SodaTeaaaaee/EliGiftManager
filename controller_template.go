@@ -1,16 +1,19 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	"gorm.io/gorm"
 )
 
 type TemplateController struct {
-	db *gorm.DB
+	db       *gorm.DB
+	presetFS embed.FS
 }
 
 func (c *TemplateController) CreateTemplate(platform, templateType, name, mappingRules string) (TemplateItem, error) {
@@ -49,44 +52,41 @@ func (c *TemplateController) ListTemplates() ([]TemplateItem, error) {
 	return items, nil
 }
 
-// ListDefaultTemplates returns the hardcoded preset templates that users can
-// choose to add to their database. Does not write to the database.
-func (c *TemplateController) ListDefaultTemplates() ([]TemplateItem, error) {
-	presets := []struct {
-		Platform     string
-		Type         string
-		Name         string
-		MappingRules string
-	}{
-		{
-			Platform:     "柔造",
-			Type:         model.TemplateTypeImportProduct,
-			Name:         "柔造 商品导入",
-			MappingRules: `{"format":"zip","hasHeader":true,"mapping":{"name":{"sourceColumn":"商品名称","required":true},"factory_sku":{"sourceColumn":"商家编码","required":true}},"extraData":{"strategy":"catch_all"}}`,
-		},
-		{
-			Platform:     "BILIBILI",
-			Type:         model.TemplateTypeImportDispatchRecord,
-			Name:         "BILIBILI 会员导入",
-			MappingRules: `{"format":"csv","hasHeader":false,"mapping":{"gift_level":{"columnIndex":0,"required":true},"platform_uid":{"columnIndex":1,"required":true},"nickname":{"columnIndex":2},"platform":{"columnIndex":-1}},"extraData":{"strategy":"catch_all"}}`,
-		},
-		{
-			Platform:     "柔造",
-			Type:         model.TemplateTypeExportOrder,
-			Name:         "柔造 工厂导出",
-			MappingRules: `{"format":"csv","hasHeader":true,"columns":[{"headerName":"订单号","valueType":"order_no","prefix":"ROUZAO-"},{"headerName":"收件人","valueType":"recipient"},{"headerName":"手机号","valueType":"phone"},{"headerName":"收件地址","valueType":"address"},{"headerName":"SKU","valueType":"sku"},{"headerName":"数量","valueType":"quantity"}]}`,
-		},
+// ListBuiltinPresets returns the built-in (embedded) preset templates.
+func (c *TemplateController) ListBuiltinPresets() ([]service.PresetInfo, error) {
+	return service.ListBuiltinPresets(c.presetFS)
+}
+
+// ListUserPresets returns user-created presets from the data directory.
+func (c *TemplateController) ListUserPresets() ([]service.PresetInfo, error) {
+	dataDir, err := service.ResolveDataDir()
+	if err != nil {
+		return nil, err
 	}
-	items := make([]TemplateItem, 0, len(presets))
-	for _, p := range presets {
-		items = append(items, TemplateItem{
-			Platform:     p.Platform,
-			Type:         p.Type,
-			Name:         p.Name,
-			MappingRules: p.MappingRules,
-		})
+	return service.ListUserPresets(dataDir)
+}
+
+// GetPresetContent returns the full content of a preset.
+func (c *TemplateController) GetPresetContent(source, id string) (*service.PresetContent, error) {
+	dataDir, _ := service.ResolveDataDir()
+	return service.ReadPresetContent(c.presetFS, dataDir, source, id)
+}
+
+// AddFromPreset creates a template from a preset and returns the created TemplateItem.
+func (c *TemplateController) AddFromPreset(source, id string) (TemplateItem, error) {
+	dataDir, err := service.ResolveDataDir()
+	if err != nil {
+		return TemplateItem{}, err
 	}
-	return items, nil
+	content, err := service.ReadPresetContent(c.presetFS, dataDir, source, id)
+	if err != nil {
+		return TemplateItem{}, err
+	}
+	mappingJSON, err := json.Marshal(content.MappingRules)
+	if err != nil {
+		return TemplateItem{}, fmt.Errorf("marshal preset mapping rules: %w", err)
+	}
+	return c.CreateTemplate(content.Platform, content.Type, content.Name, string(mappingJSON))
 }
 
 func (c *TemplateController) UpdateTemplate(id uint, platform, templateType, name, mappingRules string) error {
