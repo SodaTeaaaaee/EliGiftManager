@@ -6,6 +6,7 @@ import {
   createTemplate,
   listTemplates,
   pickCSVFile,
+  pickDataFile,
   pickFolder,
   previewArchive,
   previewCSVSample,
@@ -141,29 +142,38 @@ const productFieldGroups: FieldGroup[] = [
 const csvPattern = ref('*.csv')
 const imageDir = ref('主图')
 const productSampleFile = ref('')
-const archivePreview = ref<{ csvFile?: string; dirs: { name: string; fileCount: number }[] } | null>(null)
+const archivePreview = ref<{ extractDir: string; csvFiles: string[]; dirs: { name: string; fileCount: number }[] } | null>(null)
+const selectedArchiveCSV = ref('')
 const productFormat = computed<'csv' | 'zip'>(() => {
   if (!productSampleFile.value) return 'zip'
   return productSampleFile.value.toLowerCase().endsWith('.csv') ? 'csv' : 'zip'
 })
 
+async function loadArchiveCSV(extractDir: string, csvRelPath: string) {
+  const fullPath = extractDir.replace(/[/\\]$/, '') + '/' + csvRelPath
+  sampleRows.value = await previewCSVSample(fullPath)
+}
+
 async function handlePickProductFile() {
-  const csvPath = await pickCSVFile()
-  if (!csvPath) return
+  const path = await pickDataFile()
+  if (!path) return
   try {
-    const lower = csvPath.toLowerCase()
+    const lower = path.toLowerCase()
     if (lower.endsWith('.csv')) {
-      sampleRows.value = await previewCSVSample(csvPath)
+      sampleRows.value = await previewCSVSample(path)
+      archivePreview.value = null
+      selectedArchiveCSV.value = ''
     } else {
-      // Archive: preview structure + find CSV inside
-      const preview = await previewArchive(csvPath)
+      const preview = await previewArchive(path)
       archivePreview.value = preview
-      if (preview?.csvFile) {
-        sampleRows.value = []
-        message.info(`检测到压缩包内 CSV: ${preview.csvFile}`)
+      selectedArchiveCSV.value = ''
+      sampleRows.value = []
+      if (preview!.csvFiles.length === 1) {
+        await loadArchiveCSV(preview!.extractDir, preview!.csvFiles[0])
+        selectedArchiveCSV.value = preview!.csvFiles[0]
       }
     }
-    productSampleFile.value = csvPath.split(/[/\\]/).pop() || csvPath
+    productSampleFile.value = path.split(/[/\\]/).pop() || path
   } catch (e) {
     message.error('读取文件失败: ' + String(e))
   }
@@ -172,10 +182,26 @@ async function handlePickProductDir() {
   const dir = await pickFolder()
   if (!dir) return
   productSampleFile.value = dir
-  // For directories, user still needs to pick a sample CSV for field mapping
-  // The directory is used at import time, not for template preview
-  message.info('已选择文件夹，请上传其中的示例 CSV 以配置字段映射')
+  archivePreview.value = { extractDir: dir, csvFiles: [], dirs: [] }
+  selectedArchiveCSV.value = ''
+  sampleRows.value = []
 }
+
+async function selectArchiveCSV(csvRelPath: string) {
+  if (!archivePreview.value) return
+  selectedArchiveCSV.value = csvRelPath
+  await loadArchiveCSV(archivePreview.value.extractDir, csvRelPath)
+}
+
+// Clear state when platform or type changes
+watch([templatePlatform, templateType], () => {
+  sampleRows.value = []
+  productSampleFile.value = ''
+  archivePreview.value = null
+  selectedArchiveCSV.value = ''
+  csvPattern.value = '*.csv'
+  imageDir.value = '主图'
+})
 
 // Auto-generate default name: "{platform} {typeShortLabel}"
 watch([templatePlatform, templateType], ([plat, type]) => {
@@ -397,6 +423,29 @@ watch(
         <span v-if="productSampleFile" class="text-xs text-gray-400">{{ productSampleFile }}</span>
       </div>
 
+      <!-- Archive/directory structure: CSV selector + dirs -->
+      <div v-if="archivePreview && archivePreview.csvFiles.length > 1" class="border rounded p-3 space-y-2">
+        <p class="text-sm font-medium">选择 CSV 文件</p>
+        <div v-for="csv in archivePreview.csvFiles" :key="csv"
+          class="flex items-center gap-2 py-1 px-2 rounded cursor-pointer hover:bg-gray-50"
+          :class="selectedArchiveCSV === csv ? 'bg-blue-50' : ''"
+          @click="selectArchiveCSV(csv)">
+          <span class="text-sm">{{ csv }}</span>
+          <NTag v-if="selectedArchiveCSV === csv" size="tiny" type="info">已选</NTag>
+        </div>
+        <div v-if="archivePreview.dirs.length" class="pt-2 border-t">
+          <p class="text-xs text-gray-500 mb-1">目录结构</p>
+          <div v-for="d in archivePreview.dirs" :key="d.name" class="text-xs text-gray-400">
+            {{ d.name }}/（{{ d.fileCount }} 个文件）
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto-selected single CSV notice -->
+      <div v-else-if="archivePreview && archivePreview.csvFiles.length === 1 && selectedArchiveCSV" class="text-xs text-gray-400">
+        已自动选择 CSV: {{ selectedArchiveCSV }}
+      </div>
+
       <BasicMapper
         v-if="csvHeaders.length"
         :template-config="templateConfig"
@@ -411,13 +460,21 @@ watch(
           <NInput v-model:value="csvPattern" size="small" style="width: 160px" />
         </div>
         <div>
-          <label class="text-xs text-gray-500 block mb-0.5">图片目录名（可选）</label>
-          <NInput v-model:value="imageDir" size="small" style="width: 120px" />
+          <label class="text-xs text-gray-500 block mb-0.5">图片目录（可选）</label>
+          <NSelect
+            v-model:value="imageDir"
+            :options="archivePreview?.dirs.map(d => ({ label: `${d.name}/（${d.fileCount} 文件）`, value: d.name })) || []"
+            placeholder="选择目录"
+            size="small"
+            clearable
+            filterable
+            tag
+            style="width: 200px"
+          />
         </div>
       </div>
 
       <div v-if="archivePreview" class="border rounded p-2 text-xs space-y-1">
-        <p v-if="archivePreview.csvFile">CSV: {{ archivePreview.csvFile }}</p>
         <div v-for="d in archivePreview.dirs" :key="d.name">
           {{ d.name }}/（{{ d.fileCount }} 个文件）
         </div>

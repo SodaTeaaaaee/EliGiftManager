@@ -6,6 +6,10 @@ export function PickCSVFile() {
   return window['go']['main']['App']['PickCSVFile']();
 }
 
+export function PickDataFile() {
+  return window['go']['main']['App']['PickDataFile']();
+}
+
 export function PickFolder() {
   return window['go']['main']['App']['PickFolder']();
 }

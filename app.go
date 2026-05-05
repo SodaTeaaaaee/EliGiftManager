@@ -245,6 +245,22 @@ func (a *App) PickZIPFile() (string, error) {
 	return "", fmt.Errorf("pick ZIP file: context not available")
 }
 
+func (a *App) PickDataFile() (string, error) {
+	if a.ctx != nil {
+		selected, err := wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+			Title: "选择数据文件",
+			Filters: []wailsruntime.FileFilter{
+				{DisplayName: "支持的文件 (*.csv, *.zip, *.tar, *.tar.gz)", Pattern: "*.csv;*.zip;*.tar;*.tar.gz;*.tgz"},
+			},
+		})
+		if err != nil {
+			return "", err
+		}
+		return selected, nil
+	}
+	return "", fmt.Errorf("pick data file: context not available")
+}
+
 func (a *App) PickFolder() (string, error) {
 	if a.ctx != nil {
 		selected, err := wailsruntime.OpenDirectoryDialog(a.ctx, wailsruntime.OpenDialogOptions{
@@ -259,8 +275,9 @@ func (a *App) PickFolder() (string, error) {
 }
 
 type ArchivePreview struct {
-	CSVFile string                `json:"csvFile"`
-	Dirs    []service.ArchiveDirInfo `json:"dirs"`
+	ExtractDir string                  `json:"extractDir"`
+	CSVFiles   []string                `json:"csvFiles"`
+	Dirs       []service.ArchiveDirInfo `json:"dirs"`
 }
 
 func (a *App) PreviewArchive(path string) (*ArchivePreview, error) {
@@ -268,18 +285,10 @@ func (a *App) PreviewArchive(path string) (*ArchivePreview, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Don't clean up — the caller needs to keep the extract for later import.
 
-	csvPath, _ := service.FindCSVInDir(extractDir, "*.csv")
-	csvFile := ""
-	if csvPath != "" {
-		csvFile = filepath.Base(csvPath)
-		// Read first few rows for preview (handled by PreviewCSVSample separately)
-		_ = csvPath
-	}
-
+	csvFiles := service.FindAllCSVsInDir(extractDir)
 	dirs := service.ListArchiveDirs(extractDir)
-	return &ArchivePreview{CSVFile: csvFile, Dirs: dirs}, nil
+	return &ArchivePreview{ExtractDir: extractDir, CSVFiles: csvFiles, Dirs: dirs}, nil
 }
 
 func (a *App) resolveDatabasePath() (string, error) {

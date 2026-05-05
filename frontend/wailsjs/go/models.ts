@@ -1,7 +1,8 @@
 export namespace main {
 	
 	export class ArchivePreview {
-	    csvFile: string;
+	    extractDir: string;
+	    csvFiles: string[];
 	    dirs: service.ArchiveDirInfo[];
 	
 	    static createFrom(source: any = {}) {
@@ -10,7 +11,8 @@ export namespace main {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.csvFile = source["csvFile"];
+	        this.extractDir = source["extractDir"];
+	        this.csvFiles = source["csvFiles"];
 	        this.dirs = this.convertValues(source["dirs"], service.ArchiveDirInfo);
 	    }
 	

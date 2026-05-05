@@ -14,9 +14,11 @@ import {
   NSelect,
   NTag,
   type DataTableColumns,
+  useDialog,
   useMessage,
 } from 'naive-ui'
 import {
+  deleteTemplate,
   isWailsRuntimeAvailable,
   listTemplates,
   WAILS_PREVIEW_MESSAGE,
@@ -27,6 +29,7 @@ import PresetPicker from './PresetPicker.vue'
 
 const router = useRouter()
 const message = useMessage()
+const dialog = useDialog()
 const templates = ref<TemplateItem[]>([])
 const errorMessage = ref('')
 
@@ -40,7 +43,8 @@ const {
   getPlatform,
 } = usePlatformCatalog()
 
-const templateTypes = ['import_product', 'import_dispatch_record', 'export_order'] as const
+const memberTemplateTypes = ['import_dispatch_record'] as const
+const factoryTemplateTypes = ['import_product', 'export_order'] as const
 const platformTemplates = (p: string) => templates.value.filter((t) => (t.platform || '通用') === p)
 const platformTypeTemplates = (p: string, type: string) =>
   platformTemplates(p).filter((t) => t.type === type)
@@ -82,20 +86,35 @@ const columns: DataTableColumns<TemplateItem> = [
   {
     title: '',
     key: 'actions',
-    width: 60,
+    width: 100,
     render: (row) =>
-      h(
-        NButton,
-        {
-          size: 'tiny',
-          secondary: true,
-          onClick: (e: MouseEvent) => {
-            e.stopPropagation()
-            router.push({ name: 'templates-builder', query: { id: row.id } })
+      h('div', { class: 'flex gap-1' }, [
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            secondary: true,
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
+              openEditModal(row)
+            },
           },
-        },
-        { default: () => '编辑' },
-      ),
+          { default: () => '编辑' },
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            secondary: true,
+            type: 'error',
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
+              handleDeleteTemplate(row)
+            },
+          },
+          { default: () => '删除' },
+        ),
+      ]),
   },
 ]
 
@@ -165,17 +184,45 @@ function handleUpdatePlatform() {
 }
 
 function handleDeletePlatform() {
-  if (!removePlatform(editTarget.value)) {
-    message.warning('删除失败')
-    return
-  }
-  showEditPlatform.value = false
-  message.success('平台已删除')
+  dialog.warning({
+    title: '确认删除平台',
+    content: `确定要删除平台「${editTarget.value}」吗？该操作不可撤销。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: () => {
+      if (!removePlatform(editTarget.value)) {
+        message.warning('删除失败')
+        return
+      }
+      showEditPlatform.value = false
+      message.success('平台已删除')
+    },
+  })
 }
 
 // ---- template builder ----
 function openCreateModal(platform?: string) {
   router.push({ name: 'templates-builder', query: platform ? { platform } : {} })
+}
+function openEditModal(row: TemplateItem) {
+  router.push({ name: 'templates-builder', query: { id: row.id } })
+}
+async function handleDeleteTemplate(row: TemplateItem) {
+  dialog.warning({
+    title: '确认删除模板',
+    content: `确定要删除模板「${row.name}」吗？该操作不可撤销。`,
+    positiveText: '确认删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await deleteTemplate(row.id)
+        message.success('模板已删除')
+        await loadTemplates()
+      } catch (e) {
+        message.error('删除失败: ' + String(e))
+      }
+    },
+  })
 }
 
 const showPresetPicker = ref(false)
@@ -244,7 +291,7 @@ onMounted(async () => {
               </div>
             </template>
             <template v-if="platformTemplateCount(p.name)">
-              <div v-for="t in templateTypes" :key="t" class="mb-3 last:mb-0">
+              <div v-for="t in memberTemplateTypes" :key="t" class="mb-3 last:mb-0">
                 <NTag :type="typeColor(t)" size="small" round class="mb-1">
                   {{ typeLabel(t) }}
                 </NTag>
@@ -291,7 +338,7 @@ onMounted(async () => {
               此平台有商品导入模板但缺少订单导出模板，建议补全。
             </NAlert>
             <template v-if="platformTemplateCount(p.name)">
-              <div v-for="t in templateTypes" :key="t" class="mb-3 last:mb-0">
+              <div v-for="t in factoryTemplateTypes" :key="t" class="mb-3 last:mb-0">
                 <NTag :type="typeColor(t)" size="small" round class="mb-1">
                   {{ typeLabel(t) }}
                 </NTag>

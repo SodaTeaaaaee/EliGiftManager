@@ -4,6 +4,8 @@ import {main} from '../models';
 
 export function PickCSVFile():Promise<string>;
 
+export function PickDataFile():Promise<string>;
+
 export function PickFolder():Promise<string>;
 
 export function PickZIPFile():Promise<string>;

@@ -79,7 +79,8 @@ async function handleAdd(source: string, preset: PresetInfo) {
     let content: PresetContent
     try {
       content = await getPresetContent(source, preset.id)
-    } catch {
+    } catch (e) {
+      console.error('getPresetContent failed:', source, preset.id, e)
       message.error('读取预设内容失败')
       return
     }

@@ -7,6 +7,8 @@ export function AddFromPreset(arg1:string,arg2:string):Promise<main.TemplateItem
 
 export function CreateTemplate(arg1:string,arg2:string,arg3:string,arg4:string):Promise<main.TemplateItem>;
 
+export function DeleteTemplate(arg1:number):Promise<void>;
+
 export function GetPresetContent(arg1:string,arg2:string):Promise<service.PresetContent>;
 
 export function ListBuiltinPresets():Promise<Array<service.PresetInfo>>;

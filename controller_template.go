@@ -119,3 +119,15 @@ func (c *TemplateController) UpdateTemplate(id uint, platform, templateType, nam
 	}
 	return nil
 }
+
+
+func (c *TemplateController) DeleteTemplate(id uint) error {
+	result := c.db.Delete(&model.TemplateConfig{}, id)
+	if result.Error != nil {
+		return fmt.Errorf("delete template failed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("template not found")
+	}
+	return nil
+}

@@ -179,6 +179,25 @@ func FindCSVInDir(dir, pattern string) (string, error) {
 	return "", fmt.Errorf("no CSV file found in %q", dir)
 }
 
+// FindAllCSVsInDir recursively searches dir for all CSV files.
+// Returns relative paths (from dir) of matching files.
+func FindAllCSVsInDir(dir string) []string {
+	var results []string
+	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(strings.ToLower(info.Name()), ".csv") {
+			rel, _ := filepath.Rel(dir, path)
+			if rel != "" {
+				results = append(results, rel)
+			}
+		}
+		return nil
+	})
+	return results
+}
+
 // ListArchiveDirs returns a summary of top-level directories and their
 // file counts within an extracted archive directory.
 func ListArchiveDirs(extractDir string) []ArchiveDirInfo {

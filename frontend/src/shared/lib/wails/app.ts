@@ -1,5 +1,6 @@
 import {
   PickCSVFile as pickCSVFileBinding,
+  PickDataFile as pickDataFileBinding,
   PickFolder as pickFolderBinding,
   PickZIPFile as pickZIPFileBinding,
   PreviewArchive as previewArchiveBinding,
@@ -54,6 +55,7 @@ import {
 import {
   AddFromPreset as addFromPresetBinding,
   CreateTemplate as createTemplateBinding,
+  DeleteTemplate as deleteTemplateBinding,
   GetPresetContent as getPresetContentBinding,
   ListBuiltinPresets as listBuiltinPresetsBinding,
   ListTemplates as listTemplatesBinding,
@@ -279,6 +281,10 @@ export function addFromPreset(source: string, id: string): Promise<main.Template
   assertWailsRuntime();
   return addFromPresetBinding(source, id);
 }
+export function deleteTemplate(id: number): Promise<void> {
+  assertWailsRuntime();
+  return deleteTemplateBinding(id);
+}
 export function updateTemplate(
   id: number,
   platform: string,
@@ -351,6 +357,10 @@ export function pickCSVFile(): Promise<string> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve("");
   return pickCSVFileBinding();
 }
+export function pickDataFile(): Promise<string> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve("");
+  return pickDataFileBinding();
+}
 export function pickZIPFile(): Promise<string> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve("");
   return pickZIPFileBinding();
@@ -359,7 +369,7 @@ export function pickFolder(): Promise<string> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve("");
   return pickFolderBinding();
 }
-export type ArchivePreview = { csvFile?: string; dirs: { name: string; fileCount: number }[] };
+export type ArchivePreview = { extractDir: string; csvFiles: string[]; dirs: { name: string; fileCount: number }[] };
 export function previewArchive(path: string): Promise<ArchivePreview | null> {
   if (!isWailsRuntimeAvailable()) return Promise.resolve(null);
   return previewArchiveBinding(path);
