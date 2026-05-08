@@ -17,3 +17,7 @@ export function ListTemplates() {
 export function UpdateTemplate(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['TemplateController']['UpdateTemplate'](arg1, arg2, arg3, arg4, arg5);
 }
+
+export function DeleteTemplate(arg1) {
+  return window['go']['main']['TemplateController']['DeleteTemplate'](arg1);
+}

@@ -81,7 +81,7 @@ func (c *TemplateController) ListDefaultTemplates() ([]TemplateItem, error) {
 			Platform:     "柔造",
 			Type:         model.TemplateTypeExportOrder,
 			Name:         "柔造 工厂导出",
-			MappingRules: `{"headers":["","第三方订单号","收件人","联系电话","收件地址","商家编码","下单数量"],"prefix":"ROUZAO-","blankLeadingColumn":true}`,
+			MappingRules: `{"headers":["第三方订单号","收件人","联系电话","收件地址","商家编码","下单数量"],"prefix":"ROUZAO-","blankOrderNo":true}`,
 		},
 	}
 	items := make([]TemplateItem, 0, len(presets))
@@ -123,6 +123,21 @@ func (c *TemplateController) UpdateTemplate(id uint, platform, templateType, nam
 	})
 	if result.Error != nil {
 		return fmt.Errorf("update template failed: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("template not found")
+	}
+	return nil
+}
+
+func (c *TemplateController) DeleteTemplate(id uint) error {
+	db := c.db()
+	if db == nil {
+		return fmt.Errorf("database not available")
+	}
+	result := db.Delete(&model.TemplateConfig{}, id)
+	if result.Error != nil {
+		return fmt.Errorf("delete template failed: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("template not found")

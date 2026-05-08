@@ -14,7 +14,7 @@ import (
 type exportTemplateConfig struct {
 	Headers            []string `json:"headers"`
 	Prefix             string   `json:"prefix"`
-	BlankLeadingColumn bool     `json:"blankLeadingColumn"`
+	BlankOrderNo       bool     `json:"blankOrderNo"`
 }
 
 // ExportOrderCSV writes a factory-ready batch mini-order CSV for the given wave.
@@ -89,12 +89,8 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 	}
 
 	// Validate header column count matches expected row layout
-	expectedCols := 6
-	if cfg.BlankLeadingColumn {
-		expectedCols = 7
-	}
-	if len(cfg.Headers) != expectedCols {
-		return fmt.Errorf("export template header count mismatch: got %d headers, expected %d (blankLeadingColumn=%v)", len(cfg.Headers), expectedCols, cfg.BlankLeadingColumn)
+	if len(cfg.Headers) != 6 {
+		return fmt.Errorf("export template header count mismatch: got %d headers, expected 6", len(cfg.Headers))
 	}
 
 	for _, record := range records {
@@ -122,12 +118,10 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 		}
 
 		orderNo := cfg.Prefix + strconv.Itoa(int(record.ID))
-		var row []string
-		if cfg.BlankLeadingColumn {
-			row = []string{"", orderNo, recipient, phone, address, sku, strconv.Itoa(record.Quantity)}
-		} else {
-			row = []string{orderNo, recipient, phone, address, sku, strconv.Itoa(record.Quantity)}
+		if cfg.BlankOrderNo {
+			orderNo = ""
 		}
+		row := []string{orderNo, recipient, phone, address, sku, strconv.Itoa(record.Quantity)}
 		if err := writer.Write(row); err != nil {
 			return fmt.Errorf("export order CSV failed: write row %d: %w", record.ID, err)
 		}

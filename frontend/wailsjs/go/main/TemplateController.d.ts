@@ -9,3 +9,5 @@ export function ListDefaultTemplates():Promise<Array<main.TemplateItem>>;
 export function ListTemplates():Promise<Array<main.TemplateItem>>;
 
 export function UpdateTemplate(arg1:number,arg2:string,arg3:string,arg4:string,arg5:string):Promise<void>;
+
+export function DeleteTemplate(arg1:number):Promise<void>;

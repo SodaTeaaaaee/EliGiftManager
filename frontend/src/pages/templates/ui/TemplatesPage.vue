@@ -19,11 +19,13 @@ import {
   NSelect,
   NSwitch,
   NTag,
+  useDialog,
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
 import {
   createTemplate,
+  deleteTemplate,
   isWailsRuntimeAvailable,
   listDefaultTemplates,
   listTemplates,
@@ -33,6 +35,7 @@ import {
 } from '@/shared/lib/wails/app'
 
 const message = useMessage()
+const dialog = useDialog()
 const templates = ref<TemplateItem[]>([])
 const errorMessage = ref('')
 const showCreateModal = ref(false)
@@ -97,7 +100,7 @@ const guiImageDir = ref('')
 const guiProductFields = ref<{ name: string; header: string }[]>([])
 const guiExportPrefix = ref('')
 const guiExportHeaders = ref<string[]>([])
-const guiBlankLeadingColumn = ref(false)
+const guiBlankOrderNo = ref(false)
 
 function syncGuiFromJson() {
   try {
@@ -128,7 +131,7 @@ function syncGuiFromJson() {
   } else if (form.type === 'export_order') {
     guiExportPrefix.value = rules.prefix || ''
     guiExportHeaders.value = Array.isArray(rules.headers) ? rules.headers : []
-    guiBlankLeadingColumn.value = !!(rules as any).blankLeadingColumn
+    guiBlankOrderNo.value = !!(rules as any).blankOrderNo
   }
 }
 
@@ -150,7 +153,7 @@ function buildJsonFromGui() {
     form.mappingRules = JSON.stringify(obj, null, 2)
   } else if (form.type === 'export_order') {
     form.mappingRules = JSON.stringify(
-      { prefix: guiExportPrefix.value, headers: guiExportHeaders.value, blankLeadingColumn: guiBlankLeadingColumn.value },
+      { prefix: guiExportPrefix.value, headers: guiExportHeaders.value, blankOrderNo: guiBlankOrderNo.value },
       null,
       2,
     )
@@ -215,20 +218,46 @@ const columns: DataTableColumns<TemplateItem> = [
   {
     title: '',
     key: 'actions',
-    width: 60,
+    width: 140,
     render: (row) =>
-      h(
-        NButton,
-        {
-          size: 'tiny',
-          secondary: true,
-          onClick: (e: MouseEvent) => {
-            e.stopPropagation()
-            openEditModal(row)
+      h('div', { style: { display: 'flex', gap: '4px' } }, [
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            secondary: true,
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
+              openEditModal(row)
+            },
           },
-        },
-        { default: () => '编辑' },
-      ),
+          { default: () => '编辑' },
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'error',
+            quaternary: true,
+            onClick: () => {
+              dialog.warning({
+                title: '确认删除模板',
+                content: '删除后不可恢复。如需继续使用，请重新从预设添加或手动重建。',
+                positiveText: '确认删除',
+                negativeText: '取消',
+                onPositiveClick: async () => {
+                  try {
+                    await deleteTemplate(row.id)
+                    message.success('模板已删除')
+                    await loadTemplates()
+                  } catch (e) { message.error(String(e)) }
+                },
+              })
+            },
+          },
+          { default: () => '删除' },
+        ),
+      ]),
   },
 ]
 function typeLabel(type: string) {

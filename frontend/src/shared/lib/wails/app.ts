@@ -52,6 +52,7 @@ import {
 } from '../../../../wailsjs/go/main/SystemController'
 import {
   CreateTemplate as createTemplateBinding,
+  DeleteTemplate as deleteTemplateBinding,
   ListDefaultTemplates as listDefaultTemplatesBinding,
   ListTemplates as listTemplatesBinding,
   UpdateTemplate as updateTemplateBinding,
@@ -242,6 +243,10 @@ export function updateTemplate(
 ): Promise<void> {
   assertWailsRuntime()
   return updateTemplateBinding(id, platform, templateType, name, mappingRules)
+}
+export function deleteTemplate(id: number): Promise<void> {
+  assertWailsRuntime()
+  return deleteTemplateBinding(id)
 }
 export function setDefaultAddress(memberId: number, addressId: number): Promise<void> {
   assertWailsRuntime()
