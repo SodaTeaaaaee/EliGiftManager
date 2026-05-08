@@ -130,21 +130,28 @@ async function loadRecords() {
   }
 }
 
-async function handleBindAddresses() {
-  if (!waveId.value) return message.warning('请先选择发货任务')
+async function syncAvailableAddresses(options?: { silent?: boolean }) {
+  if (!waveId.value) return
   isBindingAddresses.value = true
   try {
     const result = await bindDefaultAddresses(waveId.value)
-    message.success(
-      '已同步 ' + result.updated + ' 条已有地址，' + result.skipped + ' 条仍缺地址跳过',
-    )
     await loadWave()
     await loadRecords()
+    if (!options?.silent) {
+      message.success(
+        '已同步 ' + result.updated + ' 条已有地址，' + result.skipped + ' 条仍缺地址跳过',
+      )
+    }
   } catch (e) {
-    message.error(String(e))
+    if (!options?.silent) message.error(String(e))
   } finally {
     isBindingAddresses.value = false
   }
+}
+
+async function handleBindAddresses() {
+  if (!waveId.value) return message.warning('请先选择发货任务')
+  await syncAvailableAddresses()
 }
 
 async function handleExport() {
@@ -187,12 +194,7 @@ onMounted(async () => {
   // Auto-bind available addresses for records that are still missing them.
   // This is safe: it only fills NULL address slots, never overwrites manual selections.
   if (waveId.value) {
-    try {
-      await bindDefaultAddresses(waveId.value)
-      await loadWave()
-    } catch {
-      // Silently ignore — automatic best-effort sync
-    }
+    await syncAvailableAddresses({ silent: true })
   }
 })
 </script>
