@@ -160,10 +160,10 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 		zipCfg.Mapping = map[string]string{}
 	}
 
-	// 创建临时解压目录
-	extractDir, err := os.MkdirTemp("", "eligift-product-zip-*")
+	// 创建受控的临时解压目录，避免把大体积导入残留到系统 Temp。
+	extractDir, err := CreateImportTempDir()
 	if err != nil {
-		return nil, "", fmt.Errorf("parse product ZIP failed: create temp dir: %w", err)
+		return nil, "", fmt.Errorf("parse product ZIP failed: %w", err)
 	}
 
 	// 解压

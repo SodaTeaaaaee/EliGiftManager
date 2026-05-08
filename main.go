@@ -8,6 +8,7 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/middleware"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -20,6 +21,11 @@ var assets embed.FS
 func main() {
 	cfg := config.Load()
 	app := NewApp(cfg)
+
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	if err := service.CleanupStaleTempArtifacts(); err != nil {
+		logger.Warn("cleanup stale temp artifacts", "error", err)
+	}
 
 	// Initialize DB singleton early so controllers can use it.
 	dbPath, _ := app.resolveDatabasePath()
@@ -66,7 +72,7 @@ func main() {
 		},
 	})
 	if err != nil {
-		slog.New(slog.NewTextHandler(os.Stderr, nil)).Error("run wails application", "error", err)
+		logger.Error("run wails application", "error", err)
 		os.Exit(1)
 	}
 }
