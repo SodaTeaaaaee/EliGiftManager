@@ -97,6 +97,7 @@ const guiImageDir = ref('')
 const guiProductFields = ref<{ name: string; header: string }[]>([])
 const guiExportPrefix = ref('')
 const guiExportHeaders = ref<string[]>([])
+const guiBlankLeadingColumn = ref(false)
 
 function syncGuiFromJson() {
   try {
@@ -127,6 +128,7 @@ function syncGuiFromJson() {
   } else if (form.type === 'export_order') {
     guiExportPrefix.value = rules.prefix || ''
     guiExportHeaders.value = Array.isArray(rules.headers) ? rules.headers : []
+    guiBlankLeadingColumn.value = !!(rules as any).blankLeadingColumn
   }
 }
 
@@ -148,7 +150,7 @@ function buildJsonFromGui() {
     form.mappingRules = JSON.stringify(obj, null, 2)
   } else if (form.type === 'export_order') {
     form.mappingRules = JSON.stringify(
-      { prefix: guiExportPrefix.value, headers: guiExportHeaders.value },
+      { prefix: guiExportPrefix.value, headers: guiExportHeaders.value, blankLeadingColumn: guiBlankLeadingColumn.value },
       null,
       2,
     )

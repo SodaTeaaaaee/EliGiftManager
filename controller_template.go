@@ -81,7 +81,7 @@ func (c *TemplateController) ListDefaultTemplates() ([]TemplateItem, error) {
 			Platform:     "柔造",
 			Type:         model.TemplateTypeExportOrder,
 			Name:         "柔造 工厂导出",
-			MappingRules: `{"headers":["第三方订单号","收件人","联系电话","收件地址","商家编码","下单数量"],"prefix":"ROUZAO-"}`,
+			MappingRules: `{"headers":["","第三方订单号","收件人","联系电话","收件地址","商家编码","下单数量"],"prefix":"ROUZAO-","blankLeadingColumn":true}`,
 		},
 	}
 	items := make([]TemplateItem, 0, len(presets))

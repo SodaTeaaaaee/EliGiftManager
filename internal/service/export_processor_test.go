@@ -397,6 +397,138 @@ func TestExportWavePreviewUnchanged(t *testing.T) {
 	}
 }
 
+// TestExportOrderCSV_BlankLeadingColumn verifies that when blankLeadingColumn is
+// enabled (7-column layout), the first column is always empty and the order number
+// starts from the second column.
+func TestExportOrderCSV_BlankLeadingColumn(t *testing.T) {
+	t.Parallel()
+	db := newServiceTestDB(t)
+
+	wave := model.Wave{WaveNo: "BLANK-LEAD-001", Name: "blank leading col wave", Status: "draft"}
+	product := model.Product{Platform: "柔造", Factory: "factory-R", FactorySKU: "SKU-ROUZO", Name: "柔造产品", ExtraData: "{}"}
+	member := model.Member{Platform: "柔造", PlatformUID: "uid-rouzo-01", ExtraData: "{}"}
+	for _, r := range []any{&wave, &product, &member} {
+		if err := db.Create(r).Error; err != nil {
+			t.Fatalf("seed failed: %v", err)
+		}
+	}
+	addr := model.MemberAddress{MemberID: member.ID, RecipientName: "阿罗娜", Phone: "13800001111", Address: "基沃托斯"}
+	if err := db.Create(&addr).Error; err != nil {
+		t.Fatalf("seed address failed: %v", err)
+	}
+	dr := model.DispatchRecord{WaveID: wave.ID, MemberID: member.ID, ProductID: product.ID, MemberAddressID: &addr.ID, Quantity: 3, Status: model.DispatchStatusPending}
+	if err := db.Create(&dr).Error; err != nil {
+		t.Fatalf("seed dispatch record failed: %v", err)
+	}
+
+	template := model.TemplateConfig{
+		Platform:     "柔造",
+		Type:         model.TemplateTypeExportOrder,
+		Name:         "柔造工厂导出(首列留空)",
+		MappingRules: `{"headers":["","第三方订单号","收件人","联系电话","收件地址","商家编码","下单数量"],"prefix":"ROUZAO-","blankLeadingColumn":true}`,
+	}
+	if err := db.Create(&template).Error; err != nil {
+		t.Fatalf("seed template failed: %v", err)
+	}
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "blank-leading.csv")
+	if err := ExportOrderCSV(db, wave.ID, outputPath, template); err != nil {
+		t.Fatalf("ExportOrderCSV (blankLeadingColumn) failed: %v", err)
+	}
+
+	lines := readCSVRecords(t, outputPath)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 CSV lines (header + 1 record), got %d", len(lines))
+	}
+
+	// Header assertions
+	headers := lines[0]
+	if len(headers) != 7 {
+		t.Fatalf("expected 7 header columns, got %d: %v", len(headers), headers)
+	}
+	if headers[0] != "" {
+		t.Fatalf("expected first header to be empty, got %q", headers[0])
+	}
+
+	// Data row assertions
+	row := lines[1]
+	if len(row) != 7 {
+		t.Fatalf("expected 7 data columns, got %d: %v", len(row), row)
+	}
+	if row[0] != "" {
+		t.Fatalf("expected first data column to be empty, got %q", row[0])
+	}
+	if !strings.HasPrefix(row[1], "ROUZAO-") {
+		t.Fatalf("expected second column to have ROUZAO- prefix, got %q", row[1])
+	}
+	if row[5] != "SKU-ROUZO" {
+		t.Fatalf("expected SKU (col 6) to be SKU-ROUZO, got %q", row[5])
+	}
+	if row[6] != "3" {
+		t.Fatalf("expected quantity (col 7) to be 3, got %q", row[6])
+	}
+}
+
+// TestExportOrderCSV_DefaultFormat verifies that a template without
+// blankLeadingColumn still produces the standard 6-column layout.
+func TestExportOrderCSV_DefaultFormat(t *testing.T) {
+	t.Parallel()
+	db := newServiceTestDB(t)
+
+	wave := model.Wave{WaveNo: "DEFAULT-FMT-001", Name: "default format wave", Status: "draft"}
+	product := model.Product{Platform: "BILIBILI", Factory: "factory-B", FactorySKU: "BILI-SKU", Name: "B站产品", ExtraData: "{}"}
+	member := model.Member{Platform: "BILIBILI", PlatformUID: "uid-bili-default", ExtraData: "{}"}
+	for _, r := range []any{&wave, &product, &member} {
+		if err := db.Create(r).Error; err != nil {
+			t.Fatalf("seed failed: %v", err)
+		}
+	}
+	addr := model.MemberAddress{MemberID: member.ID, RecipientName: "老师", Phone: "13900001111", Address: "夏莱"}
+	if err := db.Create(&addr).Error; err != nil {
+		t.Fatalf("seed address failed: %v", err)
+	}
+	dr := model.DispatchRecord{WaveID: wave.ID, MemberID: member.ID, ProductID: product.ID, MemberAddressID: &addr.ID, Quantity: 2, Status: model.DispatchStatusPending}
+	if err := db.Create(&dr).Error; err != nil {
+		t.Fatalf("seed dispatch record failed: %v", err)
+	}
+
+	// Template without blankLeadingColumn (default 6-column layout).
+	template := model.TemplateConfig{
+		Platform:     "BILIBILI",
+		Type:         model.TemplateTypeExportOrder,
+		Name:         "B站发货单模板",
+		MappingRules: `{"headers":["订单号","收件人","电话","地址","SKU","数量"],"prefix":"BILI-"}`,
+	}
+	if err := db.Create(&template).Error; err != nil {
+		t.Fatalf("seed template failed: %v", err)
+	}
+
+	tempDir := t.TempDir()
+	outputPath := filepath.Join(tempDir, "default-fmt.csv")
+	if err := ExportOrderCSV(db, wave.ID, outputPath, template); err != nil {
+		t.Fatalf("ExportOrderCSV (default) failed: %v", err)
+	}
+
+	lines := readCSVRecords(t, outputPath)
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 CSV lines, got %d", len(lines))
+	}
+
+	headers := lines[0]
+	if len(headers) != 6 {
+		t.Fatalf("expected 6 header columns, got %d: %v", len(headers), headers)
+	}
+
+	row := lines[1]
+	if len(row) != 6 {
+		t.Fatalf("expected 6 data columns, got %d: %v", len(row), row)
+	}
+	if !strings.HasPrefix(row[0], "BILI-") {
+		t.Fatalf("expected first column to have BILI- prefix, got %q", row[0])
+	}
+}
+
 // --- helpers ---
 
 // readCSVRecords opens a CSV file and returns all records (including header).
