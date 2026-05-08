@@ -32,6 +32,8 @@ coverage.out
 .claude/
 .agents/
 .agent-team/
+AGENTS.md
+CLAUDE.md
 
 # Wails
 wailsdev.log

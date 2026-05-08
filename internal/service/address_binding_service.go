@@ -7,10 +7,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// BindDefaultAddresses binds the default address of each member to all
+// BindDefaultAddresses binds the preferred address of each member to all
 // dispatch records in the given wave that currently have no address set.
-// It only uses addresses where IsDefault=true AND IsDeleted=false.
-// Members without a default address are skipped.
+// It uses GetPreferredAddress which gives priority to the default address,
+// falling back to the latest non-deleted address.
+// Members without any usable address are skipped.
 // Returns the count of updated records and the count of skipped records.
 func BindDefaultAddresses(db *gorm.DB, waveID uint) (updated int, skipped int, err error) {
 	if db == nil {
@@ -39,12 +40,13 @@ func BindDefaultAddresses(db *gorm.DB, waveID uint) (updated int, skipped int, e
 		for _, record := range records {
 			addrID, ok := defaultAddrCache[record.MemberID]
 			if !ok {
-				// Look up the member's default address.
-				var addr model.MemberAddress
-				if err := tx.
-					Where("member_id = ? AND is_default = ? AND is_deleted = ?", record.MemberID, true, false).
-					First(&addr).Error; err != nil {
-					// No default address found – cache nil and skip.
+				// Look up the member's preferred address (default first, then latest).
+				addr, err := GetPreferredAddress(tx, record.MemberID)
+				if err != nil {
+					return fmt.Errorf("bind default addresses failed: get preferred address for member %d: %w", record.MemberID, err)
+				}
+				if addr == nil {
+					// No usable address found – cache nil and skip.
 					defaultAddrCache[record.MemberID] = nil
 					skipped++
 					continue

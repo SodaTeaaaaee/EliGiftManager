@@ -692,6 +692,7 @@ export namespace model {
 	    address: string;
 	    isDefault: boolean;
 	    isDeleted: boolean;
+	    isTestAddress: boolean;
 	    // Go type: time
 	    createdAt: any;
 	    member: Member;
@@ -709,6 +710,7 @@ export namespace model {
 	        this.address = source["address"];
 	        this.isDefault = source["isDefault"];
 	        this.isDeleted = source["isDeleted"];
+	        this.isTestAddress = source["isTestAddress"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.member = this.convertValues(source["member"], Member);
 	    }
@@ -973,6 +975,45 @@ export namespace model {
 		    }
 		    return a;
 		}
+	}
+
+}
+
+export namespace service {
+	
+	export class CreateFakeAddressesResult {
+	    totalMembers: number;
+	    created: number;
+	    skippedHasAddress: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateFakeAddressesResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalMembers = source["totalMembers"];
+	        this.created = source["created"];
+	        this.skippedHasAddress = source["skippedHasAddress"];
+	    }
+	}
+	export class DeleteFakeAddressesResult {
+	    deletedAddresses: number;
+	    clearedDispatchRecords: number;
+	    updatedWaves: number;
+	    affectedMembers: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DeleteFakeAddressesResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.deletedAddresses = source["deletedAddresses"];
+	        this.clearedDispatchRecords = source["clearedDispatchRecords"];
+	        this.updatedWaves = source["updatedWaves"];
+	        this.affectedMembers = source["affectedMembers"];
+	    }
 	}
 
 }

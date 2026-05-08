@@ -302,20 +302,10 @@ const addGiftOptions = computed(() =>
 )
 
 // ---- member popup & gift actions ----
-async function openMemberPopup(group: (typeof memberGroups.value)[0]) {
-  selectedMember.value = {
-    memberId: group.memberId,
-    nickname: group.nickname,
-    platformUid: group.platformUid,
-    platform: group.platform,
-  }
-  memberRecords.value = group.records
-  showMemberPopup.value = true
-
-  // Load member addresses
+async function loadMemberAddressesForPopup(memberId: number) {
   try {
     const allMembers = await listWaveMembers(waveId.value)
-    const member = allMembers.find((m) => m.memberId === group.memberId)
+    const member = allMembers.find((m) => m.memberId === memberId)
     if (member?.addresses) {
       memberAddresses.value = member.addresses
         .filter((a) => !(a as any).isDeleted)
@@ -329,11 +319,25 @@ async function openMemberPopup(group: (typeof memberGroups.value)[0]) {
       memberAddresses.value = []
     }
     // Find current address from dispatch records
-    const currentRecord = group.records.find((r) => r.memberAddressId)
+    const group = memberGroups.value.find((g) => g.memberId === memberId)
+    const currentRecord = group?.records.find((r) => r.memberAddressId)
     selectedAddressId.value = currentRecord?.memberAddressId ?? null
   } catch {
     memberAddresses.value = []
   }
+}
+
+async function openMemberPopup(group: (typeof memberGroups.value)[0]) {
+  selectedMember.value = {
+    memberId: group.memberId,
+    nickname: group.nickname,
+    platformUid: group.platformUid,
+    platform: group.platform,
+  }
+  memberRecords.value = group.records
+  showMemberPopup.value = true
+
+  await loadMemberAddressesForPopup(group.memberId)
 
   // Load product cover images
   try {
@@ -396,7 +400,7 @@ async function handleAddAddress() {
   if (!selectedMember.value) return
   isSavingAddress.value = true
   try {
-    await addMemberAddress(
+    const newAddr = await addMemberAddress(
       selectedMember.value.memberId,
       newAddressForm.value.recipientName,
       newAddressForm.value.phone,
@@ -405,7 +409,14 @@ async function handleAddAddress() {
     message.success('地址已添加')
     showAddAddressForm.value = false
     newAddressForm.value = { recipientName: '', phone: '', address: '' }
+    // Refresh address list then auto-bind the new address using the returned ID
+    await loadMemberAddressesForPopup(selectedMember.value.memberId)
+    if (newAddr?.id) {
+      await setDispatchAddress(waveId.value, selectedMember.value.memberId, newAddr.id)
+    }
     records.value = await listDispatchRecords(waveId.value)
+    // Refresh preview export result
+    previewExportResult.value = await previewExport(waveId.value)
     // Re-open popup to refresh addresses
     const group = memberGroups.value.find((g) => g.memberId === selectedMember.value?.memberId)
     if (group) memberRecords.value = group.records
@@ -423,6 +434,7 @@ async function handleSetAddress(addressId: number) {
     await setDispatchAddress(waveId.value, member.memberId, addressId)
     message.success('地址已更新')
     records.value = await listDispatchRecords(waveId.value)
+    previewExportResult.value = await previewExport(waveId.value)
     const group = memberGroups.value.find((g) => g.memberId === member.memberId)
     if (group) memberRecords.value = group.records
   } catch (e) {

@@ -180,5 +180,8 @@ func autoMigrateTables(db *gorm.DB) error {
 		}
 	}
 
+	// Backfill is_test_address for legacy test addresses generated with the old text-marker convention.
+	db.Exec("UPDATE member_addresses SET is_test_address = 1 WHERE is_test_address = 0 AND instr(recipient_name, '__ELIGIFT_TEST_ADDRESS__') > 0")
+
 	return nil
 }

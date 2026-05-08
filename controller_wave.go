@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -332,7 +333,53 @@ func (c *WaveController) SetDispatchAddress(waveID, memberID, addressID uint) er
 	if db == nil {
 		return fmt.Errorf("set dispatch address failed: database not available")
 	}
-	return db.Model(&model.DispatchRecord{}).Where("wave_id = ? AND member_id = ?", waveID, memberID).Update("member_address_id", addressID).Error
+	return db.Transaction(func(tx *gorm.DB) error {
+		// 1. Validate address exists, not deleted, and belongs to the member.
+		var addr model.MemberAddress
+		if err := tx.Where("id = ? AND is_deleted = ?", addressID, false).First(&addr).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("address not found or has been deleted")
+			}
+			return fmt.Errorf("set dispatch address failed: %w", err)
+		}
+		if addr.MemberID != memberID {
+			return fmt.Errorf("address does not belong to this member")
+		}
+
+		// 2. Update all dispatch records for this wave+member to use the address,
+		//    and reset status from pending_address back to pending.
+		if err := tx.Model(&model.DispatchRecord{}).
+			Where("wave_id = ? AND member_id = ?", waveID, memberID).
+			Updates(map[string]any{
+				"member_address_id": addressID,
+				"status":            model.DispatchStatusPending,
+			}).Error; err != nil {
+			return fmt.Errorf("set dispatch address failed: update records: %w", err)
+		}
+
+		// 3. Lightweight wave status normalization.
+		//    If no pending_address records remain and wave is pending_address → revert to draft.
+		var pendingCount int64
+		if err := tx.Model(&model.DispatchRecord{}).
+			Where("wave_id = ? AND status = ? AND member_address_id IS NULL", waveID, model.DispatchStatusPendingAddress).
+			Count(&pendingCount).Error; err != nil {
+			return fmt.Errorf("set dispatch address failed: count pending: %w", err)
+		}
+		if pendingCount == 0 {
+			var wave model.Wave
+			if err := tx.First(&wave, waveID).Error; err != nil {
+				return fmt.Errorf("set dispatch address failed: query wave: %w", err)
+			}
+			if wave.Status == model.DispatchStatusPendingAddress {
+				if err := tx.Model(&model.Wave{}).Where("id = ?", waveID).
+					Update("status", "draft").Error; err != nil {
+					return fmt.Errorf("set dispatch address failed: normalize wave: %w", err)
+				}
+			}
+		}
+
+		return nil
+	})
 }
 
 func (c *WaveController) UpdateDispatchQuantity(dispatchID uint, quantity int) error {

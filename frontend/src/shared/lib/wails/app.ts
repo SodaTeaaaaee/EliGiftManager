@@ -43,6 +43,8 @@ import {
 import {
   BackupDatabase as backupDatabaseBinding,
   Bootstrap as bootstrapBinding,
+  CreateFakeAddresses as createFakeAddressesBinding,
+  DeleteFakeAddresses as deleteFakeAddressesBinding,
   GetDashboard as getDashboardBinding,
   PingDB as pingDatabaseBinding,
   RestoreDatabase as restoreDatabaseBinding,
@@ -324,6 +326,27 @@ export function exportOrderCSV(waveId: number, exportTemplateId: number): Promis
     return Promise.resolve('/mock/path/eligift-factory-order.csv')
   }
   return exportOrderCSVBinding(waveId, exportTemplateId)
+}
+
+export type CreateFakeAddressesResult = {
+  totalMembers: number
+  created: number
+  skippedHasAddress: number
+}
+export function createFakeAddresses(): Promise<CreateFakeAddressesResult> {
+  assertWailsRuntime()
+  return createFakeAddressesBinding() as Promise<CreateFakeAddressesResult>
+}
+
+export type DeleteFakeAddressesResult = {
+  deletedAddresses: number
+  clearedDispatchRecords: number
+  updatedWaves: number
+  affectedMembers: number
+}
+export function deleteFakeAddresses(): Promise<DeleteFakeAddressesResult> {
+  assertWailsRuntime()
+  return deleteFakeAddressesBinding() as Promise<DeleteFakeAddressesResult>
 }
 
 export type ExportPreview = {

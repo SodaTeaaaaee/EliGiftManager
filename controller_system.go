@@ -191,3 +191,23 @@ func LoadZoom() float64 {
 	}
 	return v
 }
+
+// CreateFakeAddresses generates a fake address for every member that does not
+// currently have a valid address. Returns counts of how many were created.
+func (c *SystemController) CreateFakeAddresses() (service.CreateFakeAddressesResult, error) {
+	db := c.db()
+	if db == nil {
+		return service.CreateFakeAddressesResult{}, fmt.Errorf("database not available")
+	}
+	return service.CreateFakeAddressesForAllMembers(db)
+}
+
+// DeleteFakeAddresses removes all system-generated test addresses, clears their
+// dispatch record bindings, and resets affected wave statuses.
+func (c *SystemController) DeleteFakeAddresses() (service.DeleteFakeAddressesResult, error) {
+	db := c.db()
+	if db == nil {
+		return service.DeleteFakeAddressesResult{}, fmt.Errorf("database not available")
+	}
+	return service.DeleteFakeAddressesForAllMembers(db)
+}

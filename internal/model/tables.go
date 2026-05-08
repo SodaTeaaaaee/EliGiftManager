@@ -32,6 +32,7 @@ type MemberAddress struct {
 	Address       string    `gorm:"type:text;not null" json:"address"`
 	IsDefault     bool      `gorm:"not null;default:false;index" json:"isDefault"`
 	IsDeleted     bool      `gorm:"not null;default:false;index" json:"isDeleted"`
+	IsTestAddress bool      `gorm:"not null;default:false;index" json:"isTestAddress"`
 	CreatedAt     time.Time `json:"createdAt"`
 	Member        Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"member"`
 }

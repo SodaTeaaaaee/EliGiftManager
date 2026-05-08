@@ -10,6 +10,14 @@ export function Bootstrap() {
   return window['go']['main']['SystemController']['Bootstrap']();
 }
 
+export function CreateFakeAddresses() {
+  return window['go']['main']['SystemController']['CreateFakeAddresses']();
+}
+
+export function DeleteFakeAddresses() {
+  return window['go']['main']['SystemController']['DeleteFakeAddresses']();
+}
+
 export function GetDashboard() {
   return window['go']['main']['SystemController']['GetDashboard']();
 }

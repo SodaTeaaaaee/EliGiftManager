@@ -14,6 +14,8 @@ import {
 import {
   backupDatabase,
   bootstrapApp,
+  createFakeAddresses,
+  deleteFakeAddresses,
   getDashboard,
   isWailsRuntimeAvailable,
   pingDatabase,
@@ -35,6 +37,8 @@ function setScrollMode(v: string | number | boolean) {
 const dashboard = ref<DashboardPayload | null>(null)
 const dbStatus = ref('等待检测')
 const errorMessage = ref('')
+const isCreatingFakeAddresses = ref(false)
+const isDeletingFakeAddresses = ref(false)
 
 function handleThemeChange(value: string | number | boolean) {
   themeStore.setPreference(value as ThemePreference)
@@ -77,6 +81,38 @@ function handleRestore() {
       }
     },
   })
+}
+
+async function handleCreateFakeAddresses() {
+  try {
+    const result = await createFakeAddresses()
+    message.success(
+      `已创建 ${result.created} 条测试地址，共 ${result.totalMembers} 个会员，` +
+        `跳过 ${result.skippedHasAddress} 个已有地址会员`,
+    )
+    await loadSettings()
+  } catch (error) {
+    message.error(String(error))
+  }
+}
+
+async function handleDeleteFakeAddresses() {
+  try {
+    const result = await deleteFakeAddresses()
+    const parts: string[] = []
+    if (result.deletedAddresses > 0) parts.push(`已删除 ${result.deletedAddresses} 条测试地址`)
+    if (result.clearedDispatchRecords > 0)
+      parts.push(`已清空 ${result.clearedDispatchRecords} 条发货记录`)
+    if (result.updatedWaves > 0) parts.push(`已回退 ${result.updatedWaves} 个波次状态`)
+    if (parts.length === 0) {
+      message.info('没有找到测试地址，无需清理。')
+    } else {
+      message.success(parts.join('，') + '。')
+    }
+    await loadSettings()
+  } catch (error) {
+    message.error(String(error))
+  }
 }
 
 onMounted(loadSettings)
@@ -134,6 +170,62 @@ onMounted(loadSettings)
             <NIcon> <AlertCircleOutline /> </NIcon>恢复前会自动生成带时间戳的防灾副本。
           </span></NAlert
         >
+      </NCard>
+      <NCard title="测试地址工具" size="medium" class="xl:col-span-2">
+        <p class="app-copy mb-3">
+          为缺少有效地址的会员批量生成虚拟地址，用于测试完整发货流程。删除操作会清理所有测试地址及其关联记录。
+        </p>
+        <div class="grid gap-3 md:grid-cols-2">
+          <NButton
+            size="large"
+            type="primary"
+            :loading="isCreatingFakeAddresses"
+            @click="
+              dialog.warning({
+                title: '确认生成测试地址',
+                content:
+                  '将为当前没有有效地址的所有会员各添加一条默认测试地址（标记为 __ELIGIFT_TEST_ADDRESS__）。已有地址的会员不受影响。',
+                positiveText: '确认生成',
+                negativeText: '取消',
+                onPositiveClick: async () => {
+                  isCreatingFakeAddresses = true
+                  try {
+                    await handleCreateFakeAddresses()
+                  } finally {
+                    isCreatingFakeAddresses = false
+                  }
+                },
+              })
+            "
+          >
+            一键生成测试地址
+          </NButton>
+          <NButton
+            size="large"
+            type="error"
+            ghost
+            :loading="isDeletingFakeAddresses"
+            @click="
+              dialog.warning({
+                title: '确认删除测试地址',
+                content:
+                  '将删除所有系统生成的测试地址（标记为 __ELIGIFT_TEST_ADDRESS__），并清空引用这些地址的发货记录绑定。已导出的波次状态将回退为待补全。此操作不可撤销。',
+                positiveText: '确认删除',
+                negativeText: '取消',
+                onPositiveClick: async () => {
+                  isDeletingFakeAddresses = true
+                  try {
+                    await handleDeleteFakeAddresses()
+                  } finally {
+                    isDeletingFakeAddresses = false
+                  }
+                },
+              })
+            "
+          >
+            一键删除测试地址
+          </NButton>
+        </div>
       </NCard>
     </div>
   </section>

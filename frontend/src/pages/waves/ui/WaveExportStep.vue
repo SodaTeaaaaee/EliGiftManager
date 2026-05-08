@@ -136,7 +136,7 @@ async function handleBindAddresses() {
   try {
     const result = await bindDefaultAddresses(waveId.value)
     message.success(
-      '补全完成：' + result.updated + ' 条已绑定默认地址，' + result.skipped + ' 条无默认地址跳过',
+      '已同步 ' + result.updated + ' 条已有地址，' + result.skipped + ' 条仍缺地址跳过',
     )
     await loadWave()
     await loadRecords()
@@ -184,6 +184,16 @@ onMounted(async () => {
   await loadWave()
   await loadTemplates()
   await loadRecords()
+  // Auto-bind available addresses for records that are still missing them.
+  // This is safe: it only fills NULL address slots, never overwrites manual selections.
+  if (waveId.value) {
+    try {
+      await bindDefaultAddresses(waveId.value)
+      await loadWave()
+    } catch {
+      // Silently ignore — automatic best-effort sync
+    }
+  }
 })
 </script>
 <template>
@@ -203,7 +213,7 @@ onMounted(async () => {
         type="warning"
         :loading="isBindingAddresses"
         @click="handleBindAddresses"
-        >一键补全默认地址</NButton
+        >一键同步已有地址</NButton
       >
     </template>
     <NDataTable
