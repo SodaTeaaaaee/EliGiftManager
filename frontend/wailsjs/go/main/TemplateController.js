@@ -6,6 +6,10 @@ export function CreateTemplate(arg1, arg2, arg3, arg4) {
   return window['go']['main']['TemplateController']['CreateTemplate'](arg1, arg2, arg3, arg4);
 }
 
+export function DeleteTemplate(arg1) {
+  return window['go']['main']['TemplateController']['DeleteTemplate'](arg1);
+}
+
 export function ListDefaultTemplates() {
   return window['go']['main']['TemplateController']['ListDefaultTemplates']();
 }
@@ -16,8 +20,4 @@ export function ListTemplates() {
 
 export function UpdateTemplate(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['TemplateController']['UpdateTemplate'](arg1, arg2, arg3, arg4, arg5);
-}
-
-export function DeleteTemplate(arg1) {
-  return window['go']['main']['TemplateController']['DeleteTemplate'](arg1);
 }

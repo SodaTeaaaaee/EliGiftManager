@@ -239,7 +239,8 @@ const columns: DataTableColumns<TemplateItem> = [
             size: 'tiny',
             type: 'error',
             quaternary: true,
-            onClick: () => {
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
               dialog.warning({
                 title: '确认删除模板',
                 content: '删除后不可恢复。如需继续使用，请重新从预设添加或手动重建。',
@@ -249,6 +250,10 @@ const columns: DataTableColumns<TemplateItem> = [
                   try {
                     await deleteTemplate(row.id)
                     message.success('模板已删除')
+                    if (editingTemplate.value?.id === row.id) {
+                      editingTemplate.value = null
+                      showCreateModal.value = false
+                    }
                     await loadTemplates()
                   } catch (e) { message.error(String(e)) }
                 },
