@@ -96,62 +96,60 @@ func (c *WaveController) ImportToWave(waveID uint, csvPath string, templateID ui
 	}
 	switch template.Type {
 	case model.TemplateTypeImportProduct:
-		var templateMeta struct {
-			Format   string `json:"format"`
-			ImageDir string `json:"imageDir"`
-		}
-		json.Unmarshal([]byte(template.MappingRules), &templateMeta)
-
-		var products []model.Product
-		if templateMeta.Format == model.TemplateFormatZIP {
-			var extractDir string
-			products, extractDir, err = service.ParseProductZIP(csvPath, template)
-			if extractDir != "" {
+		products, extractDir, err := service.ParseProductFromPath(csvPath, template)
+		if extractDir != "" {
+			// Never remove the user's original directory — only clean up
+			// temp extraction dirs created for archives.
+			if info, statErr := os.Stat(csvPath); statErr != nil || !info.IsDir() {
 				defer os.RemoveAll(extractDir)
 			}
-			if err == nil {
-				err = db.Transaction(func(tx *gorm.DB) error {
-					for i := range products {
-						if products[i].ExtraData == "" {
-							products[i].ExtraData = "{}"
-						}
-						products[i].WaveID = &wave.ID
-						if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
-							return delErr
-						}
+		}
+		if err != nil {
+			return fmt.Errorf("import failed: parse products: %w", err)
+		}
+
+		// Resolve image directories from template rules.
+		var rules model.DynamicTemplateRules
+		if jsonErr := json.Unmarshal([]byte(template.MappingRules), &rules); jsonErr == nil {
+			if err = db.Transaction(func(tx *gorm.DB) error {
+				for i := range products {
+					if products[i].ExtraData == "" {
+						products[i].ExtraData = "{}"
 					}
-					if len(products) > 0 {
-						if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
-							return createErr
-						}
+					products[i].WaveID = &wave.ID
+					if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
+						return delErr
 					}
-					return nil
-				})
-				if err == nil {
-					_, err = service.ProcessCoverImages(db, extractDir, "")
 				}
+				if len(products) > 0 {
+					if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
+						return createErr
+					}
+				}
+				return nil
+			}); err == nil && extractDir != "" {
+				_, err = service.ProcessCoverImages(db, extractDir, rules.ImageDirs.Cover, rules.ImageDirs.Detail)
 			}
 		} else {
-			products, err = service.ParseProductCSV(csvPath, template)
-			if err == nil {
-				err = db.Transaction(func(tx *gorm.DB) error {
-					for i := range products {
-						products[i].Platform = template.Platform
-						if products[i].ExtraData == "" {
-							products[i].ExtraData = "{}"
-						}
-						products[i].WaveID = &wave.ID
-						if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
-							return delErr
-						}
+			// Fallback: old template JSON without imageDirs — scan entire tree.
+			if err = db.Transaction(func(tx *gorm.DB) error {
+				for i := range products {
+					if products[i].ExtraData == "" {
+						products[i].ExtraData = "{}"
 					}
-					if len(products) > 0 {
-						if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
-							return createErr
-						}
+					products[i].WaveID = &wave.ID
+					if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
+						return delErr
 					}
-					return nil
-				})
+				}
+				if len(products) > 0 {
+					if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
+						return createErr
+					}
+				}
+				return nil
+			}); err == nil && extractDir != "" {
+				_, err = service.ProcessCoverImages(db, extractDir, "", "")
 			}
 		}
 	default:

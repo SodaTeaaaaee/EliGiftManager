@@ -13,6 +13,7 @@ export interface DynamicTemplateRules {
     strategy: "catch_all" | "explicit";
     explicitMapping?: Record<string, DynamicFieldMapping>;
   };
+  imageDirs?: { cover?: string; detail?: string };
 }
 
 export interface ExportColumnMapping {
@@ -26,7 +27,8 @@ export interface ExportColumnMapping {
     | "quantity"
     | "static"
     | "member_uid"
-    | "member_nickname";
+    | "member_nickname"
+    | "empty";
   prefix?: string;
   defaultValue?: string;
 }

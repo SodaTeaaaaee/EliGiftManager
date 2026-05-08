@@ -277,7 +277,7 @@ func (a *App) PickFolder() (string, error) {
 type ArchivePreview struct {
 	ExtractDir string                  `json:"extractDir"`
 	CSVFiles   []string                `json:"csvFiles"`
-	Dirs       []service.ArchiveDirInfo `json:"dirs"`
+	Dirs       []service.ArchiveDirNode `json:"dirs"`
 }
 
 func (a *App) PreviewArchive(path string) (*ArchivePreview, error) {
@@ -287,7 +287,7 @@ func (a *App) PreviewArchive(path string) (*ArchivePreview, error) {
 	}
 
 	csvFiles := service.FindAllCSVsInDir(extractDir)
-	dirs := service.ListArchiveDirs(extractDir)
+	dirs := service.ListArchiveDirTree(extractDir)
 	return &ArchivePreview{ExtractDir: extractDir, CSVFiles: csvFiles, Dirs: dirs}, nil
 }
 

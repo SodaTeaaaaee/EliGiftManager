@@ -200,6 +200,7 @@ func FindAllCSVsInDir(dir string) []string {
 
 // ListArchiveDirs returns a summary of top-level directories and their
 // file counts within an extracted archive directory.
+// Deprecated: use ListArchiveDirTree for recursive directory enumeration.
 func ListArchiveDirs(extractDir string) []ArchiveDirInfo {
 	entries, err := os.ReadDir(extractDir)
 	if err != nil {
@@ -226,4 +227,48 @@ func ListArchiveDirs(extractDir string) []ArchiveDirInfo {
 type ArchiveDirInfo struct {
 	Name      string `json:"name"`
 	FileCount int    `json:"fileCount"`
+}
+
+// ArchiveDirNode is a recursive directory tree node for UI rendering.
+type ArchiveDirNode struct {
+	Name      string            `json:"name"`
+	FileCount int               `json:"fileCount"`
+	Children  []ArchiveDirNode  `json:"children,omitempty"`
+}
+
+// ListArchiveDirTree returns a recursive directory tree of all subdirectories
+// within an extracted archive or source directory. Each node includes its
+// direct file count (excluding subdirectory contents) and child directories.
+func ListArchiveDirTree(extractDir string) []ArchiveDirNode {
+	return walkDirTree(extractDir, extractDir)
+}
+
+func walkDirTree(root string, current string) []ArchiveDirNode {
+	entries, err := os.ReadDir(current)
+	if err != nil {
+		return nil
+	}
+	nodes := make([]ArchiveDirNode, 0)
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		subDir := filepath.Join(current, e.Name())
+		fileCount := 0
+		children := walkDirTree(root, subDir)
+		dirEntries, _ := os.ReadDir(subDir)
+		for _, de := range dirEntries {
+			if de != nil && !de.IsDir() {
+				fileCount++
+			}
+		}
+		// Relative path from extract root for display and matching.
+		relPath, _ := filepath.Rel(root, subDir)
+		nodes = append(nodes, ArchiveDirNode{
+			Name:      filepath.ToSlash(relPath),
+			FileCount: fileCount,
+			Children:  children,
+		})
+	}
+	return nodes
 }

@@ -40,7 +40,7 @@ onMounted(async () => {
       if (t) {
         templateName.value = t.name
         templatePlatform.value = t.platform
-        if (t.type === 'export_order') templateType.value = 'export_order'
+        templateType.value = t.type as typeof templateType.value
         const rules = JSON.parse(t.mappingRules)
         if (templateType.value === 'export_order') {
           Object.assign(exportConfig, rules)
@@ -134,19 +134,27 @@ const productFieldGroups: FieldGroup[] = [
       { key: 'factory_sku', label: 'SKU/编码', required: true },
     ],
   },
-  {
-    label: '补充信息（可选）',
-    fields: [
-      { key: 'factory', label: '工厂名' },
-      { key: 'cover_image', label: '封面图路径' },
-    ],
-  },
 ]
 
 const csvPattern = ref('*.csv')
-const imageDir = ref('主图')
+const coverDir = ref('主图')
+const detailDir = ref('')
 const productSampleFile = ref('')
-const archivePreview = ref<{ extractDir: string; csvFiles: string[]; dirs: { name: string; fileCount: number }[] } | null>(null)
+const archivePreview = ref<{ extractDir: string; csvFiles: string[]; dirs: { name: string; fileCount: number; children?: { name: string; fileCount: number; children?: any[] }[] }[] } | null>(null)
+
+function flattenDirs(dirs: typeof archivePreview.value extends { dirs: infer D } ? D : never, prefix = ''): { label: string; value: string }[] {
+  if (!dirs) return []
+  const result: { label: string; value: string }[] = []
+  for (const d of dirs) {
+    const indent = prefix ? '  ' + prefix.replace(/[^ ]/g, ' ') : ''
+    const label = prefix ? prefix + d.name.split('/').pop()! + '/' : d.name + '/'
+    result.push({ label: indent + label, value: d.name })
+    if (d.children?.length) {
+      result.push(...flattenDirs(d.children as any, prefix + '  '))
+    }
+  }
+  return result
+}
 const selectedArchiveCSV = ref('')
 const productFormat = computed<'csv' | 'zip'>(() => {
   if (!productSampleFile.value) return 'zip'
@@ -204,7 +212,8 @@ watch([templatePlatform, templateType], () => {
   archivePreview.value = null
   selectedArchiveCSV.value = ''
   csvPattern.value = '*.csv'
-  imageDir.value = '主图'
+  coverDir.value = '主图'
+  detailDir.value = ''
 })
 
 // Auto-generate default name: "{platform} {typeShortLabel}"
@@ -247,6 +256,7 @@ const valueTypeOptions = [
   { label: '固定值', value: 'static' },
   { label: '会员UID', value: 'member_uid' },
   { label: '会员昵称', value: 'member_nickname' },
+  { label: '空值', value: 'empty' },
 ]
 
 const exportConfig = reactive<DynamicExportRules>({
@@ -285,9 +295,19 @@ function onAdvancedChange(val: boolean) {
 function buildMappingRules(): string {
   if (templateType.value === 'export_order') {
     return JSON.stringify(exportConfig)
-  } else if (templateType.value === 'import_product' && productFormat.value === 'zip') {
-    const zipCfg = { ...templateConfig, format: 'zip', csvPattern: csvPattern.value, imageDir: imageDir.value }
-    return JSON.stringify(zipCfg)
+  } else if (templateType.value === 'import_product') {
+    const imageDirs: Record<string, string> = {}
+    if (coverDir.value) imageDirs.cover = coverDir.value
+    if (detailDir.value) imageDirs.detail = detailDir.value
+    const cfg: any = { ...templateConfig }
+    if (Object.keys(imageDirs).length) cfg.imageDirs = imageDirs
+    if (productFormat.value === 'zip') {
+      cfg.format = 'zip'
+      cfg.csvPattern = csvPattern.value
+    } else {
+      cfg.format = 'csv'
+    }
+    return JSON.stringify(cfg)
   } else {
     templateConfig.format = 'csv'
     return JSON.stringify(templateConfig)
@@ -462,31 +482,24 @@ watch(
         <span v-if="productSampleFile" class="text-xs text-gray-400">{{ productSampleFile }}</span>
       </div>
 
-      <!-- Archive/directory structure: CSV selector + dirs -->
+      <!-- Multi CSV selector -->
       <div v-if="archivePreview && archivePreview.csvFiles.length > 1" class="border rounded p-3 space-y-2">
         <p class="text-sm font-medium">选择 CSV 文件</p>
         <div v-for="csv in archivePreview.csvFiles" :key="csv"
-          class="flex items-center gap-2 py-1 px-2 rounded cursor-pointer hover:bg-gray-50"
-          :class="selectedArchiveCSV === csv ? 'bg-blue-50' : ''"
+          class="flex items-center gap-2 py-1 px-2 rounded cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
+          :class="selectedArchiveCSV === csv ? 'bg-blue-50 dark:bg-blue-900' : ''"
           @click="selectArchiveCSV(csv)">
           <span class="text-sm">{{ csv }}</span>
           <NTag v-if="selectedArchiveCSV === csv" size="tiny" type="info">已选</NTag>
         </div>
-        <div v-if="archivePreview.dirs.length" class="pt-2 border-t">
-          <p class="text-xs text-gray-500 mb-1">目录结构</p>
-          <div v-for="d in archivePreview.dirs" :key="d.name" class="text-xs text-gray-400">
-            {{ d.name }}/（{{ d.fileCount }} 个文件）
-          </div>
-        </div>
       </div>
 
-      <!-- Auto-selected single CSV notice -->
+      <!-- Single CSV notice -->
       <div v-else-if="archivePreview && archivePreview.csvFiles.length === 1 && selectedArchiveCSV" class="text-xs text-gray-400">
         已自动选择 CSV: {{ selectedArchiveCSV }}
       </div>
 
       <BasicMapper
-        v-if="csvHeaders.length"
         :template-config="templateConfig"
         :csv-headers="csvHeaders"
         :field-groups="productFieldGroups"
@@ -498,29 +511,55 @@ watch(
           <label class="text-xs text-gray-500 block mb-0.5">CSV 文件名模式</label>
           <NInput v-model:value="csvPattern" size="small" style="width: 160px" />
         </div>
-        <div>
-          <label class="text-xs text-gray-500 block mb-0.5">图片目录（可选）</label>
-          <NSelect
-            v-model:value="imageDir"
-            :options="archivePreview?.dirs.map(d => ({ label: `${d.name}/（${d.fileCount} 文件）`, value: d.name })) || []"
-            placeholder="选择目录"
-            size="small"
-            clearable
-            filterable
-            tag
-            style="width: 200px"
-          />
-        </div>
       </div>
 
-      <div v-if="archivePreview" class="border rounded p-2 text-xs space-y-1">
-        <div v-for="d in archivePreview.dirs" :key="d.name">
-          {{ d.name }}/（{{ d.fileCount }} 个文件）
+      <!-- Image directory mapping -->
+      <div class="border rounded p-3 space-y-3">
+        <p class="text-sm font-medium">图片目录映射（可选）</p>
+        <div class="flex items-start gap-4">
+          <div class="flex-1">
+            <label class="text-xs text-gray-500 block mb-0.5">主图目录</label>
+            <NSelect
+              v-if="archivePreview?.dirs?.length"
+              v-model:value="coverDir"
+              :options="flattenDirs(archivePreview.dirs)"
+              placeholder="选择目录"
+              size="small"
+              clearable
+              filterable
+            />
+            <NInput v-else v-model:value="coverDir" placeholder="如 主图" size="small" />
+          </div>
+          <div class="flex-1">
+            <label class="text-xs text-gray-500 block mb-0.5">详情图目录</label>
+            <NSelect
+              v-if="archivePreview?.dirs?.length"
+              v-model:value="detailDir"
+              :options="flattenDirs(archivePreview.dirs)"
+              placeholder="选择目录"
+              size="small"
+              clearable
+              filterable
+            />
+            <NInput v-else v-model:value="detailDir" placeholder="如 详情图" size="small" />
+          </div>
+        </div>
+        <div v-if="archivePreview?.dirs?.length" class="text-xs text-gray-400 pt-1 border-t">
+          <div v-for="d in archivePreview.dirs" :key="d.name" class="inline-block mr-3">
+            {{ d.name }}/（{{ d.fileCount }}）
+          </div>
         </div>
       </div>
     </div>
 
     <div v-if="templateType === 'export_order'" class="space-y-3">
+      <div class="flex items-center gap-3">
+        <NSwitch v-model:value="exportConfig.hasHeader" />
+        <span class="text-sm">导出 CSV 包含表头行</span>
+      </div>
+      <NAlert v-if="!exportConfig.hasHeader" type="warning">
+        关闭表头后导出的 CSV 不含列名行，下游系统可能无法识别列含义。
+      </NAlert>
       <p class="text-sm font-medium">导出列配置（顺序即 CSV 列顺序）</p>
       <div
         v-for="(col, i) in exportConfig.columns"

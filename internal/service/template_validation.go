@@ -150,7 +150,7 @@ func validateExportOrder(mappingRules string, result *TemplateValidationResult) 
 
 	validValueTypes := map[string]bool{
 		"order_no": true, "recipient": true, "phone": true, "address": true,
-		"sku": true, "quantity": true, "static": true,
+		"sku": true, "quantity": true, "static": true, "empty": true,
 		"member_uid": true, "member_nickname": true,
 	}
 

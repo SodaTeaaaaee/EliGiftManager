@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { NAlert, NButton, NSelect, NSwitch, NTag } from 'naive-ui'
+import { NAlert, NButton, NInput, NInputNumber, NSelect, NSwitch, NTag } from 'naive-ui'
 import type { DynamicTemplateRules } from './types'
 
 export interface FieldDef {
@@ -23,10 +23,25 @@ defineEmits<{ upload: [] }>()
 
 const headerLoaded = computed(() => props.csvHeaders.length > 0)
 const csvError = ref('')
+const customIndexField = ref('')
+
+const maxExistingColumnIndex = computed(() => {
+  let max = -1
+  for (const m of Object.values(props.templateConfig.mapping)) {
+    if (m.columnIndex !== undefined && m.columnIndex > max) {
+      max = m.columnIndex
+    }
+  }
+  return max
+})
+
+const customIndexFieldOptions = computed(() =>
+  Object.keys(props.templateConfig.mapping).map((k) => ({ label: k, value: k })),
+)
 
 function getOptions(currentFieldKey: string) {
   if (!props.templateConfig.hasHeader) {
-    const count = props.csvHeaders.length
+    const count = Math.max(props.csvHeaders.length, maxExistingColumnIndex.value + 5, 20)
     return Array.from({ length: count }, (_, i) => {
       const preview = props.csvHeaders[i] || ''
       return {
@@ -57,8 +72,11 @@ function selectedValue(fieldKey: string): string | undefined {
 }
 
 function setSelectedValue(fieldKey: string, v: string) {
-  const m = props.templateConfig.mapping[fieldKey]
-  if (!m) return
+  let m = props.templateConfig.mapping[fieldKey]
+  if (!m) {
+    m = { columnIndex: undefined, sourceColumn: '' }
+    props.templateConfig.mapping[fieldKey] = m
+  }
   if (props.templateConfig.hasHeader) {
     m.sourceColumn = v
     m.columnIndex = undefined
@@ -87,7 +105,7 @@ function setSelectedValue(fieldKey: string, v: string) {
       </NAlert>
     </div>
 
-    <div v-if="headerLoaded" class="flex items-center gap-2">
+    <div class="flex items-center gap-2">
       <NSwitch v-model:value="templateConfig.hasHeader" />
       <span class="text-sm">第一行是表头</span>
       <NTag v-if="!templateConfig.hasHeader" size="tiny" type="warning">
@@ -98,7 +116,7 @@ function setSelectedValue(fieldKey: string, v: string) {
       </NTag>
     </div>
 
-    <div v-if="headerLoaded">
+    <div>
       <p class="text-sm font-medium mb-2">Step 2：映射字段</p>
 
       <template v-for="(group, gi) in fieldGroups" :key="gi">
@@ -113,7 +131,16 @@ function setSelectedValue(fieldKey: string, v: string) {
                   class="text-red-500"
                 >*</span>
               </label>
+              <NInput
+                v-if="templateConfig.hasHeader && !headerLoaded"
+                :value="selectedValue(field.key)"
+                :placeholder="field.label"
+                class="flex-1"
+                clearable
+                @update:value="(v: string) => setSelectedValue(field.key, v)"
+              />
               <NSelect
+                v-else
                 :value="selectedValue(field.key)"
                 :options="getOptions(field.key)"
                 :placeholder="field.label"
@@ -126,6 +153,27 @@ function setSelectedValue(fieldKey: string, v: string) {
           </div>
         </div>
       </template>
+
+      <div v-if="!templateConfig.hasHeader" class="mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 flex items-center gap-2">
+        <span class="text-xs text-gray-500">快速指定列号：</span>
+        <NSelect
+          v-model:value="customIndexField"
+          :options="customIndexFieldOptions"
+          size="tiny"
+          style="width: 120px"
+          placeholder="字段"
+        />
+        <span class="text-xs text-gray-400">→ 列</span>
+        <NInputNumber
+          :min="0"
+          size="tiny"
+          style="width: 100px"
+          placeholder="列号"
+          @update:value="(v: number | null) => {
+            if (v != null && customIndexField) setSelectedValue(customIndexField, String(v))
+          }"
+        />
+      </div>
 
       <NAlert type="info" class="mt-3">
         <template v-if="templateConfig.hasHeader">

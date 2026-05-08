@@ -127,6 +127,8 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 				}
 			case "static":
 				val = col.DefaultValue
+			case "empty":
+				val = ""
 			default:
 				val = ""
 			}

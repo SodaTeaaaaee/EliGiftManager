@@ -119,6 +119,8 @@ type productZIPTemplateConfig struct {
 	ImageDir   string `json:"imageDir"`
 }
 
+// Deprecated: use ParseProductFromPath.
+//
 // ParseProductZIP 解压 ZIP 文件，从中提取 CSV 并解析为 Product 列表。
 //
 // 流程：
@@ -232,6 +234,8 @@ func ParseProductZIP(zipPath string, template model.TemplateConfig) ([]model.Pro
 	return products, extractDir, nil
 }
 
+// Deprecated: use ParseProductFromPath.
+//
 // ParseProductArchive extracts an archive (zip/tar/tar.gz), finds a CSV inside,
 // and parses it as products. Returns products and the extraction directory.
 func ParseProductArchive(archivePath string, template model.TemplateConfig) ([]model.Product, string, error) {
@@ -270,6 +274,8 @@ func ParseProductArchive(archivePath string, template model.TemplateConfig) ([]m
 	return products, extractDir, nil
 }
 
+// Deprecated: use ParseProductFromPath.
+//
 // ParseProductDir scans a directory for a CSV file and parses it as products.
 // Returns products and the directory path (for subsequent image processing).
 func ParseProductDir(dirPath string, template model.TemplateConfig) ([]model.Product, error) {

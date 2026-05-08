@@ -43,11 +43,27 @@ func stripSuffix(filename string) string {
 	return strings.TrimSpace(name)
 }
 
-// normalizeForMatch normalizes a string for SQLite LIKE matching by
-// converting '*' → '_' and fullwidth parentheses to halfwidth.
-func normalizeForMatch(s string) string {
-	r := strings.NewReplacer("*", "_", "（", "(", "）", ")")
-	return r.Replace(s)
+// normalizeProductNameForImageMatch converts a product name or image filename
+// (after extension/suffix removal) into a canonical form for matching. It
+// replaces all Windows-reserved filename characters with '_', converts fullwidth
+// punctuation to halfwidth, strips common separators, and lowercases the result.
+// Both the product name from the database and the image filename must be
+// normalized before comparison.
+func normalizeProductNameForImageMatch(s string) string {
+	s = strings.TrimSpace(s)
+	// Fullwidth→halfwidth first, so the resulting ASCII chars are caught by the
+	// Windows-illegal-char replacement below (e.g. 全角：→: → then : → _).
+	s = strings.NewReplacer(
+		"（", "(", "）", ")",
+		"：", ":", "？", "?",
+	).Replace(s)
+	s = strings.NewReplacer(
+		"<", "_", ">", "_", ":", "_", "\"", "_",
+		"/", "_", "\\", "_", "|", "_", "?", "_", "*", "_",
+	).Replace(s)
+	// Strip separators — consistent with normalizeDynamicKey in dynamic_parser.go.
+	s = strings.NewReplacer("_", "", "-", "", " ", "").Replace(s)
+	return strings.ToLower(s)
 }
 
 // copyAssetFile copies src to dst, creating the destination directory if it
@@ -72,36 +88,78 @@ func copyAssetFile(src, dst string) error {
 	return out.Sync()
 }
 
-// ProcessCoverImages scans zipExtractDir for image files, copies them into
-// the content-addressable data/assets/ tree, and inserts matching ProductImage
-// rows. If a product has no CoverImage yet, the first matched image becomes its
-// cover.
+// ProcessCoverImages scans the extractDir subdirectories specified by coverDir
+// and detailDir for image files, copies them into the content-addressable
+// data/assets/ tree, and creates ProductImage rows matched by product name.
 //
-// When imageDir is non-empty only that subdirectory of zipExtractDir is
-// scanned; otherwise the entire tree is walked recursively.  Set imageDir to
-// "" to cover all subdirectories such as 主图/ and 详情图/.
+// When both coverDir and detailDir are empty the entire extractDir is walked
+// (backward compatibility with single-directory archive layouts).
+//
+// Images matched from coverDir are eligible to become the product's CoverImage
+// (first match wins).  Images from detailDir are stored as ProductImage rows
+// with SourceDir set to the directory basename.
 //
 // Returns the total number of product-image associations created.
-func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error) {
-	srcDir := zipExtractDir
-	if imageDir != "" {
-		srcDir = filepath.Join(zipExtractDir, imageDir)
+func ProcessCoverImages(db *gorm.DB, extractDir, coverDir, detailDir string) (int, error) {
+	// Backward compat: if no subdirectories specified, scan the entire tree.
+	if coverDir == "" && detailDir == "" {
+		return processImageSubdir(db, extractDir, filepath.Base(extractDir), true)
 	}
 
-	// Fall back to extract root if subdirectory not found.
-	if info, err := os.Stat(srcDir); err != nil || !info.IsDir() {
-		if imageDir != "" {
-			srcDir = zipExtractDir
+	matched := 0
+
+	if coverDir != "" {
+		srcDir := filepath.Join(extractDir, coverDir)
+		if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
+			count, err := processImageSubdir(db, srcDir, filepath.Base(coverDir), true)
+			if err != nil {
+				return matched, err
+			}
+			matched += count
 		}
 	}
 
+	if detailDir != "" {
+		srcDir := filepath.Join(extractDir, detailDir)
+		if info, err := os.Stat(srcDir); err == nil && info.IsDir() {
+			count, err := processImageSubdir(db, srcDir, filepath.Base(detailDir), false)
+			if err != nil {
+				return matched, err
+			}
+			matched += count
+		}
+	}
+
+	return matched, nil
+}
+
+// processImageSubdir scans a single directory for image files, copies them to
+// the assets tree, and matches them against products by normalized name.
+// When allowCover is true the first matched image for a product may become its
+// CoverImage; otherwise only ProductImage rows are created.
+func processImageSubdir(db *gorm.DB, scanDir, sourceDir string, allowCover bool) (int, error) {
 	assetsDir, err := ResolveAssetsDir()
 	if err != nil {
 		return 0, err
 	}
 
+	// Load all products once and index by normalized name for O(1) lookup.
+	var allProducts []model.Product
+	db.Select("id, name, cover_image").Find(&allProducts)
+	normalizedIndex := make(map[string][]model.Product, len(allProducts))
+	for _, p := range allProducts {
+		norm := normalizeProductNameForImageMatch(p.Name)
+		if norm != "" {
+			normalizedIndex[norm] = append(normalizedIndex[norm], p)
+		}
+	}
+
+	if len(normalizedIndex) == 0 {
+		return 0, nil
+	}
+
 	matched := 0
-	_ = filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(scanDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
@@ -121,24 +179,16 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 			}
 		}
 
-		// Relative path uses forward slashes for cross-platform consistency
-		// and to match the Wails asset URL convention.
 		relativePath := hash[:2] + "/" + hash + ext
-
-		parentDir := filepath.Base(filepath.Dir(path))
 
 		productName := stripSuffix(filepath.Base(path))
 		if productName == "" {
 			return nil
 		}
 
-		normalized := normalizeForMatch(productName)
-
-		var matchedProducts []model.Product
-		if err := db.Where(
-			"REPLACE(REPLACE(REPLACE(name, '*', '_'), '（', '('), '）', ')') = ?",
-			normalized,
-		).Find(&matchedProducts).Error; err != nil {
+		normalized := normalizeProductNameForImageMatch(productName)
+		matchedProducts, ok := normalizedIndex[normalized]
+		if !ok {
 			return nil
 		}
 
@@ -148,13 +198,13 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 				Select("COALESCE(MAX(sort_order), -1)").Scan(&maxOrder)
 			nextOrder := maxOrder + 1
 
-			pi := model.ProductImage{ProductID: p.ID, Path: relativePath, SourceDir: parentDir}
+			pi := model.ProductImage{ProductID: p.ID, Path: relativePath, SourceDir: sourceDir}
 			db.Where("product_id = ? AND path = ?", p.ID, relativePath).
 				Attrs(model.ProductImage{SortOrder: nextOrder}).
 				FirstOrCreate(&pi)
 
 			matched++
-			if p.CoverImage == "" {
+			if allowCover && p.CoverImage == "" {
 				_ = db.Model(&p).Update("cover_image", relativePath)
 			}
 		}

@@ -107,6 +107,7 @@ type DispatchRecord struct {
 	MemberID        uint           `gorm:"not null;index" json:"memberId"`
 	ProductID       uint           `gorm:"not null;index" json:"productId"`
 	MemberAddressID *uint          `gorm:"index" json:"memberAddressId"`
+	BigOrderID      string         `gorm:"size:64;not null;default:''" json:"bigOrderId"`
 	Quantity        int            `gorm:"not null;default:1" json:"quantity"`
 	Status          string         `gorm:"size:64;not null;index" json:"status"`
 	CreatedAt       time.Time      `json:"createdAt"`

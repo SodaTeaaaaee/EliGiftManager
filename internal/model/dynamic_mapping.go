@@ -1,5 +1,7 @@
 package model
 
+import "encoding/json"
+
 // DynamicFieldMapping defines how a single column from a CSV/ZIP source maps to a
 // logical field during import.  ColumnIndex is zero-based, SourceColumn is the
 // original header text, and Required/DefaultValue control validation behaviour.
@@ -13,6 +15,27 @@ type DynamicFieldMapping struct {
 	DefaultValue string `json:"defaultValue"`
 }
 
+// UnmarshalJSON converts JSON omission of columnIndex to -1 instead of Go's int
+// zero-value (0, the first CSV column). Explicit "columnIndex": 0 is unaffected.
+func (m *DynamicFieldMapping) UnmarshalJSON(data []byte) error {
+	type Alias DynamicFieldMapping
+	aux := struct {
+		ColumnIndex *int `json:"columnIndex"`
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	if aux.ColumnIndex != nil {
+		m.ColumnIndex = *aux.ColumnIndex
+	} else {
+		m.ColumnIndex = -1
+	}
+	return nil
+}
+
 // ExtraDataConfig controls how arbitrary extra fields (not part of the core mapping)
 // are handled during import.
 //
@@ -21,6 +44,13 @@ type DynamicFieldMapping struct {
 type ExtraDataConfig struct {
 	Strategy        string                         `json:"strategy"`
 	ExplicitMapping map[string]DynamicFieldMapping `json:"explicitMapping"`
+}
+
+// ImageDirsConfig specifies subdirectory names inside an extracted archive for
+// cover and detail product images. Both are relative to the extraction root.
+type ImageDirsConfig struct {
+	Cover  string `json:"cover,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
 
 // DynamicTemplateRules is the new (v3) template-mapping schema that replaces the
@@ -33,6 +63,7 @@ type DynamicTemplateRules struct {
 	HasHeader bool                           `json:"hasHeader"`
 	Mapping   map[string]DynamicFieldMapping `json:"mapping"`
 	ExtraData ExtraDataConfig                `json:"extraData"`
+	ImageDirs ImageDirsConfig                `json:"imageDirs,omitempty"`
 }
 
 // ExportColumnMapping defines how a single column in an export CSV is generated.
