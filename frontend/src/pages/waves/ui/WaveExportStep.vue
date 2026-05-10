@@ -16,7 +16,11 @@ import { useTableMode } from '@/shared/model/settings'
 import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
-import { useTableSort, nextSortOrderAscFirst, type SortDescriptor } from '@/shared/composables/useTableSort'
+import {
+  useTableSort,
+  nextSortOrderAscFirst,
+  type SortDescriptor,
+} from '@/shared/composables/useTableSort'
 import {
   bindDefaultAddresses,
   exportOrderCSV,
@@ -55,10 +59,12 @@ const exportSortDescriptors: SortDescriptor<DispatchRecordItem>[] = [
   { key: 'address', getValue: (r) => r.address || '' },
 ]
 
-const { sortedItems: sortedRecords, sortState, toggleSort, applySorter } = useTableSort(
-  records,
-  exportSortDescriptors,
-)
+const {
+  sortedItems: sortedRecords,
+  sortState,
+  toggleSort,
+  applySorter,
+} = useTableSort(records, exportSortDescriptors)
 
 const pendingAddressCount = computed(() => wave.value?.pendingAddressRecords ?? 0)
 
@@ -128,8 +134,11 @@ const recordColumns = computed<DataTableColumns<DispatchRecordItem>>(() => [
     customNextSortOrder: nextSortOrderAscFirst,
     sortOrder: sortState.value.columnKey === 'hasAddress' ? sortState.value.order : false,
     render: (row) =>
-      h(NTag, { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
-        { default: () => (row.hasAddress ? '已绑定' : '待补全') }),
+      h(
+        NTag,
+        { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
+        { default: () => (row.hasAddress ? '已绑定' : '待补全') },
+      ),
   },
   {
     title: '收件信息',
@@ -168,19 +177,30 @@ const {
   tableRef: exportTableRef,
   paginationRef: exportFooterRef,
   rowHeightHint: 56,
-  contentSignature: () => sortedRecords.value.map(r => r.id ?? r.memberId).join(','),
+  contentSignature: () => sortedRecords.value.map((r) => r.id ?? r.memberId).join(','),
 })
 
 // Measure columns (includes render fallback for accurate row-height measurement)
 const exportMeasureColumns = computed(() => [
-  { title: '会员', key: 'memberNickname', minWidth: 120, render: (row: any) => row.memberNickname || row.platformUid },
+  {
+    title: '会员',
+    key: 'memberNickname',
+    minWidth: 120,
+    render: (row: any) => row.memberNickname || row.platformUid,
+  },
   { title: '平台', key: 'memberPlatform', width: 100 },
   { title: '礼物', key: 'productName', minWidth: 140 },
   { title: '数量', key: 'quantity', width: 80 },
   {
-    title: '地址', key: 'hasAddress', width: 110,
-    render: (row: any) => h(NTag, { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
-      { default: () => (row.hasAddress ? '已绑定' : '待补全') }),
+    title: '地址',
+    key: 'hasAddress',
+    width: 110,
+    render: (row: any) =>
+      h(
+        NTag,
+        { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
+        { default: () => (row.hasAddress ? '已绑定' : '待补全') },
+      ),
   },
   { title: '收件信息', key: 'address', minWidth: 180, render: (row: any) => row.address || '-' },
 ])
@@ -189,13 +209,16 @@ let exportMeasureRunning = false
 let exportMeasurePending = false
 
 async function runExportRemeasure() {
-  if (exportMeasureRunning) { exportMeasurePending = true; return }
+  if (exportMeasureRunning) {
+    exportMeasurePending = true
+    return
+  }
   exportMeasureRunning = true
   const requestId = exportMeasurementRequestId.value
   try {
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
-    await new Promise(r => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
     refreshLayout()
     await nextTick()
     const result = exportMeasureLayer.value?.measure()
@@ -204,13 +227,19 @@ async function runExportRemeasure() {
     applyExportMeasuredRows(result.rowHeights, result.headerHeight, requestId)
   } finally {
     exportMeasureRunning = false
-    if (exportMeasurePending) { exportMeasurePending = false; await runExportRemeasure() }
+    if (exportMeasurePending) {
+      exportMeasurePending = false
+      await runExportRemeasure()
+    }
   }
 }
 
 watch(
   [() => tableMode.value, () => exportMeasurementVersion.value],
-  async () => { if (tableMode.value !== 'paginated') return; await runExportRemeasure() },
+  async () => {
+    if (tableMode.value !== 'paginated') return
+    await runExportRemeasure()
+  },
   { flush: 'post' },
 )
 
@@ -317,7 +346,9 @@ onMounted(async () => {
   requestExportRemeasure()
 })
 
-onUnmounted(() => { teardown() })
+onUnmounted(() => {
+  teardown()
+})
 </script>
 <template>
   <div class="h-full flex flex-col">
@@ -335,7 +366,8 @@ onUnmounted(() => { teardown() })
         :loading="isBindingAddresses"
         @click="handleBindAddresses"
         class="ml-auto"
-      >一键同步已有地址</NButton>
+        >一键同步已有地址</NButton
+      >
     </div>
 
     <!-- Export controls (moved above table) -->
@@ -352,12 +384,18 @@ onUnmounted(() => { teardown() })
               size="small"
               style="width: 220px"
               placeholder="选择导出模板"
-              @update:value="(v: number) => { platformTemplateSelections[ep.platform] = v }"
+              @update:value="
+                (v: number) => {
+                  platformTemplateSelections[ep.platform] = v
+                }
+              "
             />
           </div>
         </div>
         <NButton block type="success" @click="handleExport">
-          <template #icon><NIcon><DownloadOutline /></NIcon></template>
+          <template #icon
+            ><NIcon><DownloadOutline /></NIcon
+          ></template>
           生成发货清单
         </NButton>
       </div>
@@ -365,7 +403,11 @@ onUnmounted(() => { teardown() })
 
     <!-- Table viewport -->
     <div ref="exportLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div v-if="tableMode === 'scroll'" ref="exportTableRef" class="flex-1 min-h-0 overflow-hidden">
+      <div
+        v-if="tableMode === 'scroll'"
+        ref="exportTableRef"
+        class="flex-1 min-h-0 overflow-hidden"
+      >
         <NDataTable
           :columns="recordColumns"
           :data="renderRecords"
@@ -374,7 +416,9 @@ onUnmounted(() => { teardown() })
           :pagination="false"
           :max-height="tableBodyMaxHeight"
           size="small"
-          @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
+          @update:sorter="
+            (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
+          "
         />
       </div>
       <template v-if="tableMode === 'paginated'">
@@ -386,7 +430,9 @@ onUnmounted(() => { teardown() })
             :remote="true"
             :pagination="false"
             size="small"
-            @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
+            @update:sorter="
+              (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
+            "
           />
         </div>
         <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
@@ -394,14 +440,26 @@ onUnmounted(() => { teardown() })
     </div>
 
     <!-- Footer (sibling of viewport) -->
-    <div v-if="tableMode === 'paginated'" ref="exportFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
-      <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex;">
-        <NPagination :page="currentPage" :page-count="totalPages" size="small" @update:page="handlePageChange" />
+    <div
+      v-if="tableMode === 'paginated'"
+      ref="exportFooterRef"
+      class="flex justify-center shrink-0"
+      style="padding: 8px 0 12px 0"
+    >
+      <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex">
+        <NPagination
+          :page="currentPage"
+          :page-count="totalPages"
+          size="small"
+          @update:page="handlePageChange"
+        />
       </div>
     </div>
 
     <!-- Bottom nav -->
-    <div class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700">
+    <div
+      class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700"
+    >
       <NButton @click="goPrev">上一步</NButton>
       <div></div>
     </div>

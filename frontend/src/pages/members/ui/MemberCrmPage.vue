@@ -29,7 +29,11 @@ import { useTableMode } from '@/shared/model/settings'
 import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
-import { useTableSort, nextSortOrderAscFirst, type SortDescriptor } from '@/shared/composables/useTableSort'
+import {
+  useTableSort,
+  nextSortOrderAscFirst,
+  type SortDescriptor,
+} from '@/shared/composables/useTableSort'
 import { collectAllPages } from '@/shared/lib/table/collectAllPages'
 import {
   addMemberAddress,
@@ -82,10 +86,12 @@ const filteredMembers = computed(() => {
   return allMembers.value
 })
 
-const { sortedItems: displayMembers, sortState: memberSortState, toggleSort: toggleMemberSort, applySorter } = useTableSort(
-  filteredMembers,
-  memberSortDescriptors,
-)
+const {
+  sortedItems: displayMembers,
+  sortState: memberSortState,
+  toggleSort: toggleMemberSort,
+  applySorter,
+} = useTableSort(filteredMembers, memberSortDescriptors)
 
 const columns = computed<DataTableColumns<MemberItem>>(() => [
   {
@@ -94,7 +100,8 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     minWidth: 160,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
+    sortOrder:
+      memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
     render: (row) =>
       h('div', { class: 'flex items-center gap-3' }, [
         h(
@@ -118,7 +125,10 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     width: 120,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: memberSortState.value.columnKey === 'activeAddressCount' ? memberSortState.value.order : false,
+    sortOrder:
+      memberSortState.value.columnKey === 'activeAddressCount'
+        ? memberSortState.value.order
+        : false,
     render: (row) =>
       h(
         NTag,
@@ -132,7 +142,8 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     minWidth: 100,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: memberSortState.value.columnKey === 'latestRecipient' ? memberSortState.value.order : false,
+    sortOrder:
+      memberSortState.value.columnKey === 'latestRecipient' ? memberSortState.value.order : false,
     render: (row) => row.latestRecipient || '-',
   },
   {
@@ -141,7 +152,8 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     minWidth: 100,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: memberSortState.value.columnKey === 'latestPhone' ? memberSortState.value.order : false,
+    sortOrder:
+      memberSortState.value.columnKey === 'latestPhone' ? memberSortState.value.order : false,
     render: (row) => row.latestPhone || '-',
   },
   {
@@ -150,7 +162,8 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     minWidth: 180,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: memberSortState.value.columnKey === 'latestAddress' ? memberSortState.value.order : false,
+    sortOrder:
+      memberSortState.value.columnKey === 'latestAddress' ? memberSortState.value.order : false,
     ellipsis: { tooltip: true },
     render: (row) => row.latestAddress || '-',
   },
@@ -181,42 +194,78 @@ const {
   tableRef: memberTableRef,
   paginationRef: memberFooterRef,
   rowHeightHint: 56,
-  contentSignature: () => displayMembers.value.map(m => m.id).join(','),
+  contentSignature: () => displayMembers.value.map((m) => m.id).join(','),
 })
 
 // Measure columns (mirrors real first column for accurate row-height measurement)
 const memberMeasureColumns = computed<DataTableColumns<MemberItem>>(() => [
   {
-    title: '会员', key: 'latestNickname', minWidth: 160,
-    render: (row: any) => h('div', { class: 'flex items-center gap-3' }, [
-      h(NAvatar, { size: 34, color: 'var(--accent-surface)', style: { color: 'var(--accent)', fontWeight: '700' } },
-        { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() }),
-      h('div', [
-        h('div', { class: 'font-semibold' }, row.latestNickname || row.platformUid),
-        h('div', { class: 'app-copy' }, `${row.platform} / ${row.platformUid}`),
+    title: '会员',
+    key: 'latestNickname',
+    minWidth: 160,
+    render: (row: any) =>
+      h('div', { class: 'flex items-center gap-3' }, [
+        h(
+          NAvatar,
+          {
+            size: 34,
+            color: 'var(--accent-surface)',
+            style: { color: 'var(--accent)', fontWeight: '700' },
+          },
+          { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() },
+        ),
+        h('div', [
+          h('div', { class: 'font-semibold' }, row.latestNickname || row.platformUid),
+          h('div', { class: 'app-copy' }, `${row.platform} / ${row.platformUid}`),
+        ]),
       ]),
-    ]),
   },
-  { title: '地址状态', key: 'activeAddressCount', width: 120,
-    render: (row: any) => h(NTag, { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
-      { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') }),
+  {
+    title: '地址状态',
+    key: 'activeAddressCount',
+    width: 120,
+    render: (row: any) =>
+      h(
+        NTag,
+        { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
+        { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') },
+      ),
   },
-  { title: '默认收件人', key: 'latestRecipient', minWidth: 100, render: (row: any) => row.latestRecipient || '-' },
-  { title: '手机', key: 'latestPhone', minWidth: 100, render: (row: any) => row.latestPhone || '-' },
-  { title: '地址', key: 'latestAddress', minWidth: 180, ellipsis: { tooltip: true }, render: (row: any) => row.latestAddress || '-' },
+  {
+    title: '默认收件人',
+    key: 'latestRecipient',
+    minWidth: 100,
+    render: (row: any) => row.latestRecipient || '-',
+  },
+  {
+    title: '手机',
+    key: 'latestPhone',
+    minWidth: 100,
+    render: (row: any) => row.latestPhone || '-',
+  },
+  {
+    title: '地址',
+    key: 'latestAddress',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (row: any) => row.latestAddress || '-',
+  },
 ])
 
 let memberMeasureRunning = false
 let memberMeasurePending = false
 
 async function runMemberRemeasure() {
-  if (memberMeasureRunning) { memberMeasurePending = true; return }
+  if (memberMeasureRunning) {
+    memberMeasurePending = true
+    return
+  }
   memberMeasureRunning = true
   const requestId = memberMeasurementRequestId.value
   try {
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
-    await new Promise(r => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
     refreshLayout()
     await nextTick()
     const result = memberMeasureLayer.value?.measure()
@@ -225,13 +274,19 @@ async function runMemberRemeasure() {
     applyMemberMeasuredRows(result.rowHeights, result.headerHeight, requestId)
   } finally {
     memberMeasureRunning = false
-    if (memberMeasurePending) { memberMeasurePending = false; await runMemberRemeasure() }
+    if (memberMeasurePending) {
+      memberMeasurePending = false
+      await runMemberRemeasure()
+    }
   }
 }
 
 watch(
   [() => tableMode.value, () => memberMeasurementVersion.value],
-  async () => { if (tableMode.value !== 'paginated') return; await runMemberRemeasure() },
+  async () => {
+    if (tableMode.value !== 'paginated') return
+    await runMemberRemeasure()
+  },
   { flush: 'post' },
 )
 
@@ -260,13 +315,10 @@ async function loadAllMembers() {
   errorMessage.value = ''
   try {
     const selectedMemberID = selectedMember.value?.id
-    const result = await collectAllPages<MemberItem>(
-      async (p, ps) => {
-        const payload = await listMembers(p, ps, keyword.value, platform.value)
-        return { items: payload.items, total: payload.total }
-      },
-      200,
-    )
+    const result = await collectAllPages<MemberItem>(async (p, ps) => {
+      const payload = await listMembers(p, ps, keyword.value, platform.value)
+      return { items: payload.items, total: payload.total }
+    }, 200)
     allMembers.value = result.items
     platformCatalog.value = result.platforms
     if (selectedMemberID) {
@@ -422,16 +474,33 @@ onBeforeUnmount(() => {
 
     <!-- Search bar -->
     <div class="shrink-0 px-1 flex items-center gap-2 mb-3">
-      <NInput v-model:value="keyword" placeholder="搜索会员名或UID..." clearable @keyup.enter="searchMembers" style="flex:1; max-width:300px">
-        <template #prefix><NIcon><SearchOutline /></NIcon></template>
+      <NInput
+        v-model:value="keyword"
+        placeholder="搜索会员名或UID..."
+        clearable
+        @keyup.enter="searchMembers"
+        style="flex: 1; max-width: 300px"
+      >
+        <template #prefix
+          ><NIcon><SearchOutline /></NIcon
+        ></template>
       </NInput>
-      <NSelect v-model:value="platform" :options="platformOptions" placeholder="全部平台" clearable style="width:140px" @update:value="searchMembers" />
+      <NSelect
+        v-model:value="platform"
+        :options="platformOptions"
+        placeholder="全部平台"
+        clearable
+        style="width: 140px"
+        @update:value="searchMembers"
+      />
       <div class="flex items-center gap-1 ml-2">
         <span class="text-xs text-gray-500">仅缺地址</span>
         <NSwitch v-model:value="showMissingOnly" />
       </div>
       <NButton size="small" type="primary" @click="searchMembers" class="ml-2">
-        <template #icon><NIcon><SearchOutline /></NIcon></template>
+        <template #icon
+          ><NIcon><SearchOutline /></NIcon
+        ></template>
         搜索
       </NButton>
       <NButton size="small" @click="refreshMembers" class="ml-1">刷新</NButton>
@@ -441,13 +510,22 @@ onBeforeUnmount(() => {
     <NAlert v-if="errorMessage" type="warning" :show-icon="false" class="mx-1 mb-3">
       {{ errorMessage }}
     </NAlert>
-    <NAlert v-else-if="!isLoading && displayMembers.length === 0 && allMembers.length === 0" type="info" :show-icon="false" class="mx-1 mb-3">
+    <NAlert
+      v-else-if="!isLoading && displayMembers.length === 0 && allMembers.length === 0"
+      type="info"
+      :show-icon="false"
+      class="mx-1 mb-3"
+    >
       暂无会员数据
     </NAlert>
 
     <!-- Table viewport area -->
     <div ref="memberLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div v-if="tableMode === 'scroll'" ref="memberTableRef" class="flex-1 min-h-0 overflow-hidden">
+      <div
+        v-if="tableMode === 'scroll'"
+        ref="memberTableRef"
+        class="flex-1 min-h-0 overflow-hidden"
+      >
         <NDataTable
           :columns="columns"
           :data="renderMembers"
@@ -456,9 +534,18 @@ onBeforeUnmount(() => {
           :remote="true"
           :pagination="false"
           :max-height="tableBodyMaxHeight"
-          :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => { selectedMember = row } })"
+          :row-props="
+            (row: any) => ({
+              class: 'cursor-pointer',
+              onClick: () => {
+                selectedMember = row
+              },
+            })
+          "
           size="small"
-          @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
+          @update:sorter="
+            (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
+          "
         />
       </div>
       <template v-if="tableMode === 'paginated'">
@@ -470,9 +557,18 @@ onBeforeUnmount(() => {
             :bordered="false"
             :remote="true"
             :pagination="false"
-            :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => { selectedMember = row } })"
+            :row-props="
+              (row: any) => ({
+                class: 'cursor-pointer',
+                onClick: () => {
+                  selectedMember = row
+                },
+              })
+            "
             size="small"
-            @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
+            @update:sorter="
+              (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
+            "
           />
         </div>
         <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
@@ -480,9 +576,19 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Footer -->
-    <div v-if="tableMode === 'paginated'" ref="memberFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
-      <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex;">
-        <NPagination :page="currentPage" :page-count="totalPages" size="small" @update:page="handlePageChange" />
+    <div
+      v-if="tableMode === 'paginated'"
+      ref="memberFooterRef"
+      class="flex justify-center shrink-0"
+      style="padding: 8px 0 12px 0"
+    >
+      <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex">
+        <NPagination
+          :page="currentPage"
+          :page-count="totalPages"
+          size="small"
+          @update:page="handlePageChange"
+        />
       </div>
     </div>
 
