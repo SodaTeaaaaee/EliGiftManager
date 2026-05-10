@@ -2,6 +2,7 @@
 import { DownloadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
+import { useTableMode } from '@/shared/model/settings'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NAlert,
@@ -17,6 +18,7 @@ import {
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
+import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 import {
   addMemberAddress,
   isWailsRuntimeAvailable,
@@ -148,41 +150,38 @@ function clampedText(text: string, lines = MAX_LINES) {
 // adaptive paging — memberGroupColumns table
 // ══════════════════════════════════════════════
 
-const tableParentRef = ref<HTMLElement | null>(null)
-const tableWrapperRef = ref<HTMLElement | null>(null)
-const paginationRef = ref<HTMLElement | null>(null)
-const indicatorRef = ref<HTMLElement | null>(null)
+const previewLayoutRef = ref<HTMLElement | null>(null)
+const previewTableRef = ref<HTMLElement | null>(null)
+const previewFooterRef = ref<HTMLElement | null>(null)
+const tableMode = useTableMode()
 
 const {
   currentPage,
-  totalPages,
-  visibleItems,
-  scrollMode,
-  availableH,
-  lastW,
-  indicatorFontSize,
-  indicatorLeft,
-  indicatorRight,
+  pageCount: totalPages,
+  renderItems: visibleItems,
+  tableBodyMaxHeight: availableH,
+  viewportWidth,
   handlePageChange,
-  remeasure,
-  setupIndicatorObserver,
+  refreshLayout,
   teardown,
   init,
-} = useAdaptiveTable(memberGroups, {
-  tableParentRef,
-  tableWrapperRef,
-  paginationRef,
-  indicatorRef,
+} = useAdaptiveTable(memberGroups, tableMode, {
+  layoutRef: previewLayoutRef,
+  tableRef: previewTableRef,
+  footerRef: previewFooterRef,
+  rowHeightHint: 96,
+  indicatorMinHeight: 64,
 })
 
 // ── column definitions ──
-const showExtraColumns = computed(() => lastW.value === 0 || lastW.value >= 500)
 
 const memberIndexMap = computed(() => {
   const map = new Map<number, number>()
   memberGroups.value.forEach((g, i) => map.set(g.memberId, i + 1))
   return map
 })
+
+const showExtraColumns = computed(() => viewportWidth.value === 0 || viewportWidth.value >= 500)
 
 const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
   const cols: DataTableColumns = [
@@ -486,6 +485,11 @@ function goNext() {
   router.push({ name: 'waves-step-export', params: { waveId: String(waveId.value) } })
 }
 
+watch(tableMode, async () => {
+  await nextTick()
+  refreshLayout()
+})
+
 // ── lifecycle ──
 onMounted(async () => {
   await loadTemplates()
@@ -503,18 +507,6 @@ onMounted(async () => {
     }
   }
   await init()
-})
-
-watch([() => memberGroups.value.length], async () => {
-  await nextTick()
-  await remeasure()
-})
-
-watch(scrollMode, async (v) => {
-  if (!v) {
-    await nextTick()
-    setupIndicatorObserver()
-  }
 })
 
 onUnmounted(() => {
@@ -561,8 +553,9 @@ onUnmounted(() => {
     </div>
 
     <!-- Content area (flex-1, min-h-0) -->
-    <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <div ref="tableWrapperRef" class="flex-1 min-h-0 overflow-hidden">
+    <div ref="previewLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <!-- scroll mode -->
+      <div v-if="tableMode === 'scroll'" ref="previewTableRef" class="flex-1 min-h-0 overflow-hidden">
         <NDataTable
           :columns="memberGroupColumnsComputed"
           :data="visibleItems"
@@ -576,35 +569,31 @@ onUnmounted(() => {
           "
         />
       </div>
-      <div
-        v-if="!scrollMode"
-        ref="indicatorRef"
-        class="flex-1 flex justify-center items-center select-none"
-        :style="{
-          fontSize: indicatorFontSize + 'px',
-          lineHeight: 1,
-          fontFamily: 'monospace',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          marginBottom: '12px',
-        }"
-      >
-        <span style="color: rgba(96, 165, 250, 0.1)">{{ indicatorLeft }}</span
-        ><span style="color: rgba(251, 191, 36, 0.1)">{{ indicatorRight }}</span>
-      </div>
-      <div
-        v-if="!scrollMode"
-        ref="paginationRef"
-        class="flex justify-center mt-0 mb-6 shrink-0"
-        style="transform: scale(1.5); transform-origin: top center"
-      >
-        <NPagination
-          :page="currentPage"
-          :page-count="totalPages"
-          size="small"
-          @update:page="handlePageChange"
-        />
-      </div>
+      <!-- paginated mode -->
+      <template v-if="tableMode === 'paginated'">
+        <div ref="previewTableRef" class="shrink-0">
+          <NDataTable
+            :columns="memberGroupColumnsComputed"
+            :data="visibleItems"
+            :bordered="false"
+            :pagination="false"
+            :table-layout="'auto'"
+            size="small"
+            :row-props="
+              (row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })
+            "
+          />
+        </div>
+        <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
+        <div ref="previewFooterRef" class="flex justify-center shrink-0" style="transform: scale(1.5); transform-origin: top center">
+          <NPagination
+            :page="currentPage"
+            :page-count="totalPages"
+            size="small"
+            @update:page="handlePageChange"
+          />
+        </div>
+      </template>
     </div>
 
     <!-- Footer area (shrink-0) -->

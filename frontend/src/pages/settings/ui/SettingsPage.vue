@@ -24,16 +24,12 @@ import {
   type DashboardPayload,
 } from '@/shared/lib/wails/app'
 import { themePreferenceOptions, useThemeStore, type ThemePreference } from '@/shared/model/theme'
-import { useScrollMode } from '@/shared/model/settings'
+import { useTableMode } from '@/shared/model/settings'
 
 const message = useMessage()
 const dialog = useDialog()
 const themeStore = useThemeStore()
-const scrollMode = useScrollMode()
-
-function setScrollMode(v: string | number | boolean) {
-  scrollMode.value = v === 'scroll'
-}
+const tableMode = useTableMode()
 const dashboard = ref<DashboardPayload | null>(null)
 const dbStatus = ref('等待检测')
 const errorMessage = ref('')
@@ -139,7 +135,7 @@ onMounted(loadSettings)
       </NCard>
       <NCard title="表格模式" size="medium">
         <p class="app-copy mb-3">自适应分页或传统滚动。</p>
-        <NRadioGroup :value="scrollMode ? 'scroll' : 'paginated'" @update:value="setScrollMode">
+        <NRadioGroup v-model:value="tableMode">
           <NRadioButton value="paginated">自适应分页</NRadioButton>
           <NRadioButton value="scroll">滚动模式</NRadioButton>
         </NRadioGroup>

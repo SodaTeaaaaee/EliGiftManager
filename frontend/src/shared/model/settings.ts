@@ -1,18 +1,32 @@
 import { ref, watch } from 'vue'
 
-const scrollMode = ref(true)
+export type TableMode = 'scroll' | 'paginated'
 
-export function useScrollMode() {
-  return scrollMode
+const tableMode = ref<TableMode>('scroll')
+
+export function useTableMode() {
+  return tableMode
 }
 
 // Persist across page navigations by syncing to localStorage.
-const STORAGE_KEY = 'eligift_scrollMode'
-const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null
-if (stored === 'false') scrollMode.value = false
+const NEW_KEY = 'eligift_tableMode'
+const LEGACY_KEY = 'eligift_scrollMode'
 
-watch(scrollMode, (v) => {
+function loadPersistedMode(): TableMode {
+  if (typeof localStorage === 'undefined') return 'scroll'
+  const newVal = localStorage.getItem(NEW_KEY)
+  if (newVal === 'scroll' || newVal === 'paginated') return newVal
+  // Backward compat: read legacy boolean key
+  const legacy = localStorage.getItem(LEGACY_KEY)
+  if (legacy === 'false') return 'paginated'
+  if (legacy === 'true') return 'scroll'
+  return 'scroll'
+}
+
+tableMode.value = loadPersistedMode()
+
+watch(tableMode, (v) => {
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(STORAGE_KEY, String(v))
+    localStorage.setItem(NEW_KEY, v)
   }
 })

@@ -2,6 +2,7 @@
 import { CloudUploadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
+import { useTableMode } from '@/shared/model/settings'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NButton,
@@ -13,6 +14,7 @@ import {
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
+import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 import {
   importDispatchWave,
   importToWave,
@@ -108,64 +110,58 @@ const memberIndexMap = computed(() => {
 })
 const isProductLoading = ref(false)
 
+const showSkuColumn = computed(() => productViewportWidth.value === 0 || productViewportWidth.value >= 400)
+const showMemberExtraColumns = computed(() => memberViewportWidth.value === 0 || memberViewportWidth.value >= 450)
+
+const tableMode = useTableMode()
+
 // ── product table composable ──
-const productTableParent = ref<HTMLElement | null>(null)
-const productTableWrapper = ref<HTMLElement | null>(null)
-const productPaginationRef = ref<HTMLElement | null>(null)
-const productIndicatorRef = ref<HTMLElement | null>(null)
+const productLayoutRef = ref<HTMLElement | null>(null)
+const productTableRef = ref<HTMLElement | null>(null)
+const productFooterRef = ref<HTMLElement | null>(null)
 
 const {
   currentPage: productCurrentPage,
-  totalPages: productTotalPages,
-  visibleItems: visibleProducts,
-  scrollMode,
-  availableH: productAvailableH,
-  lastW: lastProductW,
-  indicatorFontSize: productIndicatorFontSize,
-  indicatorLeft: productIndicatorLeft,
-  indicatorRight: productIndicatorRight,
+  pageCount: productPageCount,
+  renderItems: renderProducts,
+  tableBodyMaxHeight: productTableBodyMaxHeight,
+  viewportWidth: productViewportWidth,
   handlePageChange: handleProductPageChange,
-  remeasure: remeasureProducts,
-  setupIndicatorObserver: setupProductIndicatorObserver,
+  refreshLayout: refreshProductLayout,
   teardown: teardownProduct,
   init: initProduct,
-} = useAdaptiveTable(allProducts, {
-  tableParentRef: productTableParent,
-  tableWrapperRef: productTableWrapper,
-  paginationRef: productPaginationRef,
-  indicatorRef: productIndicatorRef,
+} = useAdaptiveTable(allProducts, tableMode, {
+  layoutRef: productLayoutRef,
+  tableRef: productTableRef,
+  footerRef: productFooterRef,
+  rowHeightHint: 96,
+  indicatorMinHeight: 48,
 })
 
 // ── member table composable ──
-const memberTableParent = ref<HTMLElement | null>(null)
-const memberTableWrapper = ref<HTMLElement | null>(null)
-const memberPaginationRef = ref<HTMLElement | null>(null)
-const memberIndicatorRef = ref<HTMLElement | null>(null)
+const memberLayoutRef = ref<HTMLElement | null>(null)
+const memberTableRef = ref<HTMLElement | null>(null)
+const memberFooterRef = ref<HTMLElement | null>(null)
 
 const {
   currentPage: memberCurrentPage,
-  totalPages: memberTotalPages,
-  visibleItems: visibleMembers,
-  availableH: memberAvailableH,
-  lastW: lastMemberW,
-  indicatorFontSize: memberIndicatorFontSize,
-  indicatorLeft: memberIndicatorLeft,
-  indicatorRight: memberIndicatorRight,
+  pageCount: memberPageCount,
+  renderItems: renderMembers,
+  tableBodyMaxHeight: memberTableBodyMaxHeight,
+  viewportWidth: memberViewportWidth,
   handlePageChange: handleMemberPageChange,
-  remeasure: remeasureMembers,
-  setupIndicatorObserver: setupMemberIndicatorObserver,
+  refreshLayout: refreshMemberLayout,
   teardown: teardownMember,
   init: initMember,
-} = useAdaptiveTable(waveMembers, {
-  tableParentRef: memberTableParent,
-  tableWrapperRef: memberTableWrapper,
-  paginationRef: memberPaginationRef,
-  indicatorRef: memberIndicatorRef,
+} = useAdaptiveTable(waveMembers, tableMode, {
+  layoutRef: memberLayoutRef,
+  tableRef: memberTableRef,
+  footerRef: memberFooterRef,
+  rowHeightHint: 96,
+  indicatorMinHeight: 48,
 })
 
 // ── column definitions ──
-const showSkuColumn = computed(() => lastProductW.value === 0 || lastProductW.value >= 400)
-const showMemberExtraColumns = computed(() => lastMemberW.value === 0 || lastMemberW.value >= 450)
 
 const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
   const cols: DataTableColumns<MemberItem> = [
@@ -191,13 +187,15 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
     },
   ]
   if (showMemberExtraColumns.value) {
-    cols.push({
-      title: '等级',
-      key: 'giftLevel',
-      width: 50,
-      render: (row) => clampedText(row.giftLevel || '-'),
-    })
-    cols.push({ title: '地址数', key: 'activeAddressCount', width: 60 })
+    cols.push(
+      {
+        title: '等级',
+        key: 'giftLevel',
+        width: 50,
+        render: (row) => clampedText(row.giftLevel || '-'),
+      },
+      { title: '地址数', key: 'activeAddressCount', width: 60 },
+    )
   }
   cols.push({
     title: '操作',
@@ -274,6 +272,8 @@ async function loadAllProducts() {
       name: item.name,
       factorySku: item.factorySku || '',
     }))
+    await nextTick()
+    refreshProductLayout()
   } catch (e) {
     console.error('加载任务商品失败', e)
   } finally {
@@ -303,6 +303,8 @@ async function loadWaveMembers() {
   isMembersLoading.value = true
   try {
     waveMembers.value = await listWaveMembers(waveId.value)
+    await nextTick()
+    refreshMemberLayout()
   } catch (e) {
     console.error('加载任务会员失败', e)
   } finally {
@@ -363,6 +365,12 @@ function goNext() {
   router.push({ name: 'waves-step-tags', params: { waveId: String(waveId.value) } })
 }
 
+watch(tableMode, async () => {
+  await nextTick()
+  refreshProductLayout()
+  refreshMemberLayout()
+})
+
 // ── lifecycle ──
 onMounted(async () => {
   await loadTemplates()
@@ -370,20 +378,6 @@ onMounted(async () => {
   await loadAllProducts()
   await initProduct()
   await initMember()
-})
-
-watch([() => allProducts.value.length, () => waveMembers.value.length], async () => {
-  await nextTick()
-  await remeasureProducts()
-  await remeasureMembers()
-})
-
-watch(scrollMode, async (v) => {
-  if (!v) {
-    await nextTick()
-    setupProductIndicatorObserver()
-    setupMemberIndicatorObserver()
-  }
 })
 
 onUnmounted(() => {
@@ -417,50 +411,45 @@ onUnmounted(() => {
         </div>
         <div
           v-if="allProducts.length"
-          ref="productTableParent"
+          ref="productLayoutRef"
           class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3"
         >
-          <div ref="productTableWrapper" class="flex-1 min-h-0 overflow-hidden mt-2">
+          <!-- scroll mode -->
+          <div v-if="tableMode === 'scroll'" ref="productTableRef" class="flex-1 min-h-0 overflow-hidden mt-2">
             <NDataTable
               :columns="productDataColumns"
-              :data="visibleProducts"
+              :data="renderProducts"
               :loading="isProductLoading"
-              :max-height="productAvailableH"
+              :max-height="productTableBodyMaxHeight"
               :table-layout="'auto'"
               :bordered="false"
               :pagination="false"
               size="small"
             />
           </div>
-          <div
-            v-if="!scrollMode"
-            ref="productIndicatorRef"
-            class="flex-1 flex justify-center items-center select-none"
-            :style="{
-              fontSize: productIndicatorFontSize + 'px',
-              lineHeight: 1,
-              fontFamily: 'monospace',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              marginBottom: '12px',
-            }"
-          >
-            <span style="color: rgba(96, 165, 250, 0.1)">{{ productIndicatorLeft }}</span
-            ><span style="color: rgba(251, 191, 36, 0.1)">{{ productIndicatorRight }}</span>
-          </div>
-          <div
-            v-if="!scrollMode"
-            ref="productPaginationRef"
-            class="flex justify-center mt-0 mb-3 shrink-0"
-            style="transform: scale(1.3); transform-origin: top center"
-          >
-            <NPagination
-              :page="productCurrentPage"
-              :page-count="productTotalPages"
-              size="small"
-              @update:page="handleProductPageChange"
-            />
-          </div>
+          <!-- paginated mode -->
+          <template v-if="tableMode === 'paginated'">
+            <div ref="productTableRef" class="shrink-0 mt-2">
+              <NDataTable
+                :columns="productDataColumns"
+                :data="renderProducts"
+                :loading="isProductLoading"
+                :table-layout="'auto'"
+                :bordered="false"
+                :pagination="false"
+                size="small"
+              />
+            </div>
+            <AdaptivePaginationIndicator :page="productCurrentPage" :page-count="productPageCount" />
+            <div ref="productFooterRef" class="flex justify-center shrink-0" style="transform: scale(1.3); transform-origin: top center">
+              <NPagination
+                :page="productCurrentPage"
+                :page-count="productPageCount"
+                size="small"
+                @update:page="handleProductPageChange"
+              />
+            </div>
+          </template>
         </div>
         <div v-else class="flex-1" />
       </div>
@@ -481,50 +470,45 @@ onUnmounted(() => {
         </div>
         <div
           v-if="waveMembers.length"
-          ref="memberTableParent"
+          ref="memberLayoutRef"
           class="flex-1 min-h-0 flex flex-col overflow-hidden px-3 pb-3"
         >
-          <div ref="memberTableWrapper" class="flex-1 min-h-0 overflow-hidden mt-2">
+          <!-- scroll mode -->
+          <div v-if="tableMode === 'scroll'" ref="memberTableRef" class="flex-1 min-h-0 overflow-hidden mt-2">
             <NDataTable
               :columns="memberColumns"
-              :data="visibleMembers"
+              :data="renderMembers"
               :loading="isMembersLoading"
-              :max-height="memberAvailableH"
+              :max-height="memberTableBodyMaxHeight"
               :table-layout="'auto'"
               :bordered="false"
               :pagination="false"
               size="small"
             />
           </div>
-          <div
-            v-if="!scrollMode"
-            ref="memberIndicatorRef"
-            class="flex-1 flex justify-center items-center select-none"
-            :style="{
-              fontSize: memberIndicatorFontSize + 'px',
-              lineHeight: 1,
-              fontFamily: 'monospace',
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              marginBottom: '12px',
-            }"
-          >
-            <span style="color: rgba(96, 165, 250, 0.1)">{{ memberIndicatorLeft }}</span
-            ><span style="color: rgba(251, 191, 36, 0.1)">{{ memberIndicatorRight }}</span>
-          </div>
-          <div
-            v-if="!scrollMode"
-            ref="memberPaginationRef"
-            class="flex justify-center mt-0 mb-3 shrink-0"
-            style="transform: scale(1.3); transform-origin: top center"
-          >
-            <NPagination
-              :page="memberCurrentPage"
-              :page-count="memberTotalPages"
-              size="small"
-              @update:page="handleMemberPageChange"
-            />
-          </div>
+          <!-- paginated mode -->
+          <template v-if="tableMode === 'paginated'">
+            <div ref="memberTableRef" class="shrink-0 mt-2">
+              <NDataTable
+                :columns="memberColumns"
+                :data="renderMembers"
+                :loading="isMembersLoading"
+                :table-layout="'auto'"
+                :bordered="false"
+                :pagination="false"
+                size="small"
+              />
+            </div>
+            <AdaptivePaginationIndicator :page="memberCurrentPage" :page-count="memberPageCount" />
+            <div ref="memberFooterRef" class="flex justify-center shrink-0" style="transform: scale(1.3); transform-origin: top center">
+              <NPagination
+                :page="memberCurrentPage"
+                :page-count="memberPageCount"
+                size="small"
+                @update:page="handleMemberPageChange"
+              />
+            </div>
+          </template>
         </div>
         <div v-else class="flex-1" />
       </div>

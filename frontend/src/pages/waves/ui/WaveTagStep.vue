@@ -33,6 +33,8 @@ import {
 } from '@/shared/lib/wails/app'
 import { useContextMenu } from '@/shared/composables/useContextMenu'
 import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
+import { useTableMode } from '@/shared/model/settings'
+import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 
 const message = useMessage()
 const route = useRoute()
@@ -294,36 +296,42 @@ function renderTagChip(row: any, tag: TagInfo) {
 
 const lastClickedIndex = ref(-1)
 
-const tableParentRef = ref<HTMLElement | null>(null)
-const tableWrapperRef = ref<HTMLElement | null>(null)
-const paginationRef = ref<HTMLElement | null>(null)
-const indicatorRef = ref<HTMLElement | null>(null)
+const tagLayoutRef = ref<HTMLElement | null>(null)
+const tagTableRef = ref<HTMLElement | null>(null)
+const tagFooterRef = ref<HTMLElement | null>(null)
+const tableMode = useTableMode()
 
 const {
   currentPage,
-  totalPages,
-  visibleItems,
-  scrollMode,
-  availableH,
-  indicatorFontSize,
-  indicatorLeft,
-  indicatorRight,
+  pageCount: totalPages,
+  renderItems: visibleItems,
+  tableBodyMaxHeight: availableH,
   handlePageChange: rawHandlePageChange,
-  remeasure,
-  setupIndicatorObserver,
+  refreshLayout,
+  pageGeometryVersion,
   teardown,
   init,
-} = useAdaptiveTable(allTagProducts, {
-  tableParentRef,
-  tableWrapperRef,
-  paginationRef,
-  indicatorRef,
+} = useAdaptiveTable(allTagProducts, tableMode, {
+  layoutRef: tagLayoutRef,
+  tableRef: tagTableRef,
+  footerRef: tagFooterRef,
+  rowHeightHint: 120,
+  indicatorMinHeight: 64,
 })
 
 function handlePageChange(p: number) {
   rawHandlePageChange(p)
   lastClickedIndex.value = -1
 }
+
+watch(pageGeometryVersion, () => {
+  lastClickedIndex.value = -1
+})
+
+watch(tableMode, async () => {
+  await nextTick()
+  refreshLayout()
+})
 
 // ── row props: multi-select with Ctrl/Shift, highlight selected ──
 
@@ -544,6 +552,9 @@ async function loadTagProducts() {
       tags: item.tags as any as TagInfo[],
       coverImage: (item as any).coverImage || '',
     }))
+    lastClickedIndex.value = -1
+    await nextTick()
+    refreshLayout()
   } catch (e) {
     console.error('加载商品标签失败', e)
   } finally {
@@ -817,18 +828,6 @@ onMounted(async () => {
   await init()
 })
 
-watch([() => allTagProducts.value.length], async () => {
-  await nextTick()
-  await remeasure()
-})
-
-watch(scrollMode, async (v) => {
-  if (!v) {
-    await nextTick()
-    setupIndicatorObserver()
-  }
-})
-
 onUnmounted(() => {
   teardown()
   if (unregisterCtxMenu) unregisterCtxMenu()
@@ -1075,8 +1074,9 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div ref="tableParentRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1 mt-2">
-      <div ref="tableWrapperRef" class="flex-1 min-h-0 overflow-hidden">
+    <div ref="tagLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1 mt-2">
+      <!-- scroll mode -->
+      <div v-if="tableMode === 'scroll'" ref="tagTableRef" class="flex-1 min-h-0 overflow-hidden">
         <NDataTable
           :columns="tagColumns"
           :data="visibleItems"
@@ -1091,35 +1091,32 @@ onUnmounted(() => {
           :row-props="rowProps"
         />
       </div>
-      <div
-        v-if="!scrollMode"
-        ref="indicatorRef"
-        class="flex-1 flex justify-center items-center select-none"
-        :style="{
-          fontSize: indicatorFontSize + 'px',
-          lineHeight: 1,
-          fontFamily: 'monospace',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          marginBottom: '12px',
-        }"
-      >
-        <span style="color: rgba(96, 165, 250, 0.1)">{{ indicatorLeft }}</span
-        ><span style="color: rgba(251, 191, 36, 0.1)">{{ indicatorRight }}</span>
-      </div>
-      <div
-        v-if="!scrollMode"
-        ref="paginationRef"
-        class="flex justify-center mt-0 mb-6 shrink-0"
-        style="transform: scale(1.5); transform-origin: top center"
-      >
-        <NPagination
-          :page="currentPage"
-          :page-count="totalPages"
-          size="small"
-          @update:page="handlePageChange"
-        />
-      </div>
+      <!-- paginated mode -->
+      <template v-if="tableMode === 'paginated'">
+        <div ref="tagTableRef" class="shrink-0">
+          <NDataTable
+            :columns="tagColumns"
+            :data="visibleItems"
+            :loading="isTagLoading"
+            :bordered="false"
+            :table-layout="'auto'"
+            :row-key="(row: any) => row.id"
+            v-model:checked-row-keys="checkedProductIds"
+            :pagination="false"
+            size="medium"
+            :row-props="rowProps"
+          />
+        </div>
+        <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
+        <div ref="tagFooterRef" class="flex justify-center shrink-0" style="transform: scale(1.5); transform-origin: top center">
+          <NPagination
+            :page="currentPage"
+            :page-count="totalPages"
+            size="small"
+            @update:page="handlePageChange"
+          />
+        </div>
+      </template>
     </div>
 
     <div
