@@ -19,6 +19,7 @@ import {
   type DataTableColumns,
 } from 'naive-ui'
 import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
+import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
 import {
   addMemberAddress,
   isWailsRuntimeAvailable,
@@ -153,6 +154,7 @@ function clampedText(text: string, lines = MAX_LINES) {
 const previewLayoutRef = ref<HTMLElement | null>(null)
 const previewTableRef = ref<HTMLElement | null>(null)
 const previewFooterRef = ref<HTMLElement | null>(null)
+const previewMeasureLayer = ref<InstanceType<typeof AdaptiveTableMeasureLayer> | null>(null)
 const tableMode = useTableMode()
 
 const {
@@ -165,12 +167,15 @@ const {
   refreshLayout,
   teardown,
   init,
+  applyMeasuredRows,
+  schedulePostPaintRefresh,
+  measurementInvalidationVersion: previewMeasurementVersion,
+  requestRemeasure: requestPreviewRemeasure,
 } = useAdaptiveTable(memberGroups, tableMode, {
   layoutRef: previewLayoutRef,
   tableRef: previewTableRef,
-  footerRef: previewFooterRef,
-  rowHeightHint: 96,
-  indicatorMinHeight: 64,
+  paginationRef: previewFooterRef,
+  rowHeightHint: (w: number) => w < 550 ? 78 : 68,
 })
 
 // ── column definitions ──
@@ -244,6 +249,54 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
   )
   return cols
 })
+
+// ── measurement columns & function ──
+
+const previewMeasureColumns = computed(() => {
+  const cols: any[] = [
+    { title: '#', key: '__index', width: 50 },
+    { title: '会员', key: 'nickname', width: 140, render: (row: any) => clampedText(row.nickname) },
+    { title: '平台', key: 'platform', width: 100 },
+  ]
+  if (showExtraColumns.value) {
+    cols.push({ title: 'UID', key: 'platformUid', width: 140, render: (row: any) => clampedText(row.platformUid) })
+  }
+  cols.push(
+    { title: '礼物种类', key: 'records', width: 80, render: (row: any) => String(row.records.length) },
+    { title: '礼物数量', key: 'totalQty', width: 80, render: (row: any) => String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)) },
+    { title: '地址', key: 'addressStatus', width: 80, render: (row: any) => h(NTag, { type: row.addressStatus === '已绑定' ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.addressStatus }) },
+  )
+  return cols
+})
+
+let previewMeasureRunning = false
+let previewMeasurePending = false
+
+async function runPreviewRemeasure() {
+  if (previewMeasureRunning) {
+    previewMeasurePending = true
+    return
+  }
+  previewMeasureRunning = true
+  try {
+    await nextTick()
+    await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => requestAnimationFrame(r))
+    refreshLayout()
+    await nextTick()
+    const result = previewMeasureLayer.value?.measure()
+    if (!result) return
+    if (result.rowHeights.length !== memberGroups.value.length) return
+    previewMeasureLayer.value?.setWidth(viewportWidth.value)
+    applyMeasuredRows(result.rowHeights, result.headerHeight)
+  } finally {
+    previewMeasureRunning = false
+    if (previewMeasurePending) {
+      previewMeasurePending = false
+      await runPreviewRemeasure()
+    }
+  }
+}
 
 // ── giftColumns: modal 内表格，完全不动 ──
 const giftColumns: DataTableColumns = [
@@ -356,6 +409,8 @@ async function handleUpdateQuantity(memberId: number, productId: number, qty: nu
   try {
     await syncUserTagForTargetQuantity(waveId.value, memberId, productId, qty)
     records.value = await listDispatchRecords(waveId.value)
+    await nextTick()
+    requestPreviewRemeasure()
     const group = memberGroups.value.find((g) => g.memberId === selectedMember.value?.memberId)
     if (group) memberRecords.value = group.records
   } catch (e) {
@@ -367,6 +422,8 @@ async function handleRemoveGift(memberId: number, productId: number) {
   try {
     await syncUserTagForTargetQuantity(waveId.value, memberId, productId, 0)
     records.value = await listDispatchRecords(waveId.value)
+    await nextTick()
+    requestPreviewRemeasure()
     const group = memberGroups.value.find((g) => g.memberId === selectedMember.value?.memberId)
     if (group) memberRecords.value = group.records
     else showMemberPopup.value = false
@@ -388,6 +445,8 @@ async function handleAddGift() {
     addGiftProductId.value = null
     addGiftQuantity.value = 1
     records.value = await listDispatchRecords(waveId.value)
+    await nextTick()
+    requestPreviewRemeasure()
     const group = memberGroups.value.find((g) => g.memberId === selectedMember.value!.memberId)
     if (group) memberRecords.value = group.records
   } catch (e) {
@@ -414,6 +473,8 @@ async function handleAddAddress() {
       await setDispatchAddress(waveId.value, selectedMember.value.memberId, newAddr.id)
     }
     records.value = await listDispatchRecords(waveId.value)
+    await nextTick()
+    requestPreviewRemeasure()
     // Refresh preview export result
     previewExportResult.value = await previewExport(waveId.value)
     // Re-open popup to refresh addresses
@@ -433,6 +494,8 @@ async function handleSetAddress(addressId: number) {
     await setDispatchAddress(waveId.value, member.memberId, addressId)
     message.success('地址已更新')
     records.value = await listDispatchRecords(waveId.value)
+    await nextTick()
+    requestPreviewRemeasure()
     previewExportResult.value = await previewExport(waveId.value)
     const group = memberGroups.value.find((g) => g.memberId === member.memberId)
     if (group) memberRecords.value = group.records
@@ -485,10 +548,18 @@ function goNext() {
   router.push({ name: 'waves-step-export', params: { waveId: String(waveId.value) } })
 }
 
-watch(tableMode, async () => {
-  await nextTick()
-  refreshLayout()
+watch(tableMode, () => {
+  schedulePostPaintRefresh()
 })
+
+watch(
+  [() => tableMode.value, () => previewMeasurementVersion.value],
+  async () => {
+    if (tableMode.value !== 'paginated') return
+    await runPreviewRemeasure()
+  },
+  { flush: 'post' },
+)
 
 // ── lifecycle ──
 onMounted(async () => {
@@ -507,6 +578,8 @@ onMounted(async () => {
     }
   }
   await init()
+  await nextTick()
+  requestPreviewRemeasure()
 })
 
 onUnmounted(() => {
@@ -553,30 +626,17 @@ onUnmounted(() => {
     </div>
 
     <!-- Content area (flex-1, min-h-0) -->
-    <div ref="previewLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
-      <!-- scroll mode -->
-      <div v-if="tableMode === 'scroll'" ref="previewTableRef" class="flex-1 min-h-0 overflow-hidden">
-        <NDataTable
-          :columns="memberGroupColumnsComputed"
-          :data="visibleItems"
-          :bordered="false"
-          :pagination="false"
-          :max-height="availableH"
-          :table-layout="'auto'"
-          size="small"
-          :row-props="
-            (row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })
-          "
-        />
-      </div>
-      <!-- paginated mode -->
-      <template v-if="tableMode === 'paginated'">
-        <div ref="previewTableRef" class="shrink-0">
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <!-- TABLE VIEWPORT -->
+      <div ref="previewLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <!-- scroll mode -->
+        <div v-if="tableMode === 'scroll'" ref="previewTableRef" class="flex-1 min-h-0 overflow-hidden">
           <NDataTable
             :columns="memberGroupColumnsComputed"
             :data="visibleItems"
             :bordered="false"
             :pagination="false"
+            :max-height="availableH"
             :table-layout="'auto'"
             size="small"
             :row-props="
@@ -584,8 +644,27 @@ onUnmounted(() => {
             "
           />
         </div>
-        <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
-        <div ref="previewFooterRef" class="flex justify-center shrink-0" style="transform: scale(1.5); transform-origin: top center">
+        <!-- paginated mode -->
+        <template v-if="tableMode === 'paginated'">
+          <div ref="previewTableRef" class="shrink-0">
+            <NDataTable
+              :columns="memberGroupColumnsComputed"
+              :data="visibleItems"
+              :bordered="false"
+              :pagination="false"
+              :table-layout="'auto'"
+              size="small"
+              :row-props="
+                (row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })
+              "
+            />
+          </div>
+          <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
+        </template>
+      </div>
+      <!-- FOOTER (sibling, outside viewport) -->
+      <div v-if="tableMode === 'paginated'" ref="previewFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
+        <div style="transform: scale(1.5); transform-origin: top center; display: inline-flex;">
           <NPagination
             :page="currentPage"
             :page-count="totalPages"
@@ -593,7 +672,7 @@ onUnmounted(() => {
             @update:page="handlePageChange"
           />
         </div>
-      </template>
+      </div>
     </div>
 
     <!-- Footer area (shrink-0) -->
@@ -688,6 +767,16 @@ onUnmounted(() => {
         <NButton type="primary" block @click="handleAddGift">确认添加</NButton>
       </div>
     </NModal>
+
+    <!-- Measurement layer (off-screen, paginated mode only) -->
+    <AdaptiveTableMeasureLayer
+      v-if="tableMode === 'paginated' && memberGroups.length"
+      ref="previewMeasureLayer"
+      :data="memberGroups"
+      :columns="previewMeasureColumns"
+      :width="viewportWidth"
+      size="small"
+    />
   </div>
 </template>
 

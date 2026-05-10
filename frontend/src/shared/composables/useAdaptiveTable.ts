@@ -1,15 +1,15 @@
 import { computed, nextTick, ref, watch, type Ref } from 'vue'
 import type { TableMode } from '@/shared/model/settings'
+import { packMeasuredRows, type PageRange } from '@/shared/lib/table/packMeasuredRows'
 
 export interface StableTableOptions {
   layoutRef: Ref<HTMLElement | null>
   tableRef: Ref<HTMLElement | null>
-  footerRef?: Ref<HTMLElement | null>
-  rowHeightHint: number
+  paginationRef?: Ref<HTMLElement | null>
+  rowHeightHint: number | ((viewportWidth: number) => number)
   minPageSize?: number
   headerHeightHint?: number
-  footerHeightHint?: number       // fallback when footerRef is null/not provided
-  indicatorMinHeight?: number     // minimum height to reserve for the indicator area
+  footerHeightHint?: number       // fallback when paginationRef is null/not provided
 }
 
 export function useAdaptiveTable<T>(
@@ -23,14 +23,38 @@ export function useAdaptiveTable<T>(
   const measuredHeaderH = ref(options.headerHeightHint ?? 38)
   const currentPage = ref(1)
   const pageGeometryVersion = ref(0)
+  const measurementInvalidationVersion = ref(0)
 
   const footerHeightHintVal = options.footerHeightHint ?? 32
-  const indicatorMinH = options.indicatorMinHeight ?? 0
+
+  const resolvedRowHeightHint = computed(() => {
+    const h = options.rowHeightHint
+    return typeof h === 'function' ? h(viewportWidth.value) : h
+  })
+
+  const measuredRowHeights = ref<number[]>([])
+
+  const pageRanges = computed<PageRange[]>(() => {
+    if (mode.value === 'scroll') return [{ start: 0, end: items.value.length - 1 }]
+    const h = measuredRowHeights.value
+    if (h.length === 0) {
+      // Fallback: use rowHeightHint to estimate until real measurements arrive
+      if (paginatedContentHeight.value <= 0) return [{ start: 0, end: items.value.length - 1 }]
+      const estPageSize = Math.max(minPageSize, Math.floor(paginatedContentHeight.value / resolvedRowHeightHint.value))
+      const ranges: PageRange[] = []
+      for (let i = 0; i < items.value.length; i += estPageSize) {
+        ranges.push({ start: i, end: Math.min(i + estPageSize - 1, items.value.length - 1) })
+      }
+      return ranges
+    }
+    return packMeasuredRows(h, paginatedContentHeight.value, 4)
+  })
+
 
   function measureFooterHeight(): number {
-    if (!options.footerRef?.value) return footerHeightHintVal
+    if (!options.paginationRef?.value) return footerHeightHintVal
     // Use getBoundingClientRect because NPagination uses transform: scale()
-    return options.footerRef.value.getBoundingClientRect().height || footerHeightHintVal
+    return options.paginationRef.value.getBoundingClientRect().height || footerHeightHintVal
   }
 
   const measuredFooterH = ref(footerHeightHintVal)
@@ -46,25 +70,25 @@ export function useAdaptiveTable<T>(
   })
 
   // Effective body height for page size in paginated mode
-  const paginatedBodyHeight = computed(() => {
-    return Math.max(0, viewportHeight.value - measuredHeaderH.value - measuredFooterH.value - indicatorMinH)
+  const paginatedContentHeight = computed(() => {
+    return Math.max(0, viewportHeight.value - measuredHeaderH.value)
   })
 
   const pageSize = computed(() => {
-    if (mode.value === 'scroll') return items.value.length
-    if (paginatedBodyHeight.value <= 0) return minPageSize
-    return Math.max(minPageSize, Math.floor(paginatedBodyHeight.value / options.rowHeightHint))
+    const range = pageRanges.value[currentPage.value - 1]
+    if (!range) return 0
+    return range.end - range.start + 1
   })
 
   const pageCount = computed(() => {
-    if (mode.value === 'scroll') return 1
-    return Math.max(1, Math.ceil(items.value.length / pageSize.value))
+    return pageRanges.value.length || 1
   })
 
   const renderItems = computed(() => {
     if (mode.value === 'scroll') return items.value
-    const start = (currentPage.value - 1) * pageSize.value
-    return items.value.slice(start, start + pageSize.value)
+    const range = pageRanges.value[currentPage.value - 1]
+    if (!range) return items.value
+    return items.value.slice(range.start, range.end + 1)
   })
 
   const tableBodyMaxHeight = computed<number | undefined>(() => {
@@ -72,14 +96,27 @@ export function useAdaptiveTable<T>(
     return bodyHeight.value
   })
 
-  function clampCurrentPage() {
-    if (currentPage.value > pageCount.value) {
-      currentPage.value = Math.max(1, pageCount.value)
+  function applyMeasuredRows(rowHeights: number[], headerHeight: number) {
+    measuredRowHeights.value = rowHeights
+    if (headerHeight > 0) {
+      measuredHeaderH.value = headerHeight
     }
+    clampCurrentPage()
   }
 
-  function handlePageChange(p: number) {
-    currentPage.value = p
+  function schedulePostPaintRefresh() {
+    nextTick().then(() => {
+      requestAnimationFrame(() => {
+        refreshLayout()
+      })
+    })
+  }
+
+  async function init() {
+    await nextTick()
+    requestAnimationFrame(() => {
+      refreshLayout()
+    })
   }
 
   function ensureObserver() {
@@ -118,6 +155,7 @@ export function useAdaptiveTable<T>(
           viewportWidth.value = w
           // Width change may change column set → header may resize
           measuredHeaderH.value = measureHeaderHeight()
+          measuredFooterH.value = measureFooterHeight()
           geomChanged = true
         }
         if (h > 0 && h !== viewportHeight.value) {
@@ -128,6 +166,7 @@ export function useAdaptiveTable<T>(
         if (geomChanged) {
           clampCurrentPage()
           pageGeometryVersion.value++
+          measurementInvalidationVersion.value++
         }
       }
     })
@@ -140,9 +179,14 @@ export function useAdaptiveTable<T>(
     resizeObserver?.disconnect()
   }
 
-  async function init() {
-    await nextTick()
-    refreshLayout()
+  function clampCurrentPage() {
+    if (currentPage.value > pageCount.value) {
+      currentPage.value = Math.max(1, pageCount.value)
+    }
+  }
+
+  function handlePageChange(p: number) {
+    currentPage.value = p
   }
 
   // When items length changes, clamp the page
@@ -155,8 +199,13 @@ export function useAdaptiveTable<T>(
 
   watch(mode, () => {
     pageGeometryVersion.value++
+    measurementInvalidationVersion.value++
     clampCurrentPage()
   })
+
+  function requestRemeasure() {
+    measurementInvalidationVersion.value++
+  }
 
   return {
     renderItems,
@@ -169,9 +218,14 @@ export function useAdaptiveTable<T>(
     refreshLayout,
     clampCurrentPage,
     pageGeometryVersion,
+    measurementInvalidationVersion,
+    requestRemeasure,
     measuredHeaderH,
-    measuredFooterH,
     teardown,
     init,
+    pageRanges,
+    applyMeasuredRows,
+    schedulePostPaintRefresh,
+    measuredRowHeights,
   }
 }

@@ -35,6 +35,7 @@ import { useContextMenu } from '@/shared/composables/useContextMenu'
 import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 import { useTableMode } from '@/shared/model/settings'
 import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
+import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
 
 const message = useMessage()
 const route = useRoute()
@@ -299,6 +300,7 @@ const lastClickedIndex = ref(-1)
 const tagLayoutRef = ref<HTMLElement | null>(null)
 const tagTableRef = ref<HTMLElement | null>(null)
 const tagFooterRef = ref<HTMLElement | null>(null)
+const tagMeasureLayer = ref<InstanceType<typeof AdaptiveTableMeasureLayer> | null>(null)
 const tableMode = useTableMode()
 
 const {
@@ -306,17 +308,21 @@ const {
   pageCount: totalPages,
   renderItems: visibleItems,
   tableBodyMaxHeight: availableH,
+  viewportWidth,
   handlePageChange: rawHandlePageChange,
   refreshLayout,
   pageGeometryVersion,
   teardown,
   init,
+  applyMeasuredRows,
+  schedulePostPaintRefresh,
+  measurementInvalidationVersion: tagMeasurementVersion,
+  requestRemeasure: requestTagRemeasure,
 } = useAdaptiveTable(allTagProducts, tableMode, {
   layoutRef: tagLayoutRef,
   tableRef: tagTableRef,
-  footerRef: tagFooterRef,
-  rowHeightHint: 120,
-  indicatorMinHeight: 64,
+  paginationRef: tagFooterRef,
+  rowHeightHint: (w: number) => w < 650 ? 104 : 88,
 })
 
 function handlePageChange(p: number) {
@@ -328,10 +334,18 @@ watch(pageGeometryVersion, () => {
   lastClickedIndex.value = -1
 })
 
-watch(tableMode, async () => {
-  await nextTick()
-  refreshLayout()
+watch(tableMode, () => {
+  schedulePostPaintRefresh()
 })
+
+watch(
+  [() => tableMode.value, () => tagMeasurementVersion.value],
+  async () => {
+    if (tableMode.value !== 'paginated') return
+    await runTagRemeasure()
+  },
+  { flush: 'post' },
+)
 
 // ── row props: multi-select with Ctrl/Shift, highlight selected ──
 
@@ -520,6 +534,91 @@ const tagColumns = computed<DataTableColumns>(() => {
   return cols
 })
 
+// ── measurement columns for off-screen row packing ──
+
+function renderTagChipStatic(row: any, tag: TagInfo) {
+  const displayName = tag.tagType === 'user'
+    ? wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName
+    : tag.tagName
+  const t = tagColors(tag)
+  const content = tag.quantity === 1
+    ? h('span', { style: { color: t.text, fontWeight: 500 } }, displayName)
+    : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
+        h('span', { style: { color: t.text, fontWeight: 500 } }, displayName),
+        h('span', { style: { color: t.accent } }, ': '),
+        h('span', { style: { color: t.number, fontWeight: 600 } }, String(tag.quantity)),
+      ])
+  return h(NTag, { size: 'medium', round: true, color: t.bg, style: { border: t.border } }, { default: () => content })
+}
+
+const tagMeasureColumns = computed(() => {
+  const cols: any[] = [
+    {
+      title: '', key: '__selection', width: 25,
+      render: () => h('div', {
+        style: {
+          width: '21px', height: '21px',
+          border: '2px solid rgba(128,128,128,0.35)',
+          borderRadius: '2px',
+          margin: 'auto',
+        }
+      })
+    },
+    { title: '#', key: '__index', width: 25 },
+    {
+      title: '', key: 'coverImage', width: 50,
+      render: () => h('div', { style: { display: 'flex', alignItems: 'center', height: '40px' } }, [
+        h('div', { style: { width: '40px', height: '40px', background: '#e5e7eb', borderRadius: '4px' } })
+      ])
+    },
+    { title: '商品名', key: 'name', width: 160, render: (row: any) => clampedText(row.name) },
+    { title: '身份 Tag', key: 'levelTags', width: 80,
+      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
+        default: () => (row.tags as TagInfo[]).filter((t: TagInfo) => t.tagType === 'level')
+          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
+          .map((t: TagInfo) => renderTagChipStatic(row, t))
+      })
+    },
+    { title: '用户 Tag', key: 'userTags', width: 320,
+      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
+        default: () => (row.tags as TagInfo[]).filter((t: TagInfo) => t.tagType === 'user')
+          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
+          .map((t: TagInfo) => renderTagChipStatic(row, t))
+      })
+    },
+  ]
+  return cols
+})
+
+let tagMeasureRunning = false
+let tagMeasurePending = false
+
+async function runTagRemeasure() {
+  if (tagMeasureRunning) {
+    tagMeasurePending = true
+    return
+  }
+  tagMeasureRunning = true
+  try {
+    await nextTick()
+    await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => requestAnimationFrame(r))
+    refreshLayout()
+    await nextTick()
+    const result = tagMeasureLayer.value?.measure()
+    if (!result) return
+    if (result.rowHeights.length !== allTagProducts.value.length) return
+    tagMeasureLayer.value?.setWidth(viewportWidth.value)
+    applyMeasuredRows(result.rowHeights, result.headerHeight)
+  } finally {
+    tagMeasureRunning = false
+    if (tagMeasurePending) {
+      tagMeasurePending = false
+      await runTagRemeasure()
+    }
+  }
+}
+
 // ── data loading ──
 async function guardRuntime() {
   if (!isWailsRuntimeAvailable()) {
@@ -554,7 +653,7 @@ async function loadTagProducts() {
     }))
     lastClickedIndex.value = -1
     await nextTick()
-    refreshLayout()
+    requestTagRemeasure()
   } catch (e) {
     console.error('加载商品标签失败', e)
   } finally {
@@ -762,8 +861,8 @@ let unregisterCtxMenu: (() => void) | null = null
 // ── lifecycle ──
 onMounted(async () => {
   await loadWave()
-  await loadTagProducts()
   await loadWaveMembers()
+  await loadTagProducts()
   await nextTick()
 
   unregisterCtxMenu = register('tag-row', (_event: MouseEvent) => {
@@ -826,6 +925,8 @@ onMounted(async () => {
   })
 
   await init()
+  await nextTick()
+  requestTagRemeasure()
 })
 
 onUnmounted(() => {
@@ -1074,31 +1175,17 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div ref="tagLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1 mt-2">
-      <!-- scroll mode -->
-      <div v-if="tableMode === 'scroll'" ref="tagTableRef" class="flex-1 min-h-0 overflow-hidden">
-        <NDataTable
-          :columns="tagColumns"
-          :data="visibleItems"
-          :loading="isTagLoading"
-          :bordered="false"
-          :max-height="availableH"
-          :table-layout="'auto'"
-          :row-key="(row: any) => row.id"
-          v-model:checked-row-keys="checkedProductIds"
-          :pagination="false"
-          size="medium"
-          :row-props="rowProps"
-        />
-      </div>
-      <!-- paginated mode -->
-      <template v-if="tableMode === 'paginated'">
-        <div ref="tagTableRef" class="shrink-0">
+    <div class="flex-1 min-h-0 flex flex-col overflow-hidden px-1 mt-2">
+      <!-- TABLE VIEWPORT -->
+      <div ref="tagLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden">
+        <!-- scroll mode -->
+        <div v-if="tableMode === 'scroll'" ref="tagTableRef" class="flex-1 min-h-0 overflow-hidden">
           <NDataTable
             :columns="tagColumns"
             :data="visibleItems"
             :loading="isTagLoading"
             :bordered="false"
+            :max-height="availableH"
             :table-layout="'auto'"
             :row-key="(row: any) => row.id"
             v-model:checked-row-keys="checkedProductIds"
@@ -1107,8 +1194,28 @@ onUnmounted(() => {
             :row-props="rowProps"
           />
         </div>
-        <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
-        <div ref="tagFooterRef" class="flex justify-center shrink-0" style="transform: scale(1.5); transform-origin: top center">
+        <!-- paginated mode -->
+        <template v-if="tableMode === 'paginated'">
+          <div ref="tagTableRef" class="shrink-0">
+            <NDataTable
+              :columns="tagColumns"
+              :data="visibleItems"
+              :loading="isTagLoading"
+              :bordered="false"
+              :table-layout="'auto'"
+              :row-key="(row: any) => row.id"
+              v-model:checked-row-keys="checkedProductIds"
+              :pagination="false"
+              size="medium"
+              :row-props="rowProps"
+            />
+          </div>
+          <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
+        </template>
+      </div>
+      <!-- FOOTER (sibling, outside viewport) -->
+      <div v-if="tableMode === 'paginated'" ref="tagFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
+        <div style="transform: scale(1.5); transform-origin: top center; display: inline-flex;">
           <NPagination
             :page="currentPage"
             :page-count="totalPages"
@@ -1116,7 +1223,7 @@ onUnmounted(() => {
             @update:page="handlePageChange"
           />
         </div>
-      </template>
+      </div>
     </div>
 
     <div
@@ -1223,6 +1330,16 @@ onUnmounted(() => {
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <!-- Measurement layer (off-screen, paginated mode only) -->
+    <AdaptiveTableMeasureLayer
+      v-if="tableMode === 'paginated' && allTagProducts.length"
+      ref="tagMeasureLayer"
+      :data="allTagProducts"
+      :columns="tagMeasureColumns"
+      :width="viewportWidth"
+      size="medium"
+    />
   </div>
 </template>
 
