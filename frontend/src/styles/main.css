@@ -13,7 +13,9 @@
   --accent-surface: rgba(37, 99, 235, 0.12);
   --code-bg: rgba(191, 219, 254, 0.42);
   --code-text: #1d4ed8;
-  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif;
+  font-family:
+    "Noto Sans SC", "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB",
+    sans-serif;
   font-weight: 500;
   font-size: 16px;
   text-rendering: auto;
@@ -72,7 +74,8 @@ select {
 
 code {
   font-family:
-    'Cascadia Code', 'Consolas', 'SFMono-Regular', 'Noto Sans SC', ui-monospace, monospace;
+    "Cascadia Code", "Consolas", "SFMono-Regular", "Noto Sans SC", ui-monospace,
+    monospace;
   padding: 0.15rem 0.4rem;
   border-radius: 0.5rem;
   color: var(--code-text);

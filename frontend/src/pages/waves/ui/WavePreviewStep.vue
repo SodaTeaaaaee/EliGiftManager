@@ -170,6 +170,7 @@ const {
   applyMeasuredRows,
   schedulePostPaintRefresh,
   measurementInvalidationVersion: previewMeasurementVersion,
+  measurementRequestId: previewMeasurementRequestId,
   requestRemeasure: requestPreviewRemeasure,
 } = useAdaptiveTable(memberGroups, tableMode, {
   layoutRef: previewLayoutRef,
@@ -278,6 +279,7 @@ async function runPreviewRemeasure() {
     return
   }
   previewMeasureRunning = true
+  const requestId = previewMeasurementRequestId.value
   try {
     await nextTick()
     await new Promise(r => requestAnimationFrame(r))
@@ -286,9 +288,8 @@ async function runPreviewRemeasure() {
     await nextTick()
     const result = previewMeasureLayer.value?.measure()
     if (!result) return
-    if (result.rowHeights.length !== memberGroups.value.length) return
     previewMeasureLayer.value?.setWidth(viewportWidth.value)
-    applyMeasuredRows(result.rowHeights, result.headerHeight)
+    applyMeasuredRows(result.rowHeights, result.headerHeight, requestId)
   } finally {
     previewMeasureRunning = false
     if (previewMeasurePending) {

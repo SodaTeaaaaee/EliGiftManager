@@ -214,8 +214,7 @@ const wmNicknameMap = computed(() => {
   return map
 })
 
-// ── tag chip renderer (with NPopover for quantity editing + delete) ──
-function renderTagChip(row: any, tag: TagInfo) {
+function renderTagChipCore(tag: TagInfo, row?: any) {
   const displayName =
     tag.tagType === 'user' ? wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName : tag.tagName
   const t = tagColors(tag)
@@ -227,6 +226,20 @@ function renderTagChip(row: any, tag: TagInfo) {
           h('span', { style: { color: t.accent } }, ': '),
           h('span', { style: { color: t.number, fontWeight: 600 } }, String(tag.quantity)),
         ])
+  return h(
+    NTag,
+    {
+      size: 'medium',
+      round: true,
+      color: t.bg,
+      style: { cursor: 'pointer', border: t.border },
+    },
+    { default: () => content },
+  )
+}
+
+// ── tag chip renderer (with NPopover for quantity editing + delete) ──
+function renderTagChip(row: any, tag: TagInfo) {
   return h(
     NPopover,
     {
@@ -242,21 +255,7 @@ function renderTagChip(row: any, tag: TagInfo) {
       placement: 'bottom',
     },
     {
-      trigger: () =>
-        h(
-          NTag,
-          {
-            size: 'medium',
-            round: true,
-            color: t.bg,
-            style: { cursor: 'pointer', border: t.border },
-            onClick: (e: MouseEvent) => {
-              e.stopPropagation()
-              openTagEdit(row, tag)
-            },
-          },
-          { default: () => content },
-        ),
+      trigger: () => renderTagChipCore(tag),
       default: () =>
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px' } }, [
           h(NInputNumber, {
@@ -269,21 +268,12 @@ function renderTagChip(row: any, tag: TagInfo) {
           }),
           h(
             NButton,
-            {
-              size: 'tiny',
-              type: 'primary',
-              onClick: () => handleUpdateTagQuantity(),
-            },
+            { size: 'tiny', type: 'primary', onClick: () => handleUpdateTagQuantity() },
             { default: () => '确定' },
           ),
           h(
             NButton,
-            {
-              size: 'tiny',
-              type: 'error',
-              secondary: true,
-              onClick: () => handleDeleteTag(),
-            },
+            { size: 'tiny', type: 'error', secondary: true, onClick: () => handleDeleteTag() },
             { default: () => '删除' },
           ),
         ]),
@@ -317,12 +307,13 @@ const {
   applyMeasuredRows,
   schedulePostPaintRefresh,
   measurementInvalidationVersion: tagMeasurementVersion,
+  measurementRequestId: tagMeasurementRequestId,
   requestRemeasure: requestTagRemeasure,
 } = useAdaptiveTable(allTagProducts, tableMode, {
   layoutRef: tagLayoutRef,
   tableRef: tagTableRef,
   paginationRef: tagFooterRef,
-  rowHeightHint: (w: number) => w < 650 ? 104 : 88,
+  rowHeightHint: (w: number) => (w < 650 ? 104 : 88),
 })
 
 function handlePageChange(p: number) {
@@ -456,13 +447,47 @@ const productIndexMap = computed(() => {
   return map
 })
 
-const tagColumns = computed<DataTableColumns>(() => {
+const tagColumns = computed<DataTableColumns>(() => buildTagColumns({ interactive: true }))
+
+// ── measurement columns for off-screen row packing ──
+
+function renderTagChipStatic(_row: any, tag: TagInfo) {
+  return renderTagChipCore(tag)
+}
+
+function renderCoverCell(row: any) {
+  return row.coverImage
+    ? h('div', { class: 'thumb-cell' }, [
+        h('img', {
+          src: '/local-images/' + row.coverImage,
+          class: 'thumb-img rounded',
+          onClick: (e: MouseEvent) => {
+            e.stopPropagation()
+            openProductDrawer(row)
+          },
+        }),
+      ])
+    : h('div', { class: 'thumb-cell' }, [h('div', { class: 'thumb-placeholder rounded' })])
+}
+
+function renderCoverCellStatic(_row: any) {
+  return h('div', { class: 'thumb-cell' }, [h('div', { class: 'thumb-placeholder rounded' })])
+}
+
+function buildTagColumns(options: { interactive: boolean }): DataTableColumns {
   const cols: DataTableColumns = [
-    { type: 'selection' as const, width: 25 },
+    options.interactive
+      ? { type: 'selection' as const, width: 25 }
+      : {
+          title: '',
+          key: '__selection',
+          width: 25,
+          render: () => h('div', { class: 'measure-selection-box' }),
+        },
     {
       title: '#',
       key: '__index',
-      width: 25,
+      width: 35,
       render: (row: any) =>
         h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
     },
@@ -471,18 +496,7 @@ const tagColumns = computed<DataTableColumns>(() => {
       key: 'coverImage',
       width: 50,
       render: (row: any) =>
-        row.coverImage
-          ? h('div', { class: 'thumb-cell' }, [
-              h('img', {
-                src: '/local-images/' + row.coverImage,
-                class: 'thumb-img rounded',
-                onClick: (e: MouseEvent) => {
-                  e.stopPropagation()
-                  openProductDrawer(row)
-                },
-              }),
-            ])
-          : h('div', { class: 'thumb-cell' }, [h('div', { class: 'thumb-placeholder rounded' })]),
+        options.interactive ? renderCoverCell(row) : renderCoverCellStatic(row),
     },
     {
       title: '商品名',
@@ -506,7 +520,9 @@ const tagColumns = computed<DataTableColumns>(() => {
                   (a, b) =>
                     a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName),
                 )
-                .map((t: TagInfo) => renderTagChip(row, t)),
+                .map((t: TagInfo) =>
+                  options.interactive ? renderTagChip(row, t) : renderTagChipStatic(row, t),
+                ),
           },
         ),
     },
@@ -526,69 +542,17 @@ const tagColumns = computed<DataTableColumns>(() => {
                   (a, b) =>
                     a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName),
                 )
-                .map((t: TagInfo) => renderTagChip(row, t)),
+                .map((t: TagInfo) =>
+                  options.interactive ? renderTagChip(row, t) : renderTagChipStatic(row, t),
+                ),
           },
         ),
     },
   ]
   return cols
-})
-
-// ── measurement columns for off-screen row packing ──
-
-function renderTagChipStatic(row: any, tag: TagInfo) {
-  const displayName = tag.tagType === 'user'
-    ? wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName
-    : tag.tagName
-  const t = tagColors(tag)
-  const content = tag.quantity === 1
-    ? h('span', { style: { color: t.text, fontWeight: 500 } }, displayName)
-    : h('span', { style: { display: 'inline-flex', alignItems: 'baseline', gap: '1px' } }, [
-        h('span', { style: { color: t.text, fontWeight: 500 } }, displayName),
-        h('span', { style: { color: t.accent } }, ': '),
-        h('span', { style: { color: t.number, fontWeight: 600 } }, String(tag.quantity)),
-      ])
-  return h(NTag, { size: 'medium', round: true, color: t.bg, style: { border: t.border } }, { default: () => content })
 }
 
-const tagMeasureColumns = computed(() => {
-  const cols: any[] = [
-    {
-      title: '', key: '__selection', width: 25,
-      render: () => h('div', {
-        style: {
-          width: '21px', height: '21px',
-          border: '2px solid rgba(128,128,128,0.35)',
-          borderRadius: '2px',
-          margin: 'auto',
-        }
-      })
-    },
-    { title: '#', key: '__index', width: 25 },
-    {
-      title: '', key: 'coverImage', width: 50,
-      render: () => h('div', { style: { display: 'flex', alignItems: 'center', height: '40px' } }, [
-        h('div', { style: { width: '40px', height: '40px', background: '#e5e7eb', borderRadius: '4px' } })
-      ])
-    },
-    { title: '商品名', key: 'name', width: 160, render: (row: any) => clampedText(row.name) },
-    { title: '身份 Tag', key: 'levelTags', width: 80,
-      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
-        default: () => (row.tags as TagInfo[]).filter((t: TagInfo) => t.tagType === 'level')
-          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
-          .map((t: TagInfo) => renderTagChipStatic(row, t))
-      })
-    },
-    { title: '用户 Tag', key: 'userTags', width: 320,
-      render: (row: any) => h(NFlex, { size: 'small', wrap: true }, {
-        default: () => (row.tags as TagInfo[]).filter((t: TagInfo) => t.tagType === 'user')
-          .sort((a, b) => a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName))
-          .map((t: TagInfo) => renderTagChipStatic(row, t))
-      })
-    },
-  ]
-  return cols
-})
+const tagMeasureColumns = computed(() => buildTagColumns({ interactive: false }))
 
 let tagMeasureRunning = false
 let tagMeasurePending = false
@@ -599,17 +563,17 @@ async function runTagRemeasure() {
     return
   }
   tagMeasureRunning = true
+  const requestId = tagMeasurementRequestId.value
   try {
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
-    await new Promise(r => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
     refreshLayout()
     await nextTick()
     const result = tagMeasureLayer.value?.measure()
     if (!result) return
-    if (result.rowHeights.length !== allTagProducts.value.length) return
     tagMeasureLayer.value?.setWidth(viewportWidth.value)
-    applyMeasuredRows(result.rowHeights, result.headerHeight)
+    applyMeasuredRows(result.rowHeights, result.headerHeight, requestId)
   } finally {
     tagMeasureRunning = false
     if (tagMeasurePending) {
@@ -1214,8 +1178,13 @@ onUnmounted(() => {
         </template>
       </div>
       <!-- FOOTER (sibling, outside viewport) -->
-      <div v-if="tableMode === 'paginated'" ref="tagFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
-        <div style="transform: scale(1.5); transform-origin: top center; display: inline-flex;">
+      <div
+        v-if="tableMode === 'paginated'"
+        ref="tagFooterRef"
+        class="flex justify-center shrink-0"
+        style="padding: 8px 0 12px 0"
+      >
+        <div style="transform: scale(1.5); transform-origin: top center; display: inline-flex">
           <NPagination
             :page="currentPage"
             :page-count="totalPages"
@@ -1386,6 +1355,14 @@ onUnmounted(() => {
   width: 80px;
   height: 40px;
   background: #e5e7eb;
+}
+
+.measure-selection-box {
+  width: 21px;
+  height: 21px;
+  border: 2px solid rgba(128, 128, 128, 0.35);
+  border-radius: 2px;
+  margin: auto;
 }
 
 /* Panel tooltips must not capture mouse — user may want to click a tag behind them */

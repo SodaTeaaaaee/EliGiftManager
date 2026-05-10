@@ -12,9 +12,9 @@ import (
 )
 
 type exportTemplateConfig struct {
-	Headers            []string `json:"headers"`
-	Prefix             string   `json:"prefix"`
-	BlankOrderNo       bool     `json:"blankOrderNo"`
+	Headers      []string `json:"headers"`
+	Prefix       string   `json:"prefix"`
+	BlankOrderNo bool     `json:"blankOrderNo"`
 }
 
 // ExportOrderCSV writes a factory-ready batch mini-order CSV for the given wave.

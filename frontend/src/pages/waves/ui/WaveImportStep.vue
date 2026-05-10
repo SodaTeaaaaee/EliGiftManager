@@ -137,6 +137,7 @@ const {
   pageRanges: productPageRanges,
   schedulePostPaintRefresh: scheduleProductPostPaint,
   measurementInvalidationVersion: productMeasurementVersion,
+  measurementRequestId: productMeasurementRequestId,
   requestRemeasure: requestProductRemeasure,
 } = useAdaptiveTable(allProducts, tableMode, {
   layoutRef: productLayoutRef,
@@ -164,6 +165,7 @@ const {
   pageRanges: memberPageRanges,
   schedulePostPaintRefresh: scheduleMemberPostPaint,
   measurementInvalidationVersion: memberMeasurementVersion,
+  measurementRequestId: memberMeasurementRequestId,
   requestRemeasure: requestMemberRemeasure,
 } = useAdaptiveTable(waveMembers, tableMode, {
   layoutRef: memberLayoutRef,
@@ -315,6 +317,7 @@ async function runProductRemeasure() {
     return
   }
   productMeasureRunning = true
+  const requestId = productMeasurementRequestId.value
   try {
     await nextTick()
     await new Promise(r => requestAnimationFrame(r))
@@ -323,9 +326,8 @@ async function runProductRemeasure() {
     await nextTick()
     const result = productMeasureLayer.value?.measure()
     if (!result) return
-    if (result.rowHeights.length !== allProducts.value.length) return
     productMeasureLayer.value?.setWidth(productViewportWidth.value)
-    applyProductMeasuredRows(result.rowHeights, result.headerHeight)
+    applyProductMeasuredRows(result.rowHeights, result.headerHeight, requestId)
   } finally {
     productMeasureRunning = false
     if (productMeasurePending) {
@@ -344,6 +346,7 @@ async function runMemberRemeasure() {
     return
   }
   memberMeasureRunning = true
+  const requestId = memberMeasurementRequestId.value
   try {
     await nextTick()
     await new Promise(r => requestAnimationFrame(r))
@@ -352,9 +355,8 @@ async function runMemberRemeasure() {
     await nextTick()
     const result = memberMeasureLayer.value?.measure()
     if (!result) return
-    if (result.rowHeights.length !== waveMembers.value.length) return
     memberMeasureLayer.value?.setWidth(memberViewportWidth.value)
-    applyMemberMeasuredRows(result.rowHeights, result.headerHeight)
+    applyMemberMeasuredRows(result.rowHeights, result.headerHeight, requestId)
   } finally {
     memberMeasureRunning = false
     if (memberMeasurePending) {
