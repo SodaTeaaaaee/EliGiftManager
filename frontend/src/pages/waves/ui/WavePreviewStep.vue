@@ -180,8 +180,16 @@ const previewSortDescriptors: SortDescriptor<any>[] = [
   { key: 'platform', getValue: (g: any) => g.platform },
   { key: 'platformUid', getValue: (g: any) => g.platformUid },
   { key: 'giftCount', getValue: (g: any) => g.records.length },
-  { key: 'giftQty', getValue: (g: any) => g.records.reduce((s: number, r: any) => s + (r.quantity || 0), 0) },
-  { key: 'addressStatus', getValue: (g: any) => g.addressStatus === '已绑定' ? 1 : 0, compare: (a: any, b: any) => (a.addressStatus === '已绑定' ? 1 : 0) - (b.addressStatus === '已绑定' ? 1 : 0) },
+  {
+    key: 'giftQty',
+    getValue: (g: any) => g.records.reduce((s: number, r: any) => s + (r.quantity || 0), 0),
+  },
+  {
+    key: 'addressStatus',
+    getValue: (g: any) => (g.addressStatus === '已绑定' ? 1 : 0),
+    compare: (a: any, b: any) =>
+      (a.addressStatus === '已绑定' ? 1 : 0) - (b.addressStatus === '已绑定' ? 1 : 0),
+  },
 ]
 
 const {
@@ -210,7 +218,7 @@ const {
   tableRef: previewTableRef,
   paginationRef: previewFooterRef,
   rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
-  contentSignature: () => sortedGroups.value.map(g => g.memberId).join(','),
+  contentSignature: () => sortedGroups.value.map((g) => g.memberId).join(','),
 })
 
 // ── column definitions ──
@@ -242,7 +250,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       width: 140,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: previewSortState.value.columnKey === 'nickname' ? previewSortState.value.order : false,
+      sortOrder:
+        previewSortState.value.columnKey === 'nickname' ? previewSortState.value.order : false,
       render: (row: any) => clampedText(row.nickname),
     },
     {
@@ -251,7 +260,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       width: 100,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: previewSortState.value.columnKey === 'platform' ? previewSortState.value.order : false,
+      sortOrder:
+        previewSortState.value.columnKey === 'platform' ? previewSortState.value.order : false,
     },
   ]
   if (showExtraColumns.value) {
@@ -261,7 +271,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       width: 140,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: previewSortState.value.columnKey === 'platformUid' ? previewSortState.value.order : false,
+      sortOrder:
+        previewSortState.value.columnKey === 'platformUid' ? previewSortState.value.order : false,
       render: (row: any) => clampedText(row.platformUid),
     })
   }
@@ -272,7 +283,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       width: 80,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: previewSortState.value.columnKey === 'giftCount' ? previewSortState.value.order : false,
+      sortOrder:
+        previewSortState.value.columnKey === 'giftCount' ? previewSortState.value.order : false,
       render: (row: any) => String(row.records.length),
     },
     {
@@ -281,7 +293,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       width: 80,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: previewSortState.value.columnKey === 'giftQty' ? previewSortState.value.order : false,
+      sortOrder:
+        previewSortState.value.columnKey === 'giftQty' ? previewSortState.value.order : false,
       render: (row: any) =>
         String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)),
     },
@@ -291,7 +304,8 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       width: 80,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: previewSortState.value.columnKey === 'addressStatus' ? previewSortState.value.order : false,
+      sortOrder:
+        previewSortState.value.columnKey === 'addressStatus' ? previewSortState.value.order : false,
       render: (row: any) =>
         h(
           NTag,

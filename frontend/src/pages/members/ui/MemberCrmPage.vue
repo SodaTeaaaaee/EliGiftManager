@@ -100,11 +100,15 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     key: '__summary',
     width: 48,
     render: (row: any) =>
-      h(NAvatar, {
-        size: 34,
-        color: 'var(--accent-surface)',
-        style: { color: 'var(--accent)', fontWeight: '700' },
-      }, { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() }),
+      h(
+        NAvatar,
+        {
+          size: 34,
+          color: 'var(--accent-surface)',
+          style: { color: 'var(--accent)', fontWeight: '700' },
+        },
+        { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() },
+      ),
   },
   {
     title: '昵称',
@@ -112,7 +116,8 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     minWidth: 100,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
+    sortOrder:
+      memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
     render: (row) => row.latestNickname || '-',
   },
   {
@@ -129,7 +134,8 @@ const columns = computed<DataTableColumns<MemberItem>>(() => [
     minWidth: 100,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: memberSortState.value.columnKey === 'platformUid' ? memberSortState.value.order : false,
+    sortOrder:
+      memberSortState.value.columnKey === 'platformUid' ? memberSortState.value.order : false,
   },
   {
     title: '地址状态',
@@ -212,21 +218,58 @@ const {
 // Measure columns (mirrors real first column for accurate row-height measurement)
 const memberMeasureColumns = computed<DataTableColumns<MemberItem>>(() => [
   {
-    title: '会员', key: '__summary', width: 48,
-    render: (row: any) => h(NAvatar, { size: 34, color: 'var(--accent-surface)', style: { color: 'var(--accent)', fontWeight: '700' } },
-      { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() }),
+    title: '会员',
+    key: '__summary',
+    width: 48,
+    render: (row: any) =>
+      h(
+        NAvatar,
+        {
+          size: 34,
+          color: 'var(--accent-surface)',
+          style: { color: 'var(--accent)', fontWeight: '700' },
+        },
+        { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() },
+      ),
   },
-  { title: '昵称', key: 'latestNickname', minWidth: 100, render: (row: any) => row.latestNickname || '-' },
+  {
+    title: '昵称',
+    key: 'latestNickname',
+    minWidth: 100,
+    render: (row: any) => row.latestNickname || '-',
+  },
   { title: '平台', key: 'platform', width: 90 },
   { title: 'UID', key: 'platformUid', minWidth: 100 },
   {
-    title: '地址状态', key: 'activeAddressCount', width: 120,
-    render: (row: any) => h(NTag, { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
-      { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') }),
+    title: '地址状态',
+    key: 'activeAddressCount',
+    width: 120,
+    render: (row: any) =>
+      h(
+        NTag,
+        { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
+        { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') },
+      ),
   },
-  { title: '默认收件人', key: 'latestRecipient', minWidth: 100, render: (row: any) => row.latestRecipient || '-' },
-  { title: '手机', key: 'latestPhone', minWidth: 100, render: (row: any) => row.latestPhone || '-' },
-  { title: '地址', key: 'latestAddress', minWidth: 180, ellipsis: { tooltip: true }, render: (row: any) => row.latestAddress || '-' },
+  {
+    title: '默认收件人',
+    key: 'latestRecipient',
+    minWidth: 100,
+    render: (row: any) => row.latestRecipient || '-',
+  },
+  {
+    title: '手机',
+    key: 'latestPhone',
+    minWidth: 100,
+    render: (row: any) => row.latestPhone || '-',
+  },
+  {
+    title: '地址',
+    key: 'latestAddress',
+    minWidth: 180,
+    ellipsis: { tooltip: true },
+    render: (row: any) => row.latestAddress || '-',
+  },
 ])
 
 let memberMeasureRunning = false

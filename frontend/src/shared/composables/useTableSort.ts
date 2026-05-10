@@ -69,32 +69,32 @@ export function useTableSort<T>(
   function applyNaiveSorterEvent(
     sorter: { columnKey: string | null; order: SortOrder } | null,
   ) {
-    const clickedColumnKey = sorter?.columnKey ?? null
+    const clickedColumnKey = sorter?.columnKey ?? null;
     if (!clickedColumnKey) {
-      sortState.value = { columnKey: null, order: false }
-      return
+      sortState.value = { columnKey: null, order: false };
+      return;
     }
 
-    const current = sortState.value
+    const current = sortState.value;
     if (current.columnKey !== clickedColumnKey) {
       // New column clicked → always start with ascend
-      sortState.value = { columnKey: clickedColumnKey, order: 'ascend' }
-      return
+      sortState.value = { columnKey: clickedColumnKey, order: "ascend" };
+      return;
     }
 
     // Same column — cycle: ascend → descend → false
-    if (current.order === 'ascend') {
-      sortState.value = { columnKey: clickedColumnKey, order: 'descend' }
-      return
+    if (current.order === "ascend") {
+      sortState.value = { columnKey: clickedColumnKey, order: "descend" };
+      return;
     }
 
-    if (current.order === 'descend') {
-      sortState.value = { columnKey: null, order: false }
-      return
+    if (current.order === "descend") {
+      sortState.value = { columnKey: null, order: false };
+      return;
     }
 
     // Fallback (should not reach here, but safety)
-    sortState.value = { columnKey: clickedColumnKey, order: 'ascend' }
+    sortState.value = { columnKey: clickedColumnKey, order: "ascend" };
   }
 
   function clearSort() {

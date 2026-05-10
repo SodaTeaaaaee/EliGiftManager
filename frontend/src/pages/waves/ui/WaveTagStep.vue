@@ -339,7 +339,7 @@ const {
   tableRef: tagTableRef,
   paginationRef: tagFooterRef,
   rowHeightHint: (w: number) => (w < 650 ? 104 : 88),
-  contentSignature: () => sortedTagProducts.value.map(p => p.id).join(','),
+  contentSignature: () => sortedTagProducts.value.map((p) => p.id).join(','),
 })
 
 function handlePageChange(p: number) {
@@ -351,9 +351,12 @@ watch(pageGeometryVersion, () => {
   lastClickedIndex.value = -1
 })
 
-watch(() => tagSortState.value, () => {
-  lastClickedIndex.value = -1
-})
+watch(
+  () => tagSortState.value,
+  () => {
+    lastClickedIndex.value = -1
+  },
+)
 
 watch(tableMode, () => {
   schedulePostPaintRefresh()

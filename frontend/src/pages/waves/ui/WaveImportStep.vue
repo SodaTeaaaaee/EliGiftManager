@@ -164,7 +164,7 @@ const {
   tableRef: productTableRef,
   paginationRef: productFooterRef,
   rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
-  contentSignature: () => sortedProducts.value.map(p => p.id).join(','),
+  contentSignature: () => sortedProducts.value.map((p) => p.id).join(','),
 })
 
 // ── member table composable ──
@@ -207,7 +207,7 @@ const {
   tableRef: memberTableRef,
   paginationRef: memberFooterRef,
   rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
-  contentSignature: () => sortedMembers.value.map(m => m.id).join(','),
+  contentSignature: () => sortedMembers.value.map((m) => m.id).join(','),
 })
 
 // ── column definitions ──
@@ -227,7 +227,8 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
       width: 90,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
+      sortOrder:
+        memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
       render: (row) => clampedText(row.latestNickname || row.platformUid),
     },
     {
@@ -236,7 +237,8 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
       width: 71,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: memberSortState.value.columnKey === 'platform' ? memberSortState.value.order : false,
+      sortOrder:
+        memberSortState.value.columnKey === 'platform' ? memberSortState.value.order : false,
       render: (row) => clampedText(row.platform),
     },
     {
@@ -245,7 +247,8 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
       width: 90,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: memberSortState.value.columnKey === 'platformUid' ? memberSortState.value.order : false,
+      sortOrder:
+        memberSortState.value.columnKey === 'platformUid' ? memberSortState.value.order : false,
       render: (row) => clampedText(row.platformUid),
     },
   ]
@@ -257,7 +260,8 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
         width: 50,
         sorter: 'default' as const,
         customNextSortOrder: nextSortOrderAscFirst,
-        sortOrder: memberSortState.value.columnKey === 'giftLevel' ? memberSortState.value.order : false,
+        sortOrder:
+          memberSortState.value.columnKey === 'giftLevel' ? memberSortState.value.order : false,
         render: (row) => clampedText(row.giftLevel || '-'),
       },
       {
@@ -266,7 +270,10 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
         width: 60,
         sorter: 'default' as const,
         customNextSortOrder: nextSortOrderAscFirst,
-        sortOrder: memberSortState.value.columnKey === 'activeAddressCount' ? memberSortState.value.order : false,
+        sortOrder:
+          memberSortState.value.columnKey === 'activeAddressCount'
+            ? memberSortState.value.order
+            : false,
       },
     )
   }
@@ -318,7 +325,8 @@ const productDataColumns = computed<DataTableColumns>(() => {
       width: 160,
       sorter: 'default' as const,
       customNextSortOrder: nextSortOrderAscFirst,
-      sortOrder: productSortState.value.columnKey === 'factorySku' ? productSortState.value.order : false,
+      sortOrder:
+        productSortState.value.columnKey === 'factorySku' ? productSortState.value.order : false,
       render: (row: any) =>
         h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
     })
