@@ -17,6 +17,11 @@ import {
 import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
 import {
+  useTableSort,
+  nextSortOrderAscFirst,
+  type SortDescriptor,
+} from '@/shared/composables/useTableSort'
+import {
   importDispatchWave,
   importToWave,
   isWailsRuntimeAvailable,
@@ -111,6 +116,17 @@ const memberIndexMap = computed(() => {
 })
 const isProductLoading = ref(false)
 
+const productSortDescriptors: SortDescriptor<any>[] = [
+  { key: 'name', getValue: (p: any) => p.name },
+  { key: 'factorySku', getValue: (p: any) => p.factorySku || '' },
+]
+
+const {
+  sortedItems: sortedProducts,
+  sortState: productSortState,
+  applyNaiveSorterEvent: applyProductSorter,
+} = useTableSort(allProducts, productSortDescriptors)
+
 const showSkuColumn = computed(
   () => productViewportWidth.value === 0 || productViewportWidth.value >= 400,
 )
@@ -143,17 +159,32 @@ const {
   measurementInvalidationVersion: productMeasurementVersion,
   measurementRequestId: productMeasurementRequestId,
   requestRemeasure: requestProductRemeasure,
-} = useAdaptiveTable(allProducts, tableMode, {
+} = useAdaptiveTable(sortedProducts, tableMode, {
   layoutRef: productLayoutRef,
   tableRef: productTableRef,
   paginationRef: productFooterRef,
   rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
+  contentSignature: () => sortedProducts.value.map(p => p.id).join(','),
 })
 
 // ── member table composable ──
 const memberLayoutRef = ref<HTMLElement | null>(null)
 const memberTableRef = ref<HTMLElement | null>(null)
 const memberFooterRef = ref<HTMLElement | null>(null)
+
+const memberSortDescriptors: SortDescriptor<MemberItem>[] = [
+  { key: 'latestNickname', getValue: (m: MemberItem) => m.latestNickname || '' },
+  { key: 'platform', getValue: (m: MemberItem) => m.platform },
+  { key: 'platformUid', getValue: (m: MemberItem) => m.platformUid },
+  { key: 'giftLevel', getValue: (m: MemberItem) => m.giftLevel || '' },
+  { key: 'activeAddressCount', getValue: (m: MemberItem) => m.activeAddressCount },
+]
+
+const {
+  sortedItems: sortedMembers,
+  sortState: memberSortState,
+  applyNaiveSorterEvent: applyMemberSorter,
+} = useTableSort(waveMembers, memberSortDescriptors)
 
 const {
   currentPage: memberCurrentPage,
@@ -171,11 +202,12 @@ const {
   measurementInvalidationVersion: memberMeasurementVersion,
   measurementRequestId: memberMeasurementRequestId,
   requestRemeasure: requestMemberRemeasure,
-} = useAdaptiveTable(waveMembers, tableMode, {
+} = useAdaptiveTable(sortedMembers, tableMode, {
   layoutRef: memberLayoutRef,
   tableRef: memberTableRef,
   paginationRef: memberFooterRef,
   rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
+  contentSignature: () => sortedMembers.value.map(m => m.id).join(','),
 })
 
 // ── column definitions ──
@@ -193,13 +225,27 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
       title: '昵称',
       key: 'latestNickname',
       width: 90,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
       render: (row) => clampedText(row.latestNickname || row.platformUid),
     },
-    { title: '平台', key: 'platform', width: 71, render: (row) => clampedText(row.platform) },
+    {
+      title: '平台',
+      key: 'platform',
+      width: 71,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: memberSortState.value.columnKey === 'platform' ? memberSortState.value.order : false,
+      render: (row) => clampedText(row.platform),
+    },
     {
       title: 'UID',
       key: 'platformUid',
       width: 90,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: memberSortState.value.columnKey === 'platformUid' ? memberSortState.value.order : false,
       render: (row) => clampedText(row.platformUid),
     },
   ]
@@ -209,9 +255,19 @@ const memberColumns = computed<DataTableColumns<MemberItem>>(() => {
         title: '等级',
         key: 'giftLevel',
         width: 50,
+        sorter: 'default' as const,
+        customNextSortOrder: nextSortOrderAscFirst,
+        sortOrder: memberSortState.value.columnKey === 'giftLevel' ? memberSortState.value.order : false,
         render: (row) => clampedText(row.giftLevel || '-'),
       },
-      { title: '地址数', key: 'activeAddressCount', width: 60 },
+      {
+        title: '地址数',
+        key: 'activeAddressCount',
+        width: 60,
+        sorter: 'default' as const,
+        customNextSortOrder: nextSortOrderAscFirst,
+        sortOrder: memberSortState.value.columnKey === 'activeAddressCount' ? memberSortState.value.order : false,
+      },
     )
   }
   cols.push({
@@ -245,13 +301,24 @@ const productDataColumns = computed<DataTableColumns>(() => {
       render: (row: any) =>
         h('span', { style: { color: '#999' } }, String(productIndexMap.value.get(row.id) ?? '')),
     },
-    { title: '商品名', key: 'name', width: 140, render: (row: any) => clampedText(row.name) },
+    {
+      title: '商品名',
+      key: 'name',
+      width: 140,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: productSortState.value.columnKey === 'name' ? productSortState.value.order : false,
+      render: (row: any) => clampedText(row.name),
+    },
   ]
   if (showSkuColumn.value) {
     cols.push({
       title: 'SKU',
       key: 'factorySku',
       width: 160,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: productSortState.value.columnKey === 'factorySku' ? productSortState.value.order : false,
       render: (row: any) =>
         h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
     })
@@ -584,6 +651,7 @@ onUnmounted(() => {
                 :bordered="false"
                 :pagination="false"
                 size="small"
+                @update:sorter="(s: any) => applyProductSorter(s)"
               />
             </div>
             <!-- paginated mode -->
@@ -597,6 +665,7 @@ onUnmounted(() => {
                   :bordered="false"
                   :pagination="false"
                   size="small"
+                  @update:sorter="(s: any) => applyProductSorter(s)"
                 />
               </div>
               <AdaptivePaginationIndicator
@@ -657,6 +726,7 @@ onUnmounted(() => {
                 :bordered="false"
                 :pagination="false"
                 size="small"
+                @update:sorter="(s: any) => applyMemberSorter(s)"
               />
             </div>
             <!-- paginated mode -->
@@ -670,6 +740,7 @@ onUnmounted(() => {
                   :bordered="false"
                   :pagination="false"
                   size="small"
+                  @update:sorter="(s: any) => applyMemberSorter(s)"
                 />
               </div>
               <AdaptivePaginationIndicator
@@ -707,7 +778,7 @@ onUnmounted(() => {
     <AdaptiveTableMeasureLayer
       v-if="tableMode === 'paginated' && allProducts.length"
       ref="productMeasureLayer"
-      :data="allProducts"
+      :data="sortedProducts"
       :columns="productMeasureColumns"
       :width="productViewportWidth"
       size="small"
@@ -715,7 +786,7 @@ onUnmounted(() => {
     <AdaptiveTableMeasureLayer
       v-if="tableMode === 'paginated' && waveMembers.length"
       ref="memberMeasureLayer"
-      :data="waveMembers"
+      :data="sortedMembers"
       :columns="memberMeasureColumns"
       :width="memberViewportWidth"
       size="small"

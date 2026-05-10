@@ -21,6 +21,11 @@ import {
 import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
 import {
+  useTableSort,
+  nextSortOrderAscFirst,
+  type SortDescriptor,
+} from '@/shared/composables/useTableSort'
+import {
   addMemberAddress,
   isWailsRuntimeAvailable,
   listDispatchRecords,
@@ -72,6 +77,19 @@ const memberAddresses = ref<
 >([])
 const selectedAddressId = ref<number | null>(null)
 const productCoverMap = ref<Record<number, string>>({})
+
+// ---- gift sort ----
+const giftSortDescriptors: SortDescriptor<any>[] = [
+  { key: 'productName', getValue: (r: any) => r.productName },
+  { key: 'factorySku', getValue: (r: any) => r.factorySku || '' },
+  { key: 'quantity', getValue: (r: any) => r.quantity },
+]
+
+const {
+  sortedItems: sortedGiftRecords,
+  sortState: giftSortState,
+  applyNaiveSorterEvent: applyGiftSorter,
+} = useTableSort(memberRecords, giftSortDescriptors)
 
 // ---- computed ----
 const platformTemplateSelections = ref<Record<string, number | null>>({})
@@ -157,6 +175,21 @@ const previewFooterRef = ref<HTMLElement | null>(null)
 const previewMeasureLayer = ref<InstanceType<typeof AdaptiveTableMeasureLayer> | null>(null)
 const tableMode = useTableMode()
 
+const previewSortDescriptors: SortDescriptor<any>[] = [
+  { key: 'nickname', getValue: (g: any) => g.nickname },
+  { key: 'platform', getValue: (g: any) => g.platform },
+  { key: 'platformUid', getValue: (g: any) => g.platformUid },
+  { key: 'giftCount', getValue: (g: any) => g.records.length },
+  { key: 'giftQty', getValue: (g: any) => g.records.reduce((s: number, r: any) => s + (r.quantity || 0), 0) },
+  { key: 'addressStatus', getValue: (g: any) => g.addressStatus === '已绑定' ? 1 : 0, compare: (a: any, b: any) => (a.addressStatus === '已绑定' ? 1 : 0) - (b.addressStatus === '已绑定' ? 1 : 0) },
+]
+
+const {
+  sortedItems: sortedGroups,
+  sortState: previewSortState,
+  applyNaiveSorterEvent: applyPreviewSorter,
+} = useTableSort(memberGroups, previewSortDescriptors)
+
 const {
   currentPage,
   pageCount: totalPages,
@@ -172,11 +205,12 @@ const {
   measurementInvalidationVersion: previewMeasurementVersion,
   measurementRequestId: previewMeasurementRequestId,
   requestRemeasure: requestPreviewRemeasure,
-} = useAdaptiveTable(memberGroups, tableMode, {
+} = useAdaptiveTable(sortedGroups, tableMode, {
   layoutRef: previewLayoutRef,
   tableRef: previewTableRef,
   paginationRef: previewFooterRef,
   rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
+  contentSignature: () => sortedGroups.value.map(g => g.memberId).join(','),
 })
 
 // ── column definitions ──
@@ -206,29 +240,48 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       title: '会员',
       key: 'nickname',
       width: 140,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: previewSortState.value.columnKey === 'nickname' ? previewSortState.value.order : false,
       render: (row: any) => clampedText(row.nickname),
     },
-    { title: '平台', key: 'platform', width: 100 },
+    {
+      title: '平台',
+      key: 'platform',
+      width: 100,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: previewSortState.value.columnKey === 'platform' ? previewSortState.value.order : false,
+    },
   ]
   if (showExtraColumns.value) {
     cols.push({
       title: 'UID',
       key: 'platformUid',
       width: 140,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: previewSortState.value.columnKey === 'platformUid' ? previewSortState.value.order : false,
       render: (row: any) => clampedText(row.platformUid),
     })
   }
   cols.push(
     {
       title: '礼物种类',
-      key: 'records',
+      key: 'giftCount',
       width: 80,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: previewSortState.value.columnKey === 'giftCount' ? previewSortState.value.order : false,
       render: (row: any) => String(row.records.length),
     },
     {
       title: '礼物数量',
-      key: 'totalQty',
+      key: 'giftQty',
       width: 80,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: previewSortState.value.columnKey === 'giftQty' ? previewSortState.value.order : false,
       render: (row: any) =>
         String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)),
     },
@@ -236,6 +289,9 @@ const memberGroupColumnsComputed = computed<DataTableColumns>(() => {
       title: '地址',
       key: 'addressStatus',
       width: 80,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: previewSortState.value.columnKey === 'addressStatus' ? previewSortState.value.order : false,
       render: (row: any) =>
         h(
           NTag,
@@ -270,13 +326,13 @@ const previewMeasureColumns = computed(() => {
   cols.push(
     {
       title: '礼物种类',
-      key: 'records',
+      key: 'giftCount',
       width: 80,
       render: (row: any) => String(row.records.length),
     },
     {
       title: '礼物数量',
-      key: 'totalQty',
+      key: 'giftQty',
       width: 80,
       render: (row: any) =>
         String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)),
@@ -329,8 +385,8 @@ async function runPreviewRemeasure() {
   }
 }
 
-// ── giftColumns: modal 内表格，完全不动 ──
-const giftColumns: DataTableColumns = [
+// ── giftColumns: modal 内表格 ──
+const giftColumns = computed<DataTableColumns>(() => [
   {
     title: '',
     key: 'productImage',
@@ -346,12 +402,29 @@ const giftColumns: DataTableColumns = [
           ])
     },
   },
-  { title: '礼物', key: 'productName', width: 140 },
-  { title: 'SKU', key: 'factorySku', width: 100 },
+  {
+    title: '礼物',
+    key: 'productName',
+    width: 140,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: giftSortState.value.columnKey === 'productName' ? giftSortState.value.order : false,
+  },
+  {
+    title: 'SKU',
+    key: 'factorySku',
+    width: 100,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: giftSortState.value.columnKey === 'factorySku' ? giftSortState.value.order : false,
+  },
   {
     title: '数量',
     key: 'quantity',
     width: 130,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: giftSortState.value.columnKey === 'quantity' ? giftSortState.value.order : false,
     render: (row: any) =>
       h(NInputNumber, {
         value: row.quantity,
@@ -378,7 +451,7 @@ const giftColumns: DataTableColumns = [
         { default: () => '删除' },
       ),
   },
-]
+])
 
 const addGiftOptions = computed(() =>
   availableProducts.value.map((p) => ({ label: `${p.name} (${p.factorySku})`, value: p.id })),
@@ -677,6 +750,7 @@ onUnmounted(() => {
             :row-props="
               (row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })
             "
+            @update:sorter="(s: any) => applyPreviewSorter(s)"
           />
         </div>
         <!-- paginated mode -->
@@ -692,6 +766,7 @@ onUnmounted(() => {
               :row-props="
                 (row: any) => ({ class: 'cursor-pointer', onClick: () => openMemberPopup(row) })
               "
+              @update:sorter="(s: any) => applyPreviewSorter(s)"
             />
           </div>
           <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
@@ -787,10 +862,12 @@ onUnmounted(() => {
         </div>
         <NDataTable
           :columns="giftColumns"
-          :data="memberRecords"
+          :data="sortedGiftRecords"
+          :remote="true"
           :bordered="false"
           :pagination="{ pageSize: 10 }"
           size="small"
+          @update:sorter="(s: any) => applyGiftSorter(s)"
         />
       </NCard>
     </NModal>
@@ -812,7 +889,7 @@ onUnmounted(() => {
     <AdaptiveTableMeasureLayer
       v-if="tableMode === 'paginated' && memberGroups.length"
       ref="previewMeasureLayer"
-      :data="memberGroups"
+      :data="sortedGroups"
       :columns="previewMeasureColumns"
       :width="viewportWidth"
       size="small"

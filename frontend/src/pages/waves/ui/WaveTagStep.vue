@@ -34,6 +34,11 @@ import {
 import { useContextMenu } from '@/shared/composables/useContextMenu'
 import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
 import { useTableMode } from '@/shared/model/settings'
+import {
+  useTableSort,
+  nextSortOrderAscFirst,
+  type SortDescriptor,
+} from '@/shared/composables/useTableSort'
 import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
 import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
 
@@ -301,6 +306,18 @@ const tagFooterRef = ref<HTMLElement | null>(null)
 const tagMeasureLayer = ref<InstanceType<typeof AdaptiveTableMeasureLayer> | null>(null)
 const tableMode = useTableMode()
 
+const tagSortDescriptors: SortDescriptor<any>[] = [
+  { key: 'name', getValue: (p: any) => p.name },
+  { key: 'platform', getValue: (p: any) => p.platform },
+  { key: 'factorySku', getValue: (p: any) => p.factorySku || '' },
+]
+
+const {
+  sortedItems: sortedTagProducts,
+  sortState: tagSortState,
+  applyNaiveSorterEvent: applyTagSorter,
+} = useTableSort(allTagProducts, tagSortDescriptors)
+
 const {
   currentPage,
   pageCount: totalPages,
@@ -317,11 +334,12 @@ const {
   measurementInvalidationVersion: tagMeasurementVersion,
   measurementRequestId: tagMeasurementRequestId,
   requestRemeasure: requestTagRemeasure,
-} = useAdaptiveTable(allTagProducts, tableMode, {
+} = useAdaptiveTable(sortedTagProducts, tableMode, {
   layoutRef: tagLayoutRef,
   tableRef: tagTableRef,
   paginationRef: tagFooterRef,
   rowHeightHint: (w: number) => (w < 650 ? 104 : 88),
+  contentSignature: () => sortedTagProducts.value.map(p => p.id).join(','),
 })
 
 function handlePageChange(p: number) {
@@ -330,6 +348,10 @@ function handlePageChange(p: number) {
 }
 
 watch(pageGeometryVersion, () => {
+  lastClickedIndex.value = -1
+})
+
+watch(() => tagSortState.value, () => {
   lastClickedIndex.value = -1
 })
 
@@ -510,6 +532,9 @@ function buildTagColumns(options: { interactive: boolean }): DataTableColumns {
       title: '商品名',
       key: 'name',
       width: 160,
+      sorter: 'default' as const,
+      customNextSortOrder: nextSortOrderAscFirst,
+      sortOrder: tagSortState.value.columnKey === 'name' ? tagSortState.value.order : false,
       render: (row: any) => clampedText(row.name),
     },
     {
@@ -844,7 +869,7 @@ onMounted(async () => {
     if (!tr) return []
     const productId = Number(tr.dataset.productId)
     if (!productId) return []
-    const product = allTagProducts.value.find((p) => p.id === productId)
+    const product = sortedTagProducts.value.find((p) => p.id === productId)
     if (!product) return []
     const levelTags = product.tags.filter((t: TagInfo) => t.tagType === 'level')
     const userTags = product.tags.filter((t: TagInfo) => t.tagType === 'user')
@@ -1164,6 +1189,7 @@ onUnmounted(() => {
             :pagination="false"
             size="medium"
             :row-props="rowProps"
+            @update:sorter="(s: any) => applyTagSorter(s)"
           />
         </div>
         <!-- paginated mode -->
@@ -1180,6 +1206,7 @@ onUnmounted(() => {
               :pagination="false"
               size="medium"
               :row-props="rowProps"
+              @update:sorter="(s: any) => applyTagSorter(s)"
             />
           </div>
           <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
@@ -1312,7 +1339,7 @@ onUnmounted(() => {
     <AdaptiveTableMeasureLayer
       v-if="tableMode === 'paginated' && allTagProducts.length"
       ref="tagMeasureLayer"
-      :data="allTagProducts"
+      :data="sortedTagProducts"
       :columns="tagMeasureColumns"
       :width="viewportWidth"
       size="medium"

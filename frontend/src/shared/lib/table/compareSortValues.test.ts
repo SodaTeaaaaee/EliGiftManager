@@ -1,5 +1,5 @@
-import { assertEquals } from 'jsr:@std/assert'
-import { compareValues } from './compareSortValues.ts'
+import { assertEquals, assert } from 'jsr:@std/assert'
+import { compareValues, compareStrings, classifySortBucket } from './compareSortValues.ts'
 import { toHiragana, buildKanaRomajiKey, isPureKana, hasHan, hasHangul } from './kanaRomaji.ts'
 
 // --- kanaRomaji ---
@@ -116,4 +116,59 @@ Deno.test('stableSortRows: descending preserves original order on equal values',
   assertEquals(result[0].id, 1)
   assertEquals(result[1].id, 2)
   assertEquals(result[2].id, 3)
+})
+
+// --- bucket classification ---
+Deno.test('classifySortBucket: digit', () => {
+  assertEquals(classifySortBucket('123'), 'digit')
+  assertEquals(classifySortBucket('０１２'), 'digit')
+})
+
+Deno.test('classifySortBucket: latin', () => {
+  assertEquals(classifySortBucket('ABC'), 'latin')
+  assertEquals(classifySortBucket('hello'), 'latin')
+})
+
+Deno.test('classifySortBucket: han', () => {
+  assertEquals(classifySortBucket('张三'), 'han')
+  assertEquals(classifySortBucket('日本語'), 'han') // kanji → han
+})
+
+Deno.test('classifySortBucket: hiragana', () => {
+  assertEquals(classifySortBucket('あいう'), 'hiragana')
+})
+
+Deno.test('classifySortBucket: katakana', () => {
+  assertEquals(classifySortBucket('アイウ'), 'katakana')
+})
+
+Deno.test('classifySortBucket: hangul', () => {
+  assertEquals(classifySortBucket('한글'), 'hangul')
+})
+
+Deno.test('classifySortBucket: leading bracket skipped', () => {
+  assertEquals(classifySortBucket('【张三】'), 'han')
+})
+
+Deno.test('classifySortBucket: A12中文 → latin (first strong char is A)', () => {
+  assertEquals(classifySortBucket('A12中文'), 'latin')
+})
+
+Deno.test('classifySortBucket: 123abc → digit', () => {
+  assertEquals(classifySortBucket('123abc'), 'digit')
+})
+
+// --- bucket ordering ---
+Deno.test('compareStrings: bucket order ascending (digit < latin < han < hiragana < katakana < hangul < other)', () => {
+  assert(compareStrings('1', 'A') < 0)
+  assert(compareStrings('A', '张') < 0)
+  assert(compareStrings('张', 'あ') < 0)
+  assert(compareStrings('あ', 'ア') < 0)
+  assert(compareStrings('ア', '가') < 0)
+  assert(compareStrings('가', '#') < 0)
+})
+
+Deno.test('compareStrings: bucket order is preserved regardless of numeric value', () => {
+  // 1000 (digit) should come before A (latin)
+  assert(compareStrings('1000', 'A') < 0)
 })

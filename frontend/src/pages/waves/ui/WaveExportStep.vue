@@ -95,7 +95,7 @@ const exportPlatforms = computed(() => {
 const recordColumns = computed<DataTableColumns<DispatchRecordItem>>(() => [
   {
     title: '显示名',
-    key: 'memberNickname',
+    key: 'displayName',
     minWidth: 120,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
@@ -184,7 +184,7 @@ const {
 const exportMeasureColumns = computed(() => [
   {
     title: '显示名',
-    key: 'memberNickname',
+    key: 'displayName',
     minWidth: 120,
     render: (row: any) => row.memberNickname || row.platformUid,
   },
