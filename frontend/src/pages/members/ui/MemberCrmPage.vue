@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { AddOutline, CreateOutline, TrashOutline } from '@vicons/ionicons5'
 import { SearchOutline } from '@vicons/ionicons5'
-import { computed, h, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
+  NAlert,
   NAvatar,
   NButton,
   NCard,
@@ -24,6 +25,12 @@ import {
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
+import { useTableMode } from '@/shared/model/settings'
+import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
+import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
+import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
+import { useTableSort, nextSortOrderAscFirst, type SortDescriptor } from '@/shared/composables/useTableSort'
+import { collectAllPages } from '@/shared/lib/table/collectAllPages'
 import {
   addMemberAddress,
   deleteMemberAddress,
@@ -38,38 +45,56 @@ import {
 import type { model } from '../../../../wailsjs/go/models'
 
 const message = useMessage()
-const members = ref<MemberItem[]>([])
+const allMembers = ref<MemberItem[]>([])
 const keyword = ref('')
 const platform = ref('')
-const page = ref(1)
-const pageSize = ref(12)
-const total = ref(0)
 const selectedMember = ref<MemberItem | null>(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
 const dashboardStats = ref({ memberCount: 0, addressCount: 0, missingAddresses: 0 })
 const showMissingOnly = ref(false)
-const tableCardRef = ref<any>(null)
 const showAddressModal = ref(false)
 const editingAddress = ref<model.MemberAddress | null>(null)
 const addressForm = ref({ recipientName: '', phone: '', address: '' })
 const isSavingAddress = ref(false)
 
+const tableMode = useTableMode()
 const platformCatalog = ref<string[]>([])
 
 const platformOptions = computed(() =>
   platformCatalog.value.map((value) => ({ label: value, value })),
 )
-const filteredMembers = computed(() =>
-  showMissingOnly.value ? members.value.filter((m) => m.activeAddressCount === 0) : members.value,
+
+// Sort descriptors
+const memberSortDescriptors: SortDescriptor<MemberItem>[] = [
+  { key: 'latestNickname', getValue: (m) => m.latestNickname || m.platformUid },
+  { key: 'activeAddressCount', getValue: (m) => m.activeAddressCount },
+  { key: 'latestRecipient', getValue: (m) => m.latestRecipient || '' },
+  { key: 'latestPhone', getValue: (m) => m.latestPhone || '' },
+  { key: 'latestAddress', getValue: (m) => m.latestAddress || '' },
+]
+
+// Filter first, then sort
+const filteredMembers = computed(() => {
+  if (showMissingOnly.value) {
+    return allMembers.value.filter((m) => m.activeAddressCount === 0)
+  }
+  return allMembers.value
+})
+
+const { sortedItems: displayMembers, sortState: memberSortState, toggleSort: toggleMemberSort, applySorter } = useTableSort(
+  filteredMembers,
+  memberSortDescriptors,
 )
 
-const columns: DataTableColumns<MemberItem> = [
+const columns = computed<DataTableColumns<MemberItem>>(() => [
   {
     title: '会员',
     key: 'latestNickname',
     minWidth: 160,
-    sorter: true,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
     render: (row) =>
       h('div', { class: 'flex items-center gap-3' }, [
         h(
@@ -91,7 +116,9 @@ const columns: DataTableColumns<MemberItem> = [
     title: '地址状态',
     key: 'activeAddressCount',
     width: 120,
-    sorter: true,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: memberSortState.value.columnKey === 'activeAddressCount' ? memberSortState.value.order : false,
     render: (row) =>
       h(
         NTag,
@@ -103,25 +130,110 @@ const columns: DataTableColumns<MemberItem> = [
     title: '默认收件人',
     key: 'latestRecipient',
     minWidth: 100,
-    sorter: true,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: memberSortState.value.columnKey === 'latestRecipient' ? memberSortState.value.order : false,
     render: (row) => row.latestRecipient || '-',
   },
   {
     title: '手机',
     key: 'latestPhone',
     minWidth: 100,
-    sorter: true,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: memberSortState.value.columnKey === 'latestPhone' ? memberSortState.value.order : false,
     render: (row) => row.latestPhone || '-',
   },
   {
     title: '地址',
     key: 'latestAddress',
     minWidth: 180,
-    sorter: true,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: memberSortState.value.columnKey === 'latestAddress' ? memberSortState.value.order : false,
     ellipsis: { tooltip: true },
     render: (row) => row.latestAddress || '-',
   },
-]
+])
+
+// Adaptive table refs
+const memberLayoutRef = ref<HTMLElement | null>(null)
+const memberTableRef = ref<HTMLElement | null>(null)
+const memberFooterRef = ref<HTMLElement | null>(null)
+const memberMeasureLayer = ref<InstanceType<typeof AdaptiveTableMeasureLayer> | null>(null)
+
+const {
+  currentPage,
+  pageCount: totalPages,
+  renderItems: renderMembers,
+  tableBodyMaxHeight,
+  viewportWidth,
+  measurementInvalidationVersion: memberMeasurementVersion,
+  measurementRequestId: memberMeasurementRequestId,
+  requestRemeasure: requestMemberRemeasure,
+  applyMeasuredRows: applyMemberMeasuredRows,
+  handlePageChange,
+  refreshLayout,
+  teardown,
+  init,
+} = useAdaptiveTable(displayMembers, tableMode, {
+  layoutRef: memberLayoutRef,
+  tableRef: memberTableRef,
+  paginationRef: memberFooterRef,
+  rowHeightHint: 56,
+  contentSignature: () => displayMembers.value.map(m => m.id).join(','),
+})
+
+// Measure columns (mirrors real first column for accurate row-height measurement)
+const memberMeasureColumns = computed<DataTableColumns<MemberItem>>(() => [
+  {
+    title: '会员', key: 'latestNickname', minWidth: 160,
+    render: (row: any) => h('div', { class: 'flex items-center gap-3' }, [
+      h(NAvatar, { size: 34, color: 'var(--accent-surface)', style: { color: 'var(--accent)', fontWeight: '700' } },
+        { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() }),
+      h('div', [
+        h('div', { class: 'font-semibold' }, row.latestNickname || row.platformUid),
+        h('div', { class: 'app-copy' }, `${row.platform} / ${row.platformUid}`),
+      ]),
+    ]),
+  },
+  { title: '地址状态', key: 'activeAddressCount', width: 120,
+    render: (row: any) => h(NTag, { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
+      { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') }),
+  },
+  { title: '默认收件人', key: 'latestRecipient', minWidth: 100, render: (row: any) => row.latestRecipient || '-' },
+  { title: '手机', key: 'latestPhone', minWidth: 100, render: (row: any) => row.latestPhone || '-' },
+  { title: '地址', key: 'latestAddress', minWidth: 180, ellipsis: { tooltip: true }, render: (row: any) => row.latestAddress || '-' },
+])
+
+let memberMeasureRunning = false
+let memberMeasurePending = false
+
+async function runMemberRemeasure() {
+  if (memberMeasureRunning) { memberMeasurePending = true; return }
+  memberMeasureRunning = true
+  const requestId = memberMeasurementRequestId.value
+  try {
+    await nextTick()
+    await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => requestAnimationFrame(r))
+    refreshLayout()
+    await nextTick()
+    const result = memberMeasureLayer.value?.measure()
+    if (!result) return
+    memberMeasureLayer.value?.setWidth(viewportWidth.value)
+    applyMemberMeasuredRows(result.rowHeights, result.headerHeight, requestId)
+  } finally {
+    memberMeasureRunning = false
+    if (memberMeasurePending) { memberMeasurePending = false; await runMemberRemeasure() }
+  }
+}
+
+watch(
+  [() => tableMode.value, () => memberMeasurementVersion.value],
+  async () => { if (tableMode.value !== 'paginated') return; await runMemberRemeasure() },
+  { flush: 'post' },
+)
 
 async function loadDashboardStats() {
   if (!isWailsRuntimeAvailable()) return
@@ -137,26 +249,28 @@ async function loadDashboardStats() {
   }
 }
 
-async function loadMembers() {
+async function loadAllMembers() {
   if (!isWailsRuntimeAvailable()) {
-    members.value = []
-    total.value = 0
+    allMembers.value = []
     platformCatalog.value = []
     errorMessage.value = WAILS_PREVIEW_MESSAGE
     return
   }
-
   isLoading.value = true
   errorMessage.value = ''
-
   try {
     const selectedMemberID = selectedMember.value?.id
-    const payload = await listMembers(page.value, pageSize.value, keyword.value, platform.value)
-    members.value = payload.items
-    total.value = payload.total
-    platformCatalog.value = payload.platforms
+    const result = await collectAllPages<MemberItem>(
+      async (p, ps) => {
+        const payload = await listMembers(p, ps, keyword.value, platform.value)
+        return { items: payload.items, total: payload.total }
+      },
+      200,
+    )
+    allMembers.value = result.items
+    platformCatalog.value = result.platforms
     if (selectedMemberID) {
-      selectedMember.value = payload.items.find((member) => member.id === selectedMemberID) ?? null
+      selectedMember.value = result.find((m) => m.id === selectedMemberID) ?? null
     }
   } catch (error) {
     console.error(error)
@@ -166,22 +280,14 @@ async function loadMembers() {
   }
 }
 
-function searchMembers() {
-  page.value = 1
-  void loadMembers()
+async function searchMembers() {
+  await loadAllMembers()
 }
 
-function handlePageChange(nextPage: number) {
-  if (nextPage === page.value) return
-  page.value = nextPage
-  void loadMembers()
-}
-
-function handlePageSizeChange(nextPageSize: number) {
-  if (nextPageSize === pageSize.value) return
-  pageSize.value = nextPageSize
-  page.value = 1
-  void loadMembers()
+async function refreshMembers() {
+  await loadAllMembers()
+  await nextTick()
+  requestMemberRemeasure()
 }
 
 function closeMemberDetail() {
@@ -201,8 +307,10 @@ async function handleDefault(addressId: number) {
     const memberId = selectedMember.value.id
     await setDefaultAddress(memberId, addressId)
     message.success('默认地址已更新')
-    await loadMembers()
-    selectedMember.value = members.value.find((member) => member.id === memberId) ?? null
+    await loadAllMembers()
+    selectedMember.value = allMembers.value.find((member) => member.id === memberId) ?? null
+    await nextTick()
+    requestMemberRemeasure()
   } catch (error) {
     message.error(String(error))
   }
@@ -246,8 +354,10 @@ async function saveAddress() {
       message.success('地址已添加')
     }
     showAddressModal.value = false
-    await loadMembers()
-    selectedMember.value = members.value.find((m) => m.id === selectedMember.value!.id) ?? null
+    await loadAllMembers()
+    selectedMember.value = allMembers.value.find((m) => m.id === selectedMember.value!.id) ?? null
+    await nextTick()
+    requestMemberRemeasure()
   } catch (error) {
     message.error(String(error))
   } finally {
@@ -259,58 +369,41 @@ async function handleDeleteAddress(addressId: number) {
   try {
     await deleteMemberAddress(addressId)
     message.success('地址已删除')
-    await loadMembers()
+    await loadAllMembers()
     if (selectedMember.value) {
-      selectedMember.value = members.value.find((m) => m.id === selectedMember.value!.id) ?? null
+      selectedMember.value = allMembers.value.find((m) => m.id === selectedMember.value!.id) ?? null
     }
+    await nextTick()
+    requestMemberRemeasure()
   } catch (error) {
     message.error(String(error))
-  }
-}
-
-const ROW_HEIGHT = 52
-let resizeObserver: ResizeObserver | null = null
-
-function recomputePageSize() {
-  const el = tableCardRef.value?.$el as HTMLElement | undefined
-  if (!el) return
-  const headerH = (el.querySelector('.n-card-header') as HTMLElement)?.offsetHeight ?? 44
-  const available = el.clientHeight - headerH - 24 - 64
-  const newSize = Math.max(5, Math.floor(available / ROW_HEIGHT))
-  if (Math.abs(newSize - pageSize.value) > 1) {
-    pageSize.value = newSize
   }
 }
 
 onMounted(async () => {
   await nextTick()
   await loadDashboardStats()
-  await loadMembers()
-  const el = tableCardRef.value?.$el
-  if (el) {
-    resizeObserver = new ResizeObserver(() => recomputePageSize())
-    resizeObserver.observe(el)
-    recomputePageSize()
-  }
+  await loadAllMembers()
+  await init()
+  await nextTick()
+  requestMemberRemeasure()
 })
 
 onBeforeUnmount(() => {
-  resizeObserver?.disconnect()
+  teardown()
 })
 </script>
 
 <template>
-  <section class="h-full flex flex-col space-y-5">
-    <header class="flex flex-col gap-3 shrink-0 xl:flex-row xl:items-end xl:justify-between">
-      <div>
-        <p class="app-kicker">Member CRM</p>
-        <h1 class="app-title mt-2">会员管理</h1>
-        <p class="app-copy mt-2">按平台隔离检索会员，维护默认地址与昵称历史。</p>
-      </div>
-      <NButton :loading="isLoading" secondary strong @click="loadMembers">刷新会员</NButton>
+  <div class="h-full flex flex-col">
+    <!-- Title -->
+    <header class="shrink-0 px-1 py-2">
+      <p class="app-kicker">Members</p>
+      <h1 class="app-title mt-2">会员管理中心</h1>
     </header>
 
-    <div class="grid gap-4 shrink-0 md:grid-cols-3">
+    <!-- Stats cards -->
+    <div class="shrink-0 px-1 grid gap-3 md:grid-cols-3 mb-3">
       <NCard>
         <p class="app-copy">会员总数</p>
         <p class="mt-1 text-2xl font-semibold">{{ dashboardStats.memberCount }}</p>
@@ -327,61 +420,81 @@ onBeforeUnmount(() => {
       </NCard>
     </div>
 
-    <NCard ref="tableCardRef" title="会员列表" size="medium" class="flex-1 min-h-0 overflow-auto">
-      <template #header-extra>
-        <div class="flex gap-2 items-center">
-          <NInput
-            v-model:value="keyword"
-            clearable
-            placeholder="搜索昵称 / UID"
-            style="width: 240px"
-            @keyup.enter="searchMembers"
-          >
-            <template #prefix>
-              <NIcon><SearchOutline /></NIcon>
-            </template>
-          </NInput>
-          <NSelect
-            v-model:value="platform"
-            clearable
-            :options="platformOptions"
-            placeholder="平台"
-            style="width: 150px"
-            @update:value="searchMembers"
-          />
-          <NButton @click="searchMembers">搜索</NButton>
-          <div class="flex items-center gap-2 ml-2">
-            <span class="text-xs text-gray-500" style="white-space: nowrap">仅显示缺地址</span>
-            <NSwitch v-model:value="showMissingOnly" size="small" @update:value="searchMembers" />
-          </div>
-        </div>
-      </template>
+    <!-- Search bar -->
+    <div class="shrink-0 px-1 flex items-center gap-2 mb-3">
+      <NInput v-model:value="keyword" placeholder="搜索会员名或UID..." clearable @keyup.enter="searchMembers" style="flex:1; max-width:300px">
+        <template #prefix><NIcon><SearchOutline /></NIcon></template>
+      </NInput>
+      <NSelect v-model:value="platform" :options="platformOptions" placeholder="全部平台" clearable style="width:140px" @update:value="searchMembers" />
+      <div class="flex items-center gap-1 ml-2">
+        <span class="text-xs text-gray-500">仅缺地址</span>
+        <NSwitch v-model:value="showMissingOnly" />
+      </div>
+      <NButton size="small" type="primary" @click="searchMembers" class="ml-2">
+        <template #icon><NIcon><SearchOutline /></NIcon></template>
+        搜索
+      </NButton>
+      <NButton size="small" @click="refreshMembers" class="ml-1">刷新</NButton>
+    </div>
 
-      <NEmpty v-if="errorMessage" :description="errorMessage" />
-      <div v-else class="space-y-4">
+    <!-- Error / empty state -->
+    <NAlert v-if="errorMessage" type="warning" :show-icon="false" class="mx-1 mb-3">
+      {{ errorMessage }}
+    </NAlert>
+    <NAlert v-else-if="!isLoading && displayMembers.length === 0 && allMembers.length === 0" type="info" :show-icon="false" class="mx-1 mb-3">
+      暂无会员数据
+    </NAlert>
+
+    <!-- Table viewport area -->
+    <div ref="memberLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div v-if="tableMode === 'scroll'" ref="memberTableRef" class="flex-1 min-h-0 overflow-hidden">
         <NDataTable
           :columns="columns"
-          :data="filteredMembers"
+          :data="renderMembers"
           :loading="isLoading"
           :bordered="false"
-          :scroll-x="900"
+          :remote="true"
           :pagination="false"
-          :row-props="(row) => ({ class: 'cursor-pointer', onClick: () => (selectedMember = row) })"
+          :max-height="tableBodyMaxHeight"
+          :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => { selectedMember = row } })"
+          size="small"
+          @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
         />
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <p class="app-copy">共 {{ showMissingOnly ? filteredMembers.length : total }} 条记录</p>
-          <NPagination
-            :page="page"
-            :page-size="pageSize"
-            :item-count="showMissingOnly ? filteredMembers.length : total"
-            :page-sizes="[12, 24, 48]"
-            show-size-picker
-            @update:page="handlePageChange"
-            @update:page-size="handlePageSizeChange"
+      </div>
+      <template v-if="tableMode === 'paginated'">
+        <div ref="memberTableRef" class="shrink-0">
+          <NDataTable
+            :columns="columns"
+            :data="renderMembers"
+            :loading="isLoading"
+            :bordered="false"
+            :remote="true"
+            :pagination="false"
+            :row-props="(row: any) => ({ class: 'cursor-pointer', onClick: () => { selectedMember = row } })"
+            size="small"
+            @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
           />
         </div>
+        <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
+      </template>
+    </div>
+
+    <!-- Footer -->
+    <div v-if="tableMode === 'paginated'" ref="memberFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
+      <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex;">
+        <NPagination :page="currentPage" :page-count="totalPages" size="small" @update:page="handlePageChange" />
       </div>
-    </NCard>
+    </div>
+
+    <!-- Measure layer -->
+    <AdaptiveTableMeasureLayer
+      v-if="tableMode === 'paginated' && displayMembers.length"
+      ref="memberMeasureLayer"
+      :data="displayMembers"
+      :columns="memberMeasureColumns"
+      :width="viewportWidth"
+      size="small"
+    />
 
     <NDrawer :show="!!selectedMember" :width="460" @update:show="handleDrawerVisibility">
       <NDrawerContent
@@ -481,5 +594,5 @@ onBeforeUnmount(() => {
         </NButton>
       </NForm>
     </NModal>
-  </section>
+  </div>
 </template>

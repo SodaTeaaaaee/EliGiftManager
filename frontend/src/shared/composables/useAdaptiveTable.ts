@@ -13,6 +13,7 @@ export interface StableTableOptions {
   minPageSize?: number;
   headerHeightHint?: number;
   footerHeightHint?: number; // fallback when paginationRef is null/not provided
+  contentSignature?: () => string | number;
 }
 
 export function useAdaptiveTable<T>(
@@ -234,6 +235,13 @@ export function useAdaptiveTable<T>(
     measurementInvalidationVersion.value++;
     clampCurrentPage();
   });
+
+  if (options.contentSignature) {
+    watch(options.contentSignature, () => {
+      requestRemeasure();
+      currentPage.value = 1;
+    });
+  }
 
   function requestRemeasure() {
     invalidateMeasuredRows();

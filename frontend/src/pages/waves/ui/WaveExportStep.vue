@@ -1,17 +1,22 @@
 <script setup lang="ts">
 import { DownloadOutline } from '@vicons/ionicons5'
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  NCard,
   NButton,
   NDataTable,
   NIcon,
+  NPagination,
   NSelect,
   NTag,
   useMessage,
   type DataTableColumns,
 } from 'naive-ui'
+import { useTableMode } from '@/shared/model/settings'
+import { useAdaptiveTable } from '@/shared/composables/useAdaptiveTable'
+import AdaptivePaginationIndicator from '@/shared/ui/table/AdaptivePaginationIndicator.vue'
+import AdaptiveTableMeasureLayer from '@/shared/ui/table/AdaptiveTableMeasureLayer.vue'
+import { useTableSort, nextSortOrderAscFirst, type SortDescriptor } from '@/shared/composables/useTableSort'
 import {
   bindDefaultAddresses,
   exportOrderCSV,
@@ -37,6 +42,23 @@ const templates = ref<TemplateItem[]>([])
 const records = ref<DispatchRecordItem[]>([])
 const isBindingAddresses = ref(false)
 const errorMessage = ref('')
+
+const tableMode = useTableMode()
+
+// Sort descriptors for export records
+const exportSortDescriptors: SortDescriptor<DispatchRecordItem>[] = [
+  { key: 'memberNickname', getValue: (r) => r.memberNickname || r.platformUid },
+  { key: 'memberPlatform', getValue: (r) => r.memberPlatform },
+  { key: 'productName', getValue: (r) => r.productName },
+  { key: 'quantity', getValue: (r) => r.quantity },
+  { key: 'hasAddress', getValue: (r) => (r.hasAddress ? '已绑定' : '待补全') },
+  { key: 'address', getValue: (r) => r.address || '' },
+]
+
+const { sortedItems: sortedRecords, sortState, toggleSort, applySorter } = useTableSort(
+  records,
+  exportSortDescriptors,
+)
 
 const pendingAddressCount = computed(() => wave.value?.pendingAddressRecords ?? 0)
 
@@ -64,35 +86,133 @@ const exportPlatforms = computed(() => {
   })
 })
 
-const recordColumns: DataTableColumns<DispatchRecordItem> = [
+const recordColumns = computed<DataTableColumns<DispatchRecordItem>>(() => [
   {
     title: '会员',
     key: 'memberNickname',
     minWidth: 120,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: sortState.value.columnKey === 'memberNickname' ? sortState.value.order : false,
     render: (row) => row.memberNickname || row.platformUid,
   },
-  { title: '平台', key: 'memberPlatform', width: 100 },
-  { title: '礼物', key: 'productName', minWidth: 140 },
-  { title: '数量', key: 'quantity', width: 80 },
+  {
+    title: '平台',
+    key: 'memberPlatform',
+    width: 100,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: sortState.value.columnKey === 'memberPlatform' ? sortState.value.order : false,
+  },
+  {
+    title: '礼物',
+    key: 'productName',
+    minWidth: 140,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: sortState.value.columnKey === 'productName' ? sortState.value.order : false,
+  },
+  {
+    title: '数量',
+    key: 'quantity',
+    width: 80,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: sortState.value.columnKey === 'quantity' ? sortState.value.order : false,
+  },
   {
     title: '地址',
     key: 'hasAddress',
     width: 110,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: sortState.value.columnKey === 'hasAddress' ? sortState.value.order : false,
     render: (row) =>
-      h(
-        NTag,
-        { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
-        { default: () => (row.hasAddress ? '已绑定' : '待补全') },
-      ),
+      h(NTag, { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
+        { default: () => (row.hasAddress ? '已绑定' : '待补全') }),
   },
   {
     title: '收件信息',
     key: 'address',
     minWidth: 180,
     ellipsis: { tooltip: true },
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: sortState.value.columnKey === 'address' ? sortState.value.order : false,
     render: (row) => row.address || '-',
   },
-]
+])
+
+// Adaptive table refs
+const exportLayoutRef = ref<HTMLElement | null>(null)
+const exportTableRef = ref<HTMLElement | null>(null)
+const exportFooterRef = ref<HTMLElement | null>(null)
+const exportMeasureLayer = ref<InstanceType<typeof AdaptiveTableMeasureLayer> | null>(null)
+
+const {
+  currentPage,
+  pageCount: totalPages,
+  renderItems: renderRecords,
+  tableBodyMaxHeight,
+  viewportWidth,
+  measurementInvalidationVersion: exportMeasurementVersion,
+  measurementRequestId: exportMeasurementRequestId,
+  requestRemeasure: requestExportRemeasure,
+  applyMeasuredRows: applyExportMeasuredRows,
+  handlePageChange,
+  refreshLayout,
+  teardown,
+  init,
+} = useAdaptiveTable(sortedRecords, tableMode, {
+  layoutRef: exportLayoutRef,
+  tableRef: exportTableRef,
+  paginationRef: exportFooterRef,
+  rowHeightHint: 56,
+  contentSignature: () => sortedRecords.value.map(r => r.id ?? r.memberId).join(','),
+})
+
+// Measure columns (includes render fallback for accurate row-height measurement)
+const exportMeasureColumns = computed(() => [
+  { title: '会员', key: 'memberNickname', minWidth: 120, render: (row: any) => row.memberNickname || row.platformUid },
+  { title: '平台', key: 'memberPlatform', width: 100 },
+  { title: '礼物', key: 'productName', minWidth: 140 },
+  { title: '数量', key: 'quantity', width: 80 },
+  {
+    title: '地址', key: 'hasAddress', width: 110,
+    render: (row: any) => h(NTag, { type: row.hasAddress ? 'success' : 'warning', size: 'small', round: true },
+      { default: () => (row.hasAddress ? '已绑定' : '待补全') }),
+  },
+  { title: '收件信息', key: 'address', minWidth: 180, render: (row: any) => row.address || '-' },
+])
+
+let exportMeasureRunning = false
+let exportMeasurePending = false
+
+async function runExportRemeasure() {
+  if (exportMeasureRunning) { exportMeasurePending = true; return }
+  exportMeasureRunning = true
+  const requestId = exportMeasurementRequestId.value
+  try {
+    await nextTick()
+    await new Promise(r => requestAnimationFrame(r))
+    await new Promise(r => requestAnimationFrame(r))
+    refreshLayout()
+    await nextTick()
+    const result = exportMeasureLayer.value?.measure()
+    if (!result) return
+    exportMeasureLayer.value?.setWidth(viewportWidth.value)
+    applyExportMeasuredRows(result.rowHeights, result.headerHeight, requestId)
+  } finally {
+    exportMeasureRunning = false
+    if (exportMeasurePending) { exportMeasurePending = false; await runExportRemeasure() }
+  }
+}
+
+watch(
+  [() => tableMode.value, () => exportMeasurementVersion.value],
+  async () => { if (tableMode.value !== 'paginated') return; await runExportRemeasure() },
+  { flush: 'post' },
+)
 
 async function guardRuntime() {
   if (!isWailsRuntimeAvailable()) {
@@ -191,70 +311,109 @@ onMounted(async () => {
   await loadWave()
   await loadTemplates()
   await loadRecords()
-  // Auto-bind available addresses for records that are still missing them.
-  // This is safe: it only fills NULL address slots, never overwrites manual selections.
-  if (waveId.value) {
-    await syncAvailableAddresses({ silent: true })
-  }
+  if (waveId.value) await syncAvailableAddresses({ silent: true })
+  await init()
+  await nextTick()
+  requestExportRemeasure()
 })
+
+onUnmounted(() => { teardown() })
 </script>
 <template>
-  <NCard size="small" class="h-full overflow-auto">
-    <template #header>
-      <span class="flex items-center gap-2">
-        <span>步骤四：异常检查与导出</span>
-        <NTag v-if="pendingAddressCount > 0" type="warning" size="small" round
-          >{{ pendingAddressCount }} 条待补全</NTag
-        >
-      </span>
-    </template>
-    <template #header-extra>
+  <div class="h-full flex flex-col">
+    <!-- Header -->
+    <div class="flex items-center gap-2 shrink-0 px-1 py-2">
+      <NIcon size="18"><DownloadOutline /></NIcon>
+      <span class="font-semibold text-sm">步骤四：异常检查与导出</span>
+      <NTag v-if="pendingAddressCount > 0" type="warning" size="small" round>
+        {{ pendingAddressCount }} 条待补全
+      </NTag>
       <NButton
         v-if="wave && pendingAddressCount > 0"
         size="small"
         type="warning"
         :loading="isBindingAddresses"
         @click="handleBindAddresses"
-        >一键同步已有地址</NButton
-      >
-    </template>
-    <NDataTable
-      :columns="recordColumns"
-      :data="records"
-      :bordered="false"
-      :pagination="{ pageSize: 10 }"
-      class="mb-4"
-    />
-    <div class="p-3 border border-gray-100 dark:border-gray-700 rounded-lg">
-      <span class="text-xs text-gray-500 block mb-2 font-medium">导出发货清单</span>
-      <div v-if="exportPlatforms.length" class="space-y-2 mb-3">
-        <div class="text-xs text-gray-400">导出模板（已自动匹配）</div>
-        <div v-for="ep in exportPlatforms" :key="ep.platform" class="flex items-center gap-2">
-          <NTag size="small" round>{{ ep.platform }}</NTag>
-          <NSelect
-            :value="ep.templateId"
-            :options="ep.options"
+        class="ml-auto"
+      >一键同步已有地址</NButton>
+    </div>
+
+    <!-- Export controls (moved above table) -->
+    <div class="shrink-0 px-1 pb-2">
+      <div class="p-3 border border-gray-100 dark:border-gray-700 rounded-lg">
+        <span class="text-xs text-gray-500 block mb-2 font-medium">导出发货清单</span>
+        <div v-if="exportPlatforms.length" class="space-y-2 mb-3">
+          <div class="text-xs text-gray-400">导出模板（已自动匹配）</div>
+          <div v-for="ep in exportPlatforms" :key="ep.platform" class="flex items-center gap-2">
+            <NTag size="small" round>{{ ep.platform }}</NTag>
+            <NSelect
+              :value="ep.templateId"
+              :options="ep.options"
+              size="small"
+              style="width: 220px"
+              placeholder="选择导出模板"
+              @update:value="(v: number) => { platformTemplateSelections[ep.platform] = v }"
+            />
+          </div>
+        </div>
+        <NButton block type="success" @click="handleExport">
+          <template #icon><NIcon><DownloadOutline /></NIcon></template>
+          生成发货清单
+        </NButton>
+      </div>
+    </div>
+
+    <!-- Table viewport -->
+    <div ref="exportLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden px-1">
+      <div v-if="tableMode === 'scroll'" ref="exportTableRef" class="flex-1 min-h-0 overflow-hidden">
+        <NDataTable
+          :columns="recordColumns"
+          :data="renderRecords"
+          :bordered="false"
+          :remote="true"
+          :pagination="false"
+          :max-height="tableBodyMaxHeight"
+          size="small"
+          @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
+        />
+      </div>
+      <template v-if="tableMode === 'paginated'">
+        <div ref="exportTableRef" class="shrink-0">
+          <NDataTable
+            :columns="recordColumns"
+            :data="renderRecords"
+            :bordered="false"
+            :remote="true"
+            :pagination="false"
             size="small"
-            style="width: 220px"
-            placeholder="选择导出模板"
-            @update:value="
-              (v: number) => {
-                platformTemplateSelections[ep.platform] = v
-              }
-            "
+            @update:sorter="(s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })"
           />
         </div>
-      </div>
-      <NButton block type="success" @click="handleExport">
-        <template #icon
-          ><NIcon><DownloadOutline /></NIcon
-        ></template>
-        生成发货清单
-      </NButton>
+        <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />
+      </template>
     </div>
-    <div class="flex justify-between mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+
+    <!-- Footer (sibling of viewport) -->
+    <div v-if="tableMode === 'paginated'" ref="exportFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
+      <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex;">
+        <NPagination :page="currentPage" :page-count="totalPages" size="small" @update:page="handlePageChange" />
+      </div>
+    </div>
+
+    <!-- Bottom nav -->
+    <div class="flex justify-between shrink-0 pt-3 pb-1 px-1 border-t border-gray-100 dark:border-gray-700">
       <NButton @click="goPrev">上一步</NButton>
       <div></div>
     </div>
-  </NCard>
+
+    <!-- Measure layer -->
+    <AdaptiveTableMeasureLayer
+      v-if="tableMode === 'paginated' && records.length"
+      ref="exportMeasureLayer"
+      :data="sortedRecords"
+      :columns="exportMeasureColumns"
+      :width="viewportWidth"
+      size="small"
+    />
+  </div>
 </template>
