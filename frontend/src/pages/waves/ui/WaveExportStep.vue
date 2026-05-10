@@ -3,6 +3,7 @@ import { DownloadOutline } from '@vicons/ionicons5'
 import { computed, h, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  NAlert,
   NButton,
   NDataTable,
   NIcon,
@@ -55,14 +56,13 @@ const exportSortDescriptors: SortDescriptor<DispatchRecordItem>[] = [
   { key: 'memberPlatform', getValue: (r) => r.memberPlatform },
   { key: 'productName', getValue: (r) => r.productName },
   { key: 'quantity', getValue: (r) => r.quantity },
-  { key: 'hasAddress', getValue: (r) => (r.hasAddress ? '已绑定' : '待补全') },
+  { key: 'hasAddress', compare: (a, b) => Number(a.hasAddress) - Number(b.hasAddress) },
   { key: 'address', getValue: (r) => r.address || '' },
 ]
 
 const {
   sortedItems: sortedRecords,
   sortState,
-  toggleSort,
   applySorter,
 } = useTableSort(records, exportSortDescriptors)
 
@@ -369,6 +369,10 @@ onUnmounted(() => {
         >一键同步已有地址</NButton
       >
     </div>
+
+    <NAlert v-if="errorMessage" type="warning" :show-icon="false" class="mx-1 mb-3">
+      {{ errorMessage }}
+    </NAlert>
 
     <!-- Export controls (moved above table) -->
     <div class="shrink-0 px-1 pb-2">

@@ -89,7 +89,6 @@ const filteredMembers = computed(() => {
 const {
   sortedItems: displayMembers,
   sortState: memberSortState,
-  toggleSort: toggleMemberSort,
   applySorter,
 } = useTableSort(filteredMembers, memberSortDescriptors)
 
@@ -317,12 +316,12 @@ async function loadAllMembers() {
     const selectedMemberID = selectedMember.value?.id
     const result = await collectAllPages<MemberItem>(async (p, ps) => {
       const payload = await listMembers(p, ps, keyword.value, platform.value)
-      return { items: payload.items, total: payload.total }
+      return { items: payload.items, total: payload.total, platforms: payload.platforms }
     }, 200)
     allMembers.value = result.items
     platformCatalog.value = result.platforms
     if (selectedMemberID) {
-      selectedMember.value = result.find((m) => m.id === selectedMemberID) ?? null
+      selectedMember.value = result.items.find((m) => m.id === selectedMemberID) ?? null
     }
   } catch (error) {
     console.error(error)
@@ -337,6 +336,7 @@ async function searchMembers() {
 }
 
 async function refreshMembers() {
+  await loadDashboardStats()
   await loadAllMembers()
   await nextTick()
   requestMemberRemeasure()
@@ -360,6 +360,7 @@ async function handleDefault(addressId: number) {
     await setDefaultAddress(memberId, addressId)
     message.success('默认地址已更新')
     await loadAllMembers()
+    await loadDashboardStats()
     selectedMember.value = allMembers.value.find((member) => member.id === memberId) ?? null
     await nextTick()
     requestMemberRemeasure()
@@ -407,6 +408,7 @@ async function saveAddress() {
     }
     showAddressModal.value = false
     await loadAllMembers()
+    await loadDashboardStats()
     selectedMember.value = allMembers.value.find((m) => m.id === selectedMember.value!.id) ?? null
     await nextTick()
     requestMemberRemeasure()
@@ -422,6 +424,7 @@ async function handleDeleteAddress(addressId: number) {
     await deleteMemberAddress(addressId)
     message.success('地址已删除')
     await loadAllMembers()
+    await loadDashboardStats()
     if (selectedMember.value) {
       selectedMember.value = allMembers.value.find((m) => m.id === selectedMember.value!.id) ?? null
     }
