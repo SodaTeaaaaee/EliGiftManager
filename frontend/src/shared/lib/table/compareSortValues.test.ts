@@ -172,3 +172,39 @@ Deno.test('compareStrings: bucket order is preserved regardless of numeric value
   // 1000 (digit) should come before A (latin)
   assert(compareStrings('1000', 'A') < 0)
 })
+
+// --- mixed natural sort ---
+Deno.test('compareStrings: numeric strings sort naturally', () => {
+  assert(compareStrings('2', '19') < 0)
+  assert(compareStrings('A2', 'A19') < 0)
+  assert(compareStrings('SKU-2', 'SKU-19') < 0)
+})
+
+Deno.test('compareStrings: mixed CJK with numbers sort naturally', () => {
+  assert(compareStrings('张2', '张19') < 0)
+  assert(compareStrings('第2名', '第19名') < 0)
+})
+
+Deno.test('compareStrings: mixed kana with numbers sort naturally', () => {
+  assert(compareStrings('あ2', 'あ19') < 0)
+})
+
+Deno.test('compareStrings: mixed hangul with numbers sort naturally', () => {
+  assert(compareStrings('가2', '가19') < 0)
+})
+
+Deno.test('stableSortRows: mixed natural sort descending', () => {
+  const rows = [{ v: 'A19' }, { v: 'A2' }, { v: 'A1' }]
+  const result = stableSortRows(rows, { key: 'v', getValue: (r: any) => r.v }, 'descend')
+  assertEquals(result[0].v, 'A19')
+  assertEquals(result[1].v, 'A2')
+  assertEquals(result[2].v, 'A1')
+})
+
+Deno.test('stableSortRows: mixed natural sort keeps nulls at end in descend', () => {
+  const rows = [{ v: 'A2' }, { v: null }, { v: 'A19' }]
+  const result = stableSortRows(rows, { key: 'v', getValue: (r: any) => r.v }, 'descend')
+  assertEquals(result[0].v, 'A19')
+  assertEquals(result[1].v, 'A2')
+  assertEquals(result[2].v, null)
+})

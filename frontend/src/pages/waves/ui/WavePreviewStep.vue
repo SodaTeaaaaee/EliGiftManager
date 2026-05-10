@@ -217,7 +217,7 @@ const {
 
 const memberIndexMap = computed(() => {
   const map = new Map<number, number>()
-  memberGroups.value.forEach((g, i) => map.set(g.memberId, i + 1))
+  sortedGroups.value.forEach((g, i) => map.set(g.memberId, i + 1))
   return map
 })
 
@@ -743,6 +743,7 @@ onUnmounted(() => {
             :columns="memberGroupColumnsComputed"
             :data="visibleItems"
             :bordered="false"
+            :remote="true"
             :pagination="false"
             :max-height="availableH"
             :table-layout="'auto'"
@@ -760,6 +761,7 @@ onUnmounted(() => {
               :columns="memberGroupColumnsComputed"
               :data="visibleItems"
               :bordered="false"
+              :remote="true"
               :pagination="false"
               :table-layout="'auto'"
               size="small"

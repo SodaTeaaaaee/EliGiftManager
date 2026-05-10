@@ -106,12 +106,12 @@ function clampedText(text: string, lines = MAX_LINES) {
 const allProducts = ref<{ id: number; name: string; factorySku: string }[]>([])
 const productIndexMap = computed(() => {
   const map = new Map<number, number>()
-  allProducts.value.forEach((p, i) => map.set(p.id, i + 1))
+  sortedProducts.value.forEach((p, i) => map.set(p.id, i + 1))
   return map
 })
 const memberIndexMap = computed(() => {
   const map = new Map<number, number>()
-  waveMembers.value.forEach((m, i) => map.set(m.id, i + 1))
+  sortedMembers.value.forEach((m, i) => map.set(m.id, i + 1))
   return map
 })
 const isProductLoading = ref(false)
@@ -646,6 +646,7 @@ onUnmounted(() => {
                 :columns="productDataColumns"
                 :data="renderProducts"
                 :loading="isProductLoading"
+                :remote="true"
                 :max-height="productTableBodyMaxHeight"
                 :table-layout="'auto'"
                 :bordered="false"
@@ -661,6 +662,7 @@ onUnmounted(() => {
                   :columns="productDataColumns"
                   :data="renderProducts"
                   :loading="isProductLoading"
+                  :remote="true"
                   :table-layout="'auto'"
                   :bordered="false"
                   :pagination="false"
@@ -721,6 +723,7 @@ onUnmounted(() => {
                 :columns="memberColumns"
                 :data="renderMembers"
                 :loading="isMembersLoading"
+                :remote="true"
                 :max-height="memberTableBodyMaxHeight"
                 :table-layout="'auto'"
                 :bordered="false"
@@ -736,6 +739,7 @@ onUnmounted(() => {
                   :columns="memberColumns"
                   :data="renderMembers"
                   :loading="isMembersLoading"
+                  :remote="true"
                   :table-layout="'auto'"
                   :bordered="false"
                   :pagination="false"

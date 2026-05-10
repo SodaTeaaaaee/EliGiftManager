@@ -473,7 +473,7 @@ function handleInvertPage() {
 // ── column definitions ──
 const productIndexMap = computed(() => {
   const map = new Map<number, number>()
-  allTagProducts.value.forEach((p, i) => map.set(p.id, i + 1))
+  sortedTagProducts.value.forEach((p, i) => map.set(p.id, i + 1))
   return map
 })
 
@@ -1181,6 +1181,7 @@ onUnmounted(() => {
             :columns="tagColumns"
             :data="visibleItems"
             :loading="isTagLoading"
+            :remote="true"
             :bordered="false"
             :max-height="availableH"
             :table-layout="'auto'"
@@ -1199,6 +1200,7 @@ onUnmounted(() => {
               :columns="tagColumns"
               :data="visibleItems"
               :loading="isTagLoading"
+              :remote="true"
               :bordered="false"
               :table-layout="'auto'"
               :row-key="(row: any) => row.id"
