@@ -119,6 +119,21 @@ type ProductListPayload struct {
 	Total     int64         `json:"total"`
 	Platforms []string      `json:"platforms"`
 }
+type ProductMasterItem struct {
+	ID         uint      `json:"id"`
+	Platform   string    `json:"platform"`
+	Factory    string    `json:"factory"`
+	FactorySKU string    `json:"factorySku"`
+	Name       string    `json:"name"`
+	CoverImage string    `json:"coverImage"`
+	ExtraData  string    `json:"extraData"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+type ProductMasterListPayload struct {
+	Items     []ProductMasterItem `json:"items"`
+	Total     int64               `json:"total"`
+	Platforms []string            `json:"platforms"`
+}
 type TagInfo struct {
 	TagName      string `json:"tagName"`
 	Quantity     int    `json:"quantity"`
@@ -277,7 +292,7 @@ func buildMemberItems(db *gorm.DB, members []model.Member) ([]MemberItem, error)
 		return nil, err
 	}
 	for _, member := range members {
-		item := MemberItem{ID: member.ID, MemberID: member.ID, Platform: member.Platform, PlatformUID: member.PlatformUID, LatestNickname: latestNickname(member), GiftLevel: giftLevelFromExtraData(member.ExtraData), ExtraData: member.ExtraData, AddressCount: len(member.Addresses), UpdatedAt: member.UpdatedAt, Addresses: member.Addresses, Nicknames: member.Nicknames, DispatchCount: dispatchCounts[member.ID]}
+		item := MemberItem{ID: member.ID, MemberID: member.ID, Platform: member.Platform, PlatformUID: member.PlatformUID, LatestNickname: latestNickname(member), GiftLevel: "", ExtraData: member.ExtraData, AddressCount: len(member.Addresses), UpdatedAt: member.UpdatedAt, Addresses: member.Addresses, Nicknames: member.Nicknames, DispatchCount: dispatchCounts[member.ID]}
 		for _, address := range member.Addresses {
 			if address.IsDeleted {
 				continue
@@ -382,6 +397,8 @@ func queryMemberPlatforms(db *gorm.DB) ([]string, error) {
 	return platforms, nil
 }
 
+// giftLevelFromExtraData is preserved for potential external reference but no longer
+// called by buildMemberItems (D15: global CRM GiftLevel override set to "").
 func giftLevelFromExtraData(extraData string) string {
 	if extraData == "" {
 		return ""

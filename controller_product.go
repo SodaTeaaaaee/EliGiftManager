@@ -14,6 +14,8 @@ type ProductController struct{}
 
 func (c *ProductController) db() *gorm.DB { return dbpkg.GetDB() }
 
+// ListProducts 查询波次步骤页使用的 Product 快照（带 wave_id 过滤的页面不需要此接口，
+// 它们应使用 ListProductsWithTags）。此接口保留用于全局商品库浏览等非波次场景。
 func (c *ProductController) ListProducts(page, pageSize int, keyword, platform string) (ProductListPayload, error) {
 	db := c.db()
 	if db == nil {
@@ -335,6 +337,60 @@ func (c *ProductController) GetProductImages(productID uint) ([]model.ProductIma
 	var images []model.ProductImage
 	if err := db.Where("product_id = ?", productID).Order("sort_order ASC").Find(&images).Error; err != nil {
 		return nil, fmt.Errorf("get product images failed: %w", err)
+	}
+	return images, nil
+}
+
+// ListProductMasters 查询全局商品库 ProductMaster（与波次无关）。
+func (c *ProductController) ListProductMasters(page, pageSize int, keyword, platform string) (ProductMasterListPayload, error) {
+	db := c.db()
+	if db == nil {
+		return ProductMasterListPayload{}, fmt.Errorf("database not available")
+	}
+	page, pageSize = normalizePagination(page, pageSize)
+
+	q := db.Model(&model.ProductMaster{})
+	if platform = strings.TrimSpace(platform); platform != "" {
+		q = q.Where("platform = ?", platform)
+	}
+	if keyword = strings.TrimSpace(keyword); keyword != "" {
+		like := "%" + keyword + "%"
+		q = q.Where("name LIKE ? OR factory_sku LIKE ? OR factory LIKE ?", like, like, like)
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return ProductMasterListPayload{}, err
+	}
+	var masters []model.ProductMaster
+	if err := q.Order("updated_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&masters).Error; err != nil {
+		return ProductMasterListPayload{}, err
+	}
+	items := make([]ProductMasterItem, 0, len(masters))
+	for _, m := range masters {
+		items = append(items, ProductMasterItem{
+			ID:         m.ID,
+			Platform:   m.Platform,
+			Factory:    m.Factory,
+			FactorySKU: m.FactorySKU,
+			Name:       m.Name,
+			CoverImage: m.CoverImage,
+			ExtraData:  m.ExtraData,
+			UpdatedAt:  m.UpdatedAt,
+		})
+	}
+	platforms := make([]string, 0)
+	db.Model(&model.ProductMaster{}).Distinct().Order("platform ASC").Pluck("platform", &platforms)
+	return ProductMasterListPayload{Items: items, Total: total, Platforms: platforms}, nil
+}
+
+func (c *ProductController) GetProductMasterImages(masterID uint) ([]model.ProductMasterImage, error) {
+	db := c.db()
+	if db == nil {
+		return nil, fmt.Errorf("database not available")
+	}
+	var images []model.ProductMasterImage
+	if err := db.Where("product_master_id = ?", masterID).Order("sort_order ASC").Find(&images).Error; err != nil {
+		return nil, fmt.Errorf("get product master images failed: %w", err)
 	}
 	return images, nil
 }

@@ -37,20 +37,35 @@ type MemberAddress struct {
 	Member        Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"member"`
 }
 
-// Product represents the normalized product/gift record.
+// ProductMaster represents the global product registry indexed by (platform, factory_sku).
+// It stores the canonical product attributes independent of any wave.
+type ProductMaster struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	Platform   string    `gorm:"size:100;not null;uniqueIndex:idx_product_master_platform_sku" json:"platform"`
+	Factory    string    `gorm:"size:100;not null" json:"factory"`
+	FactorySKU string    `gorm:"size:255;not null;uniqueIndex:idx_product_master_platform_sku" json:"factorySku"`
+	Name       string    `gorm:"size:255;not null" json:"name"`
+	CoverImage string    `gorm:"type:text" json:"coverImage"`
+	ExtraData  string    `gorm:"type:text;not null;default:'{}'" json:"extraData"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+// Product represents a wave-specific snapshot of a product, linked to ProductMaster.
 type Product struct {
-	ID         uint           `gorm:"primaryKey" json:"id"`
-	Platform   string         `gorm:"size:100;not null;index" json:"platform"`
-	Factory    string         `gorm:"size:100;not null" json:"factory"`
-	FactorySKU string         `gorm:"size:255;not null;index" json:"factorySku"`
-	Name       string         `gorm:"size:255;not null" json:"name"`
-	CoverImage string         `gorm:"type:text" json:"coverImage"`
-	WaveID     *uint          `gorm:"index" json:"waveId"`
-	ExtraData  string         `gorm:"type:text;not null;default:'{}'" json:"extraData"`
-	CreatedAt  time.Time      `json:"createdAt"`
-	UpdatedAt  time.Time      `json:"updatedAt"`
-	Tags       []ProductTag   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"tags"`
-	Images     []ProductImage `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"images"`
+	ID              uint           `gorm:"primaryKey" json:"id"`
+	Platform        string         `gorm:"size:100;not null;index;uniqueIndex:idx_product_wave_platform_sku" json:"platform"`
+	Factory         string         `gorm:"size:100;not null" json:"factory"`
+	FactorySKU      string         `gorm:"size:255;not null;index;uniqueIndex:idx_product_wave_platform_sku" json:"factorySku"`
+	Name            string         `gorm:"size:255;not null" json:"name"`
+	CoverImage      string         `gorm:"type:text" json:"coverImage"`
+	WaveID          *uint          `gorm:"index;uniqueIndex:idx_product_wave_platform_sku" json:"waveId"`
+	ExtraData       string         `gorm:"type:text;not null;default:'{}'" json:"extraData"`
+	ProductMasterID *uint          `gorm:"index" json:"productMasterId"`
+	CreatedAt       time.Time      `json:"createdAt"`
+	UpdatedAt       time.Time      `json:"updatedAt"`
+	Tags            []ProductTag   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"tags"`
+	Images          []ProductImage `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"images"`
 }
 
 // ProductImage stores multi-image associations for a product.
@@ -62,6 +77,17 @@ type ProductImage struct {
 	SourceDir string    `gorm:"size:100;not null;default:''" json:"sourceDir"`
 	CreatedAt time.Time `json:"createdAt"`
 	Product   Product   `gorm:"foreignKey:ProductID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"product"`
+}
+
+// ProductMasterImage stores global image associations for a ProductMaster.
+type ProductMasterImage struct {
+	ID              uint          `gorm:"primaryKey" json:"id"`
+	ProductMasterID uint          `gorm:"not null;index;uniqueIndex:idx_pmi_master_path" json:"productMasterId"`
+	Path            string        `gorm:"type:text;not null;uniqueIndex:idx_pmi_master_path" json:"path"`
+	SortOrder       int           `gorm:"not null;default:0" json:"sortOrder"`
+	SourceDir       string        `gorm:"size:100;not null;default:''" json:"sourceDir"`
+	CreatedAt       time.Time     `json:"createdAt"`
+	ProductMaster   ProductMaster `gorm:"foreignKey:ProductMasterID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"productMaster"`
 }
 
 // ProductTag stores platform-level classification tags attached to a product.
@@ -145,13 +171,15 @@ type WaveMember struct {
 	Member         Member    `gorm:"foreignKey:MemberID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
 
-func (Member) TableName() string         { return "members" }
-func (MemberNickname) TableName() string { return "member_nicknames" }
-func (MemberAddress) TableName() string  { return "member_addresses" }
-func (Product) TableName() string        { return "products" }
-func (Wave) TableName() string           { return "waves" }
-func (DispatchRecord) TableName() string { return "dispatch_records" }
-func (ProductTag) TableName() string     { return "product_tags" }
-func (TemplateConfig) TableName() string { return "template_configs" }
-func (ProductImage) TableName() string   { return "product_images" }
-func (WaveMember) TableName() string     { return "wave_members" }
+func (Member) TableName() string             { return "members" }
+func (MemberNickname) TableName() string     { return "member_nicknames" }
+func (MemberAddress) TableName() string      { return "member_addresses" }
+func (ProductMaster) TableName() string      { return "product_masters" }
+func (Product) TableName() string            { return "products" }
+func (Wave) TableName() string               { return "waves" }
+func (DispatchRecord) TableName() string     { return "dispatch_records" }
+func (ProductTag) TableName() string         { return "product_tags" }
+func (TemplateConfig) TableName() string     { return "template_configs" }
+func (ProductImage) TableName() string       { return "product_images" }
+func (ProductMasterImage) TableName() string { return "product_master_images" }
+func (WaveMember) TableName() string         { return "wave_members" }

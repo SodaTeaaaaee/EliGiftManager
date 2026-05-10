@@ -40,16 +40,20 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 		cfg.Prefix = template.Platform + "-"
 	}
 
-	// 1. Precheck: abort if any record still has NULL member_address_id.
+	// 1. Precheck: abort if any record has no valid address.
+	// "No valid address" means: member_address_id IS NULL, or the referenced
+	// address is deleted, or the address has empty required fields.
 	// Only check records whose product platform matches the export template platform.
 	var count int64
 	if err := db.Model(&model.DispatchRecord{}).
-		Where("wave_id = ? AND member_address_id IS NULL AND product_id IN (SELECT id FROM products WHERE platform = ?)", waveID, template.Platform).
+		Joins("LEFT JOIN member_addresses ON dispatch_records.member_address_id = member_addresses.id").
+		Where("dispatch_records.wave_id = ? AND dispatch_records.product_id IN (SELECT id FROM products WHERE platform = ?)", waveID, template.Platform).
+		Where("dispatch_records.member_address_id IS NULL OR member_addresses.is_deleted = ? OR member_addresses.recipient_name = '' OR member_addresses.phone = '' OR member_addresses.address = ''", true).
 		Count(&count).Error; err != nil {
 		return fmt.Errorf("export order CSV failed: precheck error: %w", err)
 	}
 	if count > 0 {
-		return fmt.Errorf("export aborted: %d records in wave %d have no address", count, waveID)
+		return fmt.Errorf("export aborted: %d records in wave %d have no valid address", count, waveID)
 	}
 
 	// 2. Load records filtered by product platform (not member platform).
@@ -132,9 +136,17 @@ func ExportOrderCSV(db *gorm.DB, waveID uint, outputPath string, template model.
 		return fmt.Errorf("export order CSV failed: flush error: %w", err)
 	}
 
-	// 4. Update wave status to "exported".
-	if err := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("status", "exported").Error; err != nil {
-		return fmt.Errorf("export order CSV failed: update wave status: %w", err)
+	// 4. Mark exported records as "exported". Only the current platform's records
+	//    are affected (D8). Then recompute wave status via the unified entry point.
+	if err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.DispatchRecord{}).
+			Where("wave_id = ? AND product_id IN (SELECT id FROM products WHERE platform = ?)", waveID, template.Platform).
+			Update("status", model.DispatchStatusExported).Error; err != nil {
+			return fmt.Errorf("mark exported records: %w", err)
+		}
+		return RecomputeWaveStatus(tx, waveID)
+	}); err != nil {
+		return fmt.Errorf("export order CSV failed: %w", err)
 	}
 
 	return nil
@@ -159,7 +171,8 @@ func ExportWavePreview(db *gorm.DB, waveID uint) (totalRecords int, missingAddre
 
 	var missing int64
 	if err := db.Model(&model.DispatchRecord{}).
-		Where("wave_id = ? AND member_address_id IS NULL", waveID).
+		Joins("LEFT JOIN member_addresses ON dispatch_records.member_address_id = member_addresses.id").
+		Where("dispatch_records.wave_id = ? AND (dispatch_records.member_address_id IS NULL OR member_addresses.is_deleted = ? OR member_addresses.recipient_name = '' OR member_addresses.phone = '' OR member_addresses.address = '')", waveID, true).
 		Count(&missing).Error; err != nil {
 		return 0, 0, fmt.Errorf("export preview failed: count missing addresses: %w", err)
 	}

@@ -22,10 +22,11 @@ func BindDefaultAddresses(db *gorm.DB, waveID uint) (updated int, skipped int, e
 	}
 
 	err = db.Transaction(func(tx *gorm.DB) error {
-		// 1. Query all records in the wave that have no address.
+		// 1. Query records that need address binding: NULL address OR bound to a
+		//    deleted address (D12).
 		var records []model.DispatchRecord
 		if err := tx.
-			Where("wave_id = ? AND member_address_id IS NULL", waveID).
+			Where("wave_id = ? AND (member_address_id IS NULL OR member_address_id IN (SELECT id FROM member_addresses WHERE is_deleted = ?))", waveID, true).
 			Find(&records).Error; err != nil {
 			return fmt.Errorf("bind default addresses failed: query records: %w", err)
 		}

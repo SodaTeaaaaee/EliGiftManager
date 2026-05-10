@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -81,8 +82,25 @@ func copyAssetFile(src, dst string) error {
 // scanned; otherwise the entire tree is walked recursively.  Set imageDir to
 // "" to cover all subdirectories such as 主图/ and 详情图/.
 //
+// When productIDs is non-empty, only products in that list are matched for
+// image association.  Pass nil or empty slice to match all products (legacy).
+//
+// File-name matching is only performed when platform is "柔造".  For all other
+// platforms the function returns 0, nil immediately.
+//
+// If a single normalized file name matches more than one product in productIDs,
+// the match is skipped and a warning is logged (ambiguity).
+//
+// For each matched product with a non-nil ProductMasterID, a corresponding
+// ProductMasterImage row is also created (upsert on product_master_id + path).
+//
 // Returns the total number of product-image associations created.
-func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error) {
+func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir, platform string, productIDs []uint) (int, error) {
+	// D4: Only the 柔造 platform uses file-name matching.
+	if platform != "柔造" {
+		return 0, nil
+	}
+
 	srcDir := zipExtractDir
 	if imageDir != "" {
 		srcDir = filepath.Join(zipExtractDir, imageDir)
@@ -134,11 +152,28 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 
 		normalized := normalizeForMatch(productName)
 
-		var matchedProducts []model.Product
-		if err := db.Where(
+		q := db.Where(
 			"REPLACE(REPLACE(REPLACE(name, '*', '_'), '（', '('), '）', ')') = ?",
 			normalized,
-		).Find(&matchedProducts).Error; err != nil {
+		)
+		if len(productIDs) > 0 {
+			q = q.Where("id IN ?", productIDs)
+		}
+
+		var matchedProducts []model.Product
+		if err := q.Find(&matchedProducts).Error; err != nil {
+			return nil
+		}
+
+		// Ambiguity detection: skip if more than one product in the
+		// matched batch shares the same normalized name.
+		if len(matchedProducts) > 1 {
+			ids := make([]string, len(matchedProducts))
+			for i, mp := range matchedProducts {
+				ids[i] = fmt.Sprintf("%d", mp.ID)
+			}
+			log.Printf("[WARN] 图片匹配歧义: 文件 %q 归一化名称 %q 匹配到 %d 个商品 (ids=%s)，跳过",
+				filepath.Base(path), normalized, len(matchedProducts), strings.Join(ids, ","))
 			return nil
 		}
 
@@ -153,9 +188,36 @@ func ProcessCoverImages(db *gorm.DB, zipExtractDir, imageDir string) (int, error
 				Attrs(model.ProductImage{SortOrder: nextOrder}).
 				FirstOrCreate(&pi)
 
+			// Also create a ProductMasterImage for the global registry.
+			if p.ProductMasterID != nil {
+				var maxMasterOrder int
+				db.Model(&model.ProductMasterImage{}).Where("product_master_id = ?", *p.ProductMasterID).
+					Select("COALESCE(MAX(sort_order), -1)").Scan(&maxMasterOrder)
+				masterNextOrder := maxMasterOrder + 1
+
+				pmi := model.ProductMasterImage{
+					ProductMasterID: *p.ProductMasterID,
+					Path:            relativePath,
+					SourceDir:       parentDir,
+				}
+				db.Where("product_master_id = ? AND path = ?", *p.ProductMasterID, relativePath).
+					Attrs(model.ProductMasterImage{SortOrder: masterNextOrder}).
+					FirstOrCreate(&pmi)
+			}
+
 			matched++
 			if p.CoverImage == "" {
 				_ = db.Model(&p).Update("cover_image", relativePath)
+			}
+
+			// Sync ProductMaster cover image — fill empty cover, never overwrite existing.
+			if p.ProductMasterID != nil {
+				var master model.ProductMaster
+				if err := db.First(&master, *p.ProductMasterID).Error; err == nil {
+					if master.CoverImage == "" {
+						_ = db.Model(&master).Update("cover_image", relativePath)
+					}
+				}
 			}
 		}
 

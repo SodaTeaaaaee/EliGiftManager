@@ -13,6 +13,7 @@ import {
 } from "../../../../wailsjs/go/main/MemberController";
 import {
   GetProductImages as getProductImagesBinding,
+  ListProductMasters as listProductMastersBinding,
   ListProducts as listProductsBinding,
   ListProductsWithTags as listProductsWithTagsBinding,
   ListProductTags as listProductTagsBinding,
@@ -235,6 +236,34 @@ export function getProductImages(
   if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
   return getProductImagesBinding(productId);
 }
+export function listProductMasters(
+  page = 1,
+  pageSize = 50,
+  keyword = "",
+  platform = "",
+): Promise<main.ProductMasterListPayload> {
+  assertWailsRuntime();
+  return listProductMastersBinding(page, pageSize, keyword, platform);
+}
+
+// TODO(temporary): ProductMasterImage 类型手动定义，等待 wails dev 重新生成 bindings 后移入 models.ts
+export type ProductMasterImage = {
+  id: number;
+  productMasterId: number;
+  path: string;
+  sortOrder: number;
+  sourceDir: string;
+  createdAt: string;
+};
+
+export function getProductMasterImages(
+  masterId: number,
+): Promise<ProductMasterImage[]> {
+  if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
+  return (window as any).go.main.ProductController.GetProductMasterImages(
+    masterId,
+  );
+}
 export function listDispatchRecords(
   waveId = 0,
 ): Promise<main.DispatchRecordItem[]> {
@@ -406,5 +435,7 @@ export type MemberItem = main.MemberItem;
 export type MemberListPayload = main.MemberListPayload;
 export type ProductItem = main.ProductItem;
 export type ProductListPayload = main.ProductListPayload;
+export type ProductMasterItem = main.ProductMasterItem;
+export type ProductMasterListPayload = main.ProductMasterListPayload;
 export type DispatchRecordItem = main.DispatchRecordItem;
 export type TemplateItem = main.TemplateItem;

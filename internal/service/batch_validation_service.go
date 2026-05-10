@@ -58,6 +58,12 @@ func ValidateBatch(db *gorm.DB, waveNo string) (model.BatchValidationResult, err
 			missingMembers[record.MemberID] = struct{}{}
 			result.MissingMembers = append(result.MissingMembers, model.BatchValidationMissingMember{MemberID: record.Member.ID, Platform: record.Member.Platform, PlatformUID: record.Member.PlatformUID, LatestNickname: extractNicknameValue(latestNickname)})
 		}
+		if err := InvalidateWaveExports(tx, wave.ID); err != nil {
+			return fmt.Errorf("invalidate exported dispatch records failed: %w", err)
+		}
+		if err := RecomputeWaveStatus(tx, wave.ID); err != nil {
+			return fmt.Errorf("recompute wave status failed: %w", err)
+		}
 		return nil
 	})
 	if err != nil {

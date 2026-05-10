@@ -134,18 +134,14 @@ func DeleteFakeAddressesForAllMembers(db *gorm.DB) (DeleteFakeAddressesResult, e
 			result.ClearedDispatchRecords = int64(len(recordIDs))
 		}
 
-		// 3. Reset affected wave statuses.
+		// 3. Recompute affected wave statuses via unified entry point (D14).
 		if len(waveIDSet) > 0 {
-			waveIDs := make([]uint, 0, len(waveIDSet))
 			for wid := range waveIDSet {
-				waveIDs = append(waveIDs, wid)
+				if err := RecomputeWaveStatus(tx, wid); err != nil {
+					return fmt.Errorf("delete fake addresses failed: recompute wave %d status: %w", wid, err)
+				}
 			}
-			if err := tx.Model(&model.Wave{}).
-				Where("id IN ?", waveIDs).
-				Update("status", model.DispatchStatusPendingAddress).Error; err != nil {
-				return fmt.Errorf("delete fake addresses failed: update wave statuses: %w", err)
-			}
-			result.UpdatedWaves = int64(len(waveIDs))
+			result.UpdatedWaves = int64(len(waveIDSet))
 		}
 
 		// 4. Soft-delete the test addresses.

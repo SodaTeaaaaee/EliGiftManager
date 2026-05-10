@@ -19,14 +19,14 @@ import {
   type DataTableColumns,
 } from 'naive-ui'
 import {
-  getProductImages,
+  getProductMasterImages,
   isWailsRuntimeAvailable,
-  listProducts,
+  listProductMasters,
   WAILS_PREVIEW_MESSAGE,
-  type ProductItem,
+  type ProductMasterItem,
 } from '@/shared/lib/wails/app'
 
-const products = ref<ProductItem[]>([])
+const products = ref<ProductMasterItem[]>([])
 const keyword = ref('')
 const platform = ref('')
 const page = ref(1)
@@ -36,7 +36,7 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const viewMode = ref<'grid' | 'list'>('grid')
 
-const listColumns: DataTableColumns<ProductItem> = [
+const listColumns: DataTableColumns<ProductMasterItem> = [
   {
     title: '',
     key: 'coverImage',
@@ -69,7 +69,7 @@ const listColumns: DataTableColumns<ProductItem> = [
 
 const platformCatalog = ref<string[]>([])
 
-const detailProduct = ref<ProductItem | null>(null)
+const detailProduct = ref<ProductMasterItem | null>(null)
 const detailImages = ref<{ id: number; path: string; sortOrder: number; sourceDir: string }[]>([])
 const showDetail = ref(false)
 
@@ -133,7 +133,12 @@ async function loadProducts() {
   errorMessage.value = ''
 
   try {
-    const payload = await listProducts(page.value, pageSize.value, keyword.value, platform.value)
+    const payload = await listProductMasters(
+      page.value,
+      pageSize.value,
+      keyword.value,
+      platform.value,
+    )
     products.value = payload.items
     total.value = payload.total
     platformCatalog.value = payload.platforms
@@ -163,12 +168,12 @@ function handlePageSizeChange(nextPageSize: number) {
   void loadProducts()
 }
 
-async function openDetail(product: ProductItem) {
+async function openDetail(product: ProductMasterItem) {
   detailProduct.value = product
   showDetail.value = true
   mainIndex.value = 0
   try {
-    detailImages.value = await getProductImages(product.id)
+    detailImages.value = await getProductMasterImages(product.id)
     startAutoplay()
   } catch {
     detailImages.value = []

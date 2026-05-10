@@ -7,6 +7,10 @@ export function AssignProductTag(arg1:number,arg2:string,arg3:string,arg4:number
 
 export function GetProductImages(arg1:number):Promise<Array<model.ProductImage>>;
 
+export function GetProductMasterImages(arg1:number):Promise<Array<model.ProductMasterImage>>;
+
+export function ListProductMasters(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.ProductMasterListPayload>;
+
 export function ListProductTags(arg1:string):Promise<Array<string>>;
 
 export function ListProducts(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.ProductListPayload>;

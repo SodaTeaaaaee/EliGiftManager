@@ -487,6 +487,85 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class ProductMasterItem {
+	    id: number;
+	    platform: string;
+	    factory: string;
+	    factorySku: string;
+	    name: string;
+	    coverImage: string;
+	    extraData: string;
+	    // Go type: time
+	    updatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMasterItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.platform = source["platform"];
+	        this.factory = source["factory"];
+	        this.factorySku = source["factorySku"];
+	        this.name = source["name"];
+	        this.coverImage = source["coverImage"];
+	        this.extraData = source["extraData"];
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ProductMasterListPayload {
+	    items: ProductMasterItem[];
+	    total: number;
+	    platforms: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMasterListPayload(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], ProductMasterItem);
+	        this.total = source["total"];
+	        this.platforms = source["platforms"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	export class TemplateItem {
 	    id: number;
@@ -639,6 +718,7 @@ export namespace model {
 	    coverImage: string;
 	    waveId?: number;
 	    extraData: string;
+	    productMasterId?: number;
 	    // Go type: time
 	    createdAt: any;
 	    // Go type: time
@@ -660,6 +740,7 @@ export namespace model {
 	        this.coverImage = source["coverImage"];
 	        this.waveId = source["waveId"];
 	        this.extraData = source["extraData"];
+	        this.productMasterId = source["productMasterId"];
 	        this.createdAt = this.convertValues(source["createdAt"], null);
 	        this.updatedAt = this.convertValues(source["updatedAt"], null);
 	        this.tags = this.convertValues(source["tags"], ProductTag);
@@ -925,6 +1006,97 @@ export namespace model {
 	
 	
 	
+	export class ProductMaster {
+	    id: number;
+	    platform: string;
+	    factory: string;
+	    factorySku: string;
+	    name: string;
+	    coverImage: string;
+	    extraData: string;
+	    // Go type: time
+	    createdAt: any;
+	    // Go type: time
+	    updatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMaster(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.platform = source["platform"];
+	        this.factory = source["factory"];
+	        this.factorySku = source["factorySku"];
+	        this.name = source["name"];
+	        this.coverImage = source["coverImage"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.updatedAt = this.convertValues(source["updatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ProductMasterImage {
+	    id: number;
+	    productMasterId: number;
+	    path: string;
+	    sortOrder: number;
+	    sourceDir: string;
+	    // Go type: time
+	    createdAt: any;
+	    productMaster: ProductMaster;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMasterImage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.productMasterId = source["productMasterId"];
+	        this.path = source["path"];
+	        this.sortOrder = source["sortOrder"];
+	        this.sourceDir = source["sourceDir"];
+	        this.createdAt = this.convertValues(source["createdAt"], null);
+	        this.productMaster = this.convertValues(source["productMaster"], ProductMaster);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	
 	export class WaveMember {

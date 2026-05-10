@@ -67,9 +67,11 @@ func (c *WaveController) DeleteWave(waveID uint) error {
 		if err := tx.Where("wave_id = ?", waveID).Delete(&model.WaveMember{}).Error; err != nil {
 			return fmt.Errorf("delete wave failed: clean wave members: %w", err)
 		}
-		// Unlink products (no FK, just set wave_id to NULL).
-		if err := tx.Model(&model.Product{}).Where("wave_id = ?", waveID).Update("wave_id", nil).Error; err != nil {
-			return fmt.Errorf("delete wave failed: unlink products: %w", err)
+		// Delete product snapshots for this wave. FK CASCADE handles
+		// ProductImage/ProductTag. DispatchRecord is already deleted above.
+		// ProductMaster is preserved (no CASCADE from Product to ProductMaster).
+		if err := tx.Where("wave_id = ?", waveID).Delete(&model.Product{}).Error; err != nil {
+			return fmt.Errorf("delete wave failed: delete product snapshots: %w", err)
 		}
 		result := tx.Delete(&model.Wave{}, waveID)
 		if result.Error != nil {
@@ -120,48 +122,19 @@ func (c *WaveController) ImportToWave(waveID uint, csvPath string, templateID ui
 				defer os.RemoveAll(extractDir)
 			}
 			if err == nil {
-				err = db.Transaction(func(tx *gorm.DB) error {
-					for i := range products {
-						if products[i].ExtraData == "" {
-							products[i].ExtraData = "{}"
-						}
-						products[i].WaveID = &wave.ID
-						if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
-							return delErr
-						}
-					}
-					if len(products) > 0 {
-						if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
-							return createErr
-						}
-					}
-					return nil
-				})
+				waveProductIDs, upErr := c.upsertProductsToWave(db, wave.ID, products)
+				err = upErr
 				if err == nil {
-					_, err = service.ProcessCoverImages(db, extractDir, "")
+					_, err = service.ProcessCoverImages(db, extractDir, "", template.Platform, waveProductIDs)
 				}
 			}
 		} else {
 			products, err = service.ParseProductCSV(csvPath, template)
 			if err == nil {
-				err = db.Transaction(func(tx *gorm.DB) error {
-					for i := range products {
-						products[i].Platform = template.Platform
-						if products[i].ExtraData == "" {
-							products[i].ExtraData = "{}"
-						}
-						products[i].WaveID = &wave.ID
-						if delErr := tx.Where("platform = ? AND factory_sku = ?", products[i].Platform, products[i].FactorySKU).Delete(&model.Product{}).Error; delErr != nil {
-							return delErr
-						}
-					}
-					if len(products) > 0 {
-						if createErr := tx.CreateInBatches(&products, 100).Error; createErr != nil {
-							return createErr
-						}
-					}
-					return nil
-				})
+				for i := range products {
+					products[i].Platform = template.Platform
+				}
+				_, err = c.upsertProductsToWave(db, wave.ID, products)
 			}
 		}
 	case model.TemplateTypeImportDispatchRecord:
@@ -185,6 +158,77 @@ func (c *WaveController) ImportToWave(waveID uint, csvPath string, templateID ui
 		return fmt.Errorf("import failed: %w", err)
 	}
 	return nil
+}
+
+// upsertProductsToWave persists parsed products into a wave using the two-level
+// upsert strategy: ProductMaster (global registry) first, then Product (wave snapshot).
+//
+// Each product:
+//  1. Upserts ProductMaster on (platform, factory_sku) — preserves existing name,
+//     cover_image, factory, extra_data.
+//  2. Upserts Product snapshot on (wave_id, platform, factory_sku) — preserves the
+//     original Product.ID on re-import (same-wave same-product updates in place).
+//
+// No global delete by (platform, factory_sku) is performed; products in other waves
+// are never affected.
+func (c *WaveController) upsertProductsToWave(db *gorm.DB, waveID uint, products []model.Product) ([]uint, error) {
+	if len(products) == 0 {
+		return nil, nil
+	}
+	var collectedIDs []uint
+	err := db.Transaction(func(tx *gorm.DB) error {
+		for i := range products {
+			if products[i].ExtraData == "" {
+				products[i].ExtraData = "{}"
+			}
+			products[i].WaveID = &waveID
+
+			// 1. Upsert ProductMaster on (platform, factory_sku).
+			master := model.ProductMaster{
+				Platform:   products[i].Platform,
+				Factory:    products[i].Factory,
+				FactorySKU: products[i].FactorySKU,
+				Name:       products[i].Name,
+				CoverImage: products[i].CoverImage,
+				ExtraData:  products[i].ExtraData,
+			}
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "platform"}, {Name: "factory_sku"}},
+				DoUpdates: clause.AssignmentColumns([]string{"name", "cover_image", "factory", "extra_data", "updated_at"}),
+			}).Create(&master).Error; err != nil {
+				return fmt.Errorf("upsert product master (platform=%s, sku=%s) failed: %w", master.Platform, master.FactorySKU, err)
+			}
+			// Safety: re-fetch master ID in case GORM did not populate it after a conflict update.
+			if master.ID == 0 {
+				if err := tx.Where("platform = ? AND factory_sku = ?",
+					master.Platform, master.FactorySKU).First(&master).Error; err != nil {
+					return fmt.Errorf("product master not found after upsert (platform=%s, sku=%s): %w", master.Platform, master.FactorySKU, err)
+				}
+			}
+
+			// 2. Upsert Product snapshot on (wave_id, platform, factory_sku).
+			products[i].ProductMasterID = &master.ID
+			if err := tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "wave_id"}, {Name: "platform"}, {Name: "factory_sku"}},
+				DoUpdates: clause.AssignmentColumns([]string{"name", "cover_image", "factory", "extra_data", "product_master_id", "updated_at"}),
+			}).Create(&products[i]).Error; err != nil {
+				return fmt.Errorf("upsert product snapshot (wave=%d, platform=%s, sku=%s) failed: %w", waveID, master.Platform, master.FactorySKU, err)
+			}
+			// Safety: re-fetch product ID in case GORM did not populate it after a conflict update.
+			if products[i].ID == 0 {
+				if err := tx.Where("wave_id = ? AND platform = ? AND factory_sku = ?",
+					waveID, products[i].Platform, products[i].FactorySKU).First(&products[i]).Error; err != nil {
+					return fmt.Errorf("product not found after upsert (wave=%d, platform=%s, sku=%s): %w", waveID, products[i].Platform, products[i].FactorySKU, err)
+				}
+			}
+			collectedIDs = append(collectedIDs, products[i].ID)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return collectedIDs, nil
 }
 
 func (c *WaveController) ImportDispatchWave(waveID uint, csvPath string, importTemplateID uint) error {
@@ -215,6 +259,9 @@ func (c *WaveController) ListDispatchRecords(waveID uint) ([]DispatchRecordItem,
 // WaveMember 自包含快照字段（Platform/GiftLevel），不再需要 JOIN members。
 // user tag 通过 WaveMemberID 直接定位；level tag 通过 wm.Platform + wm.GiftLevel 匹配。
 // 比对期望状态与实际状态，通过 INSERT/UPDATE/DELETE 抹平差异。幂等。
+//
+// Performance: batch-loads all DispatchRecords once, builds a map for O(1) lookup,
+// and defers status normalization to RecomputeWaveStatus at the end.
 func (c *WaveController) ReconcileWave(waveID uint) (int, error) {
 	db := c.db()
 	if db == nil {
@@ -270,52 +317,91 @@ func (c *WaveController) ReconcileWave(waveID uint) (int, error) {
 
 	allocatedCount := 0
 	err := db.Transaction(func(tx *gorm.DB) error {
-		var validDispatchIDs []uint
+		var hadExported int64
+		if err := tx.Model(&model.DispatchRecord{}).
+			Where("wave_id = ? AND status = ?", waveID, model.DispatchStatusExported).
+			Count(&hadExported).Error; err != nil {
+			return fmt.Errorf("count exported dispatch records failed: %w", err)
+		}
+
+		// 4. Batch-load all existing DispatchRecords for this wave.
+		var allRecords []model.DispatchRecord
+		if err := tx.Where("wave_id = ?", waveID).Find(&allRecords).Error; err != nil {
+			return fmt.Errorf("batch load dispatch records failed: %w", err)
+		}
+
+		// Build map: (MemberID, ProductID) -> *DispatchRecord for O(1) lookup.
+		type recordKey struct {
+			MemberID  uint
+			ProductID uint
+		}
+		recordMap := make(map[recordKey]*model.DispatchRecord, len(allRecords))
+		for i := range allRecords {
+			key := recordKey{MemberID: allRecords[i].MemberID, ProductID: allRecords[i].ProductID}
+			recordMap[key] = &allRecords[i]
+		}
+
+		validKeys := make(map[recordKey]struct{})
 
 		for productID, memberMap := range expectedState {
 			for memberID, expectedQty := range memberMap {
-				if expectedQty > 0 {
-					var records []model.DispatchRecord
-					if err := tx.Where("wave_id = ? AND member_id = ? AND product_id = ?", waveID, memberID, productID).
-						Limit(1).Find(&records).Error; err != nil {
-						return fmt.Errorf("lookup dispatch record (member=%d, product=%d): %w", memberID, productID, err)
-					}
-					var record model.DispatchRecord
-					if len(records) == 0 {
-						record = model.DispatchRecord{
-							WaveID:    waveID,
-							MemberID:  memberID,
-							ProductID: productID,
-							Quantity:  expectedQty,
-							Status:    "draft",
-						}
-						if createErr := tx.Create(&record).Error; createErr != nil {
-							return fmt.Errorf("create dispatch record (member=%d, product=%d): %w", memberID, productID, createErr)
-						}
-					} else {
-						record = records[0]
-						if record.Quantity != expectedQty {
-							if updateErr := tx.Model(&record).Update("quantity", expectedQty).Error; updateErr != nil {
-								return fmt.Errorf("update dispatch quantity (id=%d): %w", record.ID, updateErr)
-							}
+				if expectedQty <= 0 {
+					continue
+				}
+				key := recordKey{MemberID: memberID, ProductID: productID}
+				validKeys[key] = struct{}{}
+
+				existing, exists := recordMap[key]
+				if exists {
+					// Update quantity if changed.
+					if existing.Quantity != expectedQty {
+						if err := tx.Model(existing).Update("quantity", expectedQty).Error; err != nil {
+							return fmt.Errorf("update dispatch quantity (id=%d): %w", existing.ID, err)
 						}
 					}
 					allocatedCount++
-					validDispatchIDs = append(validDispatchIDs, record.ID)
+				} else {
+					// New record: pending_address since no address is set yet.
+					newRecord := model.DispatchRecord{
+						WaveID:    waveID,
+						MemberID:  memberID,
+						ProductID: productID,
+						Quantity:  expectedQty,
+						Status:    model.DispatchStatusPendingAddress,
+					}
+					if err := tx.Create(&newRecord).Error; err != nil {
+						return fmt.Errorf("create dispatch record (member=%d, product=%d): %w", memberID, productID, err)
+					}
+					allocatedCount++
 				}
 			}
 		}
 
-		// GC: delete DispatchRecords not in expected state.
-		if len(validDispatchIDs) > 0 {
-			if err := tx.Where("wave_id = ? AND id NOT IN ?", waveID, validDispatchIDs).Delete(&model.DispatchRecord{}).Error; err != nil {
-				return fmt.Errorf("cleanup orphaned dispatch records failed: %w", err)
-			}
-		} else {
-			if err := tx.Where("wave_id = ?", waveID).Delete(&model.DispatchRecord{}).Error; err != nil {
-				return fmt.Errorf("clear all dispatch records failed: %w", err)
+		// 5. Delete DispatchRecords not in expected state.
+		existingIDs := make([]uint, 0, len(allRecords))
+		for _, rec := range allRecords {
+			key := recordKey{MemberID: rec.MemberID, ProductID: rec.ProductID}
+			if _, ok := validKeys[key]; !ok {
+				existingIDs = append(existingIDs, rec.ID)
 			}
 		}
+		if len(existingIDs) > 0 {
+			if err := tx.Where("id IN ?", existingIDs).Delete(&model.DispatchRecord{}).Error; err != nil {
+				return fmt.Errorf("cleanup orphaned dispatch records failed: %w", err)
+			}
+		}
+
+		if hadExported > 0 {
+			if err := service.InvalidateWaveExports(tx, waveID); err != nil {
+				return fmt.Errorf("invalidate exported dispatch records failed: %w", err)
+			}
+		}
+
+		// 6. Recompute wave status.
+		if err := service.RecomputeWaveStatus(tx, waveID); err != nil {
+			return fmt.Errorf("reconcile wave: recompute status: %w", err)
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -357,25 +443,9 @@ func (c *WaveController) SetDispatchAddress(waveID, memberID, addressID uint) er
 			return fmt.Errorf("set dispatch address failed: update records: %w", err)
 		}
 
-		// 3. Lightweight wave status normalization.
-		//    If no pending_address records remain and wave is pending_address → revert to draft.
-		var pendingCount int64
-		if err := tx.Model(&model.DispatchRecord{}).
-			Where("wave_id = ? AND status = ? AND member_address_id IS NULL", waveID, model.DispatchStatusPendingAddress).
-			Count(&pendingCount).Error; err != nil {
-			return fmt.Errorf("set dispatch address failed: count pending: %w", err)
-		}
-		if pendingCount == 0 {
-			var wave model.Wave
-			if err := tx.First(&wave, waveID).Error; err != nil {
-				return fmt.Errorf("set dispatch address failed: query wave: %w", err)
-			}
-			if wave.Status == model.DispatchStatusPendingAddress {
-				if err := tx.Model(&model.Wave{}).Where("id = ?", waveID).
-					Update("status", "draft").Error; err != nil {
-					return fmt.Errorf("set dispatch address failed: normalize wave: %w", err)
-				}
-			}
+		// 3. Recompute wave status via unified entry point.
+		if err := service.RecomputeWaveStatus(tx, waveID); err != nil {
+			return fmt.Errorf("set dispatch address failed: recompute wave status: %w", err)
 		}
 
 		return nil
@@ -524,11 +594,18 @@ func (c *WaveController) RemoveProductFromWave(waveID, productID uint) error {
 		if err := tx.Where("id = ? AND wave_id = ?", productID, waveID).First(&product).Error; err != nil {
 			return fmt.Errorf("product not found in this wave: %w", err)
 		}
-		if err := tx.Model(&product).Update("wave_id", nil).Error; err != nil {
-			return fmt.Errorf("remove product from wave failed: %w", err)
-		}
+		// Delete associated DispatchRecords first (FK constraint with Product).
 		if err := tx.Where("wave_id = ? AND product_id = ?", waveID, productID).Delete(&model.DispatchRecord{}).Error; err != nil {
 			return fmt.Errorf("clean dispatch records failed: %w", err)
+		}
+		// Delete the Product snapshot. FK CASCADE handles ProductImage and ProductTag.
+		// ProductMaster is preserved.
+		if err := tx.Delete(&product).Error; err != nil {
+			return fmt.Errorf("remove product from wave failed: %w", err)
+		}
+		// Normalize wave status after removing product and its dispatch records (D7).
+		if err := service.RecomputeWaveStatus(tx, waveID); err != nil {
+			return fmt.Errorf("remove product from wave failed: recompute wave status: %w", err)
 		}
 		return nil
 	})
@@ -542,6 +619,10 @@ func (c *WaveController) BindDefaultAddresses(waveID uint) (map[string]int64, er
 	updated, skipped, err := service.BindDefaultAddresses(db, waveID)
 	if err != nil {
 		return nil, fmt.Errorf("bind default addresses failed: %w", err)
+	}
+	// Normalize wave status after address binding (D7).
+	if updated > 0 {
+		_ = service.RecomputeWaveStatus(db, waveID)
 	}
 	return map[string]int64{"updated": int64(updated), "skipped": int64(skipped)}, nil
 }

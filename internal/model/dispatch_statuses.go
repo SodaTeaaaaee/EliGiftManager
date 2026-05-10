@@ -5,3 +5,6 @@ const DispatchStatusPending = "pending"
 
 // DispatchStatusPendingAddress 表示记录缺少可用地址，暂时不能继续导出。
 const DispatchStatusPendingAddress = "pending_address"
+
+// DispatchStatusExported 表示记录已被导出为工厂订单 CSV。
+const DispatchStatusExported = "exported"

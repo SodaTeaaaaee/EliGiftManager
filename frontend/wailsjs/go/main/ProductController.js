@@ -10,6 +10,14 @@ export function GetProductImages(arg1) {
   return window['go']['main']['ProductController']['GetProductImages'](arg1);
 }
 
+export function GetProductMasterImages(arg1) {
+  return window['go']['main']['ProductController']['GetProductMasterImages'](arg1);
+}
+
+export function ListProductMasters(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['ProductController']['ListProductMasters'](arg1, arg2, arg3, arg4);
+}
+
 export function ListProductTags(arg1) {
   return window['go']['main']['ProductController']['ListProductTags'](arg1);
 }

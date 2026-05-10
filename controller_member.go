@@ -6,6 +6,7 @@ import (
 
 	dbpkg "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	"gorm.io/gorm"
 )
 
@@ -157,6 +158,8 @@ func (c *MemberController) AddMemberAddress(memberID uint, recipientName, phone,
 }
 
 // UpdateMemberAddress updates an existing active address.
+// Exported DispatchRecords that referenced this address are reverted to pending
+// because the address content has changed (D10).
 func (c *MemberController) UpdateMemberAddress(addressID uint, recipientName, phone, address string) error {
 	db := c.db()
 	if db == nil {
@@ -168,22 +171,48 @@ func (c *MemberController) UpdateMemberAddress(addressID uint, recipientName, ph
 	if recipientName == "" || phone == "" || address == "" {
 		return fmt.Errorf("recipient name, phone, and address are required")
 	}
-	result := db.Model(&model.MemberAddress{}).Where("id = ? AND is_deleted = ?", addressID, false).Updates(map[string]any{
-		"recipient_name": recipientName,
-		"phone":          phone,
-		"address":        address,
+	return db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&model.MemberAddress{}).Where("id = ? AND is_deleted = ?", addressID, false).Updates(map[string]any{
+			"recipient_name": recipientName,
+			"phone":          phone,
+			"address":        address,
+		})
+		if result.Error != nil {
+			return fmt.Errorf("update member address failed: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("address not found")
+		}
+
+		// Revert exported DispatchRecords that reference this address to pending.
+		var affectedIDs []uint
+		if err := tx.Model(&model.DispatchRecord{}).
+			Where("member_address_id = ? AND status = ?", addressID, model.DispatchStatusExported).
+			Pluck("DISTINCT wave_id", &affectedIDs).Error; err != nil {
+			return fmt.Errorf("update address: query affected waves: %w", err)
+		}
+		if len(affectedIDs) > 0 {
+			if err := tx.Model(&model.DispatchRecord{}).
+				Where("member_address_id = ? AND status = ?", addressID, model.DispatchStatusExported).
+				Update("status", model.DispatchStatusPending).Error; err != nil {
+				return fmt.Errorf("update address: revert exported records: %w", err)
+			}
+		}
+
+		// Recompute wave status for each affected wave.
+		for _, wid := range affectedIDs {
+			if err := service.RecomputeWaveStatus(tx, wid); err != nil {
+				return fmt.Errorf("update address: recompute wave %d: %w", wid, err)
+			}
+		}
+
+		return nil
 	})
-	if result.Error != nil {
-		return fmt.Errorf("update member address failed: %w", result.Error)
-	}
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("address not found")
-	}
-	return nil
 }
 
-// DeleteMemberAddress soft-deletes an address. If it was the default, unsets
-// the default flag for the member first.
+// DeleteMemberAddress soft-deletes an address. It clears DispatchRecord references
+// to this address (setting them to pending_address) and recomputes affected wave statuses.
+// If it was the default, unsets the default flag for the member first.
 func (c *MemberController) DeleteMemberAddress(addressID uint) error {
 	db := c.db()
 	if db == nil {
@@ -199,7 +228,39 @@ func (c *MemberController) DeleteMemberAddress(addressID uint) error {
 				return err
 			}
 		}
-		return tx.Model(&addr).Update("is_deleted", true).Error
+
+		// Find all DispatchRecords referencing this address, clear the reference
+		// and mark them pending_address. Collect affected wave IDs.
+		var affectedIDs []uint
+		if err := tx.Model(&model.DispatchRecord{}).
+			Where("member_address_id = ?", addressID).
+			Pluck("DISTINCT wave_id", &affectedIDs).Error; err != nil {
+			return fmt.Errorf("delete address: query affected waves: %w", err)
+		}
+		if len(affectedIDs) > 0 {
+			if err := tx.Model(&model.DispatchRecord{}).
+				Where("member_address_id = ?", addressID).
+				Updates(map[string]any{
+					"member_address_id": nil,
+					"status":            model.DispatchStatusPendingAddress,
+				}).Error; err != nil {
+				return fmt.Errorf("delete address: clear dispatch records: %w", err)
+			}
+		}
+
+		// Soft-delete the address.
+		if err := tx.Model(&addr).Update("is_deleted", true).Error; err != nil {
+			return err
+		}
+
+		// Recompute wave status for each affected wave.
+		for _, wid := range affectedIDs {
+			if err := service.RecomputeWaveStatus(tx, wid); err != nil {
+				return fmt.Errorf("delete address: recompute wave %d: %w", wid, err)
+			}
+		}
+
+		return nil
 	})
 }
 
@@ -225,6 +286,12 @@ func (c *MemberController) RemoveMemberFromWave(waveID, waveMemberID uint) error
 		// Delete the wave_member record
 		if err := tx.Delete(&wm).Error; err != nil {
 			return fmt.Errorf("remove member from wave failed: %w", err)
+		}
+		if err := service.InvalidateWaveExports(tx, waveID); err != nil {
+			return fmt.Errorf("invalidate exported dispatch records failed: %w", err)
+		}
+		if err := service.RecomputeWaveStatus(tx, waveID); err != nil {
+			return fmt.Errorf("remove member from wave failed: recompute wave status: %w", err)
 		}
 		return nil
 	})
