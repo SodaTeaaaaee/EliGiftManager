@@ -153,7 +153,11 @@ function buildJsonFromGui() {
     form.mappingRules = JSON.stringify(obj, null, 2)
   } else if (form.type === 'export_order') {
     form.mappingRules = JSON.stringify(
-      { prefix: guiExportPrefix.value, headers: guiExportHeaders.value, blankOrderNo: guiBlankOrderNo.value },
+      {
+        prefix: guiExportPrefix.value,
+        headers: guiExportHeaders.value,
+        blankOrderNo: guiBlankOrderNo.value,
+      },
       null,
       2,
     )
@@ -255,7 +259,9 @@ const columns: DataTableColumns<TemplateItem> = [
                       showCreateModal.value = false
                     }
                     await loadTemplates()
-                  } catch (e) { message.error(String(e)) }
+                  } catch (e) {
+                    message.error(String(e))
+                  }
                 },
               })
             },

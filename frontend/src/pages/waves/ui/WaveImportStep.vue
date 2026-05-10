@@ -111,8 +111,12 @@ const memberIndexMap = computed(() => {
 })
 const isProductLoading = ref(false)
 
-const showSkuColumn = computed(() => productViewportWidth.value === 0 || productViewportWidth.value >= 400)
-const showMemberExtraColumns = computed(() => memberViewportWidth.value === 0 || memberViewportWidth.value >= 450)
+const showSkuColumn = computed(
+  () => productViewportWidth.value === 0 || productViewportWidth.value >= 400,
+)
+const showMemberExtraColumns = computed(
+  () => memberViewportWidth.value === 0 || memberViewportWidth.value >= 450,
+)
 
 const tableMode = useTableMode()
 
@@ -143,7 +147,7 @@ const {
   layoutRef: productLayoutRef,
   tableRef: productTableRef,
   paginationRef: productFooterRef,
-  rowHeightHint: (w: number) => w < 550 ? 78 : 68,
+  rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
 })
 
 // ── member table composable ──
@@ -171,7 +175,7 @@ const {
   layoutRef: memberLayoutRef,
   tableRef: memberTableRef,
   paginationRef: memberFooterRef,
-  rowHeightHint: (w: number) => w < 550 ? 78 : 68,
+  rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
 })
 
 // ── column definitions ──
@@ -282,27 +286,55 @@ const productMeasureColumns = computed(() => {
     { title: '商品名', key: 'name', width: 140, render: (row: any) => clampedText(row.name) },
   ]
   if (showSkuColumn.value) {
-    cols.push({ title: 'SKU', key: 'factorySku', width: 160,
-      render: (row: any) => h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')) })
+    cols.push({
+      title: 'SKU',
+      key: 'factorySku',
+      width: 160,
+      render: (row: any) =>
+        h('span', { style: { whiteSpace: 'nowrap' } }, String(row.factorySku ?? '')),
+    })
   }
-  cols.push({ title: '操作', key: '__actions', width: 80,
-    render: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }) })
+  cols.push({
+    title: '操作',
+    key: '__actions',
+    width: 80,
+    render: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }),
+  })
   return cols
 })
 
 const memberMeasureColumns = computed(() => {
   const cols: any[] = [
     { title: '#', key: '__index', width: 40 },
-    { title: '昵称', key: 'latestNickname', width: 90, render: (row: any) => clampedText(row.latestNickname || row.platformUid) },
+    {
+      title: '昵称',
+      key: 'latestNickname',
+      width: 90,
+      render: (row: any) => clampedText(row.latestNickname || row.platformUid),
+    },
     { title: '平台', key: 'platform', width: 71, render: (row: any) => clampedText(row.platform) },
-    { title: 'UID', key: 'platformUid', width: 90, render: (row: any) => clampedText(row.platformUid) },
+    {
+      title: 'UID',
+      key: 'platformUid',
+      width: 90,
+      render: (row: any) => clampedText(row.platformUid),
+    },
   ]
   if (showMemberExtraColumns.value) {
-    cols.push({ title: '等级', key: 'giftLevel', width: 50, render: (row: any) => clampedText(row.giftLevel || '-') })
+    cols.push({
+      title: '等级',
+      key: 'giftLevel',
+      width: 50,
+      render: (row: any) => clampedText(row.giftLevel || '-'),
+    })
     cols.push({ title: '地址数', key: 'activeAddressCount', width: 60 })
   }
-  cols.push({ title: '操作', key: '__actions', width: 80,
-    render: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }) })
+  cols.push({
+    title: '操作',
+    key: '__actions',
+    width: 80,
+    render: () => h(NButton, { size: 'tiny', type: 'error' }, { default: () => '删除' }),
+  })
   return cols
 })
 
@@ -320,8 +352,8 @@ async function runProductRemeasure() {
   const requestId = productMeasurementRequestId.value
   try {
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
-    await new Promise(r => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
     refreshProductLayout()
     await nextTick()
     const result = productMeasureLayer.value?.measure()
@@ -349,8 +381,8 @@ async function runMemberRemeasure() {
   const requestId = memberMeasurementRequestId.value
   try {
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
-    await new Promise(r => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
     refreshMemberLayout()
     await nextTick()
     const result = memberMeasureLayer.value?.measure()
@@ -534,14 +566,15 @@ onUnmounted(() => {
           />
           <NButton block secondary @click="handleImportProduct">导入商品</NButton>
         </div>
-        <div
-          v-if="allProducts.length"
-          class="flex-1 min-h-0 flex flex-col overflow-hidden px-3"
-        >
+        <div v-if="allProducts.length" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3">
           <!-- TABLE VIEWPORT -->
           <div ref="productLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden">
             <!-- scroll mode -->
-            <div v-if="tableMode === 'scroll'" ref="productTableRef" class="flex-1 min-h-0 overflow-hidden">
+            <div
+              v-if="tableMode === 'scroll'"
+              ref="productTableRef"
+              class="flex-1 min-h-0 overflow-hidden"
+            >
               <NDataTable
                 :columns="productDataColumns"
                 :data="renderProducts"
@@ -566,12 +599,20 @@ onUnmounted(() => {
                   size="small"
                 />
               </div>
-              <AdaptivePaginationIndicator :page="productCurrentPage" :page-count="productPageCount" />
+              <AdaptivePaginationIndicator
+                :page="productCurrentPage"
+                :page-count="productPageCount"
+              />
             </template>
           </div>
           <!-- FOOTER (sibling, outside viewport) -->
-          <div v-if="tableMode === 'paginated'" ref="productFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
-            <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex;">
+          <div
+            v-if="tableMode === 'paginated'"
+            ref="productFooterRef"
+            class="flex justify-center shrink-0"
+            style="padding: 8px 0 12px 0"
+          >
+            <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex">
               <NPagination
                 :page="productCurrentPage"
                 :page-count="productPageCount"
@@ -598,14 +639,15 @@ onUnmounted(() => {
           />
           <NButton block type="primary" @click="handleImportDispatch">导入会员数据</NButton>
         </div>
-        <div
-          v-if="waveMembers.length"
-          class="flex-1 min-h-0 flex flex-col overflow-hidden px-3"
-        >
+        <div v-if="waveMembers.length" class="flex-1 min-h-0 flex flex-col overflow-hidden px-3">
           <!-- TABLE VIEWPORT -->
           <div ref="memberLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden">
             <!-- scroll mode -->
-            <div v-if="tableMode === 'scroll'" ref="memberTableRef" class="flex-1 min-h-0 overflow-hidden">
+            <div
+              v-if="tableMode === 'scroll'"
+              ref="memberTableRef"
+              class="flex-1 min-h-0 overflow-hidden"
+            >
               <NDataTable
                 :columns="memberColumns"
                 :data="renderMembers"
@@ -630,12 +672,20 @@ onUnmounted(() => {
                   size="small"
                 />
               </div>
-              <AdaptivePaginationIndicator :page="memberCurrentPage" :page-count="memberPageCount" />
+              <AdaptivePaginationIndicator
+                :page="memberCurrentPage"
+                :page-count="memberPageCount"
+              />
             </template>
           </div>
           <!-- FOOTER (sibling, outside viewport) -->
-          <div v-if="tableMode === 'paginated'" ref="memberFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
-            <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex;">
+          <div
+            v-if="tableMode === 'paginated'"
+            ref="memberFooterRef"
+            class="flex justify-center shrink-0"
+            style="padding: 8px 0 12px 0"
+          >
+            <div style="transform: scale(1.3); transform-origin: top center; display: inline-flex">
               <NPagination
                 :page="memberCurrentPage"
                 :page-count="memberPageCount"

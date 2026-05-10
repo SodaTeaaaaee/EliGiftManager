@@ -233,6 +233,14 @@ function renderTagChipCore(tag: TagInfo, row?: any) {
       round: true,
       color: t.bg,
       style: { cursor: 'pointer', border: t.border },
+      ...(row
+        ? {
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation()
+              openTagEdit(row, tag)
+            },
+          }
+        : {}),
     },
     { default: () => content },
   )
@@ -255,7 +263,7 @@ function renderTagChip(row: any, tag: TagInfo) {
       placement: 'bottom',
     },
     {
-      trigger: () => renderTagChipCore(tag),
+      trigger: () => renderTagChipCore(tag, row),
       default: () =>
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '4px' } }, [
           h(NInputNumber, {

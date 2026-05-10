@@ -15,9 +15,12 @@ const root = ref<HTMLElement | null>(null)
 const tableRef = ref<any>(null)
 const width = ref(props.width ?? 0)
 
-watch(() => props.width, (w) => {
-  if (w != null) width.value = w
-})
+watch(
+  () => props.width,
+  (w) => {
+    if (w != null) width.value = w
+  },
+)
 
 function setWidth(w: number) {
   width.value = w
@@ -44,11 +47,7 @@ defineExpose({ setWidth, measure })
 </script>
 
 <template>
-  <div
-    ref="root"
-    class="measure-layer"
-    :style="{ width: width + 'px' }"
-  >
+  <div ref="root" class="measure-layer" :style="{ width: width + 'px' }">
     <NDataTable
       ref="tableRef"
       :data="data"

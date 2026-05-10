@@ -176,7 +176,7 @@ const {
   layoutRef: previewLayoutRef,
   tableRef: previewTableRef,
   paginationRef: previewFooterRef,
-  rowHeightHint: (w: number) => w < 550 ? 78 : 68,
+  rowHeightHint: (w: number) => (w < 550 ? 78 : 68),
 })
 
 // ── column definitions ──
@@ -260,12 +260,42 @@ const previewMeasureColumns = computed(() => {
     { title: '平台', key: 'platform', width: 100 },
   ]
   if (showExtraColumns.value) {
-    cols.push({ title: 'UID', key: 'platformUid', width: 140, render: (row: any) => clampedText(row.platformUid) })
+    cols.push({
+      title: 'UID',
+      key: 'platformUid',
+      width: 140,
+      render: (row: any) => clampedText(row.platformUid),
+    })
   }
   cols.push(
-    { title: '礼物种类', key: 'records', width: 80, render: (row: any) => String(row.records.length) },
-    { title: '礼物数量', key: 'totalQty', width: 80, render: (row: any) => String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)) },
-    { title: '地址', key: 'addressStatus', width: 80, render: (row: any) => h(NTag, { type: row.addressStatus === '已绑定' ? 'success' : 'warning', size: 'small', round: true }, { default: () => row.addressStatus }) },
+    {
+      title: '礼物种类',
+      key: 'records',
+      width: 80,
+      render: (row: any) => String(row.records.length),
+    },
+    {
+      title: '礼物数量',
+      key: 'totalQty',
+      width: 80,
+      render: (row: any) =>
+        String((row.records as any[]).reduce((s: number, r: any) => s + (r.quantity || 0), 0)),
+    },
+    {
+      title: '地址',
+      key: 'addressStatus',
+      width: 80,
+      render: (row: any) =>
+        h(
+          NTag,
+          {
+            type: row.addressStatus === '已绑定' ? 'success' : 'warning',
+            size: 'small',
+            round: true,
+          },
+          { default: () => row.addressStatus },
+        ),
+    },
   )
   return cols
 })
@@ -282,8 +312,8 @@ async function runPreviewRemeasure() {
   const requestId = previewMeasurementRequestId.value
   try {
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
-    await new Promise(r => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
+    await new Promise((r) => requestAnimationFrame(r))
     refreshLayout()
     await nextTick()
     const result = previewMeasureLayer.value?.measure()
@@ -631,7 +661,11 @@ onUnmounted(() => {
       <!-- TABLE VIEWPORT -->
       <div ref="previewLayoutRef" class="flex-1 min-h-0 flex flex-col overflow-hidden">
         <!-- scroll mode -->
-        <div v-if="tableMode === 'scroll'" ref="previewTableRef" class="flex-1 min-h-0 overflow-hidden">
+        <div
+          v-if="tableMode === 'scroll'"
+          ref="previewTableRef"
+          class="flex-1 min-h-0 overflow-hidden"
+        >
           <NDataTable
             :columns="memberGroupColumnsComputed"
             :data="visibleItems"
@@ -664,8 +698,13 @@ onUnmounted(() => {
         </template>
       </div>
       <!-- FOOTER (sibling, outside viewport) -->
-      <div v-if="tableMode === 'paginated'" ref="previewFooterRef" class="flex justify-center shrink-0" style="padding: 8px 0 12px 0;">
-        <div style="transform: scale(1.5); transform-origin: top center; display: inline-flex;">
+      <div
+        v-if="tableMode === 'paginated'"
+        ref="previewFooterRef"
+        class="flex justify-center shrink-0"
+        style="padding: 8px 0 12px 0"
+      >
+        <div style="transform: scale(1.5); transform-origin: top center; display: inline-flex">
           <NPagination
             :page="currentPage"
             :page-count="totalPages"

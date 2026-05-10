@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, useTemplateRef } from 'vue'
-import { buildPaginationIndicator, type PaginationIndicatorModel } from '@/shared/lib/table/buildPaginationIndicator'
+import {
+  buildPaginationIndicator,
+  type PaginationIndicatorModel,
+} from '@/shared/lib/table/buildPaginationIndicator'
 
 const props = defineProps<{
   page: number
@@ -54,12 +57,14 @@ watch([() => props.page, () => props.pageCount], () => {
       v-if="model.left"
       class="adaptive-pagination-indicator__left"
       :style="{ color: 'rgba(96, 165, 250, 0.1)' }"
-    >{{ model.left }}</span>
+      >{{ model.left }}</span
+    >
     <span
       v-if="model.right"
       class="adaptive-pagination-indicator__right"
       :style="{ color: 'rgba(251, 191, 36, 0.1)' }"
-    >{{ model.right }}</span>
+      >{{ model.right }}</span
+    >
   </div>
 </template>
 
