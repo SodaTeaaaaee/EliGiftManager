@@ -91,6 +91,11 @@ export function compareValues(a: unknown, b: unknown): number {
 
 export function compareForSort(order: 'ascend' | 'descend') {
   return (a: unknown, b: unknown): number => {
+    const aMissing = a == null || a === ''
+    const bMissing = b == null || b === ''
+    if (aMissing && bMissing) return 0
+    if (aMissing) return 1
+    if (bMissing) return -1
     const cmp = compareValues(a, b)
     return order === 'descend' ? -cmp : cmp
   }

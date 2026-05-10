@@ -52,7 +52,7 @@ const tableMode = useTableMode()
 
 // Sort descriptors for export records
 const exportSortDescriptors: SortDescriptor<DispatchRecordItem>[] = [
-  { key: 'memberNickname', getValue: (r) => r.memberNickname || r.platformUid },
+  { key: 'displayName', getValue: (r) => r.memberNickname || r.platformUid },
   { key: 'memberPlatform', getValue: (r) => r.memberPlatform },
   { key: 'productName', getValue: (r) => r.productName },
   { key: 'quantity', getValue: (r) => r.quantity },
@@ -63,7 +63,7 @@ const exportSortDescriptors: SortDescriptor<DispatchRecordItem>[] = [
 const {
   sortedItems: sortedRecords,
   sortState,
-  applySorter,
+  applyNaiveSorterEvent,
 } = useTableSort(records, exportSortDescriptors)
 
 const pendingAddressCount = computed(() => wave.value?.pendingAddressRecords ?? 0)
@@ -94,12 +94,12 @@ const exportPlatforms = computed(() => {
 
 const recordColumns = computed<DataTableColumns<DispatchRecordItem>>(() => [
   {
-    title: '会员',
+    title: '显示名',
     key: 'memberNickname',
     minWidth: 120,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder: sortState.value.columnKey === 'memberNickname' ? sortState.value.order : false,
+    sortOrder: sortState.value.columnKey === 'displayName' ? sortState.value.order : false,
     render: (row) => row.memberNickname || row.platformUid,
   },
   {
@@ -183,7 +183,7 @@ const {
 // Measure columns (includes render fallback for accurate row-height measurement)
 const exportMeasureColumns = computed(() => [
   {
-    title: '会员',
+    title: '显示名',
     key: 'memberNickname',
     minWidth: 120,
     render: (row: any) => row.memberNickname || row.platformUid,
@@ -420,9 +420,7 @@ onUnmounted(() => {
           :pagination="false"
           :max-height="tableBodyMaxHeight"
           size="small"
-          @update:sorter="
-            (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
-          "
+          @update:sorter="(s: any) => applyNaiveSorterEvent(s)"
         />
       </div>
       <template v-if="tableMode === 'paginated'">
@@ -434,9 +432,7 @@ onUnmounted(() => {
             :remote="true"
             :pagination="false"
             size="small"
-            @update:sorter="
-              (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
-            "
+            @update:sorter="(s: any) => applyNaiveSorterEvent(s)"
           />
         </div>
         <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />

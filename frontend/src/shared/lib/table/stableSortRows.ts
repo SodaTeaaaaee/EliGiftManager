@@ -1,4 +1,4 @@
-import { compareValues } from './compareSortValues'
+import { compareValues } from './compareSortValues.ts'
 
 export type SortOrder = 'ascend' | 'descend' | false
 
@@ -21,11 +21,20 @@ export function stableSortRows<T>(
     let cmp = 0
     if (descriptor.compare) {
       cmp = descriptor.compare(a.item, b.item)
+      if (order === 'descend') cmp = -cmp
     } else if (descriptor.getValue) {
-      cmp = compareValues(descriptor.getValue(a.item), descriptor.getValue(b.item))
+      const aVal = descriptor.getValue(a.item)
+      const bVal = descriptor.getValue(b.item)
+      const aMissing = aVal == null || aVal === ''
+      const bMissing = bVal == null || bVal === ''
+      if (aMissing && bMissing) { cmp = a.index - b.index }
+      else if (aMissing) { cmp = 1 }   // a goes after b (always sink)
+      else if (bMissing) { cmp = -1 }  // b goes after a (always sink)
+      else {
+        cmp = compareValues(aVal, bVal)
+        if (order === 'descend') cmp = -cmp
+      }
     }
-    if (order === 'descend') cmp = -cmp
-    // Stable tiebreaker: original index
     if (cmp === 0) cmp = a.index - b.index
     return cmp
   })

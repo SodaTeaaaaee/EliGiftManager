@@ -71,7 +71,9 @@ const platformOptions = computed(() =>
 
 // Sort descriptors
 const memberSortDescriptors: SortDescriptor<MemberItem>[] = [
-  { key: 'latestNickname', getValue: (m) => m.latestNickname || m.platformUid },
+  { key: 'platform', getValue: (m) => m.platform },
+  { key: 'platformUid', getValue: (m) => m.platformUid },
+  { key: 'latestNickname', getValue: (m) => m.latestNickname || '' },
   { key: 'activeAddressCount', getValue: (m) => m.activeAddressCount },
   { key: 'latestRecipient', getValue: (m) => m.latestRecipient || '' },
   { key: 'latestPhone', getValue: (m) => m.latestPhone || '' },
@@ -89,34 +91,45 @@ const filteredMembers = computed(() => {
 const {
   sortedItems: displayMembers,
   sortState: memberSortState,
-  applySorter,
+  applyNaiveSorterEvent,
 } = useTableSort(filteredMembers, memberSortDescriptors)
 
 const columns = computed<DataTableColumns<MemberItem>>(() => [
   {
     title: '会员',
+    key: '__summary',
+    width: 48,
+    render: (row: any) =>
+      h(NAvatar, {
+        size: 34,
+        color: 'var(--accent-surface)',
+        style: { color: 'var(--accent)', fontWeight: '700' },
+      }, { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() }),
+  },
+  {
+    title: '昵称',
     key: 'latestNickname',
-    minWidth: 160,
+    minWidth: 100,
     sorter: 'default' as const,
     customNextSortOrder: nextSortOrderAscFirst,
-    sortOrder:
-      memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
-    render: (row) =>
-      h('div', { class: 'flex items-center gap-3' }, [
-        h(
-          NAvatar,
-          {
-            size: 34,
-            color: 'var(--accent-surface)',
-            style: { color: 'var(--accent)', fontWeight: '700' },
-          },
-          { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() },
-        ),
-        h('div', [
-          h('div', { class: 'font-semibold' }, row.latestNickname || row.platformUid),
-          h('div', { class: 'app-copy' }, `${row.platform} / ${row.platformUid}`),
-        ]),
-      ]),
+    sortOrder: memberSortState.value.columnKey === 'latestNickname' ? memberSortState.value.order : false,
+    render: (row) => row.latestNickname || '-',
+  },
+  {
+    title: '平台',
+    key: 'platform',
+    width: 90,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: memberSortState.value.columnKey === 'platform' ? memberSortState.value.order : false,
+  },
+  {
+    title: 'UID',
+    key: 'platformUid',
+    minWidth: 100,
+    sorter: 'default' as const,
+    customNextSortOrder: nextSortOrderAscFirst,
+    sortOrder: memberSortState.value.columnKey === 'platformUid' ? memberSortState.value.order : false,
   },
   {
     title: '地址状态',
@@ -199,56 +212,21 @@ const {
 // Measure columns (mirrors real first column for accurate row-height measurement)
 const memberMeasureColumns = computed<DataTableColumns<MemberItem>>(() => [
   {
-    title: '会员',
-    key: 'latestNickname',
-    minWidth: 160,
-    render: (row: any) =>
-      h('div', { class: 'flex items-center gap-3' }, [
-        h(
-          NAvatar,
-          {
-            size: 34,
-            color: 'var(--accent-surface)',
-            style: { color: 'var(--accent)', fontWeight: '700' },
-          },
-          { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() },
-        ),
-        h('div', [
-          h('div', { class: 'font-semibold' }, row.latestNickname || row.platformUid),
-          h('div', { class: 'app-copy' }, `${row.platform} / ${row.platformUid}`),
-        ]),
-      ]),
+    title: '会员', key: '__summary', width: 48,
+    render: (row: any) => h(NAvatar, { size: 34, color: 'var(--accent-surface)', style: { color: 'var(--accent)', fontWeight: '700' } },
+      { default: () => (row.latestNickname || row.platformUid).slice(0, 1).toUpperCase() }),
   },
+  { title: '昵称', key: 'latestNickname', minWidth: 100, render: (row: any) => row.latestNickname || '-' },
+  { title: '平台', key: 'platform', width: 90 },
+  { title: 'UID', key: 'platformUid', minWidth: 100 },
   {
-    title: '地址状态',
-    key: 'activeAddressCount',
-    width: 120,
-    render: (row: any) =>
-      h(
-        NTag,
-        { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
-        { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') },
-      ),
+    title: '地址状态', key: 'activeAddressCount', width: 120,
+    render: (row: any) => h(NTag, { type: row.activeAddressCount > 0 ? 'success' : 'error', size: 'small', round: true },
+      { default: () => (row.activeAddressCount > 0 ? '已完善' : '缺地址') }),
   },
-  {
-    title: '默认收件人',
-    key: 'latestRecipient',
-    minWidth: 100,
-    render: (row: any) => row.latestRecipient || '-',
-  },
-  {
-    title: '手机',
-    key: 'latestPhone',
-    minWidth: 100,
-    render: (row: any) => row.latestPhone || '-',
-  },
-  {
-    title: '地址',
-    key: 'latestAddress',
-    minWidth: 180,
-    ellipsis: { tooltip: true },
-    render: (row: any) => row.latestAddress || '-',
-  },
+  { title: '默认收件人', key: 'latestRecipient', minWidth: 100, render: (row: any) => row.latestRecipient || '-' },
+  { title: '手机', key: 'latestPhone', minWidth: 100, render: (row: any) => row.latestPhone || '-' },
+  { title: '地址', key: 'latestAddress', minWidth: 180, ellipsis: { tooltip: true }, render: (row: any) => row.latestAddress || '-' },
 ])
 
 let memberMeasureRunning = false
@@ -546,9 +524,7 @@ onBeforeUnmount(() => {
             })
           "
           size="small"
-          @update:sorter="
-            (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
-          "
+          @update:sorter="(s: any) => applyNaiveSorterEvent(s)"
         />
       </div>
       <template v-if="tableMode === 'paginated'">
@@ -569,9 +545,7 @@ onBeforeUnmount(() => {
               })
             "
             size="small"
-            @update:sorter="
-              (s: any) => applySorter({ columnKey: s?.columnKey ?? null, order: s?.order ?? false })
-            "
+            @update:sorter="(s: any) => applyNaiveSorterEvent(s)"
           />
         </div>
         <AdaptivePaginationIndicator :page="currentPage" :page-count="totalPages" />

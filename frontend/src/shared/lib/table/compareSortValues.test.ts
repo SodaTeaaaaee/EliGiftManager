@@ -80,3 +80,40 @@ Deno.test('compareValues: Korean sorted correctly', () => {
 Deno.test('compareValues: booleans', () => {
   assertEquals(compareValues(false, true) < 0, true)
 })
+
+// --- stableSortRows integration ---
+import { stableSortRows } from './stableSortRows.ts'
+
+Deno.test('stableSortRows: ascending puts values in order, nulls at end', () => {
+  const rows = [{ name: 'b' }, { name: null }, { name: 'a' }, { name: '' }]
+  const result = stableSortRows(rows, { key: 'name', getValue: (r: any) => r.name }, 'ascend')
+  assertEquals(result[0].name, 'a')
+  assertEquals(result[1].name, 'b')
+  assertEquals(result[2].name, null)
+  assertEquals(result[3].name, '')
+})
+
+Deno.test('stableSortRows: descending puts values in reverse, nulls still at end', () => {
+  const rows = [{ name: 'b' }, { name: null }, { name: 'a' }, { name: '' }]
+  const result = stableSortRows(rows, { key: 'name', getValue: (r: any) => r.name }, 'descend')
+  assertEquals(result[0].name, 'b')
+  assertEquals(result[1].name, 'a')
+  assertEquals(result[2].name, null)
+  assertEquals(result[3].name, '')
+})
+
+Deno.test('stableSortRows: preserves original order on equal values', () => {
+  const rows = [{ id: 1, v: 'same' }, { id: 2, v: 'same' }, { id: 3, v: 'same' }]
+  const result = stableSortRows(rows, { key: 'v', getValue: (r: any) => r.v }, 'ascend')
+  assertEquals(result[0].id, 1)
+  assertEquals(result[1].id, 2)
+  assertEquals(result[2].id, 3)
+})
+
+Deno.test('stableSortRows: descending preserves original order on equal values', () => {
+  const rows = [{ id: 1, v: 'same' }, { id: 2, v: 'same' }, { id: 3, v: 'same' }]
+  const result = stableSortRows(rows, { key: 'v', getValue: (r: any) => r.v }, 'descend')
+  assertEquals(result[0].id, 1)
+  assertEquals(result[1].id, 2)
+  assertEquals(result[2].id, 3)
+})
