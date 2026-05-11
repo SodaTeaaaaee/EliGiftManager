@@ -185,7 +185,13 @@ export function upsertIdentityTag(
   quantity: number,
 ): Promise<void> {
   assertWailsRuntime();
-  return upsertIdentityTagBinding(productId, platform, tagName, matchMode, quantity);
+  return upsertIdentityTagBinding(
+    productId,
+    platform,
+    tagName,
+    matchMode,
+    quantity,
+  );
 }
 
 export function removeIdentityTag(

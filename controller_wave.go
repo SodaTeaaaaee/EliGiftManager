@@ -530,7 +530,7 @@ func (c *WaveController) syncUserTagForTargetQuantity(waveID, waveMemberID, prod
 		if err := db.Clauses(clause.OnConflict{
 			Columns:     []clause.Column{{Name: "product_id"}, {Name: "wave_member_id"}},
 			TargetWhere: userTagConflictTargetWhere(),
-			DoUpdates: clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "match_mode", "updated_at"}),
+			DoUpdates:   clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "match_mode", "updated_at"}),
 		}).Create(&userTag).Error; err != nil {
 			return fmt.Errorf("upsert user tag failed: %w", err)
 		}

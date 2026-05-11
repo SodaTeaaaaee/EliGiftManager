@@ -20,4 +20,3 @@ func userTagConflictTargetWhere() clause.Where {
 		},
 	}
 }
-

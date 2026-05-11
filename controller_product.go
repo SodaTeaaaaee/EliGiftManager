@@ -160,7 +160,7 @@ func (c *ProductController) UpsertIdentityTag(productID uint, platform, tagName,
 	if err := c.db().Clauses(clause.OnConflict{
 		Columns:     []clause.Column{{Name: "product_id"}, {Name: "platform"}, {Name: "tag_name"}, {Name: "match_mode"}},
 		TargetWhere: identityTagConflictTargetWhere(),
-		DoUpdates: clause.AssignmentColumns([]string{"quantity", "updated_at"}),
+		DoUpdates:   clause.AssignmentColumns([]string{"quantity", "updated_at"}),
 	}).Create(&tag).Error; err != nil {
 		return fmt.Errorf("upsert identity tag failed: %w", err)
 	}
@@ -238,7 +238,7 @@ func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, qua
 	if err := c.db().Clauses(clause.OnConflict{
 		Columns:     []clause.Column{{Name: "product_id"}, {Name: "wave_member_id"}},
 		TargetWhere: userTagConflictTargetWhere(),
-		DoUpdates: clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "match_mode", "updated_at"}),
+		DoUpdates:   clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "match_mode", "updated_at"}),
 	}).Create(&tag).Error; err != nil {
 		return fmt.Errorf("upsert user tag failed: %w", err)
 	}

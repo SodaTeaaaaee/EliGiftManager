@@ -77,4 +77,3 @@ func TestSQLitePartialIndexConflictTargetWithParameters(t *testing.T) {
 		t.Fatalf("parameterized user WHERE conflict target unexpectedly succeeded")
 	}
 }
-

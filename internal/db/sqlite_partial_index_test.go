@@ -53,4 +53,3 @@ func TestInitDBCreatesPartialUniqueIndexesForProductTags(t *testing.T) {
 		t.Fatalf("unexpected idx_prod_user_tag SQL: %s", userSQL)
 	}
 }
-
