@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
@@ -13,10 +14,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// ImportDispatchWave imports a headless CSV into the wave.  It deduplicates rows by
+// ImportDispatchWave imports a headless CSV into the wave. It deduplicates rows by
 // (platform, platformUid), upserts global members (CRM/address reuse, no giftLevel in
 // extra_data), maintains nickname history, upserts wave_member snapshot rows, removes
-// wave_members that disappeared from this import, and rebuilds waves.level_tags.
+// wave_members that disappeared from this import, and rebuilds waves.level_tags from
+// the final persisted wave_members snapshot.
 // DispatchRecord creation is deferred to ReconcileWave.
 func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate model.TemplateConfig) (int, error) {
 	if strings.TrimSpace(csvPath) == "" {
@@ -58,8 +60,7 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 
 	// Parse CSV and deduplicate to unique (platform, platformUid) pairs.
 	// Last occurrence wins when the same member appears multiple times.
-	dedupMap := make(map[string]csvRow)  // key: platform + "||" + platformUid
-	levelTagMap := map[string]struct{}{} // key: platform + "::" + giftName
+	dedupMap := make(map[string]csvRow) // key: platform + "||" + platformUid
 
 	file, oErr := os.Open(csvPath)
 	if oErr != nil {
@@ -103,9 +104,6 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		dedupKey := row.platform + "||" + row.platformUid
 		dedupMap[dedupKey] = row
 
-		// Collect unique level tags.
-		ltKey := row.platform + "::" + row.giftName
-		levelTagMap[ltKey] = struct{}{}
 	}
 
 	if len(dedupMap) == 0 {
@@ -191,18 +189,39 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		return 0, fmt.Errorf("import dispatch wave failed: %w", err)
 	}
 
-	// Rebuild waves.level_tags from current wave_members.
+	// Rebuild waves.level_tags from current wave_members so duplicate CSV rows only
+	// contribute the final effective gift level stored on the snapshot.
 	type levelTagEntry struct {
 		Platform string `json:"platform"`
 		TagName  string `json:"tagName"`
 	}
-	var levelTags []levelTagEntry
-	for key := range levelTagMap {
-		parts := strings.SplitN(key, "::", 2)
-		if len(parts) == 2 {
-			levelTags = append(levelTags, levelTagEntry{Platform: parts[0], TagName: parts[1]})
-		}
+	var waveMembers []model.WaveMember
+	if err := db.Where("wave_id = ?", waveID).Find(&waveMembers).Error; err != nil {
+		return len(dedupMap), fmt.Errorf("import dispatch wave warning: records imported but wave_members reload failed: %w", err)
 	}
+
+	levelTagSet := make(map[string]struct{}, len(waveMembers))
+	for _, wm := range waveMembers {
+		if strings.TrimSpace(wm.Platform) == "" || strings.TrimSpace(wm.GiftLevel) == "" {
+			continue
+		}
+		levelTagSet[wm.Platform+"::"+wm.GiftLevel] = struct{}{}
+	}
+
+	levelTags := make([]levelTagEntry, 0, len(levelTagSet))
+	for key := range levelTagSet {
+		parts := strings.SplitN(key, "::", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		levelTags = append(levelTags, levelTagEntry{Platform: parts[0], TagName: parts[1]})
+	}
+	sort.Slice(levelTags, func(i, j int) bool {
+		if levelTags[i].Platform != levelTags[j].Platform {
+			return levelTags[i].Platform < levelTags[j].Platform
+		}
+		return levelTags[i].TagName < levelTags[j].TagName
+	})
 	levelTagsJSON, _ := json.Marshal(levelTags)
 	if updateErr := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("level_tags", string(levelTagsJSON)).Error; updateErr != nil {
 		return len(dedupMap), fmt.Errorf("import dispatch wave warning: records imported but level_tags update failed: %w", updateErr)
