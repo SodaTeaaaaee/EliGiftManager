@@ -16,10 +16,11 @@ import {
   ListProductMasters as listProductMastersBinding,
   ListProducts as listProductsBinding,
   ListProductsWithTags as listProductsWithTagsBinding,
-  ListProductTags as listProductTagsBinding,
+  RemoveIdentityTag as removeIdentityTagBinding,
   RemoveLevelTag as removeLevelTagBinding,
   RemoveUserTag as removeUserTagBinding,
   UpdateProduct as updateProductBinding,
+  UpsertIdentityTag as upsertIdentityTagBinding,
   UpsertLevelTag as upsertLevelTagBinding,
   UpsertUserTag as upsertUserTagBinding,
 } from "../../../../wailsjs/go/main/ProductController";
@@ -167,10 +168,6 @@ export function setDispatchAddress(
   if (!isWailsRuntimeAvailable()) return Promise.resolve();
   return setDispatchAddressBinding(waveId, memberId, addressId);
 }
-export function listProductTags(platform: string): Promise<string[]> {
-  assertWailsRuntime();
-  return listProductTagsBinding(platform);
-}
 export function listProductsWithTags(
   waveId: number,
   platform = "",
@@ -180,6 +177,27 @@ export function listProductsWithTags(
   assertWailsRuntime();
   return listProductsWithTagsBinding(waveId, platform, page, pageSize);
 }
+export function upsertIdentityTag(
+  productId: number,
+  platform: string,
+  tagName: string,
+  matchMode: string,
+  quantity: number,
+): Promise<void> {
+  assertWailsRuntime();
+  return upsertIdentityTagBinding(productId, platform, tagName, matchMode, quantity);
+}
+
+export function removeIdentityTag(
+  productId: number,
+  platform: string,
+  tagName: string,
+  matchMode: string,
+): Promise<void> {
+  assertWailsRuntime();
+  return removeIdentityTagBinding(productId, platform, tagName, matchMode);
+}
+
 export function upsertLevelTag(
   productId: number,
   memberPlatform: string,

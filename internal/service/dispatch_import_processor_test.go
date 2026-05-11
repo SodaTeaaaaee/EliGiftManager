@@ -64,24 +64,32 @@ func TestImportDispatchWaveRebuildsLevelTagsFromFinalWaveMembers(t *testing.T) {
 	}
 
 	var levelTags []struct {
-		Platform string `json:"platform"`
-		TagName  string `json:"tagName"`
+		Platform  string `json:"platform"`
+		TagName   string `json:"tagName"`
+		MatchMode string `json:"matchMode"`
 	}
 	if err := json.Unmarshal([]byte(updatedWave.LevelTags), &levelTags); err != nil {
 		t.Fatalf("failed to parse wave level tags: %v", err)
 	}
-	if len(levelTags) != 2 {
-		t.Fatalf("expected 2 level tags, got %d: %s", len(levelTags), updatedWave.LevelTags)
+	// New BuildWaveIdentityTagCandidates emits: 2 gift_level + 1 platform_all + 1 wave_all = 4 entries.
+	if len(levelTags) != 4 {
+		t.Fatalf("expected 4 level tags (2 gift_level + 1 platform_all + 1 wave_all), got %d: %s", len(levelTags), updatedWave.LevelTags)
 	}
 
 	got := map[string]bool{}
 	for _, item := range levelTags {
-		got[item.Platform+"::"+item.TagName] = true
+		got[item.Platform+"::"+item.TagName+"::"+item.MatchMode] = true
 	}
-	if !got["BILIBILI::提督"] || !got["BILIBILI::总督"] {
-		t.Fatalf("expected final level tags to include 提督 and 总督, got %s", updatedWave.LevelTags)
+	if !got["BILIBILI::提督::gift_level"] || !got["BILIBILI::总督::gift_level"] {
+		t.Fatalf("expected final level tags to include 提督 and 总督 gift_level entries, got %s", updatedWave.LevelTags)
 	}
-	if got["BILIBILI::舰长"] {
+	if got["BILIBILI::舰长::gift_level"] {
 		t.Fatalf("expected overwritten level tag 舰长 to be absent, got %s", updatedWave.LevelTags)
+	}
+	if !got["BILIBILI::::platform_all"] {
+		t.Fatalf("expected a platform_all entry for BILIBILI, got %s", updatedWave.LevelTags)
+	}
+	if !got["::::wave_all"] {
+		t.Fatalf("expected a wave_all entry, got %s", updatedWave.LevelTags)
 	}
 }

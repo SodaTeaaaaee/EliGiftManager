@@ -2,11 +2,9 @@ package service
 
 import (
 	"encoding/csv"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
@@ -18,7 +16,8 @@ import (
 // (platform, platformUid), upserts global members (CRM/address reuse, no giftLevel in
 // extra_data), maintains nickname history, upserts wave_member snapshot rows, removes
 // wave_members that disappeared from this import, and rebuilds waves.level_tags from
-// the final persisted wave_members snapshot.
+// wave_members via BuildWaveIdentityTagCandidates
+// (pure wave_members derivation; does not read product_tags).
 // DispatchRecord creation is deferred to ReconcileWave.
 func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate model.TemplateConfig) (int, error) {
 	if strings.TrimSpace(csvPath) == "" {
@@ -189,44 +188,14 @@ func ImportDispatchWave(db *gorm.DB, waveID uint, csvPath string, importTemplate
 		return 0, fmt.Errorf("import dispatch wave failed: %w", err)
 	}
 
-	// Rebuild waves.level_tags from current wave_members so duplicate CSV rows only
-	// contribute the final effective gift level stored on the snapshot.
-	type levelTagEntry struct {
-		Platform string `json:"platform"`
-		TagName  string `json:"tagName"`
+	// Rebuild waves.level_tags using the identity tag candidates helper.
+	levelTagsJSON, buildErr := BuildWaveIdentityTagCandidates(db, waveID)
+	if buildErr != nil {
+		return len(dedupMap), fmt.Errorf("import dispatch wave warning: records imported but identity tag candidates rebuild failed: %w", buildErr)
 	}
-	var waveMembers []model.WaveMember
-	if err := db.Where("wave_id = ?", waveID).Find(&waveMembers).Error; err != nil {
-		return len(dedupMap), fmt.Errorf("import dispatch wave warning: records imported but wave_members reload failed: %w", err)
-	}
-
-	levelTagSet := make(map[string]struct{}, len(waveMembers))
-	for _, wm := range waveMembers {
-		if strings.TrimSpace(wm.Platform) == "" || strings.TrimSpace(wm.GiftLevel) == "" {
-			continue
-		}
-		levelTagSet[wm.Platform+"::"+wm.GiftLevel] = struct{}{}
-	}
-
-	levelTags := make([]levelTagEntry, 0, len(levelTagSet))
-	for key := range levelTagSet {
-		parts := strings.SplitN(key, "::", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		levelTags = append(levelTags, levelTagEntry{Platform: parts[0], TagName: parts[1]})
-	}
-	sort.Slice(levelTags, func(i, j int) bool {
-		if levelTags[i].Platform != levelTags[j].Platform {
-			return levelTags[i].Platform < levelTags[j].Platform
-		}
-		return levelTags[i].TagName < levelTags[j].TagName
-	})
-	levelTagsJSON, _ := json.Marshal(levelTags)
-	if updateErr := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("level_tags", string(levelTagsJSON)).Error; updateErr != nil {
+	if updateErr := db.Model(&model.Wave{}).Where("id = ?", waveID).Update("level_tags", levelTagsJSON).Error; updateErr != nil {
 		return len(dedupMap), fmt.Errorf("import dispatch wave warning: records imported but level_tags update failed: %w", updateErr)
 	}
-
 	return len(dedupMap), nil
 }
 

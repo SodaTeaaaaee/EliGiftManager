@@ -257,7 +257,7 @@ func (c *WaveController) ListDispatchRecords(waveID uint) ([]DispatchRecordItem,
 
 // ReconcileWave 根据 ProductTag 和 WaveMember 重新计算整个波次的 DispatchRecord。
 // WaveMember 自包含快照字段（Platform/GiftLevel），不再需要 JOIN members。
-// user tag 通过 WaveMemberID 直接定位；level tag 通过 wm.Platform + wm.GiftLevel 匹配。
+// user tag 通过 WaveMemberID 直接定位；identity tag 通过 matchMode（gift_level / platform_all / wave_all）分发。
 // 比对期望状态与实际状态，通过 INSERT/UPDATE/DELETE 抹平差异。幂等。
 //
 // Performance: batch-loads all DispatchRecords once, builds a map for O(1) lookup,
@@ -305,9 +305,9 @@ func (c *WaveController) ReconcileWave(waveID uint) (int, error) {
 				}
 				expectedState[p.ID][memberID] += tag.Quantity
 			} else {
-				// Level tag: match wave_members by platform + gift_level (simple string compare).
+				// Identity tag: dispatch via matchMode (gift_level / platform_all / wave_all).
 				for _, wm := range waveMembers {
-					if wm.Platform == tag.Platform && wm.GiftLevel == tag.TagName {
+					if service.ProductTagMatchesWaveMember(tag, wm) {
 						expectedState[p.ID][wm.MemberID] += tag.Quantity
 					}
 				}
@@ -485,9 +485,9 @@ func (c *WaveController) SyncUserTagForTargetQuantity(waveID, memberID, productI
 }
 
 // syncUserTagForTargetQuantity is the waveMemberID-based engine for adjusting a
-// single product's user-tag quantity to reach targetQty, accounting for level-tag
-// base quantity.  It upserts or deletes the user tag on (product_id, wave_member_id,
-// tag_type), then triggers ReconcileWave.
+// single product's user-tag quantity to reach targetQty, accounting for identity-tag
+// base quantity.  It upserts or deletes the user tag on (product_id, wave_member_id)
+// WHERE tag_type='user', then triggers ReconcileWave.
 func (c *WaveController) syncUserTagForTargetQuantity(waveID, waveMemberID, productID uint, targetQty int) error {
 	db := c.db()
 	if db == nil {
@@ -506,16 +506,8 @@ func (c *WaveController) syncUserTagForTargetQuantity(waveID, waveMemberID, prod
 		return fmt.Errorf("product (id=%d) not found in wave (id=%d): %w", productID, waveID, err)
 	}
 
-	// 3. Calculate baseQty from level tags matching this member's platform + gift_level.
-	var levelTags []model.ProductTag
-	db.Where("product_id = ? AND platform = ? AND tag_type = 'level'", productID, wm.Platform).Find(&levelTags)
-
-	baseQty := 0
-	for _, tag := range levelTags {
-		if tag.TagName == wm.GiftLevel {
-			baseQty += tag.Quantity
-		}
-	}
+	// 3. Calculate baseQty from identity tags matching this member via matchMode dispatch.
+	baseQty := service.CalculateWaveMemberIdentityBaseQuantity(db, productID, wm)
 
 	neededUserQty := targetQty - baseQty
 
@@ -530,13 +522,15 @@ func (c *WaveController) syncUserTagForTargetQuantity(waveID, waveMemberID, prod
 			ProductID:    productID,
 			Platform:     wm.Platform,
 			TagName:      wm.PlatformUID,
+			MatchMode:    "user_member",
 			TagType:      "user",
 			Quantity:     neededUserQty,
 			WaveMemberID: &waveMemberID,
 		}
 		if err := db.Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "product_id"}, {Name: "wave_member_id"}, {Name: "tag_type"}},
-			DoUpdates: clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "updated_at"}),
+			Columns:     []clause.Column{{Name: "product_id"}, {Name: "wave_member_id"}},
+			TargetWhere: userTagConflictTargetWhere(),
+			DoUpdates: clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "match_mode", "updated_at"}),
 		}).Create(&userTag).Error; err != nil {
 			return fmt.Errorf("upsert user tag failed: %w", err)
 		}

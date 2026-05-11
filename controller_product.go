@@ -6,6 +6,7 @@ import (
 
 	dbpkg "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/model"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -99,9 +100,9 @@ func (c *ProductController) ListProductsWithTags(waveID uint, platform string, p
 		for _, t := range p.Tags {
 			tt := t.TagType
 			if tt == "" {
-				tt = "level"
+				tt = "identity"
 			}
-			ti := TagInfo{TagName: t.TagName, Quantity: t.Quantity, TagType: tt, Platform: t.Platform}
+			ti := TagInfo{TagName: t.TagName, Quantity: t.Quantity, TagType: tt, Platform: t.Platform, MatchMode: t.MatchMode}
 			if t.WaveMemberID != nil {
 				ti.WaveMemberID = *t.WaveMemberID
 			}
@@ -113,28 +114,35 @@ func (c *ProductController) ListProductsWithTags(waveID uint, platform string, p
 	return ProductListWithTagsPayload{Items: items, Total: total, Platforms: platforms}, nil
 }
 
-func (c *ProductController) ListProductTags(platform string) ([]string, error) {
-	db := c.db()
-	if db == nil {
-		return nil, fmt.Errorf("database not available")
-	}
-	var tags []string
-	if err := db.Model(&model.ProductTag{}).Where("platform = ?", strings.TrimSpace(platform)).Distinct().Order("tag_name ASC").Pluck("tag_name", &tags).Error; err != nil {
-		return nil, fmt.Errorf("list product tags failed: %w", err)
-	}
-	return tags, nil
+// ---- Level tag operations (compatibility wrappers) ----
+
+// UpsertLevelTag is a backward-compatible wrapper that delegates to UpsertIdentityTag
+// with matchMode="gift_level".  Old "level" tagType is normalised to "identity" on write.
+func (c *ProductController) UpsertLevelTag(productID uint, memberPlatform string, levelName string, quantity int) error {
+	return c.UpsertIdentityTag(productID, memberPlatform, levelName, "gift_level", quantity)
 }
 
-// ---- Level tag operations ----
+// RemoveLevelTag is a backward-compatible wrapper that delegates to RemoveIdentityTag
+// with matchMode="gift_level".
+func (c *ProductController) RemoveLevelTag(productID uint, platform string, tagName string) error {
+	return c.RemoveIdentityTag(productID, platform, tagName, "gift_level")
+}
 
-// UpsertLevelTag creates or updates a level tag identified by (product_id, platform, tag_name, tag_type='level').
-// OnConflict uses idx_prod_platform_tag.  Triggers ReconcileWave on success.
-func (c *ProductController) UpsertLevelTag(productID uint, memberPlatform string, levelName string, quantity int) error {
-	memberPlatform = strings.TrimSpace(memberPlatform)
-	levelName = strings.TrimSpace(levelName)
+// ---- Identity tag operations ----
 
-	if productID == 0 || memberPlatform == "" || levelName == "" {
-		return fmt.Errorf("upsert level tag failed: productID, memberPlatform, and levelName are required")
+// UpsertIdentityTag creates or updates an identity tag identified by the 4-column
+// partial unique index (product_id, platform, tag_name, match_mode) WHERE tag_type='identity'.
+// matchMode defaults to "gift_level" when empty; "user_member" is rejected.
+// Triggers ReconcileWave on success.
+func (c *ProductController) UpsertIdentityTag(productID uint, platform, tagName, matchMode string, quantity int) error {
+	var err error
+	platform, tagName, matchMode, err = service.NormalizeIdentityTag(platform, tagName, matchMode)
+	if err != nil {
+		return fmt.Errorf("upsert identity tag failed: %w", err)
+	}
+
+	if productID == 0 {
+		return fmt.Errorf("upsert identity tag failed: productID is required")
 	}
 	if quantity < 0 {
 		quantity = 0
@@ -142,17 +150,19 @@ func (c *ProductController) UpsertLevelTag(productID uint, memberPlatform string
 
 	tag := model.ProductTag{
 		ProductID: productID,
-		Platform:  memberPlatform,
-		TagName:   levelName,
-		TagType:   "level",
+		Platform:  platform,
+		TagName:   tagName,
+		MatchMode: matchMode,
+		TagType:   "identity",
 		Quantity:  quantity,
 	}
 
 	if err := c.db().Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "product_id"}, {Name: "platform"}, {Name: "tag_name"}, {Name: "tag_type"}},
+		Columns:     []clause.Column{{Name: "product_id"}, {Name: "platform"}, {Name: "tag_name"}, {Name: "match_mode"}},
+		TargetWhere: identityTagConflictTargetWhere(),
 		DoUpdates: clause.AssignmentColumns([]string{"quantity", "updated_at"}),
 	}).Create(&tag).Error; err != nil {
-		return fmt.Errorf("upsert level tag failed: %w", err)
+		return fmt.Errorf("upsert identity tag failed: %w", err)
 	}
 
 	// Trigger ReconcileWave if the product belongs to a wave.
@@ -160,35 +170,39 @@ func (c *ProductController) UpsertLevelTag(productID uint, memberPlatform string
 	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
 		var wc WaveController
 		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
-			return fmt.Errorf("reconcile wave after level tag upsert failed: %w", err)
+			return fmt.Errorf("reconcile wave after identity tag upsert failed: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// RemoveLevelTag deletes a level tag by (product_id, platform, tag_name, tag_type='level').
-// Triggers ReconcileWave on success.
-func (c *ProductController) RemoveLevelTag(productID uint, platform string, tagName string) error {
-	platform = strings.TrimSpace(platform)
-	tagName = strings.TrimSpace(tagName)
-
-	if productID == 0 || platform == "" || tagName == "" {
-		return fmt.Errorf("remove level tag failed: productID, platform, and tagName are required")
+// RemoveIdentityTag deletes an identity tag by (product_id, platform, tag_name, match_mode)
+// WHERE tag_type='identity'. matchMode is validated via NormalizeIdentityTag; user_member
+// and unknown values are rejected. Triggers ReconcileWave on success.
+func (c *ProductController) RemoveIdentityTag(productID uint, platform, tagName, matchMode string) error {
+	var err error
+	platform, tagName, matchMode, err = service.NormalizeIdentityTag(platform, tagName, matchMode)
+	if err != nil {
+		return fmt.Errorf("remove identity tag failed: %w", err)
 	}
 
-	result := c.db().Where("product_id = ? AND platform = ? AND tag_name = ? AND tag_type = 'level'",
-		productID, platform, tagName).Delete(&model.ProductTag{})
+	if productID == 0 {
+		return fmt.Errorf("remove identity tag failed: productID is required")
+	}
+
+	result := c.db().Where("product_id = ? AND platform = ? AND tag_name = ? AND match_mode = ? AND tag_type = 'identity'",
+		productID, platform, tagName, matchMode).Delete(&model.ProductTag{})
 	if result.Error != nil {
-		return fmt.Errorf("remove level tag failed: %w", result.Error)
+		return fmt.Errorf("remove identity tag failed: %w", result.Error)
 	}
 
-	// Idempotent: if the tag didn't exist, still trigger ReconcileWave to be safe.
+	// Idempotent: trigger ReconcileWave even if the tag didn't exist.
 	var product model.Product
 	if err := c.db().First(&product, productID).Error; err == nil && product.WaveID != nil {
 		var wc WaveController
 		if _, err := wc.ReconcileWave(*product.WaveID); err != nil {
-			return fmt.Errorf("reconcile wave after level tag removal failed: %w", err)
+			return fmt.Errorf("reconcile wave after identity tag removal failed: %w", err)
 		}
 	}
 
@@ -199,6 +213,7 @@ func (c *ProductController) RemoveLevelTag(productID uint, platform string, tagN
 
 // UpsertUserTag creates or updates a user tag identified by (product_id, wave_member_id, tag_type='user').
 // Platform and TagName are filled from the WaveMember snapshot for display.
+// MatchMode is set to "user_member".
 // OnConflict uses idx_prod_wm_tag.  Triggers ReconcileWave on success.
 func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, quantity int) error {
 	if productID == 0 || waveMemberID == 0 {
@@ -214,14 +229,16 @@ func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, qua
 		ProductID:    productID,
 		Platform:     wm.Platform,
 		TagName:      wm.PlatformUID,
+		MatchMode:    "user_member",
 		TagType:      "user",
 		Quantity:     quantity,
 		WaveMemberID: &waveMemberID,
 	}
 
 	if err := c.db().Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "product_id"}, {Name: "wave_member_id"}, {Name: "tag_type"}},
-		DoUpdates: clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "updated_at"}),
+		Columns:     []clause.Column{{Name: "product_id"}, {Name: "wave_member_id"}},
+		TargetWhere: userTagConflictTargetWhere(),
+		DoUpdates: clause.AssignmentColumns([]string{"quantity", "platform", "tag_name", "match_mode", "updated_at"}),
 	}).Create(&tag).Error; err != nil {
 		return fmt.Errorf("upsert user tag failed: %w", err)
 	}
@@ -238,6 +255,7 @@ func (c *ProductController) UpsertUserTag(productID uint, waveMemberID uint, qua
 }
 
 // RemoveUserTag deletes a user tag by (product_id, wave_member_id, tag_type='user').
+// MatchMode is not involved in the WHERE clause (user tags are unique by wave_member_id).
 // Triggers ReconcileWave on success.
 func (c *ProductController) RemoveUserTag(productID uint, waveMemberID uint) error {
 	if productID == 0 || waveMemberID == 0 {
@@ -264,9 +282,9 @@ func (c *ProductController) RemoveUserTag(productID uint, waveMemberID uint) err
 
 // ---- Legacy wrappers (backward compat for existing Wails bindings) ----
 
-// AssignProductTag is a backward-compatible wrapper that delegates to UpsertLevelTag
-// or UpsertUserTag based on tagType.  For user tags it resolves the wave member from
-// the product's wave + (platform, platformUid).
+// AssignProductTag is a backward-compatible wrapper that delegates to UpsertIdentityTag
+// (matchMode="gift_level") or UpsertUserTag based on tagType.  For user tags it resolves
+// the wave member from the product's wave + (platform, platformUid).
 func (c *ProductController) AssignProductTag(productID uint, platform, tagName string, quantity int, tagType string) error {
 	platform = strings.TrimSpace(platform)
 	tagName = strings.TrimSpace(tagName)
@@ -276,7 +294,7 @@ func (c *ProductController) AssignProductTag(productID uint, platform, tagName s
 		return fmt.Errorf("assign product tag failed: invalid parameters")
 	}
 	if tagType == "" {
-		tagType = "level"
+		tagType = "identity"
 	}
 
 	if tagType == "user" {
@@ -296,18 +314,19 @@ func (c *ProductController) AssignProductTag(productID uint, platform, tagName s
 		return c.UpsertUserTag(productID, wm.ID, quantity)
 	}
 
-	return c.UpsertLevelTag(productID, platform, tagName, quantity)
+	// Old "level" tagType is normalised to identity with matchMode="gift_level".
+	return c.UpsertIdentityTag(productID, platform, tagName, "gift_level", quantity)
 }
 
-// RemoveProductTag is a backward-compatible wrapper that delegates to RemoveLevelTag
-// or RemoveUserTag based on tagType.
+// RemoveProductTag is a backward-compatible wrapper that delegates to RemoveIdentityTag
+// (matchMode="gift_level") or RemoveUserTag based on tagType.
 func (c *ProductController) RemoveProductTag(productID uint, platform, tagName, tagType string) error {
 	platform, tagName, tagType = strings.TrimSpace(platform), strings.TrimSpace(tagName), strings.TrimSpace(tagType)
 	if platform == "" || tagName == "" || productID == 0 {
 		return fmt.Errorf("remove product tag failed: productId, platform, and tagName are required")
 	}
 	if tagType == "" {
-		tagType = "level"
+		tagType = "identity"
 	}
 
 	if tagType == "user" {
@@ -326,7 +345,8 @@ func (c *ProductController) RemoveProductTag(productID uint, platform, tagName, 
 		return c.RemoveUserTag(productID, wm.ID)
 	}
 
-	return c.RemoveLevelTag(productID, platform, tagName)
+	// Old "level" tagType is normalised to identity with matchMode="gift_level".
+	return c.RemoveIdentityTag(productID, platform, tagName, "gift_level")
 }
 
 func (c *ProductController) GetProductImages(productID uint) ([]model.ProductImage, error) {

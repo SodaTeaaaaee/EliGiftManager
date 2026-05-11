@@ -18,16 +18,16 @@ export function ListProductMasters(arg1, arg2, arg3, arg4) {
   return window['go']['main']['ProductController']['ListProductMasters'](arg1, arg2, arg3, arg4);
 }
 
-export function ListProductTags(arg1) {
-  return window['go']['main']['ProductController']['ListProductTags'](arg1);
-}
-
 export function ListProducts(arg1, arg2, arg3, arg4) {
   return window['go']['main']['ProductController']['ListProducts'](arg1, arg2, arg3, arg4);
 }
 
 export function ListProductsWithTags(arg1, arg2, arg3, arg4) {
   return window['go']['main']['ProductController']['ListProductsWithTags'](arg1, arg2, arg3, arg4);
+}
+
+export function RemoveIdentityTag(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['ProductController']['RemoveIdentityTag'](arg1, arg2, arg3, arg4);
 }
 
 export function RemoveLevelTag(arg1, arg2, arg3) {
@@ -44,6 +44,10 @@ export function RemoveUserTag(arg1, arg2) {
 
 export function UpdateProduct(arg1) {
   return window['go']['main']['ProductController']['UpdateProduct'](arg1);
+}
+
+export function UpsertIdentityTag(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['ProductController']['UpsertIdentityTag'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function UpsertLevelTag(arg1, arg2, arg3, arg4) {

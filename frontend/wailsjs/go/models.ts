@@ -358,6 +358,7 @@ export namespace main {
 	    tagType: string;
 	    platform: string;
 	    waveMemberId: number;
+	    matchMode: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TagInfo(source);
@@ -370,6 +371,7 @@ export namespace main {
 	        this.tagType = source["tagType"];
 	        this.platform = source["platform"];
 	        this.waveMemberId = source["waveMemberId"];
+	        this.matchMode = source["matchMode"];
 	    }
 	}
 	export class ProductItemWithTags {
@@ -664,6 +666,7 @@ export namespace model {
 	    productId: number;
 	    platform: string;
 	    tagName: string;
+	    matchMode: string;
 	    tagType: string;
 	    quantity: number;
 	    waveMemberId?: number;
@@ -683,6 +686,7 @@ export namespace model {
 	        this.productId = source["productId"];
 	        this.platform = source["platform"];
 	        this.tagName = source["tagName"];
+	        this.matchMode = source["matchMode"];
 	        this.tagType = source["tagType"];
 	        this.quantity = source["quantity"];
 	        this.waveMemberId = source["waveMemberId"];

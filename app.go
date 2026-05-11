@@ -140,6 +140,7 @@ type TagInfo struct {
 	TagType      string `json:"tagType"`
 	Platform     string `json:"platform"`
 	WaveMemberID uint   `json:"waveMemberId"`
+	MatchMode    string `json:"matchMode"`
 }
 type ProductItemWithTags struct {
 	ID         uint      `json:"id"`

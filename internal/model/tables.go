@@ -91,22 +91,28 @@ type ProductMasterImage struct {
 }
 
 // ProductTag stores platform-level classification tags attached to a product.
-// TagName captures the gift tier/level name (e.g. "舰长", "提督").
-// TagType distinguishes level tags from user-specific tags.
 //
-// Level tags (tag_type='level'): unique on (product_id, platform, tag_name, tag_type).
+// Two tag families are distinguished by TagType:
 //
-//	WaveMemberID is NULL.
+//   - identity (tag_type='identity'): match on platform-level attributes via MatchMode.
+//     Unique on (product_id, platform, tag_name, match_mode) WHERE tag_type='identity'
+//     (partial unique index idx_prod_identity_tag).
+//     MatchMode values: gift_level / platform_all / wave_all.
+//     WaveMemberID is never set for identity tags.
+//     Identity tags accumulate — multiple matching tags on the same product
+//     each contribute their quantity (no mutual exclusion).
 //
-// User tags (tag_type='user'): unique on (product_id, wave_member_id, tag_type).
-//
-//	WaveMemberID points to the specific wave member.
+//   - user (tag_type='user'): per-member quantity overrides that bypass matchMode.
+//     TagName stores the member's PlatformUID. Unique on (product_id, wave_member_id)
+//     WHERE tag_type='user' (partial unique index idx_prod_user_tag).
+//     WaveMemberID points to the specific wave member; always non-nil for user tags.
 type ProductTag struct {
 	ID           uint        `gorm:"primaryKey" json:"id"`
-	ProductID    uint        `gorm:"not null;uniqueIndex:idx_prod_platform_tag" json:"productId"`
-	Platform     string      `gorm:"size:100;not null;uniqueIndex:idx_prod_platform_tag" json:"platform"`
-	TagName      string      `gorm:"size:255;not null;uniqueIndex:idx_prod_platform_tag" json:"tagName"`
-	TagType      string      `gorm:"size:20;not null;default:'level';uniqueIndex:idx_prod_platform_tag" json:"tagType"`
+	ProductID    uint        `gorm:"not null" json:"productId"`
+	Platform     string      `gorm:"size:100;not null" json:"platform"`
+	TagName      string      `gorm:"size:255;not null" json:"tagName"`
+	MatchMode    string      `gorm:"size:20;not null;default:'gift_level'" json:"matchMode"`
+	TagType      string      `gorm:"size:20;not null;default:'identity'" json:"tagType"`
 	Quantity     int         `gorm:"not null;default:1" json:"quantity"`
 	WaveMemberID *uint       `json:"waveMemberId"`
 	CreatedAt    time.Time   `json:"createdAt"`
@@ -121,7 +127,7 @@ type Wave struct {
 	WaveNo    string           `gorm:"size:64;not null;uniqueIndex" json:"waveNo"`
 	Name      string           `gorm:"size:255;not null" json:"name"`
 	Status    string           `gorm:"size:64;not null;default:'draft'" json:"status"`
-	LevelTags string           `gorm:"type:text;not null;default:'[]'" json:"levelTags"`
+	LevelTags string           `gorm:"type:text;not null;default:'[]'" json:"levelTags"` // 波次身份标签候选集 JSON（字段名保留 level_tags）
 	CreatedAt time.Time        `json:"createdAt"`
 	UpdatedAt time.Time        `json:"updatedAt"`
 	Records   []DispatchRecord `gorm:"foreignKey:WaveID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"records"`

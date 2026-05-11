@@ -11,11 +11,11 @@ export function GetProductMasterImages(arg1:number):Promise<Array<model.ProductM
 
 export function ListProductMasters(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.ProductMasterListPayload>;
 
-export function ListProductTags(arg1:string):Promise<Array<string>>;
-
 export function ListProducts(arg1:number,arg2:number,arg3:string,arg4:string):Promise<main.ProductListPayload>;
 
 export function ListProductsWithTags(arg1:number,arg2:string,arg3:number,arg4:number):Promise<main.ProductListWithTagsPayload>;
+
+export function RemoveIdentityTag(arg1:number,arg2:string,arg3:string,arg4:string):Promise<void>;
 
 export function RemoveLevelTag(arg1:number,arg2:string,arg3:string):Promise<void>;
 
@@ -24,6 +24,8 @@ export function RemoveProductTag(arg1:number,arg2:string,arg3:string,arg4:string
 export function RemoveUserTag(arg1:number,arg2:number):Promise<void>;
 
 export function UpdateProduct(arg1:model.Product):Promise<void>;
+
+export function UpsertIdentityTag(arg1:number,arg2:string,arg3:string,arg4:string,arg5:number):Promise<void>;
 
 export function UpsertLevelTag(arg1:number,arg2:string,arg3:string,arg4:number):Promise<void>;
 

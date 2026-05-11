@@ -23,8 +23,10 @@ import {
   listProductsWithTags,
   listWaveMembers,
   listWaves,
+  removeIdentityTag,
   removeLevelTag,
   removeUserTag,
+  upsertIdentityTag,
   upsertLevelTag,
   upsertUserTag,
   WAILS_PREVIEW_MESSAGE,
@@ -55,6 +57,7 @@ type TagInfo = {
   tagType: string
   platform: string
   waveMemberId: number
+  matchMode: string
 }
 
 // ── state ──
@@ -71,7 +74,7 @@ const allTagProducts = ref<
 >([])
 const checkedProductIds = ref<number[]>([])
 const selectedLevelTags = ref<string[]>([])
-const levelTagQuantity = ref(1)
+const identityTagQuantity = ref(1)
 const showLevelPanel = ref(false)
 const levelSearch = ref('')
 
@@ -109,13 +112,17 @@ async function handleUpdateTagQuantity() {
 
   try {
     if (newQty === 0) {
-      await (tag.tagType === 'level'
-        ? removeLevelTag(row.id, tag.platform, tag.tagName)
-        : removeUserTag(row.id, tag.waveMemberId))
+      if (tag.tagType === 'user') {
+        await removeUserTag(row.id, tag.waveMemberId)
+      } else {
+        await removeIdentityTag(row.id, tag.platform, tag.tagName, tag.matchMode)
+      }
     } else {
-      await (tag.tagType === 'level'
-        ? upsertLevelTag(row.id, tag.platform, tag.tagName, newQty)
-        : upsertUserTag(row.id, tag.waveMemberId, newQty))
+      if (tag.tagType === 'user') {
+        await upsertUserTag(row.id, tag.waveMemberId, newQty)
+      } else {
+        await upsertIdentityTag(row.id, tag.platform, tag.tagName, tag.matchMode, newQty)
+      }
     }
     await loadTagProducts()
     showTagPopover.value = false
@@ -130,10 +137,10 @@ async function handleDeleteTag() {
   const row = editTagProduct.value
   const tag = editTagInfo.value
   try {
-    if (tag.tagType === 'level') {
-      await removeLevelTag(row.id, tag.platform, tag.tagName)
-    } else {
+    if (tag.tagType === 'user') {
       await removeUserTag(row.id, tag.waveMemberId)
+    } else {
+      await removeIdentityTag(row.id, tag.platform, tag.tagName, tag.matchMode)
     }
     await loadTagProducts()
     showTagPopover.value = false
@@ -143,28 +150,34 @@ async function handleDeleteTag() {
   }
 }
 
-// ── wave level tags ──
-type LevelTag = { platform: string; tagName: string }
-const waveLevelTags = computed<LevelTag[]>(() => {
+// ── wave identity tag definitions ──
+type IdentityTagDef = { platform: string; tagName?: string; matchMode: string }
+const waveIdentityTags = computed<IdentityTagDef[]>(() => {
   if (!wave.value?.levelTags) return []
   try {
-    return JSON.parse(wave.value.levelTags) as LevelTag[]
+    return JSON.parse(wave.value.levelTags) as IdentityTagDef[]
   } catch {
     return []
   }
 })
 
-const batchTagOptions = computed(() =>
-  waveLevelTags.value.map((t) => ({
-    label: `${t.platform}·${t.tagName}`,
-    value: `${t.platform}|${t.tagName}`,
+function identityTagLabel(t: IdentityTagDef): string {
+  if (t.matchMode === 'platform_all') return `${t.platform} 全员`
+  if (t.matchMode === 'wave_all') return '全平台全员'
+  return `${t.platform}·${t.tagName}`
+}
+
+const batchIdentityTagOptions = computed(() =>
+  waveIdentityTags.value.map((t) => ({
+    label: identityTagLabel(t),
+    value: `${t.platform}|${t.tagName ?? ''}|${t.matchMode}`,
   })),
 )
 
-const filteredLevelOptions = computed(() => {
+const filteredIdentityOptions = computed(() => {
   const q = levelSearch.value.toLowerCase()
-  if (!q) return batchTagOptions.value
-  return batchTagOptions.value.filter((o) => o.label.toLowerCase().includes(q))
+  if (!q) return batchIdentityTagOptions.value
+  return batchIdentityTagOptions.value.filter((o) => o.label.toLowerCase().includes(q))
 })
 
 function platformTagColor(platform: string): { color: string; textColor: string } {
@@ -219,9 +232,17 @@ const wmNicknameMap = computed(() => {
   return map
 })
 
+function tagDisplayName(tag: TagInfo): string {
+  if (tag.tagType === 'user') {
+    return wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName
+  }
+  if (tag.matchMode === 'platform_all') return `${tag.platform} 全员`
+  if (tag.matchMode === 'wave_all') return '全平台全员'
+  return tag.tagName
+}
+
 function renderTagChipCore(tag: TagInfo, row?: any) {
-  const displayName =
-    tag.tagType === 'user' ? wmNicknameMap.value.get(tag.waveMemberId) || tag.tagName : tag.tagName
+  const displayName = tagDisplayName(tag)
   const t = tagColors(tag)
   const content =
     tag.quantity === 1
@@ -261,7 +282,9 @@ function renderTagChip(row: any, tag: TagInfo) {
         showTagPopover.value &&
         editTagProduct.value?.id === row.id &&
         editTagInfo.value?.tagName === tag.tagName &&
-        editTagInfo.value?.tagType === tag.tagType,
+        editTagInfo.value?.tagType === tag.tagType &&
+        editTagInfo.value?.platform === tag.platform &&
+        editTagInfo.value?.matchMode === tag.matchMode,
       'onUpdate:show': (v: boolean) => {
         if (!v) showTagPopover.value = false
       },
@@ -542,7 +565,7 @@ function buildTagColumns(options: { interactive: boolean }): DataTableColumns {
     },
     {
       title: '身份 Tag',
-      key: 'levelTags',
+      key: 'identityTags',
       width: 80,
       render: (row: any) =>
         h(
@@ -551,7 +574,7 @@ function buildTagColumns(options: { interactive: boolean }): DataTableColumns {
           {
             default: () =>
               (row.tags as TagInfo[])
-                .filter((t: TagInfo) => t.tagType === 'level')
+                .filter((t: TagInfo) => t.tagType === 'identity' || t.tagType === 'level')
                 .sort(
                   (a, b) =>
                     a.platform.localeCompare(b.platform) || a.tagName.localeCompare(b.tagName),
@@ -687,13 +710,13 @@ function toggleUserTagSelection(key: string) {
 
 // ── batch operations ──
 
-async function handleBatchAddLevelTag() {
+async function handleBatchAddIdentityTag() {
   if (selectedLevelTags.value.length === 0 || checkedProductIds.value.length === 0) return
   try {
     for (const key of selectedLevelTags.value) {
-      const [platform, tagName] = key.split('|')
+      const [platform, tagName, matchMode] = key.split('|')
       for (const productId of checkedProductIds.value) {
-        await upsertLevelTag(productId, platform, tagName, levelTagQuantity.value)
+        await upsertIdentityTag(productId, platform, tagName, matchMode, identityTagQuantity.value)
       }
     }
     message.success(
@@ -705,13 +728,13 @@ async function handleBatchAddLevelTag() {
   }
 }
 
-async function handleBatchRemoveLevelTag() {
+async function handleBatchRemoveIdentityTag() {
   if (selectedLevelTags.value.length === 0 || checkedProductIds.value.length === 0) return
   try {
     for (const key of selectedLevelTags.value) {
-      const [platform, tagName] = key.split('|')
+      const [platform, tagName, matchMode] = key.split('|')
       for (const productId of checkedProductIds.value) {
-        await removeLevelTag(productId, platform, tagName)
+        await removeIdentityTag(productId, platform, tagName, matchMode)
       }
     }
     message.success(
@@ -784,6 +807,10 @@ async function handleBatchRemoveUserTag() {
 
 // ── clear all tags for checked products ──
 
+function isIdentityTag(t: TagInfo): boolean {
+  return t.tagType === 'identity' || t.tagType === 'level'
+}
+
 async function handleClearAllTags() {
   if (checkedProductIds.value.length === 0) return message.warning('请先选择商品')
   try {
@@ -791,7 +818,7 @@ async function handleClearAllTags() {
       const product = allTagProducts.value.find((p) => p.id === pid)
       if (!product) continue
       for (const t of product.tags) {
-        if (t.tagType === 'level') await removeLevelTag(pid, t.platform, t.tagName)
+        if (isIdentityTag(t)) await removeIdentityTag(pid, t.platform, t.tagName, t.matchMode)
         else await removeUserTag(pid, t.waveMemberId)
       }
     }
@@ -802,14 +829,14 @@ async function handleClearAllTags() {
   }
 }
 
-async function handleClearLevelTags() {
+async function handleClearIdentityTags() {
   if (checkedProductIds.value.length === 0) return message.warning('请先选择商品')
   try {
     for (const pid of checkedProductIds.value) {
       const product = allTagProducts.value.find((p) => p.id === pid)
       if (!product) continue
       for (const t of product.tags) {
-        if (t.tagType === 'level') await removeLevelTag(pid, t.platform, t.tagName)
+        if (isIdentityTag(t)) await removeIdentityTag(pid, t.platform, t.tagName, t.matchMode)
       }
     }
     message.success(`已清空 ${checkedProductIds.value.length} 件商品的身份 Tag`)
@@ -874,16 +901,16 @@ onMounted(async () => {
     if (!productId) return []
     const product = sortedTagProducts.value.find((p) => p.id === productId)
     if (!product) return []
-    const levelTags = product.tags.filter((t: TagInfo) => t.tagType === 'level')
+    const identityTags = product.tags.filter((t: TagInfo) => isIdentityTag(t))
     const userTags = product.tags.filter((t: TagInfo) => t.tagType === 'user')
     const items: Array<{ label: string; key: string; action: () => void; divider?: boolean }> = []
-    if (levelTags.length > 0 || userTags.length > 0) {
+    if (identityTags.length > 0 || userTags.length > 0) {
       items.push({
         label: '清空全部 Tag',
         key: 'clear-all',
         action: async () => {
-          for (const t of levelTags) {
-            await removeLevelTag(product.id, t.platform, t.tagName)
+          for (const t of identityTags) {
+            await removeIdentityTag(product.id, t.platform, t.tagName, t.matchMode)
           }
           for (const t of userTags) {
             await removeUserTag(product.id, t.waveMemberId)
@@ -893,13 +920,13 @@ onMounted(async () => {
         },
       })
     }
-    if (levelTags.length > 0) {
+    if (identityTags.length > 0) {
       items.push({
         label: '清空身份 Tag',
-        key: 'clear-level',
+        key: 'clear-identity',
         action: async () => {
-          for (const t of levelTags) {
-            await removeLevelTag(product.id, t.platform, t.tagName)
+          for (const t of identityTags) {
+            await removeIdentityTag(product.id, t.platform, t.tagName, t.matchMode)
           }
           await loadTagProducts()
           message.success('已清空身份 Tag')
@@ -966,7 +993,7 @@ onUnmounted(() => {
             type="warning"
             secondary
             :disabled="checkedProductIds.length === 0"
-            @click="handleClearLevelTags"
+            @click="handleClearIdentityTags"
             >清空身份</NButton
           >
           <NButton
@@ -1000,7 +1027,7 @@ onUnmounted(() => {
             {{ selectedLevelTags.length ? `已选 ${selectedLevelTags.length} 项 ▾` : '身份 Tag ▾' }}
           </NButton>
           <NInputNumber
-            v-model:value="levelTagQuantity"
+            v-model:value="identityTagQuantity"
             :min="-999"
             :max="999"
             size="small"
@@ -1010,7 +1037,7 @@ onUnmounted(() => {
             size="small"
             type="primary"
             :disabled="selectedLevelTags.length === 0 || checkedProductIds.length === 0"
-            @click="handleBatchAddLevelTag"
+            @click="handleBatchAddIdentityTag"
             >添加</NButton
           >
           <NButton
@@ -1018,7 +1045,7 @@ onUnmounted(() => {
             type="error"
             secondary
             :disabled="selectedLevelTags.length === 0 || checkedProductIds.length === 0"
-            @click="handleBatchRemoveLevelTag"
+            @click="handleBatchRemoveIdentityTag"
             >删除</NButton
           >
           <NButton
@@ -1078,10 +1105,10 @@ onUnmounted(() => {
       </NFlex>
 
       <!-- Panels: rendered below the tab bar, only one visible at a time -->
-      <!-- Level tag panel -->
+      <!-- Identity tag panel -->
       <div v-if="showLevelPanel" class="tab-panel">
         <NInput
-          v-if="batchTagOptions.length > 12"
+          v-if="batchIdentityTagOptions.length > 12"
           v-model:value="levelSearch"
           size="tiny"
           placeholder="过滤..."
@@ -1090,7 +1117,7 @@ onUnmounted(() => {
         />
         <NFlex :size="'small'" :wrap="true">
           <NTag
-            v-for="opt in filteredLevelOptions"
+            v-for="opt in filteredIdentityOptions"
             :key="opt.value"
             size="medium"
             round
@@ -1274,7 +1301,7 @@ onUnmounted(() => {
               v-for="group in [
                 {
                   label: '身份 Tag',
-                  tags: drawerProduct.tags.filter((t: TagInfo) => t.tagType === 'level'),
+                  tags: drawerProduct.tags.filter((t: TagInfo) => isIdentityTag(t)),
                 },
                 {
                   label: '用户 Tag',
@@ -1293,7 +1320,7 @@ onUnmounted(() => {
               <NFlex v-if="group.tags.length" :size="'small'" :wrap="true">
                 <NTag
                   v-for="tag in group.tags"
-                  :key="tag.tagName + tag.tagType"
+                  :key="tag.tagName + tag.tagType + tag.matchMode + tag.platform"
                   size="medium"
                   round
                   :color="tagColors(tag).bg"
@@ -1301,20 +1328,12 @@ onUnmounted(() => {
                 >
                   <template v-if="tag.quantity === 1">
                     <span :style="{ color: tagColors(tag).text, fontWeight: 500 }">
-                      {{
-                        tag.tagType === 'user'
-                          ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
-                          : tag.tagName
-                      }}
+                      {{ tagDisplayName(tag) }}
                     </span>
                   </template>
                   <template v-else>
                     <span :style="{ color: tagColors(tag).text, fontWeight: 500 }">
-                      {{
-                        tag.tagType === 'user'
-                          ? wmNicknameMap.get(tag.waveMemberId) || tag.tagName
-                          : tag.tagName
-                      }}
+                      {{ tagDisplayName(tag) }}
                     </span>
                     <span :style="{ color: tagColors(tag).accent }">: </span>
                     <span :style="{ color: tagColors(tag).number, fontWeight: 600 }">
