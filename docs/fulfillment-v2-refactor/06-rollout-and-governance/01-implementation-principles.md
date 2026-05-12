@@ -19,17 +19,94 @@ V2 初期仍然优先采用“新增表/新增字段/新增服务”的方式推
 - 代码读写路径可以尽量平滑迁移
 - 但数据兼容与旧覆盖映射不是当前阶段的硬目标
 
-### 10.2 表名与业务名可暂时不完全同步
+### 10.2 命名应尽早收敛，过渡别名只用于迁移桥接
 
-短期可以允许：
+当前没有历史包袱时，命名不应继续拖延。
 
-- 代码注释、service、DTO 先采用新业务语言
-- 数据库表名保留旧名
+更准确的原则是：
+
+1. 新语义尽量从第一天就用新名
+
+- 文档
+- service
+- DTO
+- 页面
+- 测试名
+- 新增 API
+
+都应尽量直接使用目标业务语言。
+
+2. 旧名只作为迁移桥接别名
+
+- 旧名可以在兼容层、适配层、历史文档中短暂出现
+- 但不应继续作为新设计的主命名
+- 更不应因为“未来可能要兼容”而刻意制造长期双名并存
+
+3. 物理表名是否立刻重命名，单独按迁移风险判断
+
+- 如果重命名成本低、收益高、没有旧数据负担，就应尽早统一
+- 如果会引入不必要的迁移风险，可以先做逻辑别名，再安排短期物理迁移
 
 例如：
 
-- `Member` 表短期可继续存在
-- 但业务语义开始按 `CustomerProfile` 理解
+- `Member` 表如果继续存在，也应尽快只作为存储层别名理解
+- 业务语义、DTO、service、页面都应先按 `CustomerProfile` / `CustomerIdentity` 思考
+
+这和“不要为了兼容旧数据背包袱”并不矛盾，反而是一致的：
+
+- 没有历史包袱时，最容易保持一致命名
+- 越早统一，越不容易让后续代码、文档和交互一起长出歧义
+
+补充说明：
+
+- 如果某个对象、字段、页面、服务从设计上已经定型，而且没有真实生产旧包袱，就应该尽量一次到位，不必人为拉长过渡期
+- 所谓“过渡”，主要是指开发实现顺序上的分阶段，不是指业务语义上长期两套说法并存
+
+### 10.2.1 一次到位清单
+
+以下内容如果已经在 V2 中被完整定义，就应优先一次到位，不再长期保留旧名作为主语义：
+
+1. 核心业务对象
+
+- `Member` -> `CustomerProfile`
+- `MemberNickname` -> `CustomerIdentity` / 昵称历史辅助表
+- `MemberAddress` -> `CustomerAddress`
+- `WaveMember` -> `WaveParticipantSnapshot`
+- `ProductTag` -> `AllocationPolicyRule` / `AllocationContribution`
+- `DispatchRecord` -> `FulfillmentLine`
+- `TemplateConfig` -> `IntegrationProfile` / `DocumentTemplate`
+
+2. 新增执行对象
+
+- `SupplierOrder`
+- `SupplierOrderLine`
+- `Shipment`
+- `ShipmentLine`
+- `ChannelSyncJob`
+- `ChannelSyncItem`
+
+3. 新增规则与状态对象
+
+- `DemandDocument`
+- `DemandLine`
+- `FulfillmentAdjustment`
+- `WaveAllocationStep`
+- `HistoryScope`
+- `HistoryNode`
+- `HistoryCheckpoint`
+- `HistoryPin`
+
+4. 新增配置对象
+
+- `IntegrationProfile`
+- `DocumentTemplate`
+- `IntegrationProfileTemplateBinding`
+
+实施要求：
+
+- 这些对象的名称、字段、DTO、service、页面文案、测试名应尽量同步使用目标语义
+- 只要没有真实生产旧包袱，就不应为这些对象人为制造长期双名并存
+- 若某一层接线需要分批完成，也只是实现顺序分批，不是语义名分批
 
 ### 10.3 先重构领域，再重构 UI
 

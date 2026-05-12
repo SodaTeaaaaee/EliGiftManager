@@ -8,22 +8,22 @@
 
 | 当前实体 | 目标语义 | 处理策略 |
 | --- | --- | --- |
-| `Member` | `CustomerProfile` 的过渡实现 | 短期保留表名，先扩展语义 |
+| `Member` | `CustomerProfile` 的桥接实现 | 语义应尽快一次到位；若物理表暂不改名，也只作为存储层别名 |
 | `MemberNickname` | `CustomerProfile` 的昵称历史 | 保留，后续可并入 profile/identity 辅助表 |
 | `MemberAddress` | `CustomerAddress` | 保留并增强 |
 | `Wave` | `Wave` | 保留并扩充生命周期语义 |
-| `Wave.Status` | `Wave.lifecycle_stage` + `progress_snapshot` + 辅助提示信号 | 迁移期可保留旧字段，但长期降级为兼容投影 |
+| `Wave.Status` | `Wave.lifecycle_stage` + `progress_snapshot` + 辅助提示信号 | 若旧实现路径尚未切断，可短期保留兼容投影；新实现应直接收敛到目标字段 |
 | `WaveMember` | `WaveParticipantSnapshot` | 泛化，不再只承载会员 |
 | `ProductMaster` | `ProductMaster` | 直接保留 |
 | `Product` | `Wave Product Snapshot` | 直接保留 |
-| `ProductTag` | `AllocationPolicyRule` / `AllocationContribution` 的过渡实现 | 会员权益波次继续使用；零售订单波次不强迫先翻译成 tag |
+| `ProductTag` | `AllocationPolicyRule` / `AllocationContribution` 的桥接实现 | 会员权益波次可短期继续接线；新设计不应再把它当主语义 |
 | 当前负数 tag + `ReconcileWave` 中间求和 | `AllocationContribution -> Base Allocation Result` | 负号保留在贡献层；基础结果与最终执行结果不应为负 |
 | 当前显式用户覆盖 / 手工修正 | `FulfillmentAdjustment` | 逐步从隐式覆盖演进为显式共享调整层对象 |
-| `DispatchRecord` | `FulfillmentLine` | 只保留执行真相，不再继续承担全部外部状态 |
+| `DispatchRecord` | `FulfillmentLine` | 语义应直接收敛到最终名；若历史代码尚未清理，仅保留兼容别名 |
 | 当前工厂导出文件过程 | `SupplierOrder` + `SupplierOrderLine` | 从瞬时导出动作升级为可追踪对象，并记录 basis |
 | 当前工厂发货导入过程 | `Shipment` + `ShipmentLine` | 从临时回传数据升级为物流对象，并记录 basis |
 | 当前来源渠道回填脚本 / 手动操作 | `ChannelSyncJob` + `ChannelSyncItem` | 升级为可追踪、可重试、可失配提示的回填对象 |
-| `TemplateConfig` | `IntegrationProfile` + `DocumentTemplate` + `IntegrationProfileTemplateBinding` | 直接升级旧模板入口，不长期并行维护两套路由入口 |
+| `TemplateConfig` | `IntegrationProfile` + `DocumentTemplate` + `IntegrationProfileTemplateBinding` | 语义应直接升级到 profile 体系；若实现分步，别名只做短期桥接 |
 | 当前缺失的全局撤销 / 重做持久层 | `HistoryScope` + `HistoryNode` + `HistoryCheckpoint` + `HistoryPin` | 新增；先接入 `wave`，再复用到模板 / 商品等工作区 |
 
 ### 6.2 关键保留原则
@@ -121,6 +121,7 @@
 - 由于项目仍在早期阶段
 - 若某些过渡问题在删库后自然消失，可不为其设计额外长期兼容层
 - 迁移重点应放在目标语义清晰，而不是为旧数据形状补复杂绕路
+- 这里的分阶段仅指实现顺序，不是指长期保留旧名旧结构作为主语义
 
 ---
 

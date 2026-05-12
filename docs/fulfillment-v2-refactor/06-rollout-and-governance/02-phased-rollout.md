@@ -27,20 +27,24 @@
 
 - 补充“CustomerProfile / Demand / Fulfillment / SupplierOrder / Shipment / ChannelSync”词汇表
 - 补充 `HistoryScope / HistoryNode / Basis Projection` 词汇表
-- 标记旧术语与新术语映射关系
+- 标记旧术语与新术语映射关系，但仅作为迁移桥接，不作为长期双轨
 - 明确 `platform` 的多维语义
 - 补充基于官方资料的平台业务面例子说明
 - 明确 `IntegrationProfile` 和 `DocumentTemplate` 的边界
-- 为现有 `TemplateConfig` 预留向 `DocumentTemplate` 迁移的路径
+- 为现有 `TemplateConfig` 预留向 `DocumentTemplate` 迁移的路径，若可一次到位则直接用新名
 - 明确 `policy-driven` / `demand-driven` / `hybrid` 三种分配语义
 - 明确 `membership_entitlement` 与“会员限定购买”之间的边界
 - 明确 `ObligationTriggerKind`、`EntitlementAuthority`、`RecipientInputState`、`RoutingDisposition`
 - 明确当前 tag 系统在会员权益场景中的保留价值与边界
 - 正式采用 `WaveAllocationStep` 作为新文档语义
+- 对 docs / DTO / service / API / 页面步骤名做第一轮统一命名扫尾
+- 明确“一次到位清单”中的对象不再允许新增旧名实现
+- 若物理表名与代码主语义仍不一致，逐项评估是否可在当前阶段直接一次到位
 
 验收：
 
 - 文档层不再把会员、买家、订单、工厂单和模板能力混为一谈
+- 新增设计不再继续把 `Member / WaveMember / ProductTag / DispatchRecord / TemplateConfig` 当作主语义名
 
 ### 阶段 2：引入新表结构
 
@@ -83,6 +87,8 @@
 - 新表迁移可重复执行
 - 新的 profile 层可以先只服务少量试点来源
 - 不要求为未投产旧数据补复杂兼容逻辑
+- 能一次到位的命名、字段、表、接口，优先一次到位
+- 不再为“以后可能兼容”而新增长期双轨表意
 
 ### 阶段 3：重构履约真相层
 

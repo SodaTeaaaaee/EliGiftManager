@@ -64,6 +64,8 @@
 - `supports_api_import`
 - `supports_api_export`
 - `capabilities`
+- `supported_locales`
+- `default_locale`
 - `extra_data`
 - `created_at`
 - `updated_at`
@@ -77,6 +79,8 @@
 - `tracking_sync_mode` 和 `closure_policy` 用来避免系统继续靠平台印象推断闭环逻辑
 - `entitlement_authority_mode` 用来约束本系统是否应自行判定权益成立
 - `recipient_input_mode` 用来说明该业务面通常通过什么方式补齐领取参数
+- `supported_locales` 和 `default_locale` 用来描述该业务面在 UI / 模板 / 导出展示上支持哪些语言
+- 这些语言字段不应影响核心业务 code 的稳定性
 
 #### DocumentTemplate
 
@@ -107,6 +111,7 @@
 
 - `DocumentTemplate` 只负责文档字段结构
 - 它不负责决定需求类型、业务面和平台能力
+- 如果同一业务面需要中英两套模板，推荐通过不同 `locale` 版本或不同 `template_key` 表达，而不是把翻译文本塞进业务判断
 
 #### IntegrationProfileTemplateBinding
 

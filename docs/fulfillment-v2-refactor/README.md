@@ -14,7 +14,8 @@
 4. 再看 [04-workflows-and-state](./04-workflows-and-state/)，用于理解波次生命周期、状态与进度展示
    其中 [04-workflows-and-state/03-entitlement-resolution-and-routing.md](./04-workflows-and-state/03-entitlement-resolution-and-routing.md) 专门说明 `membership_entitlement` 的判定权威、会员输入采集与本系统路由决策
    [04-workflows-and-state/04-workspace-history-and-undo-redo.md](./04-workflows-and-state/04-workspace-history-and-undo-redo.md) 专门说明工作区历史、树状撤销/重做与 basis 提示的协同方式
-5. 最后看 [05-profile-system](./05-profile-system/) 与 [06-rollout-and-governance](./06-rollout-and-governance/)，用于落地实施与迁移治理
+5. 接着看 [05-profile-system](./05-profile-system/) 与 [07-non-functional-foundations](./07-non-functional-foundations/)，前者说明 profile / 模板 / service 的分层，后者说明大数据与 i18n 的底层能力
+6. 最后看 [06-rollout-and-governance](./06-rollout-and-governance/)，用于落地实施与迁移治理
 
 ## 目录结构
 
@@ -30,6 +31,8 @@
   - 定义长生命周期工作流、行级状态、波次聚合状态与进度展示，并补充会员权益型需求的判定、输入采集、路由模型和树状撤销/重做交互边界
 - `05-profile-system/`
   - 说明为什么模板系统要升级为 profile 系统，以及 profile / 模板 / service 的分工
+- `07-non-functional-foundations/`
+  - 说明大数据查询、轻量 DTO、远程排序分页 / 滚动，以及中英双语 i18n 的基础策略
 - `06-rollout-and-governance/`
   - 包含实施原则、阶段计划、迁移策略、测试验收、风险与待决策问题
 - `legacy/`
@@ -50,6 +53,7 @@
 - 动态集合规则属于 `Membership Allocation` 的规则层，不属于共享调整层
 - 工作区历史需要树状分支、持久化和 basis 引用协同，而不是普通线性撤销栈
 - 本地工作区历史只回滚本地结果，不伪装成工厂导出、物流导入、渠道回填的真实外部回滚
+- 大数据查询能力与中英双语 i18n 属于 V2 的基础能力，不应被视为后补优化
 
 ## 待决策问题
 
