@@ -10,8 +10,10 @@
 2. 再看 [01-boundaries-and-language](./01-boundaries-and-language/) 下的边界、统一业务语言、平台与 profile 讨论
    其中 [01-boundaries-and-language/04-source-backed-platform-example-notes.md](./01-boundaries-and-language/04-source-backed-platform-example-notes.md) 专门记录了当前平台例子的官方资料依据
 3. 然后看 [02-allocation-model](./02-allocation-model/) 与 [03-data-model](./03-data-model/)，这两部分定义未来核心语义和数据结构
+   其中 [03-data-model/06-workspace-history-and-basis-model.md](./03-data-model/06-workspace-history-and-basis-model.md) 专门定义 scope 化工作区历史、basis 引用与外部对象关联方式
 4. 再看 [04-workflows-and-state](./04-workflows-and-state/)，用于理解波次生命周期、状态与进度展示
    其中 [04-workflows-and-state/03-entitlement-resolution-and-routing.md](./04-workflows-and-state/03-entitlement-resolution-and-routing.md) 专门说明 `membership_entitlement` 的判定权威、会员输入采集与本系统路由决策
+   [04-workflows-and-state/04-workspace-history-and-undo-redo.md](./04-workflows-and-state/04-workspace-history-and-undo-redo.md) 专门说明工作区历史、树状撤销/重做与 basis 提示的协同方式
 5. 最后看 [05-profile-system](./05-profile-system/) 与 [06-rollout-and-governance](./06-rollout-and-governance/)，用于落地实施与迁移治理
 
 ## 目录结构
@@ -23,9 +25,9 @@
 - `02-allocation-model/`
   - 定义会员与零售在分配语义上的差异、混合波次的统一方式、`WaveAllocationStep` 的演化方向
 - `03-data-model/`
-  - 给出 V2 目标数据结构、分层边界、当前模型到目标模型的映射
+  - 给出 V2 目标数据结构、分层边界、当前模型到目标模型的映射，并补充工作区历史与 basis 模型
 - `04-workflows-and-state/`
-  - 定义长生命周期工作流、行级状态、波次聚合状态与进度展示，并补充会员权益型需求的判定、输入采集与路由模型
+  - 定义长生命周期工作流、行级状态、波次聚合状态与进度展示，并补充会员权益型需求的判定、输入采集、路由模型和树状撤销/重做交互边界
 - `05-profile-system/`
   - 说明为什么模板系统要升级为 profile 系统，以及 profile / 模板 / service 的分工
 - `06-rollout-and-governance/`
@@ -45,6 +47,9 @@
 - 不把“会员平台 / 零售平台”当成唯一平台分类方式，而是拆成来源渠道、业务面、能力面来建模
 - 物流映射、快递单号转换、来源渠道回填必须纳入主数据结构与生命周期，而不是后补脚本
 - 模板系统的升级方向应是 profile 系统，而不是继续堆叠零散模板类型
+- 动态集合规则属于 `Membership Allocation` 的规则层，不属于共享调整层
+- 工作区历史需要树状分支、持久化和 basis 引用协同，而不是普通线性撤销栈
+- 本地工作区历史只回滚本地结果，不伪装成工厂导出、物流导入、渠道回填的真实外部回滚
 
 ## 待决策问题
 

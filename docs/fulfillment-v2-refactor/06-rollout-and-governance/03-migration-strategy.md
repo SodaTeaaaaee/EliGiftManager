@@ -31,5 +31,40 @@
 
 - 新状态由多维字段和聚合投影驱动
 
----
+### 12.4 工作区历史迁移建议
 
+当前已经确认：
+
+- 撤销 / 重做历史需要持久化
+- 但不需要为旧版本未存在的历史做复杂回填
+
+因此更稳妥的迁移策略是：
+
+1. 新增 history 相关表
+
+- `history_scopes`
+- `history_nodes`
+- `history_checkpoints`
+- `history_pins`
+
+2. 不回填旧版本工作区历史
+
+- V2 上线前的旧编辑过程不必追溯重建
+- 新历史从 V2 新路径开始产生即可
+
+3. basis 引用只对新对象生效
+
+- 新创建的 `SupplierOrder / Shipment / ChannelSyncJob` 才写入 `basis_history_node_id` 与 projection hash
+- 不要求为旧对象补造完整 basis 链
+
+4. 允许一段时间内“新旧页面不同步支持历史”
+
+- `wave` 工作区优先接入
+- 其他页面可以稍后按 scope 逐步纳入
+
+这样能避免：
+
+- 为尚未投产的旧数据背上高成本历史回填包袱
+- 把 history 功能和旧路径兼容耦合得过深
+
+---

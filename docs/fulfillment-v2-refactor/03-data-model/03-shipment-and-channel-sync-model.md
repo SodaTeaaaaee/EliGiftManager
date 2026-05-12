@@ -27,6 +27,9 @@
   - `returned`
 - `shipped_at`
 - `delivered_at`
+- `basis_history_node_id`
+- `basis_projection_hash`
+- `basis_payload_snapshot`
 - `raw_payload`
 - `extra_data`
 - `created_at`
@@ -48,6 +51,10 @@
 说明：
 
 - 如果未来存在一个包裹覆盖多条履约行，或一条履约行被拆包发货，该层是必要的
+- `Shipment` 记录的是当前工作区里最近一次已知物流结果
+- 它服务于后续回填映射与状态辅助
+- 建议保留本次物流回传所依据的工厂提交 / 履约基础引用，以便后续修改时识别“当前结果已偏离最近一次物流映射基础”
+- 不自动等于不可改写的历史归档
 
 ### 5.8 回填层
 
@@ -69,6 +76,9 @@
   - `success`
   - `partial_success`
   - `failed`
+- `basis_history_node_id`
+- `basis_projection_hash`
+- `basis_payload_snapshot`
 - `request_payload`
 - `response_payload`
 - `error_message`
@@ -102,4 +112,7 @@
 - 不能只在导入导出过程中瞬时处理
 - 但并不是所有需求都会生成 `ChannelSyncJob`
 - 对 `routing_disposition != accepted` 的需求，本系统不应生成后续执行记录
+- 当前阶段的追踪重点是“辅助当前工作区完成闭环”
+- 而不是把所有外部交互固化成不可覆盖的历史账本
+- 建议保留其所依据的 `Shipment` / `FulfillmentLine` 基础引用，便于在回填后再次修改时给出失配提示，而不是把同步结果误做历史锁定
 

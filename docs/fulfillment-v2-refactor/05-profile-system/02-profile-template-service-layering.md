@@ -74,3 +74,25 @@ V2 推荐明确三层结构：
   - 负责平台能力
   - 负责导入导出方式
   - 负责 API / CSV / 手工上传差异
+
+### 9.5.1 Profile 与模板编辑也应接入统一工作区历史
+
+当前已经确认：
+
+- 全应用最终应共用同一套工作区 history 基础设施
+- 但接入优先级应先做稳 `wave`
+
+这意味着 Profile / 模板编辑页在目标架构里也不应继续依赖纯前端临时状态。
+
+更稳妥的方向是：
+
+- Profile 编辑页拥有自己的 `HistoryScope(scope_type = template)` 或等价 scope
+- 模板字段映射编辑也通过 `HistoryNode` 记录“用户意图级操作”
+- 默认交互仍保持轻量
+- 但底层可复用同一套树状分支、checkpoint、pin 语义
+
+这里还要再补一条边界：
+
+- Profile 配置的修改，不应自动伪装成已经回滚了历史波次的外部执行结果
+- 已存在的 `SupplierOrder / Shipment / ChannelSyncJob` 仍然依赖它们各自创建时的 basis
+- Profile 变更更适合影响未来导入导出解释，或在用户显式重算当前工作区时生效

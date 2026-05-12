@@ -40,6 +40,42 @@
 - `Profile System` 是能力配置层
 - `Template System` 是 Profile 下面的文档映射子层
 
+### 9.0.3 Profile 不是“平台类别标签”
+
+还需要再把一个常见误区提前拆开：
+
+- `IntegrationProfile` 不是给平台贴一个“会员平台 / 零售平台”总标签
+- 它更接近“某个平台供应商下的某个具体业务面合同”
+
+例如：
+
+- `patreon.membership`
+- `patreon.shop_purchase`
+- `fanbox.support_plan`
+- `fanbox.supporter_only_purchase`
+
+这些 profile 可能来自同一供应商名下，但在本系统里承担的是不同语义：
+
+- 有的产生 `membership_entitlement`
+- 有的产生 `retail_order`
+- 有的只提供资格上下文，但真正履约义务仍由后续订单成立
+
+因此 Profile 系统要回答的是：
+
+- “这个来源业务面到底是什么”
+- “它在本系统里落成哪种需求语义”
+- “它的义务由资格成立还是由订单成立”
+
+而不是只回答：
+
+- “这个平台品牌叫什么”
+
+同时也要明确：
+
+- `IntegrationProfile` 负责来源业务面的稳定语义
+- `Adjustment Review` 负责波次内最终履约例外
+- 两者不能互相吞并
+
 ### 9.0.2 当前决策：直接升级旧模板入口
 
 根据当前讨论，V2 文档层已经采用以下决策：
