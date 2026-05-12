@@ -11,18 +11,16 @@
 
 典型能力：
 
-- `can_import_csv`
-- `can_export_csv`
-- `can_import_api`
-- `can_push_tracking`
 - `supports_partial_shipment`
 - `requires_carrier_mapping`
 - `requires_external_order_no`
 - `entitlement_authority_mode`
 - `recipient_input_collection_mode`
-- `manual_closure_mode`
 - `tracking_sync_mode`
 - `closure_policy`
+- `allows_manual_closure`
+- `supports_api_import`
+- `supports_api_export`
 
 说明：
 
@@ -32,7 +30,15 @@
 - `closure_policy` 用来决定某个业务面在什么条件下才算真正闭环
 - `entitlement_authority_mode` 用来说明权益是否应由上游平台判定
 - `recipient_input_collection_mode` 用来说明地址、款式、领取确认等参数通常如何补齐
-- `manual_closure_mode` 用来说明该业务面是否允许、以及如何允许人工闭环决策进入统计
+- `allows_manual_closure` 用来说明该业务面是否允许人工闭环决策进入统计
+
+这里还应再加一条收敛约束：
+
+- 不建议同时保留一组抽象 `can_*` 能力、另一组 `supports_*` 布尔值，以及重复表达相同问题的 strategy 字段
+- 更稳妥的方式是：
+  - strategy 字段表达主流程分支
+  - capability flag 表达正交能力
+  - connector 负责真实实现差异
 
 ### 9.7 不应该放进 Profile 的东西
 

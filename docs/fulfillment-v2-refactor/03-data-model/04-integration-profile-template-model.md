@@ -28,11 +28,9 @@
 - `demand_kind`
   - `membership_entitlement`
   - `retail_order`
-  - `manual_adjustment`
-- `default_allocation_mode`
-  - `rule_based`
-  - `direct_from_demand`
-  - `hybrid`
+- `initial_allocation_strategy`
+  - `policy_driven`
+  - `demand_driven`
 - `identity_strategy`
   - `platform_uid`
   - `email`
@@ -59,11 +57,13 @@
   - `close_after_sync`
   - `close_after_manual_confirmation`
   - `close_after_shipment`
-- `supports_tracking_push`
 - `supports_partial_shipment`
 - `supports_api_import`
 - `supports_api_export`
-- `capabilities`
+- `requires_carrier_mapping`
+- `requires_external_order_no`
+- `allows_manual_closure`
+- `connector_key`
 - `supported_locales`
 - `default_locale`
 - `extra_data`
@@ -79,8 +79,70 @@
 - `tracking_sync_mode` 和 `closure_policy` 用来避免系统继续靠平台印象推断闭环逻辑
 - `entitlement_authority_mode` 用来约束本系统是否应自行判定权益成立
 - `recipient_input_mode` 用来说明该业务面通常通过什么方式补齐领取参数
+- `initial_allocation_strategy` 用来说明该业务面默认走规则推导还是需求直入
+- `supports_* / requires_* / allows_*` 只应用于不与 strategy 字段重复的正交能力
+- `connector_key` 用来把 profile 绑定到真实的连接器/适配器实现
 - `supported_locales` 和 `default_locale` 用来描述该业务面在 UI / 模板 / 导出展示上支持哪些语言
 - 这些语言字段不应影响核心业务 code 的稳定性
+
+### 5.9.1 Profile 收敛原则
+
+从设计模式角度看，`IntegrationProfile` 更适合被收敛成三层信息：
+
+1. 语义策略字段
+
+- `demand_kind`
+- `initial_allocation_strategy`
+- `entitlement_authority_mode`
+- `recipient_input_mode`
+- `tracking_sync_mode`
+- `closure_policy`
+- `reference_strategy`
+
+2. 正交能力标记
+
+- `supports_partial_shipment`
+- `supports_api_import`
+- `supports_api_export`
+- `requires_carrier_mapping`
+- `requires_external_order_no`
+- `allows_manual_closure`
+
+3. 外部实现绑定
+
+- `connector_key`
+- `IntegrationProfileTemplateBinding`
+
+这意味着：
+
+- 不再保留一个语义不清的通用 `capabilities` blob
+- 不再同时保留会重复表达 strategy 的布尔字段
+- 复杂平台差异优先下沉到 connector / service 层，而不是继续堆到 Profile
+
+### 5.9.2 收敛后可能损失的表达力与补偿方案
+
+Profile 收敛后，最容易让人担心的是“会不会表达不了复杂平台差异”。
+
+当前更稳妥的补偿方式，不是把 `capabilities` 再塞回来，而是补以下模式化结构：
+
+1. `Connector`
+
+- 负责真实导入、导出、回填协议差异
+- 负责 API / CSV / 手工上传的具体执行
+- 负责复杂失败处理、重试和平台特殊校验
+
+2. `CarrierMappingProfile`
+
+- 当某业务面需要复杂承运商映射时
+- 不应把大量 carrier 规则压回 `IntegrationProfile`
+- 更适合单独作为连接器依赖的映射对象或模板子对象
+
+3. `ProfileCapabilityExtension`
+
+- 如果未来确实出现少量、稳定、不可下沉到 connector 的额外能力声明
+- 更适合增加命名清晰的新字段
+- 或增加一张结构化扩展表
+- 不建议重新回到匿名 `capabilities` blob
 
 #### DocumentTemplate
 

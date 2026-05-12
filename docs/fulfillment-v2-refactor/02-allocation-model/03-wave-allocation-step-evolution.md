@@ -13,7 +13,7 @@
 - 讨论当前旧实现
 - 说明从旧实现迁移到新概念的过程
 
-换句话说，未来语义里不再把“tag step”当成总名，而把它视为 `WaveAllocationStep` 里偏 `policy-driven` 的一个遗留实现来源。
+换句话说，未来语义里不再把“tag step”当成总名，而把它视为 `WaveAllocationStep` 里偏 `policy_driven` 的一个遗留实现来源。
 
 ### 7.4.1 工作流分区优先于视觉分区
 
@@ -56,11 +56,11 @@
 其中 `Initial Allocation` 阶段建议拆成两个独立页面：
 
 1. `Membership Allocation`
-   - 面向 `policy-driven`
+   - 面向 `policy_driven`
    - 主要服务会员权益型需求
    - 保留当前商品级批量规则编辑体验
 2. `Demand Mapping`
-   - 面向 `demand-driven`
+   - 面向 `demand_driven`
    - 主要服务零售订单型需求
    - 核心目标是清晰展示原始需求行、商品映射、异常与缺失项
 
@@ -84,7 +84,7 @@
 
 更应该被理解为：
 
-- 同一个 `Wave` 容器里，允许同时存在 `policy-driven` 和 `demand-driven` 的初始生成步骤
+- 同一个 `Wave` 容器里，允许同时存在 `policy_driven` 和 `demand_driven` 的初始生成步骤
 - 这些步骤写入同一套 `FulfillmentLine` 真相层
 - 后续共享同一套调整、执行、发货、回填与闭环流程
 

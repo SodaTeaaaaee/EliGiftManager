@@ -48,7 +48,7 @@
 - `line_reason`
   - `entitlement`
   - `retail_order`
-  - `manual_adjustment`
+  - `wave_adjustment`
 - `extra_data`
 - `created_at`
 - `updated_at`
@@ -62,6 +62,8 @@
 - `quantity` 应被理解为最终进入执行链的非负结果
 - 规则贡献层里的负数、共享调整层里的负 delta，都不应直接以负数 `FulfillmentLine` 长期存在
 - 如果最终结果被压到 0，更合理的解释是“本次无可执行履约行”，而不是保留一条负数执行记录
+- 如果某条执行行来自波次内显式补发/补偿，才更接近 `line_reason = wave_adjustment`
+- 如果某条执行行来自手工录入的上游权益或线下订单，它仍应分别保持 `entitlement` 或 `retail_order` 的来源语义
 
 #### FulfillmentAdjustment
 
@@ -99,6 +101,8 @@
 - 不应用于凭空新增一个尚未进入当前波次处理范围的全新参与者
 - 它的 target 应是具体 `FulfillmentLine`、具体参与者，或明确展开后的具体对象集合
 - 首版不应让它直接持有“身份 / 平台 / 交集 selector”这类动态目标
+- 纯手工录入的一条上游权益或订单，应先落 `DemandDocument / DemandLine`
+- 不应为了图省事，直接跳过上游层落成 `FulfillmentAdjustment`
 
 还应明确：
 

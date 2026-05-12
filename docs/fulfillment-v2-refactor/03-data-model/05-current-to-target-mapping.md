@@ -26,6 +26,12 @@
 | `TemplateConfig` | `IntegrationProfile` + `DocumentTemplate` + `IntegrationProfileTemplateBinding` | 语义应直接升级到 profile 体系；若实现分步，别名只做短期桥接 |
 | 当前缺失的全局撤销 / 重做持久层 | `HistoryScope` + `HistoryNode` + `HistoryCheckpoint` + `HistoryPin` | 新增；先接入 `wave`，再复用到模板 / 商品等工作区 |
 
+补充收敛说明：
+
+- 旧的“手工修正需求”如果表达的是上游事实，应迁移为 `DemandDocument(kind = membership_entitlement|retail_order, capture_mode = manual_entry)`
+- 旧的“波次内最终修正”应迁移为 `FulfillmentAdjustment`
+- 旧的波次级 `allocation_mode` 不建议保留为目标真相字段，更适合改为只读投影
+
 ### 6.2 关键保留原则
 
 以下设计原则必须保持：

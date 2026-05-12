@@ -66,8 +66,7 @@
 
 - `id`
 - `wave_id`
-- `source_channel`
-- `source_surface`
+- `integration_profile_id`
 - `direction`
   - `push_tracking`
 - `status`
@@ -115,4 +114,6 @@
 - 当前阶段的追踪重点是“辅助当前工作区完成闭环”
 - 而不是把所有外部交互固化成不可覆盖的历史账本
 - 建议保留其所依据的 `Shipment` / `FulfillmentLine` 基础引用，便于在回填后再次修改时给出失配提示，而不是把同步结果误做历史锁定
+- 使用 `integration_profile_id` 比重复落 `source_channel / source_surface` 更稳妥
+- 因为回填协议与闭环策略本来就应由 profile + connector 共同决定
 

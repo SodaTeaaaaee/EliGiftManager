@@ -164,7 +164,7 @@
 这意味着：
 
 - `Membership Allocation`、`Demand Mapping`、`Wave Overview`、`Adjustment Review` 需要共享同一套稳定底层真相
-- 不同步骤应尽量只修改自己拥有的那一层语义
+- 不同步骤应尽量只触达自己主要承载的那一层领域能力入口
 - 任何跨层重算都需要可解释、可预期、可审计
 
 ### 13. `Wave Overview` 可以作为进入共享调整层的显式关口

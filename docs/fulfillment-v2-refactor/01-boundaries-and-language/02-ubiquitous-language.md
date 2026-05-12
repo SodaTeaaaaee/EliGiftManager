@@ -76,7 +76,13 @@
 
 - `membership_entitlement`
 - `retail_order`
-- `manual_adjustment`
+
+这里要特别强调：
+
+- 手工录入不是第三种顶层 `DemandDocument.kind`
+- 如果是手工授予的一条权益，仍然属于 `membership_entitlement`
+- 如果是手工录入的一条订单，仍然属于 `retail_order`
+- 波次内最终履约例外应进入 `FulfillmentAdjustment`，而不是伪装成新的上游需求类型
 
 #### D. DemandLine
 
@@ -182,26 +188,40 @@ V2 不移除 Wave，而是把它从“导出终点容器”升级为“全链路
 - “失败了吗？”
 - “是否需要重试？”
 
-#### K. AllocationMode
+#### K. InitialAllocationStrategy
 
-表示某类需求或某个波次默认采用哪种“初始分配生成方式”。
+表示某类来源业务面默认采用哪种“初始履约生成策略”。
 
 推荐语义：
 
-- `rule_based`
+- `policy_driven`
   - 由规则推导初始履约结果
-- `direct_from_demand`
+- `demand_driven`
   - 由上游需求行直接生成初始履约结果
-- `hybrid`
-  - 同时允许规则推导和需求直入并存
 
 说明：
 
-- 会员权益型需求通常更接近 `rule_based`
-- 零售订单型需求通常更接近 `direct_from_demand`
-- 混合波次通常更接近 `hybrid`
+- 会员权益型需求通常更接近 `policy_driven`
+- 零售订单型需求通常更接近 `demand_driven`
+- “混合波次”不是第三种单一策略
+- 混合波次更适合被理解为：同一 `Wave` 中同时存在多条 demand/profile 路径，各自采用自己的初始策略
 
-#### L. FulfillmentAdjustment
+#### L. DemandCaptureMode
+
+表示“这条上游需求是以什么方式被接入系统的”。
+
+推荐语义：
+
+- `document_import`
+- `api_ingest`
+- `manual_entry`
+
+它的关键价值是：
+
+- 保留手工录入上游事实的能力
+- 但不再把“手工”误建模成第三种顶层 `demand_kind`
+
+#### M. FulfillmentAdjustment
 
 表示在“初始履约结果”之上的人工或系统调整层。
 
@@ -221,8 +241,10 @@ V2 不移除 Wave，而是把它从“导出终点容器”升级为“全链路
 
 - 在当前实现中，部分调整是通过 `user tag` 间接表达的
 - 在 V2 长期目标中，这类调整应逐步演进为显式的履约调整对象
+- 它只表达波次内最终履约例外
+- 不应用来替代手工录入的上游需求事实
 
-#### M. ObligationTriggerKind
+#### N. ObligationTriggerKind
 
 表示“履约义务究竟因什么事件成立”。
 
@@ -250,7 +272,7 @@ V2 不移除 Wave，而是把它从“导出终点容器”升级为“全链路
 - 不新增顶层 `demand_kind`
 - 但仍能区分“会员权益怎么成立”和“订单为什么成立”
 
-#### N. EntitlementAuthority
+#### O. EntitlementAuthority
 
 表示“谁有权判定这条会员权益已经成立”。
 

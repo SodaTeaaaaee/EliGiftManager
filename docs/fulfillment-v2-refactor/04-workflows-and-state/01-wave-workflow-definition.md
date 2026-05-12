@@ -50,8 +50,8 @@ V2 的目标是“最终收敛”，不是“前置步骤强统一”。
 
 因此：
 
-- 会员权益型需求主要走 `policy-driven`
-- 零售订单型需求主要走 `demand-driven`
+- 会员权益型需求主要走 `policy_driven`
+- 零售订单型需求主要走 `demand_driven`
 
 两者都可以进入同一波次，也都可以进入同一套最终履约真相，但不应被强迫使用同一种初始分配引擎。
 
@@ -97,7 +97,7 @@ V2 的目标是“最终收敛”，不是“前置步骤强统一”。
 
 - `Adjustment Review`
 
-这样做的关键点不是“页面更多”，而是“不同语义拥有不同主入口”。
+这样做的关键点不是“页面更多”，而是“不同领域能力拥有不同主入口”。
 
 在这之前，还应补一个前置判断：
 
@@ -121,14 +121,25 @@ V2 的目标是“最终收敛”，不是“前置步骤强统一”。
 
 更具体地说：
 
-- `Membership Allocation` 主要拥有规则驱动初始分配语义
-- 它同时拥有 selector、规则贡献和动态集合规则的语义所有权
-- `Demand Mapping` 主要拥有需求行到内部商品的映射语义
-- `Adjustment Review` 主要拥有显式履约修正语义
-- 它不拥有动态 selector 规则语义
-- `Wave Overview` 主要拥有聚合观察、诊断和路由语义
+- `AllocationPolicyService`
+  - 主要承载规则驱动初始分配能力
+  - 同时承载 selector、规则贡献和动态集合规则能力
+- `DemandMappingService`
+  - 主要承载需求行到内部商品的映射能力
+- `FulfillmentAdjustmentService`
+  - 主要承载显式履约修正能力
+  - 不承载动态 selector 规则语义
+- `WaveOverviewProjection`
+  - 主要承载聚合观察、诊断和路由能力
 
-这些页面应尽量修改自己拥有的语义层，而不是彼此越权改写。
+对应页面只是这些能力的主要 UX 入口：
+
+- `Membership Allocation` -> `AllocationPolicyService`
+- `Demand Mapping` -> `DemandMappingService`
+- `Adjustment Review` -> `FulfillmentAdjustmentService`
+- `Wave Overview` -> `WaveOverviewProjection`
+
+因此真正需要稳定的，是领域能力边界，而不是页面命名本身。
 
 还要再补一条共享调整层边界：
 

@@ -32,7 +32,7 @@
 - 补充基于官方资料的平台业务面例子说明
 - 明确 `IntegrationProfile` 和 `DocumentTemplate` 的边界
 - 为现有 `TemplateConfig` 预留向 `DocumentTemplate` 迁移的路径，若可一次到位则直接用新名
-- 明确 `policy-driven` / `demand-driven` / `hybrid` 三种分配语义
+- 明确 `policy_driven` / `demand_driven` 两种初始履约策略，以及 mixed wave 只是多策略并存
 - 明确 `membership_entitlement` 与“会员限定购买”之间的边界
 - 明确 `ObligationTriggerKind`、`EntitlementAuthority`、`RecipientInputState`、`RoutingDisposition`
 - 明确当前 tag 系统在会员权益场景中的保留价值与边界
@@ -40,6 +40,7 @@
 - 对 docs / DTO / service / API / 页面步骤名做第一轮统一命名扫尾
 - 明确“一次到位清单”中的对象不再允许新增旧名实现
 - 若物理表名与代码主语义仍不一致，逐项评估是否可在当前阶段直接一次到位
+- 明确“手工录入上游事实”和“波次内履约调整”不是同一层
 
 验收：
 
@@ -77,9 +78,13 @@
 同时为旧表补充过渡字段：
 
 - `waves.wave_type`
-- `waves.allocation_mode`
 - `waves.lifecycle_stage`
 - `dispatch_records` 的多维状态字段
+
+补充约束：
+
+- `waves.allocation_mode` 不建议进入目标真相模型
+- 如确需短期保留，也只作为旧路径兼容投影
 
 验收：
 
