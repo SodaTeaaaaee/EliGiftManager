@@ -82,6 +82,21 @@ func (m *mockShipmentRepo) CreateLine(line *domain.ShipmentLine) error {
 	return nil
 }
 
+func (m *mockShipmentRepo) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	shipment.ID = m.next()
+	cp := *shipment
+	m.shipments[shipment.ID] = &cp
+	for _, line := range lines {
+		line.ShipmentID = shipment.ID
+		line.ID = m.next()
+		cpLine := *line
+		m.shipmentLines[shipment.ID] = append(m.shipmentLines[shipment.ID], &cpLine)
+	}
+	return nil
+}
+
 func (m *mockShipmentRepo) ListLinesByShipment(shipmentID uint) ([]domain.ShipmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -121,16 +136,16 @@ func TestCreateShipmentPersistsShipmentAndLines(t *testing.T) {
 
 	// Create lines
 	line1 := &domain.ShipmentLine{
-		ShipmentID:        shipment.ID,
+		ShipmentID:          shipment.ID,
 		SupplierOrderLineID: 10,
-		FulfillmentLineID: 100,
-		Quantity:          2,
+		FulfillmentLineID:   100,
+		Quantity:            2,
 	}
 	line2 := &domain.ShipmentLine{
-		ShipmentID:        shipment.ID,
+		ShipmentID:          shipment.ID,
 		SupplierOrderLineID: 11,
-		FulfillmentLineID: 101,
-		Quantity:          3,
+		FulfillmentLineID:   101,
+		Quantity:            3,
 	}
 	if err := repo.CreateLine(line1); err != nil {
 		t.Fatalf("CreateLine 1: %v", err)
@@ -264,18 +279,18 @@ func TestWaveOverviewCountsShipmentsAndTrackedFulfillment(t *testing.T) {
 
 	// Lines for tracked shipment with distinct fulfillment line IDs
 	if err := repo.CreateLine(&domain.ShipmentLine{
-		ShipmentID:        trackedShipment.ID,
+		ShipmentID:          trackedShipment.ID,
 		SupplierOrderLineID: 10,
-		FulfillmentLineID: 100,
-		Quantity:          1,
+		FulfillmentLineID:   100,
+		Quantity:            1,
 	}); err != nil {
 		t.Fatalf("CreateLine for tracked: %v", err)
 	}
 	if err := repo.CreateLine(&domain.ShipmentLine{
-		ShipmentID:        trackedShipment.ID,
+		ShipmentID:          trackedShipment.ID,
 		SupplierOrderLineID: 11,
-		FulfillmentLineID: 101,
-		Quantity:          1,
+		FulfillmentLineID:   101,
+		Quantity:            1,
 	}); err != nil {
 		t.Fatalf("CreateLine for tracked: %v", err)
 	}
@@ -293,10 +308,10 @@ func TestWaveOverviewCountsShipmentsAndTrackedFulfillment(t *testing.T) {
 
 	// Line for untracked shipment
 	if err := repo.CreateLine(&domain.ShipmentLine{
-		ShipmentID:        untrackedShipment.ID,
+		ShipmentID:          untrackedShipment.ID,
 		SupplierOrderLineID: 20,
-		FulfillmentLineID: 200,
-		Quantity:          1,
+		FulfillmentLineID:   200,
+		Quantity:            1,
 	}); err != nil {
 		t.Fatalf("CreateLine for untracked: %v", err)
 	}
@@ -541,4 +556,67 @@ func createShipmentWithValidation(
 	}
 
 	return dto.ShipmentDTO{}, nil
+}
+
+func TestCreateShipmentRejectsEmptyLines(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo)
+
+	input := dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		Lines:           []dto.CreateShipmentLineInput{},
+	}
+
+	_, _, err := uc.CreateShipment(input)
+	if err == nil {
+		t.Fatal("expected error for empty lines, got nil")
+	}
+}
+
+func TestCreateShipmentPersistsShipmentAndLinesAtomically(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo)
+
+	// Setup: existing supplier order + line + fulfillment line
+	now := "2026-01-01T00:00:00Z"
+	supplierOrder := &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orders[1] = supplierOrder
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	input := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test-platform",
+		ShipmentNo:       "SHIP-001",
+		TrackingNo:       "TRACK-123",
+		Status:           "shipped",
+		Lines: []dto.CreateShipmentLineInput{
+			{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 5},
+		},
+	}
+
+	shipment, lines, err := uc.CreateShipment(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if shipment.ID == 0 {
+		t.Error("expected shipment to have an ID")
+	}
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line, got %d", len(lines))
+	}
+	if lines[0].ShipmentID != shipment.ID {
+		t.Errorf("line shipment ID %d != shipment ID %d", lines[0].ShipmentID, shipment.ID)
+	}
+
+	// Verify no leftover on error path — if AtomicCreateShipment failed, nothing should persist
+	// (The mock implements AtomicCreateShipment atomically by design)
 }

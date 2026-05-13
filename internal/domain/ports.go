@@ -77,4 +77,7 @@ type ShipmentRepository interface {
 
 	CreateLine(line *ShipmentLine) error
 	ListLinesByShipment(shipmentID uint) ([]ShipmentLine, error)
+
+	// AtomicCreateShipment creates a shipment and its lines atomically.
+	AtomicCreateShipment(shipment *Shipment, lines []*ShipmentLine) error
 }

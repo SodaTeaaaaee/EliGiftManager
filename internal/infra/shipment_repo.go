@@ -67,6 +67,24 @@ func (r *shipmentRepository) CreateLine(line *domain.ShipmentLine) error {
 	return nil
 }
 
+func (r *shipmentRepository) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		pShip := persistence.ToPersistenceShipment(shipment)
+		if err := tx.Create(pShip).Error; err != nil {
+			return err
+		}
+		*shipment = *persistence.FromPersistenceShipment(pShip)
+		for _, line := range lines {
+			pLine := persistence.ToPersistenceShipmentLine(line)
+			if err := tx.Create(pLine).Error; err != nil {
+				return err
+			}
+			*line = *persistence.FromPersistenceShipmentLine(pLine)
+		}
+		return nil
+	})
+}
+
 func (r *shipmentRepository) ListLinesByShipment(shipmentID uint) ([]domain.ShipmentLine, error) {
 	var ps []persistence.ShipmentLine
 	if err := r.db.Where("shipment_id = ?", shipmentID).Find(&ps).Error; err != nil {
