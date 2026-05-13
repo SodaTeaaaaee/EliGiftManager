@@ -1,6 +1,6 @@
 # 分阶段实施计划
 
-本文件拆出阶段化落地路线，用于指导 V2 领域重构、数据迁移、状态投影和 profile 系统升级的推进顺序。
+本文件拆出阶段化落地路线，用于指导 V2 greenfield 重建、状态投影和 profile 系统升级的推进顺序。
 
 ## 11. 分阶段实施计划
 
@@ -17,6 +17,26 @@
 - 本文档
 - 重构前备份分支
 
+### 阶段 0.5：清理边界与保留资产
+
+目标：
+
+- 明确哪些内容会被保留
+- 明确哪些旧代码会被整体删除
+
+任务：
+
+- 保留 `docs/` 与相关方案
+- 保留备份分支与仓库历史
+- 识别需要保留的工程壳子、构建配置和开发基础设施
+- 标记 `PROJECT-STRUCTURE` 等旧代码导向文档为历史参考
+- 停止以旧 controller/service/model 结构作为新设计约束
+
+验收：
+
+- 团队对“保留什么 / 删除什么 / 不再兼容什么”有一致认知
+- 旧代码删除不会误伤文档、备份或必要工程基础设施
+
 ### 阶段 1：统一命名与领域边界
 
 目标：
@@ -27,7 +47,7 @@
 
 - 补充“CustomerProfile / Demand / Fulfillment / SupplierOrder / Shipment / ChannelSync”词汇表
 - 补充 `HistoryScope / HistoryNode / Basis Projection` 词汇表
-- 标记旧术语与新术语映射关系，但仅作为迁移桥接，不作为长期双轨
+- 标记旧术语与新术语映射关系，但仅作为历史对照，不作为新代码桥接层
 - 明确 `platform` 的多维语义
 - 补充基于官方资料的平台业务面例子说明
 - 明确 `IntegrationProfile` 和 `DocumentTemplate` 的边界
@@ -47,11 +67,11 @@
 - 文档层不再把会员、买家、订单、工厂单和模板能力混为一谈
 - 新增设计不再继续把 `Member / WaveMember / ProductTag / DispatchRecord / TemplateConfig` 当作主语义名
 
-### 阶段 2：引入新表结构
+### 阶段 2：搭建新代码骨架与新 Schema
 
 目标：
 
-- 以新增为主，引入 V2 所需核心表
+- 在清理旧业务代码后，直接搭建 V2 的新代码骨架与新 Schema
 - 当前阶段不把旧数据库兼容作为硬约束
 
 建议优先新增：
@@ -75,21 +95,16 @@
 - `routing_disposition`
 - `eligibility_context_ref`
 
-同时为旧表补充过渡字段：
+同时应直接采用目标语义：
 
-- `waves.wave_type`
-- `waves.lifecycle_stage`
-- `dispatch_records` 的多维状态字段
-
-补充约束：
-
-- `waves.allocation_mode` 不建议进入目标真相模型
-- 如确需短期保留，也只作为旧路径兼容投影
+- 不为旧表补过渡字段
+- 不在新版本里继续扩展 `DispatchRecord / WaveMember / TemplateConfig`
+- 直接建立目标结构
 
 验收：
 
-- 不影响现有导入导出链路
-- 新表迁移可重复执行
+- 新代码骨架可独立启动
+- 新 Schema 可重复初始化
 - 新的 profile 层可以先只服务少量试点来源
 - 不要求为未投产旧数据补复杂兼容逻辑
 - 能一次到位的命名、字段、表、接口，优先一次到位
@@ -286,4 +301,3 @@
 - 新来源业务面接入不再需要临时硬编码整套流程
 
 ---
-

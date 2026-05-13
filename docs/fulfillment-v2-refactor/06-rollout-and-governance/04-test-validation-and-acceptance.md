@@ -43,6 +43,10 @@
 35. undo / redo 不会伪装成已真实撤销工厂导出、物流导入或渠道同步
 36. 在文本输入框中使用 `Ctrl+Z / Ctrl+Shift+Z` 时，优先触发输入框自身的原生撤销 / 重做
 37. undo / redo 后，用户能收到即时 toast，并在短时间内翻看最近动作回执
+38. 同一处 basis 偏离可出现 `drifted + recommended`，而不是被强行抬升成 `required`
+39. adjustment target 被删除或失去唯一映射时，会进入 `drifted + required`
+40. 不会出现 `in_sync + required` 这类自相矛盾的组合
+41. UI 可以把双轴投影为单一总结状态，但底层仍保留双轴语义
 
 ### 13.2 回归重点
 
@@ -91,6 +95,6 @@ V2 至少应满足：
 22. 树状 undo / redo 在跨重启后仍保留分支与当前 head
 23. 工作区级 undo / redo 与外部 basis 偏离提示可以协同存在，而不会相互伪装
 24. 用户在执行 undo / redo 后，总能得到明确、短期可回看的操作反馈
+25. drift 与 review requirement 在底层是两条独立轴，UI 只负责投影，不反向污染领域语义
 
 ---
-

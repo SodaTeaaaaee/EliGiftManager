@@ -88,7 +88,10 @@
 
 - undo/redo 回滚的是本地工作区 head
 - 外部对象仍然保留
-- 外部对象与当前工作区如果发生偏离，应进入 `outdated / requires_review` 提示
+- 外部对象与当前工作区如果发生偏离，应进入：
+  - `basis_drift_status`
+  - `review_requirement`
+  这两条提示轴
 
 换句话说：
 
@@ -208,8 +211,8 @@
 
 从而决定：
 
-- 当前是否只是“已偏离最近一次 basis”
-- 还是已经“需要复核”
+- 当前是否只是 `basis_drift_status = drifted`
+- 还是已经升级为 `review_requirement = required`
 
 这让两套机制能够协同：
 
@@ -227,6 +230,7 @@
 5. 不抢文本输入的原生 undo/redo
 6. undo/redo 有 toast 与短期回执
 7. basis 偏离能与历史节点关联
+8. drift 与 review 两条提示轴能与历史节点关联
 
 而以下能力可以延后：
 

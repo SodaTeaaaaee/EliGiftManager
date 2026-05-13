@@ -32,12 +32,16 @@
 - 回答：
   - “这次导出 / 物流导入 / 渠道回填，当时依赖的是哪个本地结果？”
   - “当前工作区是否已经偏离了它当时依赖的基础？”
+  - “这种偏离现在是否已经需要人工复核？”
 
 这意味着：
 
 - `Ctrl+Z` 只回退本地工作区 head
 - 不意味着工厂、物流平台、来源渠道真的跟着回滚
-- 外部对象更适合通过 basis 引用进入 `outdated / requires_review` 语义
+- 外部对象更适合通过 basis 引用进入：
+  - `basis_drift_status`
+  - `review_requirement`
+  这两条独立提示轴
 
 ### 5.10.2 `HistoryScope`
 
@@ -213,6 +217,44 @@
 
 - 所谓“冻结旧版本”，更适合冻结 basis 引用和必要投影
 - 不必默认复制整个 wave 的全部状态
+
+### 5.10.7.1 Basis 比较结果更适合做成投影对象
+
+除了 basis 引用本身，系统还需要一个稳定的“比较结果”语义。
+
+更稳妥的方式不是把所有结果都硬落进外部对象表，而是引入一个计算型或缓存型 projection，例如：
+
+- `BasisComparisonProjection`
+
+建议至少表达：
+
+- `basis_kind`
+  - `supplier_order_basis`
+  - `shipment_basis`
+  - `channel_sync_basis`
+  - `adjustment_basis`
+- `basis_drift_status`
+  - `in_sync`
+  - `drifted`
+- `review_requirement`
+  - `none`
+  - `recommended`
+  - `required`
+- `drift_reason_codes`
+- `last_compared_at`
+
+这里的模式边界应保持清楚：
+
+- basis 引用回答“当时依赖了什么”
+- comparison projection 回答“现在还是否 still valid”
+
+这样才能避免把：
+
+- 历史引用
+- 事实偏离
+- 处理建议
+
+重新压回一个单枚举字段。
 
 ### 5.10.8 与 `SupplierOrder / Shipment / ChannelSyncJob` 的关系
 

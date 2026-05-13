@@ -15,7 +15,7 @@
    其中 [04-workflows-and-state/03-entitlement-resolution-and-routing.md](./04-workflows-and-state/03-entitlement-resolution-and-routing.md) 专门说明 `membership_entitlement` 的判定权威、会员输入采集与本系统路由决策
    [04-workflows-and-state/04-workspace-history-and-undo-redo.md](./04-workflows-and-state/04-workspace-history-and-undo-redo.md) 专门说明工作区历史、树状撤销/重做与 basis 提示的协同方式
 5. 接着看 [05-profile-system](./05-profile-system/) 与 [07-non-functional-foundations](./07-non-functional-foundations/)，前者说明 profile / 模板 / service 的分层，后者说明大数据与 i18n 的底层能力
-6. 最后看 [06-rollout-and-governance](./06-rollout-and-governance/)，用于落地实施与迁移治理
+6. 最后看 [06-rollout-and-governance](./06-rollout-and-governance/)，用于落地实施与 greenfield 重建治理
 
 ## 目录结构
 
@@ -34,7 +34,7 @@
 - `07-non-functional-foundations/`
   - 说明大数据查询、轻量 DTO、远程排序分页 / 滚动，以及中英双语 i18n 的基础策略
 - `06-rollout-and-governance/`
-  - 包含实施原则、阶段计划、迁移策略、测试验收、风险与待决策问题
+  - 包含实施原则、阶段计划、greenfield 重建策略、测试验收、风险与待决策问题
 - `legacy/`
   - 保留拆分前的完整长稿，便于全文检索和历史对照
 
@@ -55,6 +55,10 @@
 - 工作区历史需要树状分支、持久化和 basis 引用协同，而不是普通线性撤销栈
 - 本地工作区历史只回滚本地结果，不伪装成工厂导出、物流导入、渠道回填的真实外部回滚
 - 大数据查询能力与中英双语 i18n 属于 V2 的基础能力，不应被视为后补优化
+- 当前实施路线已明确采用 greenfield 重建：
+  - 保留文档、备份分支和必要工程壳子
+  - 丢弃旧业务代码与技术债惯性
+  - 新版本直接按 V2 业务语言与设计模式落地
 
 ## 待决策问题
 

@@ -1,5 +1,9 @@
 # Project Structure
 
+> 注：本文件当前主要描述 **greenfield 重建前的旧代码结构**。
+> 当 `main` 上的旧业务代码被清理后，这份文档应被视为历史参考，
+> 不再作为新版本代码结构的权威说明。
+
 在修改任何业务逻辑之前，先读
 [`docs/PRODUCT-DOMAIN-AND-PAIN-POINTS.md`](./PRODUCT-DOMAIN-AND-PAIN-POINTS.md)。
 那份文档是当前分支的业务语义说明；本文件只解释代码和目录如何承载这些语义。
@@ -20,7 +24,7 @@
 
 `BACKEND-TABLE-ARCHITECTURE-TODO.md` 现在应与 V2 重构中的非功能基础文档一起理解，而不是单独看成一份独立性能备忘录。
 
-如果多个文档口径冲突，优先级应理解为：
+如果多个文档口径冲突，在阅读旧代码时，优先级应理解为：
 
 1. `PRODUCT-DOMAIN-AND-PAIN-POINTS`
 2. 当前代码中的 model / service 实现
