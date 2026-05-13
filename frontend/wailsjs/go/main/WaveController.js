@@ -14,6 +14,10 @@ export function GetWave(arg1) {
   return window['go']['main']['WaveController']['GetWave'](arg1);
 }
 
+export function GetWaveOverview(arg1) {
+  return window['go']['main']['WaveController']['GetWaveOverview'](arg1);
+}
+
 export function ListWaves() {
   return window['go']['main']['WaveController']['ListWaves']();
 }

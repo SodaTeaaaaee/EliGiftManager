@@ -12,6 +12,8 @@ import (
 type WaveController struct {
 	waveUC       app.WaveUseCase
 	allocationUC app.AllocationUseCase
+	fulfillRepo  domain.FulfillmentLineRepository
+	supplierRepo domain.SupplierOrderRepository
 }
 
 func NewWaveController() *WaveController {
@@ -20,10 +22,13 @@ func NewWaveController() *WaveController {
 	demandRepo := infra.NewDemandRepository(gdb)
 	ruleRepo := infra.NewRuleRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
+	supplierRepo := infra.NewSupplierOrderRepository(gdb)
 
 	return &WaveController{
 		waveUC:       app.NewWaveUseCase(waveRepo),
 		allocationUC: app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo),
+		fulfillRepo:  fulfillRepo,
+		supplierRepo: supplierRepo,
 	}
 }
 
@@ -58,6 +63,31 @@ func (c *WaveController) GetWave(id uint) (dto.WaveDTO, error) {
 		return dto.WaveDTO{}, err
 	}
 	return domainToWaveDTO(w), nil
+}
+
+// GetWaveOverview returns aggregated wave overview data.
+func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, error) {
+	w, err := c.waveUC.GetWave(waveID)
+	if err != nil {
+		return dto.WaveOverviewDTO{}, err
+	}
+
+	fulfillLines, err := c.fulfillRepo.ListByWave(waveID)
+	if err != nil {
+		return dto.WaveOverviewDTO{}, err
+	}
+
+	supplierOrders, err := c.supplierRepo.ListByWave(waveID)
+	if err != nil {
+		return dto.WaveOverviewDTO{}, err
+	}
+
+	return dto.WaveOverviewDTO{
+		Wave:               domainToWaveDTO(w),
+		DemandCount:        0, // DemandDocument not yet directly linked to wave
+		FulfillmentCount:   len(fulfillLines),
+		SupplierOrderCount: len(supplierOrders),
+	}, nil
 }
 
 // ApplyAllocationRules applies allocation policy rules to the given wave

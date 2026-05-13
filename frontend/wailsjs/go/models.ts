@@ -117,6 +117,56 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class DemandLineDTO {
+	    id: number;
+	    demandDocumentId: number;
+	    sourceLineNo?: number;
+	    lineType: string;
+	    obligationTriggerKind: string;
+	    entitlementAuthority: string;
+	    recipientInputState: string;
+	    routingDisposition: string;
+	    routingReasonCode: string;
+	    eligibilityContextRef: string;
+	    productMasterId?: number;
+	    externalTitle: string;
+	    requestedQuantity: number;
+	    entitlementCode: string;
+	    giftLevelSnapshot: string;
+	    recipientInputPayload: string;
+	    rawPayload: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandLineDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.demandDocumentId = source["demandDocumentId"];
+	        this.sourceLineNo = source["sourceLineNo"];
+	        this.lineType = source["lineType"];
+	        this.obligationTriggerKind = source["obligationTriggerKind"];
+	        this.entitlementAuthority = source["entitlementAuthority"];
+	        this.recipientInputState = source["recipientInputState"];
+	        this.routingDisposition = source["routingDisposition"];
+	        this.routingReasonCode = source["routingReasonCode"];
+	        this.eligibilityContextRef = source["eligibilityContextRef"];
+	        this.productMasterId = source["productMasterId"];
+	        this.externalTitle = source["externalTitle"];
+	        this.requestedQuantity = source["requestedQuantity"];
+	        this.entitlementCode = source["entitlementCode"];
+	        this.giftLevelSnapshot = source["giftLevelSnapshot"];
+	        this.recipientInputPayload = source["recipientInputPayload"];
+	        this.rawPayload = source["rawPayload"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
 	export class FulfillmentLineDTO {
 	    id: number;
 	    waveId: number;
@@ -234,6 +284,42 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
+	}
+	export class WaveOverviewDTO {
+	    wave: WaveDTO;
+	    demandCount: number;
+	    fulfillmentCount: number;
+	    supplierOrderCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveOverviewDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.wave = this.convertValues(source["wave"], WaveDTO);
+	        this.demandCount = source["demandCount"];
+	        this.fulfillmentCount = source["fulfillmentCount"];
+	        this.supplierOrderCount = source["supplierOrderCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 
 }

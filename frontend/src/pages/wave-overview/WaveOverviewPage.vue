@@ -32,6 +32,17 @@
         />
       </n-card>
 
+      <n-card v-if="overview" title="波次汇总">
+        <n-space vertical size="small">
+          <div><strong>波次号:</strong> {{ overview.wave.waveNo }}</div>
+          <div><strong>名称:</strong> {{ overview.wave.name }}</div>
+          <div><strong>阶段:</strong> {{ overview.wave.lifecycleStage }}</div>
+          <div><strong>需求数:</strong> {{ overview.demandCount }}</div>
+          <div><strong>履约行数:</strong> {{ overview.fulfillmentCount }}</div>
+          <div><strong>供应商订单数:</strong> {{ overview.supplierOrderCount }}</div>
+        </n-space>
+      </n-card>
+
       <n-alert v-if="actionMsg" type="info" :title="actionMsg" />
       <n-alert v-if="actionErr" type="error" :title="actionErr" />
     </n-space>
@@ -54,14 +65,17 @@ import {
   createWave,
   applyAllocationRules,
   exportSupplierOrder,
+  getWaveOverview,
 } from "@/shared/lib/wails/app";
+import { dto } from "@/../wailsjs/go/models";
 
-const waves = ref<any[]>([]);
+const waves = ref<dto.WaveDTO[]>([]);
 const loading = ref(false);
 const creating = ref(false);
 const newWaveName = ref("");
 const actionMsg = ref("");
 const actionErr = ref("");
+const overview = ref<dto.WaveOverviewDTO | null>(null);
 
 const columns = [
   { title: "ID", key: "id", width: 60 },
@@ -71,8 +85,8 @@ const columns = [
   {
     title: "操作",
     key: "actions",
-    width: 240,
-    render(row: any) {
+    width: 300,
+    render(row: dto.WaveDTO) {
       return h(NSpace, {}, {
         default: () => [
           h(
@@ -84,6 +98,11 @@ const columns = [
             NButton,
             { size: "small", onClick: () => handleExport(row.id) },
             { default: () => "导出" },
+          ),
+          h(
+            NButton,
+            { size: "small", onClick: () => handleOverview(row.id) },
+            { default: () => "查看汇总" },
           ),
         ],
       });
@@ -137,6 +156,17 @@ async function handleExport(waveId: number) {
     const order = await exportSupplierOrder(waveId);
     actionMsg.value =
       `导出完成：SupplierOrder ID ${order.id}, 状态 ${order.status}`;
+  } catch (e: any) {
+    actionErr.value = e?.message ?? String(e);
+  }
+}
+
+async function handleOverview(waveId: number) {
+  actionMsg.value = "";
+  actionErr.value = "";
+  overview.value = null;
+  try {
+    overview.value = await getWaveOverview(waveId);
   } catch (e: any) {
     actionErr.value = e?.message ?? String(e);
   }

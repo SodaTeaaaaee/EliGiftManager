@@ -31,6 +31,18 @@ func (r *supplierOrderRepository) FindByID(id uint) (*domain.SupplierOrder, erro
 	return persistence.FromPersistenceSupplierOrder(&p), nil
 }
 
+func (r *supplierOrderRepository) List() ([]domain.SupplierOrder, error) {
+	var ps []persistence.SupplierOrder
+	if err := r.db.Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.SupplierOrder, len(ps))
+	for i, p := range ps {
+		result[i] = *persistence.FromPersistenceSupplierOrder(&p)
+	}
+	return result, nil
+}
+
 func (r *supplierOrderRepository) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
 	var ps []persistence.SupplierOrder
 	if err := r.db.Where("wave_id = ?", waveID).Find(&ps).Error; err != nil {

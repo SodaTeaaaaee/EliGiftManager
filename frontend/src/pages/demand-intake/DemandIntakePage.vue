@@ -39,9 +39,10 @@
 import { ref } from "vue";
 import { NCard, NButton, NSpace, NAlert, NDataTable } from "naive-ui";
 import { importDemandDocument } from "@/shared/lib/wails/app";
+import { dto } from "@/../wailsjs/go/models";
 
 const loading = ref(false);
-const result = ref<any>(null);
+const result = ref<dto.DemandDocumentDTO | null>(null);
 const error = ref<string | null>(null);
 
 const detailColumns = [

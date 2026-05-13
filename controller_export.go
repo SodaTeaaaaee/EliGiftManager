@@ -36,10 +36,15 @@ func (c *ExportController) ExportSupplierOrder(waveID uint) (dto.SupplierOrderDT
 
 // ListSupplierOrders lists all supplier orders.
 func (c *ExportController) ListSupplierOrders() ([]dto.SupplierOrderDTO, error) {
-	// SupplierOrderRepository does not have a List() method, so list by wave 0
-	// (which returns empty) as a placeholder. The use case layer will add a
-	// proper List method when needed.
-	return []dto.SupplierOrderDTO{}, nil
+	orders, err := c.supplierRepo.List()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.SupplierOrderDTO, len(orders))
+	for i, order := range orders {
+		result[i] = domainToSupplierOrderDTO(&order)
+	}
+	return result, nil
 }
 
 // domainToSupplierOrderDTO converts a domain SupplierOrder to a DTO.

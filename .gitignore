@@ -1,6 +1,7 @@
 .wails-scaffold/
 .vue-scaffold/
 .cache/
+.deepseek/
 build/bin/
 data/
 SampleData/
@@ -27,6 +28,11 @@ frontend/yarn.lock
 # Go
 *.test
 coverage.out
+GOCACHE/
+go-build/
+go-cache/
+go.work
+go.work.sum
 
 # Claude Code
 .claude/
@@ -42,3 +48,9 @@ wailsdev.log
 .DS_Store
 Thumbs.db
 *.syso
+
+# Local accidental artifacts
+$null
+-Force/
+env/
+go/

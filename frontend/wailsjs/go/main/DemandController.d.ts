@@ -7,3 +7,5 @@ export function GetDemandDocument(arg1:number):Promise<dto.DemandDocumentDTO>;
 export function ImportDemandDocument(arg1:dto.CreateDemandInput):Promise<dto.DemandDocumentDTO>;
 
 export function ListDemandDocuments():Promise<Array<dto.DemandDocumentDTO>>;
+
+export function ListDemandLines(arg1:number):Promise<Array<dto.DemandLineDTO>>;

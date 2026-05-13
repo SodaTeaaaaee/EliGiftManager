@@ -10,6 +10,7 @@ import {
   CreateWave,
   ListWaves,
   GetWave,
+  GetWaveOverview,
   ApplyAllocationRules,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
@@ -93,6 +94,13 @@ export async function applyAllocationRules(
 ): Promise<dto.FulfillmentLineDTO[]> {
   assertWailsRuntime();
   return ApplyAllocationRules(waveId);
+}
+
+export async function getWaveOverview(
+  waveId: number,
+): Promise<dto.WaveOverviewDTO> {
+  assertWailsRuntime();
+  return GetWaveOverview(waveId);
 }
 
 // ── ExportController ──

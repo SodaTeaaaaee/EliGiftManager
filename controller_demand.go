@@ -61,6 +61,19 @@ func (c *DemandController) ListDemandDocuments() ([]dto.DemandDocumentDTO, error
 	return result, nil
 }
 
+// ListDemandLines returns all demand lines for a given document.
+func (c *DemandController) ListDemandLines(documentID uint) ([]dto.DemandLineDTO, error) {
+	lines, err := c.demandRepo.ListLinesByDocument(documentID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.DemandLineDTO, len(lines))
+	for i, line := range lines {
+		result[i] = domainToDemandLineDTO(&line)
+	}
+	return result, nil
+}
+
 // GetDemandDocument returns a single demand document by ID.
 func (c *DemandController) GetDemandDocument(id uint) (dto.DemandDocumentDTO, error) {
 	doc, err := c.demandRepo.FindByID(id)

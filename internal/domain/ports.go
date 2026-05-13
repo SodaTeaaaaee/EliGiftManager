@@ -42,6 +42,7 @@ type FulfillmentLineRepository interface {
 type SupplierOrderRepository interface {
 	Create(order *SupplierOrder) error
 	FindByID(id uint) (*SupplierOrder, error)
+	List() ([]SupplierOrder, error)
 	ListByWave(waveID uint) ([]SupplierOrder, error)
 
 	CreateLine(line *SupplierOrderLine) error

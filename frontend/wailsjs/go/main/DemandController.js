@@ -13,3 +13,7 @@ export function ImportDemandDocument(arg1) {
 export function ListDemandDocuments() {
   return window['go']['main']['DemandController']['ListDemandDocuments']();
 }
+
+export function ListDemandLines(arg1) {
+  return window['go']['main']['DemandController']['ListDemandLines'](arg1);
+}

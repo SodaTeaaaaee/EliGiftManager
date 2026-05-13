@@ -8,4 +8,6 @@ export function CreateWave(arg1:dto.CreateWaveInput):Promise<dto.WaveDTO>;
 
 export function GetWave(arg1:number):Promise<dto.WaveDTO>;
 
+export function GetWaveOverview(arg1:number):Promise<dto.WaveOverviewDTO>;
+
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
