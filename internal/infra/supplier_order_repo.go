@@ -76,6 +76,14 @@ func (r *supplierOrderRepository) ListLinesByOrder(orderID uint) ([]domain.Suppl
 	return result, nil
 }
 
+func (r *supplierOrderRepository) FindLineByID(id uint) (*domain.SupplierOrderLine, error) {
+	var p persistence.SupplierOrderLine
+	if err := r.db.First(&p, id).Error; err != nil {
+		return nil, err
+	}
+	return persistence.FromPersistenceSupplierOrderLine(&p), nil
+}
+
 func (r *supplierOrderRepository) DeleteLinesByOrder(orderID uint) error {
 	return r.db.Where("supplier_order_id = ?", orderID).Delete(&persistence.SupplierOrderLine{}).Error
 }

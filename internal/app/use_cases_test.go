@@ -372,6 +372,20 @@ func (m *mockSupplierRepo) ListLinesByOrder(orderID uint) ([]domain.SupplierOrde
 	return out, nil
 }
 
+func (m *mockSupplierRepo) FindLineByID(id uint) (*domain.SupplierOrderLine, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, lines := range m.orderLines {
+		for _, l := range lines {
+			if l.ID == id {
+				cp := *l
+				return &cp, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("supplier order line %d not found", id)
+}
+
 func (m *mockSupplierRepo) DeleteLinesByOrder(orderID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

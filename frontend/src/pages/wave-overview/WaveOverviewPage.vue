@@ -40,9 +40,34 @@
           <div><strong>需求数:</strong> {{ overview.demandCount }}</div>
           <div><strong>履约行数:</strong> {{ overview.fulfillmentCount }}</div>
           <div><strong>供应商订单数:</strong> {{ overview.supplierOrderCount }}</div>
-          <div><strong>发货单数:</strong> {{ shipmentCount }}</div>
-          <div><strong>已追踪履约行:</strong> {{ trackedFulfillmentCount }}</div>
+          <div><strong>发货单数:</strong> {{ overview?.shipmentCount ?? 0 }}</div>
+          <div><strong>已追踪履约行:</strong> {{ overview?.trackedFulfillmentCount ?? 0 }}</div>
         </n-space>
+      </n-card>
+
+      <n-card title="录入发货信息" v-if="overview">
+        <n-form>
+          <n-space vertical size="small">
+            <n-input-number v-model:value="shipmentInput.supplierOrderId" placeholder="Supplier Order ID" :min="0" />
+            <n-input v-model:value="shipmentInput.supplierPlatform" placeholder="供应商平台" />
+            <n-input v-model:value="shipmentInput.shipmentNo" placeholder="发货单号" />
+            <n-input v-model:value="shipmentInput.trackingNo" placeholder="物流单号" />
+            <n-input v-model:value="shipmentInput.carrierCode" placeholder="承运商编码" />
+            <n-input v-model:value="shipmentInput.carrierName" placeholder="承运商名称" />
+            <div v-for="(line, index) in shipmentInput.lines" :key="index" style="margin-top: 8px">
+              <n-space align="center">
+                <n-input-number v-model:value="line.supplierOrderLineId" placeholder="Supplier Order Line ID" :min="0" style="width: 160px" />
+                <n-input-number v-model:value="line.fulfillmentLineId" placeholder="Fulfillment Line ID" :min="0" style="width: 160px" />
+                <n-input-number v-model:value="line.quantity" placeholder="数量" :min="1" style="width: 80px" />
+                <n-button size="small" @click="shipmentInput.lines.splice(index, 1)">删除</n-button>
+              </n-space>
+            </div>
+            <n-button size="small" @click="addShipmentLine" style="margin-top: 4px">添加行</n-button>
+            <n-button type="primary" @click="handleCreateShipment" :loading="creatingShipment">
+              录入发货
+            </n-button>
+          </n-space>
+        </n-form>
       </n-card>
 
       <n-alert v-if="actionMsg" type="info" :title="actionMsg" />
@@ -52,15 +77,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from "vue";
+import { ref, onMounted, h } from "vue";
 import {
   NCard,
   NButton,
   NInput,
+  NInputNumber,
   NSpace,
   NDataTable,
   NEmpty,
   NAlert,
+  NForm,
 } from "naive-ui";
 import {
   listWaves,
@@ -68,6 +95,7 @@ import {
   applyAllocationRules,
   exportSupplierOrder,
   getWaveOverview,
+  createShipment,
 } from "@/shared/lib/wails/app";
 import { dto } from "@/../wailsjs/go/models";
 
@@ -79,10 +107,22 @@ const actionMsg = ref("");
 const actionErr = ref("");
 const overview = ref<dto.WaveOverviewDTO | null>(null);
 
-// wailsjs models not yet regenerated — shipCount/trackedFulfillmentCount are
-// returned by the Go backend but missing from the generated WaveOverviewDTO.
-const shipmentCount = computed(() => (overview.value as any)?.shipmentCount ?? 0)
-const trackedFulfillmentCount = computed(() => (overview.value as any)?.trackedFulfillmentCount ?? 0)
+const creatingShipment = ref(false)
+const shipmentInput = ref({
+  supplierOrderId: 0,
+  supplierPlatform: '',
+  shipmentNo: '',
+  externalShipmentNo: '',
+  carrierCode: '',
+  carrierName: '',
+  trackingNo: '',
+  status: 'shipped',
+  shippedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
+  basisHistoryNodeId: '',
+  basisProjectionHash: '',
+  basisPayloadSnapshot: '',
+  lines: [] as Array<{ supplierOrderLineId: number; fulfillmentLineId: number; quantity: number }>
+})
 
 const columns = [
   { title: "ID", key: "id", width: 60 },
@@ -176,6 +216,36 @@ async function handleOverview(waveId: number) {
     overview.value = await getWaveOverview(waveId);
   } catch (e: any) {
     actionErr.value = e?.message ?? String(e);
+  }
+}
+
+function addShipmentLine() {
+  shipmentInput.value.lines.push({
+    supplierOrderLineId: 0,
+    fulfillmentLineId: 0,
+    quantity: 1,
+  })
+}
+
+async function handleCreateShipment() {
+  creatingShipment.value = true
+  actionErr.value = ''
+  actionMsg.value = ''
+  try {
+    const result = await createShipment({
+      ...shipmentInput.value,
+      status: shipmentInput.value.status || 'shipped',
+      shippedAt: shipmentInput.value.shippedAt || new Date().toISOString(),
+    })
+    actionMsg.value = `发货单创建成功 (ID: ${result.id})`
+    // 刷新 overview 统计
+    if (overview.value) {
+      await handleOverview(overview.value.wave.id)
+    }
+  } catch (e: any) {
+    actionErr.value = e?.message ?? String(e)
+  } finally {
+    creatingShipment.value = false
   }
 }
 

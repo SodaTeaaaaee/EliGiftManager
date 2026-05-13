@@ -61,6 +61,77 @@ export namespace dto {
 		}
 	}
 	
+	export class CreateShipmentLineInput {
+	    supplierOrderLineId: number;
+	    fulfillmentLineId: number;
+	    quantity: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateShipmentLineInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supplierOrderLineId = source["supplierOrderLineId"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.quantity = source["quantity"];
+	    }
+	}
+	export class CreateShipmentInput {
+	    supplierOrderId: number;
+	    supplierPlatform: string;
+	    shipmentNo: string;
+	    externalShipmentNo: string;
+	    carrierCode: string;
+	    carrierName: string;
+	    trackingNo: string;
+	    status: string;
+	    shippedAt: string;
+	    basisHistoryNodeId: string;
+	    basisProjectionHash: string;
+	    basisPayloadSnapshot: string;
+	    lines: CreateShipmentLineInput[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateShipmentInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supplierOrderId = source["supplierOrderId"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.shipmentNo = source["shipmentNo"];
+	        this.externalShipmentNo = source["externalShipmentNo"];
+	        this.carrierCode = source["carrierCode"];
+	        this.carrierName = source["carrierName"];
+	        this.trackingNo = source["trackingNo"];
+	        this.status = source["status"];
+	        this.shippedAt = source["shippedAt"];
+	        this.basisHistoryNodeId = source["basisHistoryNodeId"];
+	        this.basisProjectionHash = source["basisProjectionHash"];
+	        this.basisPayloadSnapshot = source["basisPayloadSnapshot"];
+	        this.lines = this.convertValues(source["lines"], CreateShipmentLineInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class CreateWaveInput {
 	    name: string;
 	
@@ -213,6 +284,91 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class ShipmentLineDTO {
+	    id: number;
+	    shipmentId: number;
+	    supplierOrderLineId: number;
+	    fulfillmentLineId: number;
+	    quantity: number;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShipmentLineDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.shipmentId = source["shipmentId"];
+	        this.supplierOrderLineId = source["supplierOrderLineId"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.quantity = source["quantity"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class ShipmentDTO {
+	    id: number;
+	    supplierOrderId: number;
+	    supplierPlatform: string;
+	    shipmentNo: string;
+	    externalShipmentNo: string;
+	    carrierCode: string;
+	    carrierName: string;
+	    trackingNo: string;
+	    status: string;
+	    shippedAt: string;
+	    basisHistoryNodeId: string;
+	    basisProjectionHash: string;
+	    basisPayloadSnapshot: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	    lines: ShipmentLineDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ShipmentDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.supplierOrderId = source["supplierOrderId"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.shipmentNo = source["shipmentNo"];
+	        this.externalShipmentNo = source["externalShipmentNo"];
+	        this.carrierCode = source["carrierCode"];
+	        this.carrierName = source["carrierName"];
+	        this.trackingNo = source["trackingNo"];
+	        this.status = source["status"];
+	        this.shippedAt = source["shippedAt"];
+	        this.basisHistoryNodeId = source["basisHistoryNodeId"];
+	        this.basisProjectionHash = source["basisProjectionHash"];
+	        this.basisPayloadSnapshot = source["basisPayloadSnapshot"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.lines = this.convertValues(source["lines"], ShipmentLineDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class SupplierOrderDTO {
 	    id: number;
 	    waveId: number;
@@ -292,6 +448,8 @@ export namespace dto {
 	    demandCount: number;
 	    fulfillmentCount: number;
 	    supplierOrderCount: number;
+	    shipmentCount: number;
+	    trackedFulfillmentCount: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new WaveOverviewDTO(source);
@@ -303,6 +461,8 @@ export namespace dto {
 	        this.demandCount = source["demandCount"];
 	        this.fulfillmentCount = source["fulfillmentCount"];
 	        this.supplierOrderCount = source["supplierOrderCount"];
+	        this.shipmentCount = source["shipmentCount"];
+	        this.trackedFulfillmentCount = source["trackedFulfillmentCount"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

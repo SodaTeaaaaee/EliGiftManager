@@ -49,6 +49,7 @@ type SupplierOrderRepository interface {
 
 	CreateLine(line *SupplierOrderLine) error
 	ListLinesByOrder(orderID uint) ([]SupplierOrderLine, error)
+	FindLineByID(id uint) (*SupplierOrderLine, error)
 	DeleteLinesByOrder(orderID uint) error
 }
 

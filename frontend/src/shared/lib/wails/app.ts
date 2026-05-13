@@ -20,6 +20,10 @@ import {
   ListSupplierOrders,
 } from "../../../../wailsjs/go/main/ExportController";
 import {
+  CreateShipment,
+  ListShipmentsByWave,
+} from "../../../../wailsjs/go/main/ShipmentController";
+import {
   PickCSVFile,
   PickZIPFile,
   SaveZoom,
@@ -134,10 +138,6 @@ export async function listSupplierOrders(): Promise<dto.SupplierOrderDTO[]> {
 }
 
 // ── ShipmentController ──
-// wailsjs bindings not yet regenerated; using runtime fallback.
-// When `wails build` regenerates the bindings, switch to typed imports:
-//   import { CreateShipment, ListShipmentsByWave } from "../../../../wailsjs/go/main/ShipmentController";
-//   and call them directly like the other controllers above.
 
 export async function createShipment(input: {
   supplierOrderId: number
@@ -157,16 +157,15 @@ export async function createShipment(input: {
     fulfillmentLineId: number
     quantity: number
   }>
-}): Promise<any> {
+}): Promise<dto.ShipmentDTO> {
   assertWailsRuntime()
-  const go = (window as any).go
-  return go.main.ShipmentController.CreateShipment(input)
+  const req = dto.CreateShipmentInput.createFrom(input)
+  return CreateShipment(req)
 }
 
-export async function listShipmentsByWave(waveId: number): Promise<any[]> {
+export async function listShipmentsByWave(waveId: number): Promise<dto.ShipmentDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const go = (window as any).go
-  return go.main.ShipmentController.ListShipmentsByWave(waveId)
+  return ListShipmentsByWave(waveId)
 }
 
 // ── App (utility) ──
