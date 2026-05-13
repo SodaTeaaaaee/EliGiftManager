@@ -5,6 +5,7 @@ import {
   GetDemandDocument,
   ImportDemandDocument,
   ListDemandDocuments,
+  ListDemandLines,
 } from "../../../../wailsjs/go/main/DemandController";
 import {
   CreateWave,
@@ -12,6 +13,7 @@ import {
   GetWave,
   GetWaveOverview,
   ApplyAllocationRules,
+  AssignDemandToWave,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
   ExportSupplierOrder,
@@ -39,6 +41,11 @@ function assertWailsRuntime(): void {
 }
 
 // ── DemandController ──
+
+export async function listDemandLines(documentID: number): Promise<dto.DemandLineDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListDemandLines(documentID);
+}
 
 export async function listDemandDocuments(): Promise<dto.DemandDocumentDTO[]> {
   if (!isWailsRuntimeAvailable()) return [];
@@ -101,6 +108,15 @@ export async function getWaveOverview(
 ): Promise<dto.WaveOverviewDTO> {
   assertWailsRuntime();
   return GetWaveOverview(waveId);
+}
+
+/** Assign a demand document to a wave. */
+export async function assignDemandToWave(
+  waveId: number,
+  demandDocumentId: number,
+): Promise<void> {
+  assertWailsRuntime();
+  return AssignDemandToWave(waveId, demandDocumentId);
 }
 
 // ── ExportController ──

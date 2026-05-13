@@ -6,6 +6,10 @@ export function ApplyAllocationRules(arg1) {
   return window['go']['main']['WaveController']['ApplyAllocationRules'](arg1);
 }
 
+export function AssignDemandToWave(arg1, arg2) {
+  return window['go']['main']['WaveController']['AssignDemandToWave'](arg1, arg2);
+}
+
 export function CreateWave(arg1) {
   return window['go']['main']['WaveController']['CreateWave'](arg1);
 }

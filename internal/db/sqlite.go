@@ -63,6 +63,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		&persistence.AllocationPolicyRule{},
 		&persistence.SupplierOrder{},
 		&persistence.SupplierOrderLine{},
+		&persistence.WaveDemandAssignment{},
 	); err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: auto migrate: %w", err)
 	}

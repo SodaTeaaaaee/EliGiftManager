@@ -24,6 +24,8 @@ frontend/yarn.lock
 *.log
 .vscode/
 .idea/
+# Local helper scripts (transient — do not commit)
+_*.bat
 
 # Go
 *.test

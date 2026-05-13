@@ -97,18 +97,24 @@ func (uc *waveUseCase) GetWave(id uint) (*domain.Wave, error) {
 // ---- Allocation ----
 
 type allocationUseCase struct {
-	demandRepo  domain.DemandDocumentRepository
-	ruleRepo    domain.AllocationPolicyRuleRepository
-	fulfillRepo domain.FulfillmentLineRepository
+	demandRepo     domain.DemandDocumentRepository
+	ruleRepo       domain.AllocationPolicyRuleRepository
+	fulfillRepo    domain.FulfillmentLineRepository
+	assignmentRepo domain.WaveDemandAssignmentRepository
 }
 
-func NewAllocationUseCase(demandRepo domain.DemandDocumentRepository, ruleRepo domain.AllocationPolicyRuleRepository, fulfillRepo domain.FulfillmentLineRepository) AllocationUseCase {
-	return &allocationUseCase{demandRepo: demandRepo, ruleRepo: ruleRepo, fulfillRepo: fulfillRepo}
+func NewAllocationUseCase(demandRepo domain.DemandDocumentRepository, ruleRepo domain.AllocationPolicyRuleRepository, fulfillRepo domain.FulfillmentLineRepository, assignmentRepo domain.WaveDemandAssignmentRepository) AllocationUseCase {
+	return &allocationUseCase{demandRepo: demandRepo, ruleRepo: ruleRepo, fulfillRepo: fulfillRepo, assignmentRepo: assignmentRepo}
 }
 
 func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, error) {
-	// [V2-STUB] demand_driven minimal: for every accepted DemandLine, create a FulfillmentLine
-	docs, err := uc.demandRepo.List()
+	// Delete existing allocation_demand_driven fulfillment lines for this wave (rebuild pattern for idempotency)
+	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(waveID, "allocation_demand_driven"); err != nil {
+		return nil, err
+	}
+
+	// Use assigned demands only (wave-demand linkage)
+	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,6 +134,12 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 				continue
 			}
 
+			// Derive LineReason from the DemandDocument's Kind
+			lineReason := "retail_order"
+			if doc.Kind == "membership_entitlement" {
+				lineReason = "entitlement"
+			}
+
 			docID := doc.ID
 			lineID := dl.ID
 			fl := domain.FulfillmentLine{
@@ -136,12 +148,13 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 				DemandLineID:     &lineID,
 				Quantity:         dl.RequestedQuantity,
 				AllocationState:  "allocated",
-				LineReason:       "retail_order",
+				LineReason:       lineReason,
+				GeneratedBy:      "allocation_demand_driven",
 				CreatedAt:        now,
 				UpdatedAt:        now,
 			}
 			if doc.CustomerProfileID != nil {
-				fl.CustomerProfileID = *doc.CustomerProfileID
+				fl.CustomerProfileID = doc.CustomerProfileID
 			}
 
 			if err := uc.fulfillRepo.Create(&fl); err != nil {
@@ -166,6 +179,11 @@ func NewExportUseCase(supplierRepo domain.SupplierOrderRepository, fulfillRepo d
 }
 
 func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder, error) {
+	// Delete only existing draft orders for this wave (rebuild pattern for idempotency)
+	if err := uc.supplierRepo.DeleteDraftsByWave(waveID); err != nil {
+		return nil, err
+	}
+
 	// [V2-STUB] aggregate all FulfillmentLines for the wave into a SupplierOrder with lines
 	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
 	if err != nil {

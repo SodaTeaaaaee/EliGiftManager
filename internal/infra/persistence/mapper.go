@@ -259,6 +259,7 @@ func ToPersistenceFulfillmentLine(d *domain.FulfillmentLine) *FulfillmentLine {
 		SupplierState:             d.SupplierState,
 		ChannelSyncState:          d.ChannelSyncState,
 		LineReason:                FulfillmentLineReason(d.LineReason),
+		GeneratedBy:               d.GeneratedBy,
 		ExtraData:                 d.ExtraData,
 	}
 }
@@ -279,6 +280,7 @@ func FromPersistenceFulfillmentLine(p *FulfillmentLine) *domain.FulfillmentLine 
 		SupplierState:            p.SupplierState,
 		ChannelSyncState:         p.ChannelSyncState,
 		LineReason:               string(p.LineReason),
+		GeneratedBy:              p.GeneratedBy,
 		ExtraData:                p.ExtraData,
 		CreatedAt:                formatTime(p.CreatedAt),
 		UpdatedAt:                formatTime(p.UpdatedAt),
@@ -387,5 +389,30 @@ func FromPersistenceSupplierOrderLine(p *SupplierOrderLine) *domain.SupplierOrde
 		ExtraData:         p.ExtraData,
 		CreatedAt:         formatTime(p.CreatedAt),
 		UpdatedAt:         formatTime(p.UpdatedAt),
+	}
+}
+
+// ---- WaveDemandAssignment ----
+
+func ToPersistenceWaveDemandAssignment(d *domain.WaveDemandAssignment) *WaveDemandAssignment {
+	return &WaveDemandAssignment{
+		WaveID:           d.WaveID,
+		DemandDocumentID: d.DemandDocumentID,
+		AcceptedAt:       parseTimePtr(d.AcceptedAt),
+		AcceptedBy:       d.AcceptedBy,
+		ExtraData:        d.ExtraData,
+	}
+}
+
+func FromPersistenceWaveDemandAssignment(p *WaveDemandAssignment) *domain.WaveDemandAssignment {
+	return &domain.WaveDemandAssignment{
+		ID:               p.ID,
+		WaveID:           p.WaveID,
+		DemandDocumentID: p.DemandDocumentID,
+		AcceptedAt:       formatTimePtr(p.AcceptedAt),
+		AcceptedBy:       p.AcceptedBy,
+		ExtraData:        p.ExtraData,
+		CreatedAt:        formatTime(p.CreatedAt),
+		UpdatedAt:        formatTime(p.UpdatedAt),
 	}
 }

@@ -4,6 +4,8 @@ import {dto} from '../models';
 
 export function ApplyAllocationRules(arg1:number):Promise<Array<dto.FulfillmentLineDTO>>;
 
+export function AssignDemandToWave(arg1:number,arg2:number):Promise<void>;
+
 export function CreateWave(arg1:dto.CreateWaveInput):Promise<dto.WaveDTO>;
 
 export function GetWave(arg1:number):Promise<dto.WaveDTO>;

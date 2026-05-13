@@ -118,8 +118,8 @@ func (WaveParticipantSnapshot) TableName() string { return "wave_participant_sna
 type FulfillmentLine struct {
 	gorm.Model
 	WaveID                     uint                  `gorm:"index;not null"`
-	CustomerProfileID          uint                  `gorm:"index;not null"`
-	WaveParticipantSnapshotID  uint                  `gorm:"index;not null"`
+	CustomerProfileID          *uint                 `gorm:"index"`
+	WaveParticipantSnapshotID  *uint                 `gorm:"index"`
 	ProductID                  *uint                 `gorm:"index"` // nullable FK
 	DemandDocumentID           *uint                 `gorm:"index"` // nullable FK
 	DemandLineID               *uint                 `gorm:"index"` // nullable FK
@@ -130,6 +130,7 @@ type FulfillmentLine struct {
 	SupplierState              string
 	ChannelSyncState           string
 	LineReason                 FulfillmentLineReason `gorm:"type:text;not null"`
+	GeneratedBy                string
 	ExtraData                  string                `gorm:"type:text"` // JSON
 }
 
@@ -188,3 +189,16 @@ type SupplierOrderLine struct {
 }
 
 func (SupplierOrderLine) TableName() string { return "supplier_order_lines" }
+
+// ---- WaveDemandAssignment ----
+
+type WaveDemandAssignment struct {
+	gorm.Model
+	WaveID           uint `gorm:"uniqueIndex:idx_wave_demand;not null"`
+	DemandDocumentID uint `gorm:"uniqueIndex:idx_wave_demand;not null"`
+	AcceptedAt       *time.Time
+	AcceptedBy       string
+	ExtraData        string `gorm:"type:text"`
+}
+
+func (WaveDemandAssignment) TableName() string { return "wave_demand_assignments" }

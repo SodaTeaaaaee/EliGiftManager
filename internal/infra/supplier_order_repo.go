@@ -75,3 +75,24 @@ func (r *supplierOrderRepository) ListLinesByOrder(orderID uint) ([]domain.Suppl
 	}
 	return result, nil
 }
+
+func (r *supplierOrderRepository) DeleteLinesByOrder(orderID uint) error {
+	return r.db.Where("supplier_order_id = ?", orderID).Delete(&persistence.SupplierOrderLine{}).Error
+}
+
+func (r *supplierOrderRepository) DeleteDraftsByWave(waveID uint) error {
+	// Find all draft orders for this wave
+	var orders []persistence.SupplierOrder
+	if err := r.db.Where("wave_id = ? AND status = ?", waveID, "draft").Find(&orders).Error; err != nil {
+		return err
+	}
+	for _, o := range orders {
+		if err := r.db.Where("supplier_order_id = ?", o.ID).Delete(&persistence.SupplierOrderLine{}).Error; err != nil {
+			return err
+		}
+	}
+	if err := r.db.Where("wave_id = ? AND status = ?", waveID, "draft").Delete(&persistence.SupplierOrder{}).Error; err != nil {
+		return err
+	}
+	return nil
+}

@@ -170,8 +170,8 @@ export namespace dto {
 	export class FulfillmentLineDTO {
 	    id: number;
 	    waveId: number;
-	    customerProfileId: number;
-	    waveParticipantSnapshotId: number;
+	    customerProfileId?: number;
+	    waveParticipantSnapshotId?: number;
 	    productId?: number;
 	    demandDocumentId?: number;
 	    demandLineId?: number;
@@ -182,6 +182,7 @@ export namespace dto {
 	    supplierState: string;
 	    channelSyncState: string;
 	    lineReason: string;
+	    generatedBy: string;
 	    extraData: string;
 	    createdAt: string;
 	    updatedAt: string;
@@ -206,6 +207,7 @@ export namespace dto {
 	        this.supplierState = source["supplierState"];
 	        this.channelSyncState = source["channelSyncState"];
 	        this.lineReason = source["lineReason"];
+	        this.generatedBy = source["generatedBy"];
 	        this.extraData = source["extraData"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];

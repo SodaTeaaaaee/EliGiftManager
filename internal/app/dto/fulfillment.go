@@ -3,8 +3,8 @@ package dto
 type FulfillmentLineDTO struct {
 	ID                        uint   `json:"id"`
 	WaveID                    uint   `json:"waveId"`
-	CustomerProfileID         uint   `json:"customerProfileId"`
-	WaveParticipantSnapshotID uint   `json:"waveParticipantSnapshotId"`
+	CustomerProfileID         *uint  `json:"customerProfileId"`
+	WaveParticipantSnapshotID *uint  `json:"waveParticipantSnapshotId"`
 	ProductID                 *uint  `json:"productId"`
 	DemandDocumentID          *uint  `json:"demandDocumentId"`
 	DemandLineID              *uint  `json:"demandLineId"`
@@ -15,6 +15,7 @@ type FulfillmentLineDTO struct {
 	SupplierState             string `json:"supplierState"`
 	ChannelSyncState          string `json:"channelSyncState"`
 	LineReason                string `json:"lineReason"`
+	GeneratedBy               string `json:"generatedBy"`
 	ExtraData                 string `json:"extraData"`
 	CreatedAt                 string `json:"createdAt"`
 	UpdatedAt                 string `json:"updatedAt"`

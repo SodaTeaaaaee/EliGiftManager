@@ -36,6 +36,7 @@ type FulfillmentLineRepository interface {
 	Create(line *FulfillmentLine) error
 	FindByID(id uint) (*FulfillmentLine, error)
 	ListByWave(waveID uint) ([]FulfillmentLine, error)
+	DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error
 }
 
 // SupplierOrderRepository defines persistence operations for SupplierOrder and SupplierOrderLine.
@@ -44,9 +45,11 @@ type SupplierOrderRepository interface {
 	FindByID(id uint) (*SupplierOrder, error)
 	List() ([]SupplierOrder, error)
 	ListByWave(waveID uint) ([]SupplierOrder, error)
+	DeleteDraftsByWave(waveID uint) error
 
 	CreateLine(line *SupplierOrderLine) error
 	ListLinesByOrder(orderID uint) ([]SupplierOrderLine, error)
+	DeleteLinesByOrder(orderID uint) error
 }
 
 // AllocationPolicyRuleRepository defines persistence operations for AllocationPolicyRule.
@@ -54,4 +57,12 @@ type AllocationPolicyRuleRepository interface {
 	Create(rule *AllocationPolicyRule) error
 	FindByID(id uint) (*AllocationPolicyRule, error)
 	ListByWave(waveID uint) ([]AllocationPolicyRule, error)
+}
+
+// WaveDemandAssignmentRepository defines persistence operations for wave-demand linkage.
+type WaveDemandAssignmentRepository interface {
+	Create(assignment *WaveDemandAssignment) error
+	ListByWave(waveID uint) ([]WaveDemandAssignment, error)
+	ListByDemandDocument(docID uint) ([]WaveDemandAssignment, error)
+	ListDemandDocumentsByWave(waveID uint) ([]DemandDocument, error)
 }

@@ -110,8 +110,8 @@ type WaveParticipantSnapshot struct {
 type FulfillmentLine struct {
 	ID                       uint
 	WaveID                   uint
-	CustomerProfileID        uint
-	WaveParticipantSnapshotID uint
+	CustomerProfileID        *uint
+	WaveParticipantSnapshotID *uint
 	ProductID                *uint
 	DemandDocumentID         *uint
 	DemandLineID             *uint
@@ -122,6 +122,7 @@ type FulfillmentLine struct {
 	SupplierState            string
 	ChannelSyncState         string
 	LineReason               string
+	GeneratedBy              string
 	ExtraData                string
 	CreatedAt                string
 	UpdatedAt                string
@@ -179,4 +180,17 @@ type SupplierOrderLine struct {
 	ExtraData         string
 	CreatedAt         string
 	UpdatedAt         string
+}
+
+// ---- WaveDemandAssignment ----
+
+type WaveDemandAssignment struct {
+	ID               uint
+	WaveID           uint
+	DemandDocumentID uint
+	AcceptedAt       string
+	AcceptedBy       string
+	ExtraData        string
+	CreatedAt        string
+	UpdatedAt        string
 }

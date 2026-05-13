@@ -42,3 +42,7 @@ func (r *fulfillmentRepository) ListByWave(waveID uint) ([]domain.FulfillmentLin
 	}
 	return result, nil
 }
+
+func (r *fulfillmentRepository) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
+	return r.db.Where("wave_id = ? AND generated_by = ?", waveID, generatedBy).Delete(&persistence.FulfillmentLine{}).Error
+}
