@@ -59,7 +59,7 @@ type DemandLine struct {
 	RecipientInputState   string
 	RoutingDisposition    string
 	RoutingReasonCode     string
-	EligibilityContextRef  string
+	EligibilityContextRef string
 	ProductMasterID       *uint
 	ExternalTitle         string
 	RequestedQuantity     int
@@ -108,24 +108,24 @@ type WaveParticipantSnapshot struct {
 // ---- FulfillmentLine ----
 
 type FulfillmentLine struct {
-	ID                       uint
-	WaveID                   uint
-	CustomerProfileID        *uint
+	ID                        uint
+	WaveID                    uint
+	CustomerProfileID         *uint
 	WaveParticipantSnapshotID *uint
-	ProductID                *uint
-	DemandDocumentID         *uint
-	DemandLineID             *uint
-	CustomerAddressID        *uint
-	Quantity                 int
-	AllocationState          string
-	AddressState             string
-	SupplierState            string
-	ChannelSyncState         string
-	LineReason               string
-	GeneratedBy              string
-	ExtraData                string
-	CreatedAt                string
-	UpdatedAt                string
+	ProductID                 *uint
+	DemandDocumentID          *uint
+	DemandLineID              *uint
+	CustomerAddressID         *uint
+	Quantity                  int
+	AllocationState           string
+	AddressState              string
+	SupplierState             string
+	ChannelSyncState          string
+	LineReason                string
+	GeneratedBy               string
+	ExtraData                 string
+	CreatedAt                 string
+	UpdatedAt                 string
 }
 
 // ---- AllocationPolicyRule ----
@@ -193,4 +193,36 @@ type WaveDemandAssignment struct {
 	ExtraData        string
 	CreatedAt        string
 	UpdatedAt        string
+}
+
+// ---- Shipment ----
+
+type Shipment struct {
+	ID                   uint
+	SupplierOrderID      uint
+	SupplierPlatform     string
+	ShipmentNo           string
+	ExternalShipmentNo   string
+	CarrierCode          string
+	CarrierName          string
+	TrackingNo           string
+	Status               string
+	ShippedAt            string
+	BasisHistoryNodeID   string
+	BasisProjectionHash  string
+	BasisPayloadSnapshot string
+	ExtraData            string
+	CreatedAt            string
+	UpdatedAt            string
+}
+
+// ---- ShipmentLine ----
+
+type ShipmentLine struct {
+	ID                  uint
+	ShipmentID          uint
+	SupplierOrderLineID uint
+	FulfillmentLineID   uint
+	Quantity            int
+	CreatedAt           string
 }

@@ -133,6 +133,42 @@ export async function listSupplierOrders(): Promise<dto.SupplierOrderDTO[]> {
   return ListSupplierOrders();
 }
 
+// ── ShipmentController ──
+// wailsjs bindings not yet regenerated; using runtime fallback.
+// When `wails build` regenerates the bindings, switch to typed imports:
+//   import { CreateShipment, ListShipmentsByWave } from "../../../../wailsjs/go/main/ShipmentController";
+//   and call them directly like the other controllers above.
+
+export async function createShipment(input: {
+  supplierOrderId: number
+  supplierPlatform: string
+  shipmentNo: string
+  externalShipmentNo: string
+  carrierCode: string
+  carrierName: string
+  trackingNo: string
+  status: string
+  shippedAt: string
+  basisHistoryNodeId: string
+  basisProjectionHash: string
+  basisPayloadSnapshot: string
+  lines: Array<{
+    supplierOrderLineId: number
+    fulfillmentLineId: number
+    quantity: number
+  }>
+}): Promise<any> {
+  assertWailsRuntime()
+  const go = (window as any).go
+  return go.main.ShipmentController.CreateShipment(input)
+}
+
+export async function listShipmentsByWave(waveId: number): Promise<any[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  const go = (window as any).go
+  return go.main.ShipmentController.ListShipmentsByWave(waveId)
+}
+
 // ── App (utility) ──
 
 export async function pickCsvFile(): Promise<string> {

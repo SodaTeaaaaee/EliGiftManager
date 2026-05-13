@@ -66,3 +66,14 @@ type WaveDemandAssignmentRepository interface {
 	ListByDemandDocument(docID uint) ([]WaveDemandAssignment, error)
 	ListDemandDocumentsByWave(waveID uint) ([]DemandDocument, error)
 }
+
+// ShipmentRepository defines persistence operations for Shipment and ShipmentLine.
+type ShipmentRepository interface {
+	Create(shipment *Shipment) error
+	FindByID(id uint) (*Shipment, error)
+	ListBySupplierOrder(supplierOrderID uint) ([]Shipment, error)
+	ListByWave(waveID uint) ([]Shipment, error)
+
+	CreateLine(line *ShipmentLine) error
+	ListLinesByShipment(shipmentID uint) ([]ShipmentLine, error)
+}

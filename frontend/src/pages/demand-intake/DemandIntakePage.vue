@@ -74,16 +74,9 @@
             </n-space>
           </n-card>
 
-          <n-button dashed size="small" @click="addLine">
-            添加一行
-          </n-button>
+          <n-button dashed size="small" @click="addLine"> 添加一行 </n-button>
 
-          <n-button
-            type="primary"
-            @click="importDemand"
-            :loading="loading"
-            :disabled="!formValid"
-          >
+          <n-button type="primary" @click="importDemand" :loading="loading" :disabled="!formValid">
             导入需求
           </n-button>
         </n-space>
@@ -126,176 +119,163 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from "vue";
-import {
-  NCard,
-  NButton,
-  NInput,
-  NInputNumber,
-  NSelect,
-  NSpace,
-  NAlert,
-  NDivider,
-} from "naive-ui";
-import {
-  importDemandDocument,
-  listWaves,
-  assignDemandToWave,
-} from "@/shared/lib/wails/app";
-import { dto } from "@/../wailsjs/go/models";
+import { ref, reactive, computed, watch } from 'vue'
+import { NCard, NButton, NInput, NInputNumber, NSelect, NSpace, NAlert, NDivider } from 'naive-ui'
+import { importDemandDocument, listWaves, assignDemandToWave } from '@/shared/lib/wails/app'
+import { dto } from '@/../wailsjs/go/models'
 
 // ── Options ──
 
 const kindOptions = [
-  { label: "Membership Entitlement", value: "membership_entitlement" },
-  { label: "Retail Order", value: "retail_order" },
-];
+  { label: 'Membership Entitlement', value: 'membership_entitlement' },
+  { label: 'Retail Order', value: 'retail_order' },
+]
 
 const captureModeOptions = [
-  { label: "Manual Entry", value: "manual_entry" },
-  { label: "Document Import", value: "document_import" },
-  { label: "API Ingest", value: "api_ingest" },
-];
+  { label: 'Manual Entry', value: 'manual_entry' },
+  { label: 'Document Import', value: 'document_import' },
+  { label: 'API Ingest', value: 'api_ingest' },
+]
 
 const lineTypeOptions = [
-  { label: "Entitlement Rule", value: "entitlement_rule" },
-  { label: "SKU Order", value: "sku_order" },
-  { label: "Manual Entry", value: "manual_entry" },
-];
+  { label: 'Entitlement Rule', value: 'entitlement_rule' },
+  { label: 'SKU Order', value: 'sku_order' },
+  { label: 'Manual Entry', value: 'manual_entry' },
+]
 
 const routingDispositionOptions = [
-  { label: "Accepted", value: "accepted" },
-  { label: "Pending Intake", value: "pending_intake" },
-  { label: "Deferred", value: "deferred" },
-  { label: "Excluded Manual", value: "excluded_manual" },
-  { label: "Excluded Duplicate", value: "excluded_duplicate" },
-  { label: "Excluded Revoked", value: "excluded_revoked" },
-];
+  { label: 'Accepted', value: 'accepted' },
+  { label: 'Pending Intake', value: 'pending_intake' },
+  { label: 'Deferred', value: 'deferred' },
+  { label: 'Excluded Manual', value: 'excluded_manual' },
+  { label: 'Excluded Duplicate', value: 'excluded_duplicate' },
+  { label: 'Excluded Revoked', value: 'excluded_revoked' },
+]
 
 // ── Form state ──
 
 interface LineForm {
-  lineType: string;
-  obligationTriggerKind: string;
-  entitlementAuthority: string;
-  routingDisposition: string;
-  externalTitle: string;
-  requestedQuantity: number;
+  lineType: string
+  obligationTriggerKind: string
+  entitlementAuthority: string
+  routingDisposition: string
+  externalTitle: string
+  requestedQuantity: number
 }
 
 const makeLine = (): LineForm => ({
-  lineType: "entitlement_rule",
-  obligationTriggerKind: "periodic_membership",
-  entitlementAuthority: "local_policy",
-  routingDisposition: "accepted",
-  externalTitle: "",
+  lineType: 'entitlement_rule',
+  obligationTriggerKind: 'periodic_membership',
+  entitlementAuthority: 'local_policy',
+  routingDisposition: 'accepted',
+  externalTitle: '',
   requestedQuantity: 1,
-});
+})
 
 const form = reactive({
-  kind: "membership_entitlement",
-  captureMode: "manual_entry",
-  sourceChannel: "",
-  sourceDocumentNo: "",
+  kind: 'membership_entitlement',
+  captureMode: 'manual_entry',
+  sourceChannel: '',
+  sourceDocumentNo: '',
   lines: [makeLine()] as LineForm[],
-});
+})
 
 const formValid = computed(() => {
-  if (!form.kind || !form.captureMode) return false;
+  if (!form.kind || !form.captureMode) return false
   for (const line of form.lines) {
-    if (!line.lineType || !line.routingDisposition || line.requestedQuantity < 1) return false;
+    if (!line.lineType || !line.routingDisposition || line.requestedQuantity < 1) return false
   }
-  return true;
-});
+  return true
+})
 
 function addLine() {
-  form.lines.push(makeLine());
+  form.lines.push(makeLine())
 }
 
 function removeLine(idx: number) {
   if (form.lines.length > 1) {
-    form.lines.splice(idx, 1);
+    form.lines.splice(idx, 1)
   }
 }
 
 // ── Import ──
 
-const loading = ref(false);
-const result = ref<dto.DemandDocumentDTO | null>(null);
-const error = ref<string | null>(null);
+const loading = ref(false)
+const result = ref<dto.DemandDocumentDTO | null>(null)
+const error = ref<string | null>(null)
 
 async function importDemand() {
-  loading.value = true;
-  error.value = null;
-  result.value = null;
+  loading.value = true
+  error.value = null
+  result.value = null
 
   try {
     const input = {
       kind: form.kind,
       captureMode: form.captureMode,
-      sourceChannel: form.sourceChannel || "manual",
+      sourceChannel: form.sourceChannel || 'manual',
       sourceDocumentNo: form.sourceDocumentNo || `IMPORT-${Date.now()}`,
       lines: form.lines.map((l) => ({ ...l })),
-    };
-    result.value = await importDemandDocument(input);
+    }
+    result.value = await importDemandDocument(input)
   } catch (e: any) {
-    error.value = e?.message ?? String(e);
+    error.value = e?.message ?? String(e)
   } finally {
-    loading.value = false;
+    loading.value = false
   }
 }
 
 // ── Assign to wave ──
 
-const waves = ref<dto.WaveDTO[]>([]);
-const wavesLoading = ref(false);
-const selectedWaveId = ref<number | null>(null);
-const assigning = ref(false);
-const assignMsg = ref("");
-const assignErr = ref("");
+const waves = ref<dto.WaveDTO[]>([])
+const wavesLoading = ref(false)
+const selectedWaveId = ref<number | null>(null)
+const assigning = ref(false)
+const assignMsg = ref('')
+const assignErr = ref('')
 
 const waveOptions = computed(() =>
   waves.value.map((w) => ({
     label: `${w.waveNo} — ${w.name}`,
     value: w.id,
   })),
-);
+)
 
 // Load waves when result appears
 watch(result, (val) => {
   if (val) {
-    loadWaves();
+    loadWaves()
   }
-});
+})
 
 async function loadWaves() {
-  wavesLoading.value = true;
+  wavesLoading.value = true
   try {
-    waves.value = await listWaves();
+    waves.value = await listWaves()
   } catch {
     // offline — handled by guard
   } finally {
-    wavesLoading.value = false;
+    wavesLoading.value = false
   }
 }
 
 async function assignToWave() {
-  if (!result.value || !selectedWaveId.value) return;
-  assigning.value = true;
-  assignMsg.value = "";
-  assignErr.value = "";
+  if (!result.value || !selectedWaveId.value) return
+  assigning.value = true
+  assignMsg.value = ''
+  assignErr.value = ''
   try {
-    await assignDemandToWave(selectedWaveId.value, result.value.id);
-    assignMsg.value = `需求单 ${result.value.id} 已接手到波次 ${selectedWaveId.value}`;
+    await assignDemandToWave(selectedWaveId.value, result.value.id)
+    assignMsg.value = `需求单 ${result.value.id} 已接手到波次 ${selectedWaveId.value}`
   } catch (e: any) {
-    const msg: string = e?.message ?? String(e);
+    const msg: string = e?.message ?? String(e)
     if (/unique|duplicate|already/i.test(msg)) {
-      assignErr.value = "该需求已接守到此波次";
+      assignErr.value = '该需求已接手到此波次'
     } else {
-      assignErr.value = msg;
+      assignErr.value = msg
     }
   } finally {
-    assigning.value = false;
+    assigning.value = false
   }
 }
 </script>

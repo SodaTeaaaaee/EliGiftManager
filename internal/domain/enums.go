@@ -50,12 +50,12 @@ const (
 type ObligationTriggerKind string
 
 const (
-	ObligationTriggerKindPeriodicMembership        ObligationTriggerKind = "periodic_membership"
-	ObligationTriggerKindLoyaltyMembership         ObligationTriggerKind = "loyalty_membership"
-	ObligationTriggerKindSupporterOnlyPurchase     ObligationTriggerKind = "supporter_only_purchase"
+	ObligationTriggerKindPeriodicMembership         ObligationTriggerKind = "periodic_membership"
+	ObligationTriggerKindLoyaltyMembership          ObligationTriggerKind = "loyalty_membership"
+	ObligationTriggerKindSupporterOnlyPurchase      ObligationTriggerKind = "supporter_only_purchase"
 	ObligationTriggerKindMemberOnlyDiscountPurchase ObligationTriggerKind = "member_only_discount_purchase"
-	ObligationTriggerKindCampaignReward            ObligationTriggerKind = "campaign_reward"
-	ObligationTriggerKindManualCompensation        ObligationTriggerKind = "manual_compensation"
+	ObligationTriggerKindCampaignReward             ObligationTriggerKind = "campaign_reward"
+	ObligationTriggerKindManualCompensation         ObligationTriggerKind = "manual_compensation"
 )
 
 // DemandLine: EntitlementAuthority
@@ -71,12 +71,12 @@ const (
 type RecipientInputState string
 
 const (
-	RecipientInputStateNotRequired          RecipientInputState = "not_required"
-	RecipientInputStateWaitingForInput      RecipientInputState = "waiting_for_input"
-	RecipientInputStatePartiallyCollected   RecipientInputState = "partially_collected"
-	RecipientInputStateReady                RecipientInputState = "ready"
-	RecipientInputStateWaived               RecipientInputState = "waived"
-	RecipientInputStateExpired              RecipientInputState = "expired"
+	RecipientInputStateNotRequired        RecipientInputState = "not_required"
+	RecipientInputStateWaitingForInput    RecipientInputState = "waiting_for_input"
+	RecipientInputStatePartiallyCollected RecipientInputState = "partially_collected"
+	RecipientInputStateReady              RecipientInputState = "ready"
+	RecipientInputStateWaived             RecipientInputState = "waived"
+	RecipientInputStateExpired            RecipientInputState = "expired"
 )
 
 // DemandLine: RoutingDisposition
@@ -131,10 +131,22 @@ const (
 type SupplierOrderStatus string
 
 const (
-	SupplierOrderStatusDraft             SupplierOrderStatus = "draft"
-	SupplierOrderStatusSubmitted         SupplierOrderStatus = "submitted"
-	SupplierOrderStatusAccepted          SupplierOrderStatus = "accepted"
-	SupplierOrderStatusPartiallyShipped  SupplierOrderStatus = "partially_shipped"
-	SupplierOrderStatusShipped           SupplierOrderStatus = "shipped"
-	SupplierOrderStatusCanceled          SupplierOrderStatus = "canceled"
+	SupplierOrderStatusDraft            SupplierOrderStatus = "draft"
+	SupplierOrderStatusSubmitted        SupplierOrderStatus = "submitted"
+	SupplierOrderStatusAccepted         SupplierOrderStatus = "accepted"
+	SupplierOrderStatusPartiallyShipped SupplierOrderStatus = "partially_shipped"
+	SupplierOrderStatusShipped          SupplierOrderStatus = "shipped"
+	SupplierOrderStatusCanceled         SupplierOrderStatus = "canceled"
+)
+
+// Shipment: ShipmentStatus
+type ShipmentStatus string
+
+const (
+	ShipmentStatusPending   ShipmentStatus = "pending"
+	ShipmentStatusShipped   ShipmentStatus = "shipped"
+	ShipmentStatusInTransit ShipmentStatus = "in_transit"
+	ShipmentStatusDelivered ShipmentStatus = "delivered"
+	ShipmentStatusException ShipmentStatus = "exception"
+	ShipmentStatusReturned  ShipmentStatus = "returned"
 )

@@ -90,20 +90,20 @@ func FromPersistenceCustomerIdentity(p *CustomerIdentity) *domain.CustomerIdenti
 
 func ToPersistenceDemandDocument(d *domain.DemandDocument) *DemandDocument {
 	return &DemandDocument{
-		Kind:                DemandKind(d.Kind),
-		CaptureMode:         CaptureMode(d.CaptureMode),
-		SourceChannel:       d.SourceChannel,
-		SourceSurface:       d.SourceSurface,
+		Kind:                 DemandKind(d.Kind),
+		CaptureMode:          CaptureMode(d.CaptureMode),
+		SourceChannel:        d.SourceChannel,
+		SourceSurface:        d.SourceSurface,
 		IntegrationProfileID: d.IntegrationProfileID,
-		SourceDocumentNo:    d.SourceDocumentNo,
-		SourceCustomerRef:   d.SourceCustomerRef,
-		CustomerProfileID:   d.CustomerProfileID,
-		SourceCreatedAt:     parseTimePtr(d.SourceCreatedAt),
-		SourcePaidAt:        parseTimePtr(d.SourcePaidAt),
-		Currency:            d.Currency,
-		AuthoritySnapshotAt: parseTimePtr(d.AuthoritySnapshotAt),
-		RawPayload:          d.RawPayload,
-		ExtraData:           d.ExtraData,
+		SourceDocumentNo:     d.SourceDocumentNo,
+		SourceCustomerRef:    d.SourceCustomerRef,
+		CustomerProfileID:    d.CustomerProfileID,
+		SourceCreatedAt:      parseTimePtr(d.SourceCreatedAt),
+		SourcePaidAt:         parseTimePtr(d.SourcePaidAt),
+		Currency:             d.Currency,
+		AuthoritySnapshotAt:  parseTimePtr(d.AuthoritySnapshotAt),
+		RawPayload:           d.RawPayload,
+		ExtraData:            d.ExtraData,
 	}
 }
 
@@ -141,7 +141,7 @@ func ToPersistenceDemandLine(d *domain.DemandLine) *DemandLine {
 		RecipientInputState:   RecipientInputState(d.RecipientInputState),
 		RoutingDisposition:    RoutingDisposition(d.RoutingDisposition),
 		RoutingReasonCode:     d.RoutingReasonCode,
-		EligibilityContextRef:  d.EligibilityContextRef,
+		EligibilityContextRef: d.EligibilityContextRef,
 		ProductMasterID:       d.ProductMasterID,
 		ExternalTitle:         d.ExternalTitle,
 		RequestedQuantity:     d.RequestedQuantity,
@@ -164,7 +164,7 @@ func FromPersistenceDemandLine(p *DemandLine) *domain.DemandLine {
 		RecipientInputState:   string(p.RecipientInputState),
 		RoutingDisposition:    string(p.RoutingDisposition),
 		RoutingReasonCode:     p.RoutingReasonCode,
-		EligibilityContextRef:  p.EligibilityContextRef,
+		EligibilityContextRef: p.EligibilityContextRef,
 		ProductMasterID:       p.ProductMasterID,
 		ExternalTitle:         p.ExternalTitle,
 		RequestedQuantity:     p.RequestedQuantity,
@@ -211,34 +211,34 @@ func FromPersistenceWave(p *Wave) *domain.Wave {
 
 func ToPersistenceWaveParticipantSnapshot(d *domain.WaveParticipantSnapshot) *WaveParticipantSnapshot {
 	return &WaveParticipantSnapshot{
-		ID:                d.ID,
-		WaveID:            d.WaveID,
-		CustomerProfileID: d.CustomerProfileID,
-		SnapshotType:      SnapshotType(d.SnapshotType),
-		IdentityPlatform:  d.IdentityPlatform,
-		IdentityValue:     d.IdentityValue,
-		DisplayName:       d.DisplayName,
-		GiftLevel:         d.GiftLevel,
+		ID:                 d.ID,
+		WaveID:             d.WaveID,
+		CustomerProfileID:  d.CustomerProfileID,
+		SnapshotType:       SnapshotType(d.SnapshotType),
+		IdentityPlatform:   d.IdentityPlatform,
+		IdentityValue:      d.IdentityValue,
+		DisplayName:        d.DisplayName,
+		GiftLevel:          d.GiftLevel,
 		SourceDocumentRefs: d.SourceDocumentRefs,
 		SourceProfileRefs:  d.SourceProfileRefs,
-		ExtraData:         d.ExtraData,
+		ExtraData:          d.ExtraData,
 	}
 }
 
 func FromPersistenceWaveParticipantSnapshot(p *WaveParticipantSnapshot) *domain.WaveParticipantSnapshot {
 	return &domain.WaveParticipantSnapshot{
-		ID:                p.ID,
-		WaveID:            p.WaveID,
-		CustomerProfileID: p.CustomerProfileID,
-		SnapshotType:      string(p.SnapshotType),
-		IdentityPlatform:  p.IdentityPlatform,
-		IdentityValue:     p.IdentityValue,
-		DisplayName:       p.DisplayName,
-		GiftLevel:         p.GiftLevel,
+		ID:                 p.ID,
+		WaveID:             p.WaveID,
+		CustomerProfileID:  p.CustomerProfileID,
+		SnapshotType:       string(p.SnapshotType),
+		IdentityPlatform:   p.IdentityPlatform,
+		IdentityValue:      p.IdentityValue,
+		DisplayName:        p.DisplayName,
+		GiftLevel:          p.GiftLevel,
 		SourceDocumentRefs: p.SourceDocumentRefs,
 		SourceProfileRefs:  p.SourceProfileRefs,
-		ExtraData:         p.ExtraData,
-		CreatedAt:         formatTime(p.CreatedAt),
+		ExtraData:          p.ExtraData,
+		CreatedAt:          formatTime(p.CreatedAt),
 	}
 }
 
@@ -266,24 +266,24 @@ func ToPersistenceFulfillmentLine(d *domain.FulfillmentLine) *FulfillmentLine {
 
 func FromPersistenceFulfillmentLine(p *FulfillmentLine) *domain.FulfillmentLine {
 	return &domain.FulfillmentLine{
-		ID:                       p.ID,
-		WaveID:                   p.WaveID,
-		CustomerProfileID:        p.CustomerProfileID,
+		ID:                        p.ID,
+		WaveID:                    p.WaveID,
+		CustomerProfileID:         p.CustomerProfileID,
 		WaveParticipantSnapshotID: p.WaveParticipantSnapshotID,
-		ProductID:                p.ProductID,
-		DemandDocumentID:         p.DemandDocumentID,
-		DemandLineID:             p.DemandLineID,
-		CustomerAddressID:        p.CustomerAddressID,
-		Quantity:                 p.Quantity,
-		AllocationState:          p.AllocationState,
-		AddressState:             p.AddressState,
-		SupplierState:            p.SupplierState,
-		ChannelSyncState:         p.ChannelSyncState,
-		LineReason:               string(p.LineReason),
-		GeneratedBy:              p.GeneratedBy,
-		ExtraData:                p.ExtraData,
-		CreatedAt:                formatTime(p.CreatedAt),
-		UpdatedAt:                formatTime(p.UpdatedAt),
+		ProductID:                 p.ProductID,
+		DemandDocumentID:          p.DemandDocumentID,
+		DemandLineID:              p.DemandLineID,
+		CustomerAddressID:         p.CustomerAddressID,
+		Quantity:                  p.Quantity,
+		AllocationState:           p.AllocationState,
+		AddressState:              p.AddressState,
+		SupplierState:             p.SupplierState,
+		ChannelSyncState:          p.ChannelSyncState,
+		LineReason:                string(p.LineReason),
+		GeneratedBy:               p.GeneratedBy,
+		ExtraData:                 p.ExtraData,
+		CreatedAt:                 formatTime(p.CreatedAt),
+		UpdatedAt:                 formatTime(p.UpdatedAt),
 	}
 }
 
@@ -414,5 +414,68 @@ func FromPersistenceWaveDemandAssignment(p *WaveDemandAssignment) *domain.WaveDe
 		ExtraData:        p.ExtraData,
 		CreatedAt:        formatTime(p.CreatedAt),
 		UpdatedAt:        formatTime(p.UpdatedAt),
+	}
+}
+
+// ---- Shipment ----
+
+func ToPersistenceShipment(d *domain.Shipment) *Shipment {
+	return &Shipment{
+		SupplierOrderID:      d.SupplierOrderID,
+		SupplierPlatform:     d.SupplierPlatform,
+		ShipmentNo:           d.ShipmentNo,
+		ExternalShipmentNo:   d.ExternalShipmentNo,
+		CarrierCode:          d.CarrierCode,
+		CarrierName:          d.CarrierName,
+		TrackingNo:           d.TrackingNo,
+		Status:               ShipmentStatus(d.Status),
+		ShippedAt:            parseTimePtr(d.ShippedAt),
+		BasisHistoryNodeID:   d.BasisHistoryNodeID,
+		BasisProjectionHash:  d.BasisProjectionHash,
+		BasisPayloadSnapshot: d.BasisPayloadSnapshot,
+		ExtraData:            d.ExtraData,
+	}
+}
+
+func FromPersistenceShipment(p *Shipment) *domain.Shipment {
+	return &domain.Shipment{
+		ID:                   p.ID,
+		SupplierOrderID:      p.SupplierOrderID,
+		SupplierPlatform:     p.SupplierPlatform,
+		ShipmentNo:           p.ShipmentNo,
+		ExternalShipmentNo:   p.ExternalShipmentNo,
+		CarrierCode:          p.CarrierCode,
+		CarrierName:          p.CarrierName,
+		TrackingNo:           p.TrackingNo,
+		Status:               string(p.Status),
+		ShippedAt:            formatTimePtr(p.ShippedAt),
+		BasisHistoryNodeID:   p.BasisHistoryNodeID,
+		BasisProjectionHash:  p.BasisProjectionHash,
+		BasisPayloadSnapshot: p.BasisPayloadSnapshot,
+		ExtraData:            p.ExtraData,
+		CreatedAt:            formatTime(p.CreatedAt),
+		UpdatedAt:            formatTime(p.UpdatedAt),
+	}
+}
+
+// ---- ShipmentLine ----
+
+func ToPersistenceShipmentLine(d *domain.ShipmentLine) *ShipmentLine {
+	return &ShipmentLine{
+		ShipmentID:          d.ShipmentID,
+		SupplierOrderLineID: d.SupplierOrderLineID,
+		FulfillmentLineID:   d.FulfillmentLineID,
+		Quantity:            d.Quantity,
+	}
+}
+
+func FromPersistenceShipmentLine(p *ShipmentLine) *domain.ShipmentLine {
+	return &domain.ShipmentLine{
+		ID:                  p.ID,
+		ShipmentID:          p.ShipmentID,
+		SupplierOrderLineID: p.SupplierOrderLineID,
+		FulfillmentLineID:   p.FulfillmentLineID,
+		Quantity:            p.Quantity,
+		CreatedAt:           formatTime(p.CreatedAt),
 	}
 }

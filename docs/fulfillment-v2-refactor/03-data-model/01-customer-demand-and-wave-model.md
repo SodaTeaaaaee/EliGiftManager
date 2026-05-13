@@ -103,6 +103,33 @@
 - 如果是手工录入的线下订单，仍应以 `retail_order + capture_mode = manual_entry` 表达
 - `integration_profile_id` 表示这条需求是按哪个来源业务面合同被解释进系统的
 
+这里还要补一条当前阶段的定位：
+
+- 在当前 V2 阶段，`DemandDocument` 更接近“一次性被接手处理的上游需求单元”
+- 这意味着它通常更像：
+  - 一张零售订单
+  - 或某个会员/权益来源在某次履约中被接手的一份权益单元
+
+当前默认不要求：
+
+- 同一 `DemandDocument` 被拆到多个 wave 分别处理
+
+更准确地说：
+
+- 现阶段更稳妥的工作假设是：
+  - 一份 `DemandDocument`
+  - 在同一时间只属于一个活跃的接手关系
+  - 不主动支持跨波次拆分
+
+但这不等于：
+
+- 把接手关系直接塞回 `DemandDocument` 本体
+
+原因是：
+
+- `DemandDocument` 回答的是“上游为什么产生了这份需求”
+- “这份需求这次被哪个 wave 接手”属于独立关系语义
+
 #### DemandLine
 
 建议字段：
@@ -212,6 +239,51 @@
 - 更稳妥的做法是：
   - 让不同 demand/profile 路径各自声明自己的 `InitialAllocationStrategy`
   - 再由只读投影层汇总出该波次当前是 `policy-only`、`demand-only` 还是 `mixed-strategy`
+
+#### WaveDemandAssignment
+
+建议新增。
+
+建议字段：
+
+- `id`
+- `wave_id`
+- `demand_document_id`
+- `accepted_at`
+- `accepted_by`
+- `extra_data`
+- `created_at`
+- `updated_at`
+
+说明：
+
+- 这层回答的是：
+  - “这份 demand 这次由哪个 wave 接手处理？”
+- 它不回答：
+  - “这份 demand 上游是什么”
+- 也不回答：
+  - “最终发什么”
+
+当前保留 `WaveDemandAssignment` 的原因，不是因为现阶段已经要做跨波次拆分，
+而是因为它更符合当前已采用的设计模式边界：
+
+- `DemandDocument`
+  - 来源真相
+- `WaveDemandAssignment`
+  - 接手关系
+- `FulfillmentLine`
+  - 最终执行真相
+
+这比：
+
+- 直接把 `accepted_wave_id` 塞回 `DemandDocument`
+
+更不容易让职责混淆。
+
+当前阶段的更稳妥约束是：
+
+- 默认不支持同一 `DemandDocument` 跨多个活跃 wave 拆分处理
+- 但仍然保留显式关系对象，以避免把“来源真相”和“接手关系”压成一个字段
 
 #### WaveParticipantSnapshot
 

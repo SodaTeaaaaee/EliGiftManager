@@ -35,20 +35,20 @@ func (CustomerIdentity) TableName() string { return "customer_identities" }
 
 type DemandDocument struct {
 	gorm.Model
-	Kind                DemandKind  `gorm:"type:text;not null"`
-	CaptureMode         CaptureMode `gorm:"type:text;not null"`
-	SourceChannel       string
-	SourceSurface       string
+	Kind                 DemandKind  `gorm:"type:text;not null"`
+	CaptureMode          CaptureMode `gorm:"type:text;not null"`
+	SourceChannel        string
+	SourceSurface        string
 	IntegrationProfileID *uint
-	SourceDocumentNo    string
-	SourceCustomerRef   string
-	CustomerProfileID   *uint      `gorm:"index"`
-	SourceCreatedAt     *time.Time
-	SourcePaidAt        *time.Time
-	Currency            string
-	AuthoritySnapshotAt *time.Time
-	RawPayload          string `gorm:"type:text"` // JSON
-	ExtraData           string `gorm:"type:text"` // JSON
+	SourceDocumentNo     string
+	SourceCustomerRef    string
+	CustomerProfileID    *uint `gorm:"index"`
+	SourceCreatedAt      *time.Time
+	SourcePaidAt         *time.Time
+	Currency             string
+	AuthoritySnapshotAt  *time.Time
+	RawPayload           string `gorm:"type:text"` // JSON
+	ExtraData            string `gorm:"type:text"` // JSON
 }
 
 func (DemandDocument) TableName() string { return "demand_documents" }
@@ -57,23 +57,23 @@ func (DemandDocument) TableName() string { return "demand_documents" }
 
 type DemandLine struct {
 	gorm.Model
-	DemandDocumentID       uint                 `gorm:"index;not null"`
-	SourceLineNo           int
-	LineType               DemandLineType        `gorm:"type:text;not null"`
-	ObligationTriggerKind  ObligationTriggerKind `gorm:"type:text"`
-	EntitlementAuthority   EntitlementAuthority  `gorm:"type:text"`
-	RecipientInputState    RecipientInputState   `gorm:"type:text"`
-	RoutingDisposition     RoutingDisposition    `gorm:"type:text"`
-	RoutingReasonCode      string
-	EligibilityContextRef  string
-	ProductMasterID        *uint
-	ExternalTitle          string
-	RequestedQuantity      int
-	EntitlementCode        string
-	GiftLevelSnapshot      string `gorm:"type:text"` // JSON
-	RecipientInputPayload  string `gorm:"type:text"` // JSON
-	RawPayload             string `gorm:"type:text"` // JSON
-	ExtraData              string `gorm:"type:text"` // JSON
+	DemandDocumentID      uint `gorm:"index;not null"`
+	SourceLineNo          int
+	LineType              DemandLineType        `gorm:"type:text;not null"`
+	ObligationTriggerKind ObligationTriggerKind `gorm:"type:text"`
+	EntitlementAuthority  EntitlementAuthority  `gorm:"type:text"`
+	RecipientInputState   RecipientInputState   `gorm:"type:text"`
+	RoutingDisposition    RoutingDisposition    `gorm:"type:text"`
+	RoutingReasonCode     string
+	EligibilityContextRef string
+	ProductMasterID       *uint
+	ExternalTitle         string
+	RequestedQuantity     int
+	EntitlementCode       string
+	GiftLevelSnapshot     string `gorm:"type:text"` // JSON
+	RecipientInputPayload string `gorm:"type:text"` // JSON
+	RawPayload            string `gorm:"type:text"` // JSON
+	ExtraData             string `gorm:"type:text"` // JSON
 }
 
 func (DemandLine) TableName() string { return "demand_lines" }
@@ -82,7 +82,7 @@ func (DemandLine) TableName() string { return "demand_lines" }
 
 type Wave struct {
 	gorm.Model
-	WaveNo           string   `gorm:"uniqueIndex;not null"`
+	WaveNo           string `gorm:"uniqueIndex;not null"`
 	Name             string
 	WaveType         WaveType `gorm:"type:text;not null;default:'mixed'"`
 	LifecycleStage   string
@@ -97,18 +97,18 @@ func (Wave) TableName() string { return "waves" }
 // Does not use gorm.Model — only CreatedAt, no UpdatedAt/DeletedAt per V2 spec.
 
 type WaveParticipantSnapshot struct {
-	ID                  uint         `gorm:"primaryKey;autoIncrement"`
-	WaveID              uint         `gorm:"index;not null"`
-	CustomerProfileID   uint         `gorm:"index;not null"`
-	SnapshotType        SnapshotType `gorm:"type:text;not null;default:'member'"`
-	IdentityPlatform    string
-	IdentityValue       string
-	DisplayName         string
-	GiftLevel           string
-	SourceDocumentRefs  string `gorm:"type:text"` // JSON
-	SourceProfileRefs   string `gorm:"type:text"` // JSON
-	ExtraData           string `gorm:"type:text"` // JSON
-	CreatedAt           time.Time
+	ID                 uint         `gorm:"primaryKey;autoIncrement"`
+	WaveID             uint         `gorm:"index;not null"`
+	CustomerProfileID  uint         `gorm:"index;not null"`
+	SnapshotType       SnapshotType `gorm:"type:text;not null;default:'member'"`
+	IdentityPlatform   string
+	IdentityValue      string
+	DisplayName        string
+	GiftLevel          string
+	SourceDocumentRefs string `gorm:"type:text"` // JSON
+	SourceProfileRefs  string `gorm:"type:text"` // JSON
+	ExtraData          string `gorm:"type:text"` // JSON
+	CreatedAt          time.Time
 }
 
 func (WaveParticipantSnapshot) TableName() string { return "wave_participant_snapshots" }
@@ -117,21 +117,21 @@ func (WaveParticipantSnapshot) TableName() string { return "wave_participant_sna
 
 type FulfillmentLine struct {
 	gorm.Model
-	WaveID                     uint                  `gorm:"index;not null"`
-	CustomerProfileID          *uint                 `gorm:"index"`
-	WaveParticipantSnapshotID  *uint                 `gorm:"index"`
-	ProductID                  *uint                 `gorm:"index"` // nullable FK
-	DemandDocumentID           *uint                 `gorm:"index"` // nullable FK
-	DemandLineID               *uint                 `gorm:"index"` // nullable FK
-	CustomerAddressID          *uint                 // nullable FK
-	Quantity                   int                   `gorm:"not null;default:1"`
-	AllocationState            string
-	AddressState               string
-	SupplierState              string
-	ChannelSyncState           string
-	LineReason                 FulfillmentLineReason `gorm:"type:text;not null"`
-	GeneratedBy                string
-	ExtraData                  string                `gorm:"type:text"` // JSON
+	WaveID                    uint  `gorm:"index;not null"`
+	CustomerProfileID         *uint `gorm:"index"`
+	WaveParticipantSnapshotID *uint `gorm:"index"`
+	ProductID                 *uint `gorm:"index"` // nullable FK
+	DemandDocumentID          *uint `gorm:"index"` // nullable FK
+	DemandLineID              *uint `gorm:"index"` // nullable FK
+	CustomerAddressID         *uint // nullable FK
+	Quantity                  int   `gorm:"not null;default:1"`
+	AllocationState           string
+	AddressState              string
+	SupplierState             string
+	ChannelSyncState          string
+	LineReason                FulfillmentLineReason `gorm:"type:text;not null"`
+	GeneratedBy               string
+	ExtraData                 string `gorm:"type:text"` // JSON
 }
 
 func (FulfillmentLine) TableName() string { return "fulfillment_lines" }
@@ -146,8 +146,8 @@ type AllocationPolicyRule struct {
 	ProductTargetRef     string
 	ContributionQuantity int
 	RuleKind             string
-	Priority             int    `gorm:"not null;default:0"`
-	Active               bool   `gorm:"not null;default:true"`
+	Priority             int  `gorm:"not null;default:0"`
+	Active               bool `gorm:"not null;default:true"`
 }
 
 func (AllocationPolicyRule) TableName() string { return "allocation_policy_rules" }
@@ -156,12 +156,12 @@ func (AllocationPolicyRule) TableName() string { return "allocation_policy_rules
 
 type SupplierOrder struct {
 	gorm.Model
-	WaveID               uint                `gorm:"index;not null"`
+	WaveID               uint `gorm:"index;not null"`
 	SupplierPlatform     string
 	TemplateID           string
 	BatchNo              string
 	ExternalOrderNo      string
-	SubmissionMode       SubmissionMode      `gorm:"type:text;not null;default:'csv'"`
+	SubmissionMode       SubmissionMode `gorm:"type:text;not null;default:'csv'"`
 	SubmittedAt          *time.Time
 	Status               SupplierOrderStatus `gorm:"type:text;not null;default:'draft'"`
 	RequestPayload       string              `gorm:"type:text"` // JSON
@@ -178,8 +178,8 @@ func (SupplierOrder) TableName() string { return "supplier_orders" }
 
 type SupplierOrderLine struct {
 	gorm.Model
-	SupplierOrderID   uint   `gorm:"index;not null"`
-	FulfillmentLineID uint   `gorm:"index;not null"`
+	SupplierOrderID   uint `gorm:"index;not null"`
+	FulfillmentLineID uint `gorm:"index;not null"`
 	SupplierLineNo    int
 	SupplierSKU       string
 	SubmittedQuantity int
@@ -202,3 +202,37 @@ type WaveDemandAssignment struct {
 }
 
 func (WaveDemandAssignment) TableName() string { return "wave_demand_assignments" }
+
+// ---- Shipment ----
+
+type Shipment struct {
+	gorm.Model
+	SupplierOrderID      uint `gorm:"index;not null"`
+	SupplierPlatform     string
+	ShipmentNo           string
+	ExternalShipmentNo   string
+	CarrierCode          string
+	CarrierName          string
+	TrackingNo           string
+	Status               ShipmentStatus `gorm:"type:text;not null;default:'pending'"`
+	ShippedAt            *time.Time
+	BasisHistoryNodeID   string
+	BasisProjectionHash  string
+	BasisPayloadSnapshot string `gorm:"type:text"` // JSON
+	ExtraData            string `gorm:"type:text"` // JSON
+}
+
+func (Shipment) TableName() string { return "shipments" }
+
+// ---- ShipmentLine ----
+
+type ShipmentLine struct {
+	ID                  uint `gorm:"primaryKey;autoIncrement"`
+	ShipmentID          uint `gorm:"index;not null"`
+	SupplierOrderLineID uint
+	FulfillmentLineID   uint
+	Quantity            int `gorm:"not null;default:0"`
+	CreatedAt           time.Time
+}
+
+func (ShipmentLine) TableName() string { return "shipment_lines" }

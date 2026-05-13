@@ -18,6 +18,7 @@ type WaveController struct {
 	supplierRepo   domain.SupplierOrderRepository
 	assignmentRepo domain.WaveDemandAssignmentRepository
 	demandRepo     domain.DemandDocumentRepository
+	shipmentRepo   domain.ShipmentRepository
 }
 
 func NewWaveController() *WaveController {
@@ -28,6 +29,7 @@ func NewWaveController() *WaveController {
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
 	supplierRepo := infra.NewSupplierOrderRepository(gdb)
 	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
+	shipmentRepo := infra.NewShipmentRepository(gdb)
 
 	return &WaveController{
 		waveUC:         app.NewWaveUseCase(waveRepo),
@@ -36,6 +38,7 @@ func NewWaveController() *WaveController {
 		supplierRepo:   supplierRepo,
 		assignmentRepo: assignmentRepo,
 		demandRepo:     demandRepo,
+		shipmentRepo:   shipmentRepo,
 	}
 }
 
@@ -108,11 +111,38 @@ func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, erro
 		}
 	}
 
+	// Collect shipment stats
+	shipments, err := c.shipmentRepo.ListByWave(waveID)
+	if err != nil {
+		return dto.WaveOverviewDTO{}, err
+	}
+	shipmentCount := len(shipments)
+
+	trackedFulfillmentCount := 0
+	trackedSet := make(map[uint]bool)
+	for _, s := range shipments {
+		if s.TrackingNo == "" {
+			continue
+		}
+		lines, err := c.shipmentRepo.ListLinesByShipment(s.ID)
+		if err != nil {
+			return dto.WaveOverviewDTO{}, err
+		}
+		for _, l := range lines {
+			if !trackedSet[l.FulfillmentLineID] {
+				trackedSet[l.FulfillmentLineID] = true
+				trackedFulfillmentCount++
+			}
+		}
+	}
+
 	return dto.WaveOverviewDTO{
-		Wave:               domainToWaveDTO(w),
-		DemandCount:        demandCount,
-		FulfillmentCount:   len(fulfillLines),
-		SupplierOrderCount: len(supplierOrders),
+		Wave:                    domainToWaveDTO(w),
+		DemandCount:             demandCount,
+		FulfillmentCount:        len(fulfillLines),
+		SupplierOrderCount:      len(supplierOrders),
+		ShipmentCount:           shipmentCount,
+		TrackedFulfillmentCount: trackedFulfillmentCount,
 	}, nil
 }
 
@@ -177,23 +207,23 @@ func domainToFulfillmentLineDTO(fl *domain.FulfillmentLine) dto.FulfillmentLineD
 		return dto.FulfillmentLineDTO{}
 	}
 	return dto.FulfillmentLineDTO{
-		ID:                       fl.ID,
-		WaveID:                   fl.WaveID,
-		CustomerProfileID:        fl.CustomerProfileID,
+		ID:                        fl.ID,
+		WaveID:                    fl.WaveID,
+		CustomerProfileID:         fl.CustomerProfileID,
 		WaveParticipantSnapshotID: fl.WaveParticipantSnapshotID,
-		ProductID:                fl.ProductID,
-		DemandDocumentID:         fl.DemandDocumentID,
-		DemandLineID:             fl.DemandLineID,
-		CustomerAddressID:        fl.CustomerAddressID,
-		Quantity:                 fl.Quantity,
-		AllocationState:          fl.AllocationState,
-		AddressState:             fl.AddressState,
-		SupplierState:            fl.SupplierState,
-		ChannelSyncState:         fl.ChannelSyncState,
-		LineReason:               fl.LineReason,
-		GeneratedBy:              fl.GeneratedBy,
-		ExtraData:                fl.ExtraData,
-		CreatedAt:                fl.CreatedAt,
-		UpdatedAt:                fl.UpdatedAt,
+		ProductID:                 fl.ProductID,
+		DemandDocumentID:          fl.DemandDocumentID,
+		DemandLineID:              fl.DemandLineID,
+		CustomerAddressID:         fl.CustomerAddressID,
+		Quantity:                  fl.Quantity,
+		AllocationState:           fl.AllocationState,
+		AddressState:              fl.AddressState,
+		SupplierState:             fl.SupplierState,
+		ChannelSyncState:          fl.ChannelSyncState,
+		LineReason:                fl.LineReason,
+		GeneratedBy:               fl.GeneratedBy,
+		ExtraData:                 fl.ExtraData,
+		CreatedAt:                 fl.CreatedAt,
+		UpdatedAt:                 fl.UpdatedAt,
 	}
 }

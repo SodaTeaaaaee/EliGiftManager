@@ -32,7 +32,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 
 	db, err := gorm.Open(sqlite.Open(cleanedPath), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
-		Logger: logger.Default.LogMode(logger.Error),
+		Logger:                                   logger.Default.LogMode(logger.Error),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: open %q failed: %w", cleanedPath, err)
@@ -64,6 +64,8 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		&persistence.SupplierOrder{},
 		&persistence.SupplierOrderLine{},
 		&persistence.WaveDemandAssignment{},
+		&persistence.Shipment{},
+		&persistence.ShipmentLine{},
 	); err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: auto migrate: %w", err)
 	}

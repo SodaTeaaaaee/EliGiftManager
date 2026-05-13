@@ -102,6 +102,23 @@
 - `deferred` 的需求可以保留在导入侧或候选池中，但不应伪装成已进入执行链
 - `excluded_manual` 的需求应进入统计，但单独归类
 
+这里还要再补一条：
+
+- `accepted` 只表示“本系统接手”
+- 不自动等于“已经归属到某个具体 wave”
+
+更准确地说：
+
+- 本系统接手，是 routing 层语义
+- 归属到哪个 wave，是 `WaveDemandAssignment` 的关系语义
+
+当前阶段的默认约束是：
+
+- 同一份 `DemandDocument`
+- 通常不跨多个活跃 wave 拆分处理
+
+但仍保留显式 assignment relation，而不是把它并回 `DemandDocument` 本体。
+
 对 `accepted` 的需求，又应再区分：
 
 - `recipient_input_state = ready`

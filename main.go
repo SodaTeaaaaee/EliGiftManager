@@ -66,6 +66,7 @@ func main() {
 			NewDemandController(),
 			NewWaveController(),
 			NewExportController(),
+			NewShipmentController(),
 		},
 	})
 	if err != nil {

@@ -40,6 +40,8 @@
           <div><strong>需求数:</strong> {{ overview.demandCount }}</div>
           <div><strong>履约行数:</strong> {{ overview.fulfillmentCount }}</div>
           <div><strong>供应商订单数:</strong> {{ overview.supplierOrderCount }}</div>
+          <div><strong>发货单数:</strong> {{ shipmentCount }}</div>
+          <div><strong>已追踪履约行:</strong> {{ trackedFulfillmentCount }}</div>
         </n-space>
       </n-card>
 
@@ -50,7 +52,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, h } from "vue";
+import { ref, computed, onMounted, h } from "vue";
 import {
   NCard,
   NButton,
@@ -76,6 +78,11 @@ const newWaveName = ref("");
 const actionMsg = ref("");
 const actionErr = ref("");
 const overview = ref<dto.WaveOverviewDTO | null>(null);
+
+// wailsjs models not yet regenerated — shipCount/trackedFulfillmentCount are
+// returned by the Go backend but missing from the generated WaveOverviewDTO.
+const shipmentCount = computed(() => (overview.value as any)?.shipmentCount ?? 0)
+const trackedFulfillmentCount = computed(() => (overview.value as any)?.trackedFulfillmentCount ?? 0)
 
 const columns = [
   { title: "ID", key: "id", width: 60 },

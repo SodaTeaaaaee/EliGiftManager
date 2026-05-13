@@ -490,6 +490,30 @@
 - 执行真相
 - 工厂执行出口
 
+### 34. 当前阶段不主动支持跨波次拆分，但保留 `WaveDemandAssignment`
+
+已确认：
+
+- 当前阶段不太需要把同一份 `DemandDocument` 拆到多个活跃 wave 分别处理
+- 但仍然保留显式的 `WaveDemandAssignment` 关系对象
+
+原因：
+
+- 现阶段虽然不主动支持跨波次拆分
+- 仍然需要把以下三层职责分开：
+  - `DemandDocument`
+    - 上游来源真相
+  - `WaveDemandAssignment`
+    - 本次接手关系
+  - `FulfillmentLine`
+    - 最终执行真相
+
+这比：
+
+- 把 `accepted_wave_id` 直接塞进 `DemandDocument`
+
+更符合当前已经采用的设计模式与边界定义，也更不容易让后续实现误解。
+
 ## 仍需继续讨论的问题
 
 ### 1. 灰区动作的归属规则是否还需要更细的子分类
