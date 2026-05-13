@@ -1,19 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watchEffect } from 'vue'
+import { computed, onMounted, onUnmounted, watchEffect } from "vue";
+import { RouterView } from "vue-router";
 import {
   NConfigProvider,
-  NDialogProvider,
   NGlobalStyle,
+  NDialogProvider,
   NMessageProvider,
   darkTheme,
   useOsTheme,
   type GlobalThemeOverrides,
-} from 'naive-ui'
-import { RouterView } from 'vue-router'
-import { useThemeStore } from '@/shared/model/theme'
-import { useContextMenu } from '@/shared/composables/useContextMenu'
-import { saveZoom } from '@/shared/lib/wails/app'
-import ContextMenu from '@/shared/ui/ContextMenu.vue'
+} from "naive-ui";
+import { useThemeStore } from "@/shared/model/theme";
+import { useContextMenu } from "@/shared/composables/useContextMenu";
+import ContextMenu from "@/shared/ui/ContextMenu.vue";
 
 const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
@@ -79,14 +78,15 @@ function onGlobalContextMenu(event: MouseEvent) {
 
 // ── zoom persistence via devicePixelRatio ──
 // WebView2 native zoom changes devicePixelRatio proportionally.
-// Shutdown: Go OnBeforeClose → WindowExecJS → persistZoom() → saveZoom + localStorage.
+// Shutdown: Go OnBeforeClose → WindowExecJS → persistZoom().
+// Backend saveZoom binding will be restored when Wails bridge is rebuilt.
 let baseDPR = 1
 
 function persistZoom() {
   const current = window.devicePixelRatio
   const zoom = Math.round((current / baseDPR) * 100)
   if (zoom < 25 || zoom > 500) return
-  saveZoom(zoom) // Go → zoom.cfg
+  // TODO(V2): restore saveZoom backend call when Wails bridge rebuilt
   try {
     localStorage.setItem('eligift_zoom', String(zoom))
   } catch {
@@ -113,9 +113,9 @@ onUnmounted(() => {
     <NGlobalStyle />
     <NMessageProvider>
       <NDialogProvider>
-        <RouterView class="h-full" />
-        <ContextMenu />
+        <RouterView />
       </NDialogProvider>
     </NMessageProvider>
+    <ContextMenu />
   </NConfigProvider>
 </template>

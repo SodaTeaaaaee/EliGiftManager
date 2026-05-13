@@ -1,465 +1,129 @@
+// Bridge: strong-typed thin wrappers over generated Wails bindings.
+// Never import from "wailsjs" directly outside this file.
+
 import {
-  PickCSVFile as pickCSVFileBinding,
-  PickZIPFile as pickZIPFileBinding,
-} from "../../../../wailsjs/go/main/App";
+  GetDemandDocument,
+  ImportDemandDocument,
+  ListDemandDocuments,
+} from "../../../../wailsjs/go/main/DemandController";
 import {
-  AddMemberAddress as addMemberAddressBinding,
-  DeleteMemberAddress as deleteMemberAddressBinding,
-  ListMembers as listMembersBinding,
-  ListWaveMembers as listWaveMembersBinding,
-  RemoveMemberFromWave as removeMemberFromWaveBinding,
-  SetDefaultAddress as setDefaultAddressBinding,
-  UpdateMemberAddress as updateMemberAddressBinding,
-} from "../../../../wailsjs/go/main/MemberController";
-import {
-  GetProductImages as getProductImagesBinding,
-  ListProductMasters as listProductMastersBinding,
-  ListProducts as listProductsBinding,
-  ListProductsWithTags as listProductsWithTagsBinding,
-  RemoveIdentityTag as removeIdentityTagBinding,
-  RemoveLevelTag as removeLevelTagBinding,
-  RemoveUserTag as removeUserTagBinding,
-  UpdateProduct as updateProductBinding,
-  UpsertIdentityTag as upsertIdentityTagBinding,
-  UpsertLevelTag as upsertLevelTagBinding,
-  UpsertUserTag as upsertUserTagBinding,
-} from "../../../../wailsjs/go/main/ProductController";
-import {
-  AddDispatchToMember as addDispatchToMemberBinding,
-  AllocateByTags as allocateByTagsBinding,
-  BindDefaultAddresses as bindDefaultAddressesBinding,
-  CreateWave as createWaveBinding,
-  DeleteWave as deleteWaveBinding,
-  ExportOrderCSV as exportOrderCSVBinding,
-  ImportDispatchWave as importDispatchWaveBinding,
-  ImportToWave as importToWaveBinding,
-  ListDispatchRecords as listDispatchRecordsBinding,
-  ListWaves as listWavesBinding,
-  PreviewExport as previewExportBinding,
-  RemoveDispatchFromMember as removeDispatchFromMemberBinding,
-  RemoveProductFromWave as removeProductFromWaveBinding,
-  SetDispatchAddress as setDispatchAddressBinding,
-  SyncUserTagForTargetQuantity as syncUserTagForTargetQuantityBinding,
-  UpdateDispatchQuantity as updateDispatchQuantityBinding,
+  CreateWave,
+  ListWaves,
+  GetWave,
+  ApplyAllocationRules,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
-  BackupDatabase as backupDatabaseBinding,
-  Bootstrap as bootstrapBinding,
-  CreateFakeAddresses as createFakeAddressesBinding,
-  DeleteFakeAddresses as deleteFakeAddressesBinding,
-  GetDashboard as getDashboardBinding,
-  PingDB as pingDatabaseBinding,
-  RestoreDatabase as restoreDatabaseBinding,
-  SaveZoom as saveZoomBinding,
-} from "../../../../wailsjs/go/main/SystemController";
+  ExportSupplierOrder,
+  ListSupplierOrders,
+} from "../../../../wailsjs/go/main/ExportController";
 import {
-  CreateTemplate as createTemplateBinding,
-  DeleteTemplate as deleteTemplateBinding,
-  ListDefaultTemplates as listDefaultTemplatesBinding,
-  ListTemplates as listTemplatesBinding,
-  UpdateTemplate as updateTemplateBinding,
-} from "../../../../wailsjs/go/main/TemplateController";
-import type { BootstrapPayload } from "@/shared/types/app";
-import { model } from "../../../../wailsjs/go/models";
-import type { main } from "../../../../wailsjs/go/models";
+  PickCSVFile,
+  PickZIPFile,
+  SaveZoom,
+} from "../../../../wailsjs/go/main/App";
+import { dto } from "../../../../wailsjs/go/models";
 
-export const WAILS_PREVIEW_MESSAGE =
-  "当前处于浏览器预览模式，Wails 后端尚未连接";
+// ── Guards ──
 
-type WindowWithWails = Window & { go?: unknown };
-export function isWailsRuntimeAvailable() {
-  return typeof window !== "undefined" &&
-    Boolean((window as WindowWithWails).go);
-}
-function assertWailsRuntime() {
-  if (!isWailsRuntimeAvailable()) throw new Error(WAILS_PREVIEW_MESSAGE);
+function isWailsRuntimeAvailable(): boolean {
+  return typeof window !== "undefined" && !!(window as any).go;
 }
 
-export function bootstrapApp(): Promise<BootstrapPayload> {
-  assertWailsRuntime();
-  return bootstrapBinding();
-}
-export function pingDatabase() {
-  assertWailsRuntime();
-  return pingDatabaseBinding();
-}
-export function getDashboard(): Promise<main.DashboardPayload> {
-  assertWailsRuntime();
-  return getDashboardBinding();
-}
-export function createWave(name: string): Promise<model.Wave> {
-  assertWailsRuntime();
-  return createWaveBinding(name);
-}
-export function deleteWave(waveId: number): Promise<void> {
-  assertWailsRuntime();
-  return deleteWaveBinding(waveId);
-}
-export function listWaves(status = ""): Promise<main.WaveItem[]> {
-  assertWailsRuntime();
-  return listWavesBinding(status);
-}
-export function importToWave(
-  waveId: number,
-  csvPath: string,
-  templateId: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return importToWaveBinding(waveId, csvPath, templateId);
-}
-export function importDispatchWave(
-  waveId: number,
-  csvPath: string,
-  importTemplateId: number,
-): Promise<void> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve();
-  return importDispatchWaveBinding(waveId, csvPath, importTemplateId);
-}
-export function allocateByTags(waveId: number): Promise<number> {
-  assertWailsRuntime();
-  return allocateByTagsBinding(waveId);
-}
-export function updateDispatchQuantity(
-  dispatchId: number,
-  quantity: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return updateDispatchQuantityBinding(dispatchId, quantity);
-}
-export function syncUserTagForTargetQuantity(
-  waveId: number,
-  memberId: number,
-  productId: number,
-  targetQty: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return syncUserTagForTargetQuantityBinding(
-    waveId,
-    memberId,
-    productId,
-    targetQty,
-  );
-}
-export function addDispatchToMember(
-  waveId: number,
-  memberId: number,
-  productId: number,
-  quantity: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return addDispatchToMemberBinding(waveId, memberId, productId, quantity);
-}
-export function removeDispatchFromMember(dispatchId: number): Promise<void> {
-  assertWailsRuntime();
-  return removeDispatchFromMemberBinding(dispatchId);
-}
-export function removeProductFromWave(
-  waveId: number,
-  productId: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return removeProductFromWaveBinding(waveId, productId);
-}
-export function setDispatchAddress(
-  waveId: number,
-  memberId: number,
-  addressId: number,
-): Promise<void> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve();
-  return setDispatchAddressBinding(waveId, memberId, addressId);
-}
-export function listProductsWithTags(
-  waveId: number,
-  platform = "",
-  page = 1,
-  pageSize = 50,
-): Promise<main.ProductListWithTagsPayload> {
-  assertWailsRuntime();
-  return listProductsWithTagsBinding(waveId, platform, page, pageSize);
-}
-export function upsertIdentityTag(
-  productId: number,
-  platform: string,
-  tagName: string,
-  matchMode: string,
-  quantity: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return upsertIdentityTagBinding(
-    productId,
-    platform,
-    tagName,
-    matchMode,
-    quantity,
-  );
+function assertWailsRuntime(): void {
+  if (!isWailsRuntimeAvailable()) {
+    throw new Error(
+      "Wails backend not connected — is the app running inside Wails?",
+    );
+  }
 }
 
-export function removeIdentityTag(
-  productId: number,
-  platform: string,
-  tagName: string,
-  matchMode: string,
-): Promise<void> {
-  assertWailsRuntime();
-  return removeIdentityTagBinding(productId, platform, tagName, matchMode);
+// ── DemandController ──
+
+export async function listDemandDocuments(): Promise<dto.DemandDocumentDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListDemandDocuments();
 }
 
-export function upsertLevelTag(
-  productId: number,
-  memberPlatform: string,
-  levelName: string,
-  quantity: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return upsertLevelTagBinding(productId, memberPlatform, levelName, quantity);
-}
-export function upsertUserTag(
-  productId: number,
-  waveMemberId: number,
-  quantity: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return upsertUserTagBinding(productId, waveMemberId, quantity);
-}
-export function removeLevelTag(
-  productId: number,
-  platform: string,
-  tagName: string,
-): Promise<void> {
-  assertWailsRuntime();
-  return removeLevelTagBinding(productId, platform, tagName);
-}
-export function removeUserTag(
-  productId: number,
-  waveMemberId: number,
-): Promise<void> {
-  assertWailsRuntime();
-  return removeUserTagBinding(productId, waveMemberId);
-}
-export function listMembers(
-  page = 1,
-  pageSize = 50,
-  keyword = "",
-  platform = "",
-): Promise<main.MemberListPayload> {
-  assertWailsRuntime();
-  return listMembersBinding(page, pageSize, keyword, platform);
-}
-export function listProducts(
-  page = 1,
-  pageSize = 50,
-  keyword = "",
-  platform = "",
-): Promise<main.ProductListPayload> {
-  assertWailsRuntime();
-  return listProductsBinding(page, pageSize, keyword, platform);
-}
-export function getProductImages(
-  productId: number,
-): Promise<model.ProductImage[]> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
-  return getProductImagesBinding(productId);
-}
-export function listProductMasters(
-  page = 1,
-  pageSize = 50,
-  keyword = "",
-  platform = "",
-): Promise<main.ProductMasterListPayload> {
-  assertWailsRuntime();
-  return listProductMastersBinding(page, pageSize, keyword, platform);
-}
-
-// TODO(temporary): ProductMasterImage 类型手动定义，等待 wails dev 重新生成 bindings 后移入 models.ts
-export type ProductMasterImage = {
-  id: number;
-  productMasterId: number;
-  path: string;
-  sortOrder: number;
-  sourceDir: string;
-  createdAt: string;
-};
-
-export function getProductMasterImages(
-  masterId: number,
-): Promise<ProductMasterImage[]> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
-  return (window as any).go.main.ProductController.GetProductMasterImages(
-    masterId,
-  );
-}
-export function listDispatchRecords(
-  waveId = 0,
-): Promise<main.DispatchRecordItem[]> {
-  assertWailsRuntime();
-  return listDispatchRecordsBinding(waveId);
-}
-export function createTemplate(
-  platform: string,
-  templateType: string,
-  name: string,
-  mappingRules: string,
-): Promise<main.TemplateItem> {
-  assertWailsRuntime();
-  return createTemplateBinding(platform, templateType, name, mappingRules);
-}
-export function listTemplates(): Promise<main.TemplateItem[]> {
-  assertWailsRuntime();
-  return listTemplatesBinding();
-}
-export function listDefaultTemplates(): Promise<main.TemplateItem[]> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
-  return listDefaultTemplatesBinding();
-}
-export function updateTemplate(
+export async function getDemandDocument(
   id: number,
-  platform: string,
-  templateType: string,
-  name: string,
-  mappingRules: string,
-): Promise<void> {
+): Promise<dto.DemandDocumentDTO> {
   assertWailsRuntime();
-  return updateTemplateBinding(id, platform, templateType, name, mappingRules);
+  return GetDemandDocument(id);
 }
-export function deleteTemplate(id: number): Promise<void> {
+
+/** Import a demand document. Accepts a plain object matching CreateDemandInput shape. */
+export async function importDemandDocument(input: {
+  kind: string;
+  captureMode: string;
+  sourceChannel: string;
+  sourceDocumentNo: string;
+  lines: Array<{
+    lineType: string;
+    obligationTriggerKind: string;
+    entitlementAuthority: string;
+    routingDisposition: string;
+    externalTitle: string;
+    requestedQuantity: number;
+  }>;
+}): Promise<dto.DemandDocumentDTO> {
   assertWailsRuntime();
-  return deleteTemplateBinding(id);
+  const req = dto.CreateDemandInput.createFrom(input);
+  return ImportDemandDocument(req);
 }
-export function setDefaultAddress(
-  memberId: number,
-  addressId: number,
-): Promise<void> {
+
+// ── WaveController ──
+
+export async function listWaves(): Promise<dto.WaveDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListWaves();
+}
+
+export async function getWave(id: number): Promise<dto.WaveDTO> {
   assertWailsRuntime();
-  return setDefaultAddressBinding(memberId, addressId);
+  return GetWave(id);
 }
-export function addMemberAddress(
-  memberId: number,
-  recipientName: string,
-  phone: string,
-  address: string,
-): Promise<model.MemberAddress> {
+
+export async function createWave(name: string): Promise<dto.WaveDTO> {
   assertWailsRuntime();
-  return addMemberAddressBinding(memberId, recipientName, phone, address);
+  return CreateWave(new dto.CreateWaveInput({ name }));
 }
-export function updateMemberAddress(
-  addressId: number,
-  recipientName: string,
-  phone: string,
-  address: string,
-): Promise<void> {
-  assertWailsRuntime();
-  return updateMemberAddressBinding(addressId, recipientName, phone, address);
-}
-export function deleteMemberAddress(addressId: number): Promise<void> {
-  assertWailsRuntime();
-  return deleteMemberAddressBinding(addressId);
-}
-export function removeMemberFromWave(
+
+export async function applyAllocationRules(
   waveId: number,
-  memberId: number,
-): Promise<void> {
+): Promise<dto.FulfillmentLineDTO[]> {
   assertWailsRuntime();
-  return removeMemberFromWaveBinding(waveId, memberId);
-}
-export function listWaveMembers(waveId: number): Promise<MemberItem[]> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve([]);
-  return listWaveMembersBinding(waveId);
-}
-export type ProductUpdateInput = {
-  id: number;
-  platform: string;
-  factory: string;
-  factorySku: string;
-  name: string;
-  coverImage: string;
-  extraData: string;
-};
-
-export function updateProduct(product: ProductUpdateInput): Promise<void> {
-  assertWailsRuntime();
-  return updateProductBinding(model.Product.createFrom(product));
-}
-export function backupDatabase(): Promise<string> {
-  assertWailsRuntime();
-  return backupDatabaseBinding();
-}
-export function pickCSVFile(): Promise<string> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve("");
-  return pickCSVFileBinding();
-}
-export function pickZIPFile(): Promise<string> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve("");
-  return pickZIPFileBinding();
-}
-export function restoreDatabase(): Promise<void> {
-  assertWailsRuntime();
-  return restoreDatabaseBinding();
+  return ApplyAllocationRules(waveId);
 }
 
-export function saveZoom(percent: number): Promise<void> {
-  if (!isWailsRuntimeAvailable()) return Promise.resolve();
-  return saveZoomBinding(percent);
-}
+// ── ExportController ──
 
-export type AddressBindingResult = { updated: number; skipped: number };
-export function bindDefaultAddresses(
+export async function exportSupplierOrder(
   waveId: number,
-): Promise<AddressBindingResult> {
-  if (!isWailsRuntimeAvailable()) {
-    return Promise.resolve({ updated: 0, skipped: 0 });
-  }
-  return bindDefaultAddressesBinding(waveId) as Promise<AddressBindingResult>;
-}
-
-export function exportOrderCSV(
-  waveId: number,
-  exportTemplateId: number,
-): Promise<string> {
-  if (!isWailsRuntimeAvailable()) {
-    return Promise.resolve("/mock/path/eligift-factory-order.csv");
-  }
-  return exportOrderCSVBinding(waveId, exportTemplateId);
-}
-
-export type CreateFakeAddressesResult = {
-  totalMembers: number;
-  created: number;
-  skippedHasAddress: number;
-};
-export function createFakeAddresses(): Promise<CreateFakeAddressesResult> {
+): Promise<dto.SupplierOrderDTO> {
   assertWailsRuntime();
-  return createFakeAddressesBinding() as Promise<CreateFakeAddressesResult>;
+  return ExportSupplierOrder(waveId);
 }
 
-export type DeleteFakeAddressesResult = {
-  deletedAddresses: number;
-  clearedDispatchRecords: number;
-  updatedWaves: number;
-  affectedMembers: number;
-};
-export function deleteFakeAddresses(): Promise<DeleteFakeAddressesResult> {
+export async function listSupplierOrders(): Promise<dto.SupplierOrderDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListSupplierOrders();
+}
+
+// ── App (utility) ──
+
+export async function pickCsvFile(): Promise<string> {
   assertWailsRuntime();
-  return deleteFakeAddressesBinding() as Promise<DeleteFakeAddressesResult>;
+  return PickCSVFile();
 }
 
-export type ExportPreview = {
-  totalRecords: number;
-  missingAddressCount: number;
-};
-export function previewExport(waveId: number): Promise<ExportPreview> {
-  if (!isWailsRuntimeAvailable()) {
-    return Promise.resolve({ totalRecords: 0, missingAddressCount: 0 });
-  }
-  return previewExportBinding(waveId) as Promise<ExportPreview>;
+export async function pickZipFile(): Promise<string> {
+  assertWailsRuntime();
+  return PickZIPFile();
 }
 
-export type DashboardPayload = main.DashboardPayload;
-export type WaveItem = main.WaveItem;
-export type MemberItem = main.MemberItem;
-export type MemberListPayload = main.MemberListPayload;
-export type ProductItem = main.ProductItem;
-export type ProductListPayload = main.ProductListPayload;
-export type ProductMasterItem = main.ProductMasterItem;
-export type ProductMasterListPayload = main.ProductMasterListPayload;
-export type DispatchRecordItem = main.DispatchRecordItem;
-export type TemplateItem = main.TemplateItem;
+export async function saveZoom(zoomPercent: number): Promise<void> {
+  if (!isWailsRuntimeAvailable()) return;
+  await SaveZoom(zoomPercent);
+}
+
+export { isWailsRuntimeAvailable, assertWailsRuntime };

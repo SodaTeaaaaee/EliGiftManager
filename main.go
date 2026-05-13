@@ -8,7 +8,6 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/middleware"
-	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -23,29 +22,29 @@ func main() {
 	app := NewApp(cfg)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	if err := service.CleanupStaleTempArtifacts(); err != nil {
-		logger.Warn("cleanup stale temp artifacts", "error", err)
-	}
 
-	// Initialize DB singleton early so controllers can use it.
-	dbPath, _ := app.resolveDatabasePath()
-	if db, err := database.InitDB(dbPath); err == nil {
-		sqlDB, _ := db.DB()
-		database.SetDefaultDB(db)
-		defer sqlDB.Close()
+	// Initialize DB singleton.
+	dbPath, err := app.resolveDatabasePath()
+	if err != nil {
+		logger.Error("resolve database path", "error", err)
+		os.Exit(1)
 	}
-
-	// Controllers
-	memberCtrl := &MemberController{}
-	productCtrl := &ProductController{}
-	waveCtrl := &WaveController{}
-	systemCtrl := &SystemController{appCfg: cfg}
-	templateCtrl := &TemplateController{}
-	sysCtrl = systemCtrl // wire into startup() via app.go global
+	db, err := database.InitDB(dbPath)
+	if err != nil {
+		logger.Error("initialize database", "error", err)
+		os.Exit(1)
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Error("get underlying sql.DB", "error", err)
+		os.Exit(1)
+	}
+	database.SetDefaultDB(db)
+	defer sqlDB.Close()
 
 	zoom := LoadZoom()
 
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:     cfg.Name,
 		Width:     cfg.WindowWidth,
 		Height:    cfg.WindowHeight,
@@ -64,11 +63,9 @@ func main() {
 		OnBeforeClose: app.beforeClose,
 		Bind: []any{
 			app,
-			memberCtrl,
-			productCtrl,
-			waveCtrl,
-			systemCtrl,
-			templateCtrl,
+			NewDemandController(),
+			NewWaveController(),
+			NewExportController(),
 		},
 	})
 	if err != nil {

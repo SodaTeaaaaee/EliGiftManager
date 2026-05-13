@@ -9,3 +9,7 @@ export function PickCSVFile() {
 export function PickZIPFile() {
   return window['go']['main']['App']['PickZIPFile']();
 }
+
+export function SaveZoom(arg1) {
+  return window['go']['main']['App']['SaveZoom'](arg1);
+}

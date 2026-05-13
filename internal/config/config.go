@@ -16,9 +16,9 @@ type App struct {
 func Load() App {
 	return App{
 		Name:            "EliGiftManager",
-		Version:         "0.1.0",
+		Version:         "2.0.0-alpha",
 		Module:          "github.com/SodaTeaaaaee/EliGiftManager",
-		Description:     "A desktop gift planning workspace built with Go, Wails, Vue 3 SFC, Vite, and Deno.",
+		Description:     "Creator fulfillment workspace — V2 greenfield rebuild",
 		FrontendRuntime: "Vue 3.5.33 + Vite 8.0.9 + Deno 2",
 		WindowWidth:     1320,
 		WindowHeight:    860,
