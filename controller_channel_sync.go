@@ -32,7 +32,14 @@ func NewChannelSyncController() *ChannelSyncController {
 	demandRepo := infra.NewDemandRepository(gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	decisionRepo := infra.NewClosureDecisionRepository(gdb)
-	channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo)
+	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
+	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
+	historyPinRepo := infra.NewHistoryPinRepository(gdb)
+
+	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+	basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+
+	channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
 	executorProvider := buildExecutorProvider()
 	return &ChannelSyncController{
 		channelSyncUC:    channelSyncUC,

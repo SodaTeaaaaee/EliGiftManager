@@ -172,16 +172,27 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 type exportUseCase struct {
 	supplierRepo domain.SupplierOrderRepository
 	fulfillRepo  domain.FulfillmentLineRepository
+	basisStamp   *BasisStampService
 }
 
-func NewExportUseCase(supplierRepo domain.SupplierOrderRepository, fulfillRepo domain.FulfillmentLineRepository) ExportUseCase {
-	return &exportUseCase{supplierRepo: supplierRepo, fulfillRepo: fulfillRepo}
+func NewExportUseCase(supplierRepo domain.SupplierOrderRepository, fulfillRepo domain.FulfillmentLineRepository, basisStamp *BasisStampService) ExportUseCase {
+	return &exportUseCase{supplierRepo: supplierRepo, fulfillRepo: fulfillRepo, basisStamp: basisStamp}
 }
 
 func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder, error) {
 	// Delete only existing draft orders for this wave (rebuild pattern for idempotency)
 	if err := uc.supplierRepo.DeleteDraftsByWave(waveID); err != nil {
 		return nil, err
+	}
+
+	// Resolve basis stamp before persisting
+	var basisNodeID, basisHash string
+	if uc.basisStamp != nil {
+		var err error
+		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(waveID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve basis for supplier order: %w", err)
+		}
 	}
 
 	// [V2-STUB] aggregate all FulfillmentLines for the wave into a SupplierOrder with lines
@@ -192,14 +203,23 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder
 
 	now := time.Now().Format(time.RFC3339)
 	order := &domain.SupplierOrder{
-		WaveID:         waveID,
-		Status:         "draft",
-		SubmissionMode: "csv",
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		WaveID:              waveID,
+		Status:              "draft",
+		SubmissionMode:      "csv",
+		BasisHistoryNodeID:  basisNodeID,
+		BasisProjectionHash: basisHash,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := uc.supplierRepo.Create(order); err != nil {
 		return nil, err
+	}
+
+	// Create pin after persistence (order.ID is now set)
+	if uc.basisStamp != nil && basisNodeID != "" {
+		if err := uc.basisStamp.CreatePin(basisNodeID, "supplier_order_basis", "supplier_order", order.ID); err != nil {
+			return nil, fmt.Errorf("create basis pin for supplier order: %w", err)
+		}
 	}
 
 	for i := range fulfillLines {

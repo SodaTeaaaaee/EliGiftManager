@@ -329,7 +329,7 @@ func newSyncTestSetup() *syncTestSetup {
 		shipment:        sh,
 		supplier:        su,
 		fulfill:         fl,
-		uc:              NewChannelSyncUseCase(cs, sh, su, fl),
+		uc:              NewChannelSyncUseCase(cs, sh, su, fl, nil),
 		waveID:          1,
 		shipmentID:      1,
 		fulfillLineID:   1,

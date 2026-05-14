@@ -13,6 +13,7 @@ type channelSyncUseCase struct {
 	shipmentRepo    domain.ShipmentRepository
 	supplierRepo    domain.SupplierOrderRepository
 	fulfillRepo     domain.FulfillmentLineRepository
+	basisStamp      *BasisStampService
 }
 
 func NewChannelSyncUseCase(
@@ -20,12 +21,14 @@ func NewChannelSyncUseCase(
 	shipmentRepo domain.ShipmentRepository,
 	supplierRepo domain.SupplierOrderRepository,
 	fulfillRepo domain.FulfillmentLineRepository,
+	basisStamp *BasisStampService,
 ) ChannelSyncUseCase {
 	return &channelSyncUseCase{
 		channelSyncRepo: channelSyncRepo,
 		shipmentRepo:    shipmentRepo,
 		supplierRepo:    supplierRepo,
 		fulfillRepo:     fulfillRepo,
+		basisStamp:      basisStamp,
 	}
 }
 
@@ -84,12 +87,24 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 		}
 	}
 
+	// Resolve basis stamp before persisting
+	var basisNodeID, basisHash string
+	if uc.basisStamp != nil {
+		var err error
+		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(input.WaveID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve basis for channel sync job: %w", err)
+		}
+	}
+
 	now := time.Now().Format(time.RFC3339)
 	job := &domain.ChannelSyncJob{
 		WaveID:               input.WaveID,
 		IntegrationProfileID: input.IntegrationProfileID,
 		Direction:            input.Direction,
 		Status:               "pending",
+		BasisHistoryNodeID:   basisNodeID,
+		BasisProjectionHash:  basisHash,
 		CreatedAt:            now,
 		UpdatedAt:            now,
 	}
@@ -111,6 +126,13 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 
 	if err := uc.channelSyncRepo.AtomicCreateChannelSync(job, items); err != nil {
 		return nil, nil, err
+	}
+
+	// Create basis pin after persistence (job.ID is now set)
+	if uc.basisStamp != nil && basisNodeID != "" {
+		if err := uc.basisStamp.CreatePin(basisNodeID, "channel_sync_basis", "channel_sync_job", job.ID); err != nil {
+			return nil, nil, fmt.Errorf("create basis pin for channel sync job: %w", err)
+		}
 	}
 
 	domainItems := make([]domain.ChannelSyncItem, len(items))

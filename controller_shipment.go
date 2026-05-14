@@ -19,8 +19,15 @@ func NewShipmentController() *ShipmentController {
 	shipmentRepo := infra.NewShipmentRepository(gdb)
 	supplierRepo := infra.NewSupplierOrderRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
+	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
+	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
+	historyPinRepo := infra.NewHistoryPinRepository(gdb)
+
+	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+	basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+
 	return &ShipmentController{
-		shipmentUC:   app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo),
+		shipmentUC:   app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
 		shipmentRepo: shipmentRepo,
 	}
 }

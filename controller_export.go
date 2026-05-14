@@ -18,9 +18,15 @@ func NewExportController() *ExportController {
 	gdb := db.GetDB()
 	supplierRepo := infra.NewSupplierOrderRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
+	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
+	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
+	historyPinRepo := infra.NewHistoryPinRepository(gdb)
+
+	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+	basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
 
 	return &ExportController{
-		exportUC:     app.NewExportUseCase(supplierRepo, fulfillRepo),
+		exportUC:     app.NewExportUseCase(supplierRepo, fulfillRepo, basisStamp),
 		supplierRepo: supplierRepo,
 	}
 }

@@ -600,7 +600,7 @@ func TestExportSupplierOrder(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil)
 	order, err := exportUC.ExportSupplierOrder(waveID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder failed: %v", err)
@@ -689,7 +689,7 @@ func TestFullVerticalSlice(t *testing.T) {
 	}
 
 	// Step 4: Export Supplier Order
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil)
 	order, err := exportUC.ExportSupplierOrder(wave.ID)
 	if err != nil {
 		t.Fatalf("Step 4 ExportSupplierOrder failed: %v", err)
@@ -825,7 +825,7 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil)
 
 	// First export
 	order1, err := exportUC.ExportSupplierOrder(waveID)

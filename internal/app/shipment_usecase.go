@@ -14,13 +14,15 @@ type shipmentUseCase struct {
 	shipmentRepo domain.ShipmentRepository
 	supplierRepo domain.SupplierOrderRepository
 	fulfillRepo  domain.FulfillmentLineRepository
+	basisStamp   *BasisStampService
 }
 
-func NewShipmentUseCase(shipmentRepo domain.ShipmentRepository, supplierRepo domain.SupplierOrderRepository, fulfillRepo domain.FulfillmentLineRepository) ShipmentUseCase {
+func NewShipmentUseCase(shipmentRepo domain.ShipmentRepository, supplierRepo domain.SupplierOrderRepository, fulfillRepo domain.FulfillmentLineRepository, basisStamp *BasisStampService) ShipmentUseCase {
 	return &shipmentUseCase{
 		shipmentRepo: shipmentRepo,
 		supplierRepo: supplierRepo,
 		fulfillRepo:  fulfillRepo,
+		basisStamp:   basisStamp,
 	}
 }
 
@@ -62,7 +64,18 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 		}
 	}
 
-	// 4. Build domain objects
+	// 4. Resolve basis stamp from the supplier order's wave
+	basisNodeID := input.BasisHistoryNodeID
+	basisHash := input.BasisProjectionHash
+	if uc.basisStamp != nil && basisNodeID == "" {
+		var err error
+		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(supplierOrder.WaveID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolve basis for shipment: %w", err)
+		}
+	}
+
+	// 5. Build domain objects
 	now := time.Now().Format(time.RFC3339)
 	shipment := &domain.Shipment{
 		SupplierOrderID:      input.SupplierOrderID,
@@ -74,8 +87,8 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 		TrackingNo:           input.TrackingNo,
 		Status:               input.Status,
 		ShippedAt:            input.ShippedAt,
-		BasisHistoryNodeID:   input.BasisHistoryNodeID,
-		BasisProjectionHash:  input.BasisProjectionHash,
+		BasisHistoryNodeID:   basisNodeID,
+		BasisProjectionHash:  basisHash,
 		BasisPayloadSnapshot: input.BasisPayloadSnapshot,
 		CreatedAt:            now,
 		UpdatedAt:            now,
@@ -91,12 +104,19 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 		}
 	}
 
-	// 5. Atomic persistence
+	// 6. Atomic persistence
 	if err := uc.shipmentRepo.AtomicCreateShipment(shipment, lines); err != nil {
 		return nil, nil, err
 	}
 
-	// 6. Return domain objects
+	// 7. Create basis pin after persistence
+	if uc.basisStamp != nil && basisNodeID != "" {
+		if err := uc.basisStamp.CreatePin(basisNodeID, "shipment_basis", "shipment", shipment.ID); err != nil {
+			return nil, nil, fmt.Errorf("create basis pin for shipment: %w", err)
+		}
+	}
+
+	// 8. Return domain objects
 	domainLines := make([]domain.ShipmentLine, len(lines))
 	for i, l := range lines {
 		domainLines[i] = *l

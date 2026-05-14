@@ -131,7 +131,7 @@ func newClosureTestSetup() *closureTestSetup {
 	dm.docs[10] = &domain.DemandDocument{ID: 10, SourceDocumentNo: "EXT-ORDER-1", IntegrationProfileID: uintPtr(1)}
 	dm.linesByID[100] = &domain.DemandLine{ID: 100, SourceLineNo: 3}
 
-	lowLevelUC := NewChannelSyncUseCase(cs, sh, su, fl)
+	lowLevelUC := NewChannelSyncUseCase(cs, sh, su, fl, nil)
 
 	return &closureTestSetup{
 		profile:     pr,

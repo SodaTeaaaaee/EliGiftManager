@@ -614,7 +614,7 @@ func TestCreateShipmentRejectsEmptyLines(t *testing.T) {
 	shipmentRepo := newMockShipmentRepo()
 	supplierRepo := newMockSupplierRepoForShipment()
 	fulfillRepo := newMockFulfillRepoForShipment()
-	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo)
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
 	input := dto.CreateShipmentInput{
 		SupplierOrderID: 1,
@@ -633,7 +633,7 @@ func TestCreateShipmentPersistsShipmentAndLinesAtomically(t *testing.T) {
 	shipmentRepo := newMockShipmentRepo()
 	supplierRepo := newMockSupplierRepoForShipment()
 	fulfillRepo := newMockFulfillRepoForShipment()
-	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo)
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
 	// Setup: existing supplier order + line + fulfillment line
 	now := "2026-01-01T00:00:00Z"
@@ -674,7 +674,7 @@ func TestCreateShipmentRollsBackWhenLinePersistenceFails(t *testing.T) {
 	shipmentRepo := newMockShipmentRepo()
 	supplierRepo := newMockSupplierRepoForShipment()
 	fulfillRepo := newMockFulfillRepoForShipment()
-	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo)
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
 	// Setup: supplier order 1 (wave 1), two supplier order lines -> two fulfillment lines
 	now := "2026-01-01T00:00:00Z"
