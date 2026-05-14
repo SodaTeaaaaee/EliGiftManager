@@ -24,6 +24,10 @@ import {
   ListShipmentsByWave,
 } from "../../../../wailsjs/go/main/ShipmentController";
 import {
+  CreateChannelSyncJob,
+  ListChannelSyncJobsByWave,
+} from "../../../../wailsjs/go/main/ChannelSyncController";
+import {
   PickCSVFile,
   PickZIPFile,
   SaveZoom,
@@ -166,6 +170,31 @@ export async function createShipment(input: {
 export async function listShipmentsByWave(waveId: number): Promise<dto.ShipmentDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
   return ListShipmentsByWave(waveId)
+}
+
+// ── ChannelSyncController ──
+
+export async function createChannelSyncJob(input: {
+  waveId: number
+  integrationProfileId: number
+  direction: string
+  items: Array<{
+    fulfillmentLineId: number
+    shipmentId: number
+    externalDocumentNo: string
+    externalLineNo: string
+    trackingNo: string
+    carrierCode: string
+  }>
+}): Promise<dto.ChannelSyncJobDTO> {
+  assertWailsRuntime()
+  const req = dto.CreateChannelSyncJobInput.createFrom(input)
+  return CreateChannelSyncJob(req)
+}
+
+export async function listChannelSyncJobsByWave(waveId: number): Promise<dto.ChannelSyncJobDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListChannelSyncJobsByWave(waveId)
 }
 
 // ── App (utility) ──

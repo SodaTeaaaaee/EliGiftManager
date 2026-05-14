@@ -479,3 +479,75 @@ func FromPersistenceShipmentLine(p *ShipmentLine) *domain.ShipmentLine {
 		CreatedAt:           formatTime(p.CreatedAt),
 	}
 }
+
+// ---- ChannelSyncJob ----
+
+func ToPersistenceChannelSyncJob(d *domain.ChannelSyncJob) *ChannelSyncJob {
+	return &ChannelSyncJob{
+		WaveID:               d.WaveID,
+		IntegrationProfileID: d.IntegrationProfileID,
+		Direction:            ChannelSyncDirection(d.Direction),
+		Status:               ChannelSyncJobStatus(d.Status),
+		BasisHistoryNodeID:   d.BasisHistoryNodeID,
+		BasisProjectionHash:  d.BasisProjectionHash,
+		BasisPayloadSnapshot: d.BasisPayloadSnapshot,
+		RequestPayload:       d.RequestPayload,
+		ResponsePayload:      d.ResponsePayload,
+		ErrorMessage:         d.ErrorMessage,
+		StartedAt:            parseTimePtr(d.StartedAt),
+		FinishedAt:           parseTimePtr(d.FinishedAt),
+	}
+}
+
+func FromPersistenceChannelSyncJob(p *ChannelSyncJob) *domain.ChannelSyncJob {
+	return &domain.ChannelSyncJob{
+		ID:                   p.ID,
+		WaveID:               p.WaveID,
+		IntegrationProfileID: p.IntegrationProfileID,
+		Direction:            string(p.Direction),
+		Status:               string(p.Status),
+		BasisHistoryNodeID:   p.BasisHistoryNodeID,
+		BasisProjectionHash:  p.BasisProjectionHash,
+		BasisPayloadSnapshot: p.BasisPayloadSnapshot,
+		RequestPayload:       p.RequestPayload,
+		ResponsePayload:      p.ResponsePayload,
+		ErrorMessage:         p.ErrorMessage,
+		StartedAt:            formatTimePtr(p.StartedAt),
+		FinishedAt:           formatTimePtr(p.FinishedAt),
+		CreatedAt:            formatTime(p.CreatedAt),
+		UpdatedAt:            formatTime(p.UpdatedAt),
+	}
+}
+
+// ---- ChannelSyncItem ----
+
+func ToPersistenceChannelSyncItem(d *domain.ChannelSyncItem) *ChannelSyncItem {
+	return &ChannelSyncItem{
+		ChannelSyncJobID:   d.ChannelSyncJobID,
+		FulfillmentLineID:  d.FulfillmentLineID,
+		ShipmentID:         d.ShipmentID,
+		ExternalDocumentNo: d.ExternalDocumentNo,
+		ExternalLineNo:     d.ExternalLineNo,
+		TrackingNo:         d.TrackingNo,
+		CarrierCode:        d.CarrierCode,
+		Status:             ChannelSyncItemStatus(d.Status),
+		ErrorMessage:       d.ErrorMessage,
+	}
+}
+
+func FromPersistenceChannelSyncItem(p *ChannelSyncItem) *domain.ChannelSyncItem {
+	return &domain.ChannelSyncItem{
+		ID:                 p.ID,
+		ChannelSyncJobID:   p.ChannelSyncJobID,
+		FulfillmentLineID:  p.FulfillmentLineID,
+		ShipmentID:         p.ShipmentID,
+		ExternalDocumentNo: p.ExternalDocumentNo,
+		ExternalLineNo:     p.ExternalLineNo,
+		TrackingNo:         p.TrackingNo,
+		CarrierCode:        p.CarrierCode,
+		Status:             string(p.Status),
+		ErrorMessage:       p.ErrorMessage,
+		CreatedAt:          formatTime(p.CreatedAt),
+		UpdatedAt:          formatTime(p.UpdatedAt),
+	}
+}

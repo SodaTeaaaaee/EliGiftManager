@@ -226,3 +226,40 @@ type ShipmentLine struct {
 	Quantity            int
 	CreatedAt           string
 }
+
+// ---- ChannelSyncJob ----
+
+type ChannelSyncJob struct {
+	ID                   uint
+	WaveID               uint
+	IntegrationProfileID uint
+	Direction            string
+	Status               string
+	BasisHistoryNodeID   string
+	BasisProjectionHash  string
+	BasisPayloadSnapshot string
+	RequestPayload       string
+	ResponsePayload      string
+	ErrorMessage         string
+	StartedAt            string
+	FinishedAt           string
+	CreatedAt            string
+	UpdatedAt            string
+}
+
+// ---- ChannelSyncItem ----
+
+type ChannelSyncItem struct {
+	ID                 uint
+	ChannelSyncJobID   uint
+	FulfillmentLineID  uint
+	ShipmentID         uint
+	ExternalDocumentNo string
+	ExternalLineNo     string
+	TrackingNo         string
+	CarrierCode        string
+	Status             string
+	ErrorMessage       string
+	CreatedAt          string
+	UpdatedAt          string
+}

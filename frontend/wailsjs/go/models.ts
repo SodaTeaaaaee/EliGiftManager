@@ -483,6 +483,158 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class CreateChannelSyncItemInput {
+	    fulfillmentLineId: number;
+	    shipmentId: number;
+	    externalDocumentNo: string;
+	    externalLineNo: string;
+	    trackingNo: string;
+	    carrierCode: string;
+
+	    static createFrom(source: any = {}) {
+	        return new CreateChannelSyncItemInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.shipmentId = source["shipmentId"];
+	        this.externalDocumentNo = source["externalDocumentNo"];
+	        this.externalLineNo = source["externalLineNo"];
+	        this.trackingNo = source["trackingNo"];
+	        this.carrierCode = source["carrierCode"];
+	    }
+	}
+	export class CreateChannelSyncJobInput {
+	    waveId: number;
+	    integrationProfileId: number;
+	    direction: string;
+	    items: CreateChannelSyncItemInput[];
+
+	    static createFrom(source: any = {}) {
+	        return new CreateChannelSyncJobInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.direction = source["direction"];
+	        this.items = this.convertValues(source["items"], CreateChannelSyncItemInput);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ChannelSyncItemDTO {
+	    id: number;
+	    channelSyncJobId: number;
+	    fulfillmentLineId: number;
+	    shipmentId: number;
+	    externalDocumentNo: string;
+	    externalLineNo: string;
+	    trackingNo: string;
+	    carrierCode: string;
+	    status: string;
+	    errorMessage: string;
+	    createdAt: string;
+	    updatedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ChannelSyncItemDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.channelSyncJobId = source["channelSyncJobId"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.shipmentId = source["shipmentId"];
+	        this.externalDocumentNo = source["externalDocumentNo"];
+	        this.externalLineNo = source["externalLineNo"];
+	        this.trackingNo = source["trackingNo"];
+	        this.carrierCode = source["carrierCode"];
+	        this.status = source["status"];
+	        this.errorMessage = source["errorMessage"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class ChannelSyncJobDTO {
+	    id: number;
+	    waveId: number;
+	    integrationProfileId: number;
+	    direction: string;
+	    status: string;
+	    basisHistoryNodeId: string;
+	    basisProjectionHash: string;
+	    basisPayloadSnapshot: string;
+	    requestPayload: string;
+	    responsePayload: string;
+	    errorMessage: string;
+	    startedAt: string;
+	    finishedAt: string;
+	    createdAt: string;
+	    updatedAt: string;
+	    items: ChannelSyncItemDTO[];
+
+	    static createFrom(source: any = {}) {
+	        return new ChannelSyncJobDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveId = source["waveId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.direction = source["direction"];
+	        this.status = source["status"];
+	        this.basisHistoryNodeId = source["basisHistoryNodeId"];
+	        this.basisProjectionHash = source["basisProjectionHash"];
+	        this.basisPayloadSnapshot = source["basisPayloadSnapshot"];
+	        this.requestPayload = source["requestPayload"];
+	        this.responsePayload = source["responsePayload"];
+	        this.errorMessage = source["errorMessage"];
+	        this.startedAt = source["startedAt"];
+	        this.finishedAt = source["finishedAt"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.items = this.convertValues(source["items"], ChannelSyncItemDTO);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
 

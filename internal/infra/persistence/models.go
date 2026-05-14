@@ -236,3 +236,42 @@ type ShipmentLine struct {
 }
 
 func (ShipmentLine) TableName() string { return "shipment_lines" }
+
+// ---- ChannelSyncJob ----
+
+type ChannelSyncJob struct {
+	gorm.Model
+	WaveID               uint                `gorm:"index;not null"`
+	IntegrationProfileID uint                `gorm:"index"`
+	Direction            ChannelSyncDirection `gorm:"type:text;not null;default:'push_tracking'"`
+	Status               ChannelSyncJobStatus `gorm:"type:text;not null;default:'pending'"`
+	BasisHistoryNodeID   string
+	BasisProjectionHash  string
+	BasisPayloadSnapshot string              `gorm:"type:text"`
+	RequestPayload       string              `gorm:"type:text"`
+	ResponsePayload      string              `gorm:"type:text"`
+	ErrorMessage         string              `gorm:"type:text"`
+	StartedAt            *time.Time
+	FinishedAt           *time.Time
+}
+
+func (ChannelSyncJob) TableName() string { return "channel_sync_jobs" }
+
+// ---- ChannelSyncItem ----
+
+type ChannelSyncItem struct {
+	ID                 uint                 `gorm:"primaryKey;autoIncrement"`
+	ChannelSyncJobID   uint                 `gorm:"index;not null"`
+	FulfillmentLineID  uint                 `gorm:"index"`
+	ShipmentID         uint                 `gorm:"index"`
+	ExternalDocumentNo string
+	ExternalLineNo     string
+	TrackingNo         string
+	CarrierCode        string
+	Status             ChannelSyncItemStatus `gorm:"type:text;not null;default:'pending'"`
+	ErrorMessage       string                `gorm:"type:text"`
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+func (ChannelSyncItem) TableName() string { return "channel_sync_items" }

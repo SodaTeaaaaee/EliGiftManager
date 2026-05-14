@@ -31,3 +31,8 @@ type ExportUseCase interface {
 type ShipmentUseCase interface {
 	CreateShipment(input dto.CreateShipmentInput) (*domain.Shipment, []domain.ShipmentLine, error)
 }
+
+// ChannelSyncUseCase handles channel sync job creation.
+type ChannelSyncUseCase interface {
+	CreateChannelSyncJob(input dto.CreateChannelSyncJobInput) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error)
+}

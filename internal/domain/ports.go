@@ -81,3 +81,16 @@ type ShipmentRepository interface {
 	// AtomicCreateShipment creates a shipment and its lines atomically.
 	AtomicCreateShipment(shipment *Shipment, lines []*ShipmentLine) error
 }
+
+// ChannelSyncRepository defines persistence operations for ChannelSyncJob and ChannelSyncItem.
+type ChannelSyncRepository interface {
+	CreateJob(job *ChannelSyncJob) error
+	FindJobByID(id uint) (*ChannelSyncJob, error)
+	ListJobsByWave(waveID uint) ([]ChannelSyncJob, error)
+
+	CreateItem(item *ChannelSyncItem) error
+	ListItemsByJob(jobID uint) ([]ChannelSyncItem, error)
+
+	// AtomicCreateChannelSync creates a job and its items atomically.
+	AtomicCreateChannelSync(job *ChannelSyncJob, items []*ChannelSyncItem) error
+}

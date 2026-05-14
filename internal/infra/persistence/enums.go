@@ -150,3 +150,30 @@ const (
 	ShipmentStatusException ShipmentStatus = "exception"
 	ShipmentStatusReturned  ShipmentStatus = "returned"
 )
+
+// ChannelSyncJob: Direction
+type ChannelSyncDirection string
+
+const (
+	ChannelSyncDirectionPushTracking ChannelSyncDirection = "push_tracking"
+)
+
+// ChannelSyncJob: Status
+type ChannelSyncJobStatus string
+
+const (
+	ChannelSyncJobStatusPending       ChannelSyncJobStatus = "pending"
+	ChannelSyncJobStatusRunning       ChannelSyncJobStatus = "running"
+	ChannelSyncJobStatusSuccess       ChannelSyncJobStatus = "success"
+	ChannelSyncJobStatusPartialSuccess ChannelSyncJobStatus = "partial_success"
+	ChannelSyncJobStatusFailed        ChannelSyncJobStatus = "failed"
+)
+
+// ChannelSyncItem: Status
+type ChannelSyncItemStatus string
+
+const (
+	ChannelSyncItemStatusPending ChannelSyncItemStatus = "pending"
+	ChannelSyncItemStatusSuccess ChannelSyncItemStatus = "success"
+	ChannelSyncItemStatusFailed  ChannelSyncItemStatus = "failed"
+)

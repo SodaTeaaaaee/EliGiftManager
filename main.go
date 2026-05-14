@@ -67,6 +67,7 @@ func main() {
 			NewWaveController(),
 			NewExportController(),
 			NewShipmentController(),
+			NewChannelSyncController(),
 		},
 	})
 	if err != nil {
