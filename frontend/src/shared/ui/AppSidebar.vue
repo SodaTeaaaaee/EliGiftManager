@@ -38,11 +38,6 @@ const menuOptions: MenuOption[] = [
     key: "demand-intake",
     icon: () => h(NIcon, null, { default: () => "📥" }),
   },
-  {
-    label: "波次总览",
-    key: "wave-overview",
-    icon: () => h(NIcon, null, { default: () => "📊" }),
-  },
 ];
 
 const footerOptions: MenuOption[] = [

@@ -9,6 +9,7 @@ import {
   NGrid,
   NGridItem,
   NTag,
+  NText,
 } from 'naive-ui'
 import { getWaveOverview } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
@@ -38,7 +39,8 @@ onMounted(loadOverview)
         预测阶段：{{ overview.projectedLifecycleStage || '-' }}
       </n-tag>
 
-      <n-grid :cols="4" :x-gap="12" :y-gap="12" class="mt-4">
+      <n-divider title-placement="left">基础统计</n-divider>
+      <n-grid :cols="4" :x-gap="12" :y-gap="12">
         <n-grid-item>
           <n-statistic label="需求行" :value="overview.demandCount" />
         </n-grid-item>
@@ -54,7 +56,6 @@ onMounted(loadOverview)
       </n-grid>
 
       <n-divider title-placement="left">渠道同步</n-divider>
-
       <n-grid :cols="5" :x-gap="12">
         <n-grid-item>
           <n-statistic label="待执行" :value="overview.channelSyncPendingCount ?? 0" />
@@ -75,6 +76,30 @@ onMounted(loadOverview)
           <n-statistic label="失败" :value="overview.channelSyncFailedCount ?? 0" />
         </n-grid-item>
       </n-grid>
+
+      <n-divider title-placement="left">手动闭环决策</n-divider>
+      <n-grid :cols="4" :x-gap="12">
+        <n-grid-item>
+          <n-statistic label="决策总数" :value="overview.manualClosureDecisionCount ?? 0" />
+        </n-grid-item>
+        <n-grid-item>
+          <n-statistic label="不支持" :value="overview.manualUnsupportedCount ?? 0" />
+        </n-grid-item>
+        <n-grid-item>
+          <n-statistic label="已跳过" :value="overview.manualSkippedCount ?? 0" />
+        </n-grid-item>
+        <n-grid-item>
+          <n-statistic label="手动完成" :value="overview.manualCompletedCount ?? 0" />
+        </n-grid-item>
+      </n-grid>
+
+      <n-divider title-placement="left">基线偏移检测</n-divider>
+      <n-alert
+        v-if="overview.hasDriftedBasis"
+        type="warning"
+        title="检测到基线偏移，请检查供应商订单与发货数据的一致性"
+      />
+      <n-text v-else depth="3">无偏移信号</n-text>
     </n-card>
   </div>
 </template>
