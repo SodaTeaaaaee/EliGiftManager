@@ -75,6 +75,7 @@ func (r *shipmentRepository) AtomicCreateShipment(shipment *domain.Shipment, lin
 		}
 		*shipment = *persistence.FromPersistenceShipment(pShip)
 		for _, line := range lines {
+			line.ShipmentID = shipment.ID
 			pLine := persistence.ToPersistenceShipmentLine(line)
 			if err := tx.Create(pLine).Error; err != nil {
 				return err

@@ -92,6 +92,11 @@ func (uc *templateManagementUseCase) BindTemplateToProfile(input dto.BindTemplat
 		return nil, fmt.Errorf("template %d not found", input.TemplateID)
 	}
 
+	// Validate template documentType matches binding documentType
+	if t.DocumentType != input.DocumentType {
+		return nil, fmt.Errorf("template %d has documentType %q, cannot bind as %q", input.TemplateID, t.DocumentType, input.DocumentType)
+	}
+
 	// Validate profile exists.
 	profile, err := uc.profileRepo.FindByID(input.IntegrationProfileID)
 	if err != nil {
