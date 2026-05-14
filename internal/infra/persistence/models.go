@@ -325,14 +325,16 @@ func (ChannelClosureDecisionRecord) TableName() string { return "channel_closure
 
 type FulfillmentAdjustment struct {
 	gorm.Model
-	WaveID            uint   `gorm:"not null;index"`
-	FulfillmentLineID uint   `gorm:"not null;index"`
-	AdjustmentKind    string `gorm:"not null"`
-	QuantityDelta     int    `gorm:"not null;default:0"`
-	ReasonCode        string
-	OperatorID        string `gorm:"not null"`
-	Note              string
-	EvidenceRef       string
+	WaveID                    uint   `gorm:"not null;index"`
+	TargetKind                string `gorm:"not null;default:'fulfillment_line'"`
+	FulfillmentLineID         *uint  `gorm:"index"`
+	WaveParticipantSnapshotID *uint  `gorm:"index"`
+	AdjustmentKind            string `gorm:"not null"`
+	QuantityDelta             int    `gorm:"not null;default:0"`
+	ReasonCode                string
+	OperatorID                string `gorm:"not null"`
+	Note                      string
+	EvidenceRef               string
 }
 
 func (FulfillmentAdjustment) TableName() string { return "fulfillment_adjustments" }

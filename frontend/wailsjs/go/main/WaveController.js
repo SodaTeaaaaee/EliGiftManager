@@ -25,3 +25,11 @@ export function GetWaveOverview(arg1) {
 export function ListWaves() {
   return window['go']['main']['WaveController']['ListWaves']();
 }
+
+export function RedoWaveAction(arg1) {
+  return window['go']['main']['WaveController']['RedoWaveAction'](arg1);
+}
+
+export function UndoWaveAction(arg1) {
+  return window['go']['main']['WaveController']['UndoWaveAction'](arg1);
+}

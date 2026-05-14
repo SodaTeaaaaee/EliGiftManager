@@ -75,6 +75,11 @@ type AdjustmentUseCase interface {
 	ListAdjustmentsByWave(waveID uint) ([]dto.FulfillmentAdjustmentDTO, error)
 }
 
+type UndoRedoUseCase interface {
+	Undo(waveID uint) (commandSummary string, err error)
+	Redo(waveID uint) (commandSummary string, err error)
+}
+
 type TemplateManagementUseCase interface {
 	CreateDocumentTemplate(input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error)
 	ListDocumentTemplates() ([]dto.DocumentTemplateDTO, error)

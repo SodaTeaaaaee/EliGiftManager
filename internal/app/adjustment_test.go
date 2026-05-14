@@ -54,7 +54,7 @@ func (m *mockAdjustmentRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]do
 	defer m.mu.Unlock()
 	var out []domain.FulfillmentAdjustment
 	for _, r := range m.records {
-		if r.FulfillmentLineID == fulfillmentLineID {
+		if r.FulfillmentLineID != nil && *r.FulfillmentLineID == fulfillmentLineID {
 			out = append(out, r)
 		}
 	}
@@ -95,29 +95,78 @@ func (m *mockFulfillRepoForAdjustment) DeleteByWaveAndGeneratedBy(waveID uint, g
 	panic("not implemented")
 }
 
+// ── mock WaveRepository (adjustment tests) ──
+
+type mockWaveRepoForAdjustment struct {
+	mu           sync.Mutex
+	participants map[uint][]domain.WaveParticipantSnapshot // waveID -> snapshots
+}
+
+func newMockWaveRepoForAdjustment() *mockWaveRepoForAdjustment {
+	return &mockWaveRepoForAdjustment{
+		participants: make(map[uint][]domain.WaveParticipantSnapshot),
+	}
+}
+
+func (m *mockWaveRepoForAdjustment) Create(wave *domain.Wave) error {
+	panic("not implemented")
+}
+
+func (m *mockWaveRepoForAdjustment) FindByID(id uint) (*domain.Wave, error) {
+	panic("not implemented")
+}
+
+func (m *mockWaveRepoForAdjustment) FindByWaveNo(waveNo string) (*domain.Wave, error) {
+	panic("not implemented")
+}
+
+func (m *mockWaveRepoForAdjustment) List() ([]domain.Wave, error) {
+	panic("not implemented")
+}
+
+func (m *mockWaveRepoForAdjustment) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.participants[snap.WaveID] = append(m.participants[snap.WaveID], *snap)
+	return nil
+}
+
+func (m *mockWaveRepoForAdjustment) ListParticipantsByWave(waveID uint) ([]domain.WaveParticipantSnapshot, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.participants[waveID], nil
+}
+
 // ── helpers ──
 
 type adjustmentTestSetup struct {
 	adjRepo     *mockAdjustmentRepo
 	fulfillRepo *mockFulfillRepoForAdjustment
+	waveRepo    *mockWaveRepoForAdjustment
 	uc          AdjustmentUseCase
 }
 
 func newAdjustmentTestSetup() *adjustmentTestSetup {
 	ar := newMockAdjustmentRepo()
 	fr := newMockFulfillRepoForAdjustment()
+	wr := newMockWaveRepoForAdjustment()
 	fr.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 10}
+	wr.participants[10] = []domain.WaveParticipantSnapshot{
+		{ID: 100, WaveID: 10, CustomerProfileID: 1, DisplayName: "Test Participant"},
+	}
 	return &adjustmentTestSetup{
 		adjRepo:     ar,
 		fulfillRepo: fr,
-		uc:          NewAdjustmentUseCase(ar, fr),
+		waveRepo:    wr,
+		uc:          NewAdjustmentUseCase(ar, fr, wr),
 	}
 }
 
 func validAdjustmentInput() dto.RecordAdjustmentInput {
 	return dto.RecordAdjustmentInput{
 		WaveID:            10,
-		FulfillmentLineID: 1,
+		TargetKind:        "fulfillment_line",
+		FulfillmentLineID: uintPtr(1),
 		AdjustmentKind:    "add_send",
 		QuantityDelta:     2,
 		ReasonCode:        "restock",
@@ -143,8 +192,8 @@ func TestRecordAdjustmentSuccess(t *testing.T) {
 	if adj.WaveID != 10 {
 		t.Errorf("WaveID = %d, want 10", adj.WaveID)
 	}
-	if adj.FulfillmentLineID != 1 {
-		t.Errorf("FulfillmentLineID = %d, want 1", adj.FulfillmentLineID)
+	if adj.FulfillmentLineID == nil || *adj.FulfillmentLineID != 1 {
+		t.Errorf("FulfillmentLineID = %v, want 1", adj.FulfillmentLineID)
 	}
 	if adj.AdjustmentKind != "add_send" {
 		t.Errorf("AdjustmentKind = %q, want add_send", adj.AdjustmentKind)
@@ -152,8 +201,27 @@ func TestRecordAdjustmentSuccess(t *testing.T) {
 	if adj.QuantityDelta != 2 {
 		t.Errorf("QuantityDelta = %d, want 2", adj.QuantityDelta)
 	}
+	if adj.TargetKind != "fulfillment_line" {
+		t.Errorf("TargetKind = %q, want fulfillment_line", adj.TargetKind)
+	}
 	if len(s.adjRepo.records) != 1 {
 		t.Errorf("expected 1 persisted record, got %d", len(s.adjRepo.records))
+	}
+}
+
+func TestRecordAdjustmentDefaultTargetKind(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := validAdjustmentInput()
+	input.TargetKind = "" // should default to "fulfillment_line"
+
+	adj, err := s.uc.RecordAdjustment(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if adj.TargetKind != "fulfillment_line" {
+		t.Errorf("TargetKind = %q, want fulfillment_line", adj.TargetKind)
 	}
 }
 
@@ -162,7 +230,7 @@ func TestRecordAdjustmentFulfillmentLineNotFound(t *testing.T) {
 	s := newAdjustmentTestSetup()
 
 	input := validAdjustmentInput()
-	input.FulfillmentLineID = 999
+	input.FulfillmentLineID = uintPtr(999)
 
 	_, err := s.uc.RecordAdjustment(input)
 	if err == nil {
@@ -212,7 +280,7 @@ func TestListAdjustmentsByWave(t *testing.T) {
 	// Record one adjustment in wave 20
 	other := validAdjustmentInput()
 	other.WaveID = 20
-	other.FulfillmentLineID = 2
+	other.FulfillmentLineID = uintPtr(2)
 	if _, err := s.uc.RecordAdjustment(other); err != nil {
 		t.Fatalf("setup: unexpected error: %v", err)
 	}
@@ -237,5 +305,70 @@ func TestListAdjustmentsByWave(t *testing.T) {
 	}
 	if len(results20) != 1 {
 		t.Errorf("expected 1 adjustment for wave 20, got %d", len(results20))
+	}
+}
+
+func TestRecordSupplementAdjustmentWithParticipantTarget(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := dto.RecordAdjustmentInput{
+		WaveID:                    10,
+		TargetKind:                "participant",
+		WaveParticipantSnapshotID: uintPtr(100),
+		AdjustmentKind:            "supplement",
+		QuantityDelta:             1,
+		ReasonCode:                "bonus",
+		OperatorID:                "op-1",
+		Note:                      "supplement for participant",
+		EvidenceRef:               "ref-002",
+	}
+
+	adj, err := s.uc.RecordAdjustment(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if adj.TargetKind != "participant" {
+		t.Errorf("TargetKind = %q, want participant", adj.TargetKind)
+	}
+	if adj.WaveParticipantSnapshotID == nil || *adj.WaveParticipantSnapshotID != 100 {
+		t.Errorf("WaveParticipantSnapshotID = %v, want 100", adj.WaveParticipantSnapshotID)
+	}
+	if adj.AdjustmentKind != "supplement" {
+		t.Errorf("AdjustmentKind = %q, want supplement", adj.AdjustmentKind)
+	}
+}
+
+func TestRecordSupplementAdjustmentRejectsFulfillmentLineTarget(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := validAdjustmentInput()
+	input.AdjustmentKind = "supplement"
+	input.TargetKind = "fulfillment_line"
+
+	_, err := s.uc.RecordAdjustment(input)
+	if err == nil {
+		t.Fatal("expected error: supplement should require participant target, got nil")
+	}
+}
+
+func TestRecordAddSendRejectsParticipantTarget(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := dto.RecordAdjustmentInput{
+		WaveID:                    10,
+		TargetKind:                "participant",
+		WaveParticipantSnapshotID: uintPtr(100),
+		AdjustmentKind:            "add_send",
+		QuantityDelta:             1,
+		ReasonCode:                "test",
+		OperatorID:                "op-1",
+	}
+
+	_, err := s.uc.RecordAdjustment(input)
+	if err == nil {
+		t.Fatal("expected error: add_send should require fulfillment_line target, got nil")
 	}
 }

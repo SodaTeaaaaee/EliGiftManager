@@ -645,31 +645,35 @@ func FromPersistenceChannelClosureDecisionRecord(p *ChannelClosureDecisionRecord
 
 func FulfillmentAdjustmentToDomain(p *FulfillmentAdjustment) *domain.FulfillmentAdjustment {
 	return &domain.FulfillmentAdjustment{
-		ID:                p.ID,
-		WaveID:            p.WaveID,
-		FulfillmentLineID: p.FulfillmentLineID,
-		AdjustmentKind:    p.AdjustmentKind,
-		QuantityDelta:     p.QuantityDelta,
-		ReasonCode:        p.ReasonCode,
-		OperatorID:        p.OperatorID,
-		Note:              p.Note,
-		EvidenceRef:       p.EvidenceRef,
-		CreatedAt:         p.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:         p.UpdatedAt.Format(time.RFC3339),
+		ID:                        p.ID,
+		WaveID:                    p.WaveID,
+		TargetKind:                p.TargetKind,
+		FulfillmentLineID:         p.FulfillmentLineID,
+		WaveParticipantSnapshotID: p.WaveParticipantSnapshotID,
+		AdjustmentKind:            p.AdjustmentKind,
+		QuantityDelta:             p.QuantityDelta,
+		ReasonCode:                p.ReasonCode,
+		OperatorID:                p.OperatorID,
+		Note:                      p.Note,
+		EvidenceRef:               p.EvidenceRef,
+		CreatedAt:                 p.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:                 p.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
 func FulfillmentAdjustmentFromDomain(d *domain.FulfillmentAdjustment) *FulfillmentAdjustment {
 	return &FulfillmentAdjustment{
-		Model:             gorm.Model{ID: d.ID},
-		WaveID:            d.WaveID,
-		FulfillmentLineID: d.FulfillmentLineID,
-		AdjustmentKind:    d.AdjustmentKind,
-		QuantityDelta:     d.QuantityDelta,
-		ReasonCode:        d.ReasonCode,
-		OperatorID:        d.OperatorID,
-		Note:              d.Note,
-		EvidenceRef:       d.EvidenceRef,
+		Model:                     gorm.Model{ID: d.ID},
+		WaveID:                    d.WaveID,
+		TargetKind:                d.TargetKind,
+		FulfillmentLineID:         d.FulfillmentLineID,
+		WaveParticipantSnapshotID: d.WaveParticipantSnapshotID,
+		AdjustmentKind:            d.AdjustmentKind,
+		QuantityDelta:             d.QuantityDelta,
+		ReasonCode:                d.ReasonCode,
+		OperatorID:                d.OperatorID,
+		Note:                      d.Note,
+		EvidenceRef:               d.EvidenceRef,
 	}
 }
 

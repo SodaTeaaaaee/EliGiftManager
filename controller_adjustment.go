@@ -15,8 +15,9 @@ func NewAdjustmentController() *AdjustmentController {
 	gdb := db.GetDB()
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
+	waveRepo := infra.NewWaveRepository(gdb)
 	return &AdjustmentController{
-		adjustmentUC: app.NewAdjustmentUseCase(adjustmentRepo, fulfillRepo),
+		adjustmentUC: app.NewAdjustmentUseCase(adjustmentRepo, fulfillRepo, waveRepo),
 	}
 }
 
@@ -26,17 +27,19 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 		return dto.FulfillmentAdjustmentDTO{}, err
 	}
 	return dto.FulfillmentAdjustmentDTO{
-		ID:                adj.ID,
-		WaveID:            adj.WaveID,
-		FulfillmentLineID: adj.FulfillmentLineID,
-		AdjustmentKind:    adj.AdjustmentKind,
-		QuantityDelta:     adj.QuantityDelta,
-		ReasonCode:        adj.ReasonCode,
-		OperatorID:        adj.OperatorID,
-		Note:              adj.Note,
-		EvidenceRef:       adj.EvidenceRef,
-		CreatedAt:         adj.CreatedAt,
-		UpdatedAt:         adj.UpdatedAt,
+		ID:                        adj.ID,
+		WaveID:                    adj.WaveID,
+		TargetKind:                adj.TargetKind,
+		FulfillmentLineID:         adj.FulfillmentLineID,
+		WaveParticipantSnapshotID: adj.WaveParticipantSnapshotID,
+		AdjustmentKind:            adj.AdjustmentKind,
+		QuantityDelta:             adj.QuantityDelta,
+		ReasonCode:                adj.ReasonCode,
+		OperatorID:                adj.OperatorID,
+		Note:                      adj.Note,
+		EvidenceRef:               adj.EvidenceRef,
+		CreatedAt:                 adj.CreatedAt,
+		UpdatedAt:                 adj.UpdatedAt,
 	}, nil
 }
 

@@ -13,3 +13,7 @@ export function GetWave(arg1:number):Promise<dto.WaveDTO>;
 export function GetWaveOverview(arg1:number):Promise<dto.WaveOverviewDTO>;
 
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
+
+export function RedoWaveAction(arg1:number):Promise<string>;
+
+export function UndoWaveAction(arg1:number):Promise<string>;

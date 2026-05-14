@@ -14,6 +14,8 @@ import {
   GetWaveOverview,
   ApplyAllocationRules,
   AssignDemandToWave,
+  UndoWaveAction,
+  RedoWaveAction,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
   ExportSupplierOrder,
@@ -129,6 +131,18 @@ export async function assignDemandToWave(
 ): Promise<void> {
   assertWailsRuntime();
   return AssignDemandToWave(waveId, demandDocumentId);
+}
+
+/** Undo the last action for a wave. Returns the command summary of the undone action. */
+export async function undoWaveAction(waveId: number): Promise<string> {
+  assertWailsRuntime();
+  return UndoWaveAction(waveId);
+}
+
+/** Redo the last undone action for a wave. Returns the command summary of the redone action. */
+export async function redoWaveAction(waveId: number): Promise<string> {
+  assertWailsRuntime();
+  return RedoWaveAction(waveId);
 }
 
 // ── ExportController ──

@@ -20,6 +20,7 @@ type WaveController struct {
 	demandRepo     domain.DemandDocumentRepository
 	shipmentRepo   domain.ShipmentRepository
 	overviewProjUC app.WaveOverviewProjectionUseCase
+	undoRedoUC     app.UndoRedoUseCase
 }
 
 func NewWaveController() *WaveController {
@@ -48,6 +49,7 @@ func NewWaveController() *WaveController {
 		demandRepo:     demandRepo,
 		shipmentRepo:   shipmentRepo,
 		overviewProjUC: app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
+		undoRedoUC:     app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo),
 	}
 }
 
@@ -236,4 +238,14 @@ func domainToFulfillmentLineDTO(fl *domain.FulfillmentLine) dto.FulfillmentLineD
 		CreatedAt:                 fl.CreatedAt,
 		UpdatedAt:                 fl.UpdatedAt,
 	}
+}
+
+// UndoWaveAction undoes the last action for the given wave.
+func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
+	return c.undoRedoUC.Undo(waveID)
+}
+
+// RedoWaveAction redoes the last undone action for the given wave.
+func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
+	return c.undoRedoUC.Redo(waveID)
 }

@@ -312,17 +312,19 @@ type ChannelClosureDecisionRecord struct {
 // ---- FulfillmentAdjustment ----
 
 type FulfillmentAdjustment struct {
-	ID                uint
-	WaveID            uint
-	FulfillmentLineID uint
-	AdjustmentKind    string
-	QuantityDelta     int
-	ReasonCode        string
-	OperatorID        string
-	Note              string
-	EvidenceRef       string
-	CreatedAt         string
-	UpdatedAt         string
+	ID                        uint
+	WaveID                    uint
+	TargetKind                string // "fulfillment_line" or "participant"
+	FulfillmentLineID         *uint  // required when TargetKind == "fulfillment_line"
+	WaveParticipantSnapshotID *uint  // required when TargetKind == "participant"
+	AdjustmentKind            string
+	QuantityDelta             int
+	ReasonCode                string
+	OperatorID                string
+	Note                      string
+	EvidenceRef               string
+	CreatedAt                 string
+	UpdatedAt                 string
 }
 
 // ---- DocumentTemplate ----
