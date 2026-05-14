@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"gorm.io/gorm"
 )
 
 // ---- helper functions ----
@@ -637,5 +638,37 @@ func FromPersistenceChannelClosureDecisionRecord(p *ChannelClosureDecisionRecord
 		OperatorID:           p.OperatorID,
 		CreatedAt:            formatTime(p.CreatedAt),
 		UpdatedAt:            formatTime(p.UpdatedAt),
+	}
+}
+
+// ---- FulfillmentAdjustment ----
+
+func FulfillmentAdjustmentToDomain(p *FulfillmentAdjustment) *domain.FulfillmentAdjustment {
+	return &domain.FulfillmentAdjustment{
+		ID:                p.ID,
+		WaveID:            p.WaveID,
+		FulfillmentLineID: p.FulfillmentLineID,
+		AdjustmentKind:    p.AdjustmentKind,
+		QuantityDelta:     p.QuantityDelta,
+		ReasonCode:        p.ReasonCode,
+		OperatorID:        p.OperatorID,
+		Note:              p.Note,
+		EvidenceRef:       p.EvidenceRef,
+		CreatedAt:         p.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:         p.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func FulfillmentAdjustmentFromDomain(d *domain.FulfillmentAdjustment) *FulfillmentAdjustment {
+	return &FulfillmentAdjustment{
+		Model:             gorm.Model{ID: d.ID},
+		WaveID:            d.WaveID,
+		FulfillmentLineID: d.FulfillmentLineID,
+		AdjustmentKind:    d.AdjustmentKind,
+		QuantityDelta:     d.QuantityDelta,
+		ReasonCode:        d.ReasonCode,
+		OperatorID:        d.OperatorID,
+		Note:              d.Note,
+		EvidenceRef:       d.EvidenceRef,
 	}
 }

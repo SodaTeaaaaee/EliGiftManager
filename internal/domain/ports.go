@@ -113,3 +113,10 @@ type IntegrationProfileRepository interface {
 	FindByProfileKey(profileKey string) (*IntegrationProfile, error)
 	List() ([]IntegrationProfile, error)
 }
+
+// FulfillmentAdjustmentRepository defines persistence operations for FulfillmentAdjustment.
+type FulfillmentAdjustmentRepository interface {
+	Create(adj *FulfillmentAdjustment) error
+	ListByWave(waveID uint) ([]FulfillmentAdjustment, error)
+	ListByFulfillmentLine(fulfillmentLineID uint) ([]FulfillmentAdjustment, error)
+}

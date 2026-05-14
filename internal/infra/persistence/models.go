@@ -320,3 +320,19 @@ type ChannelClosureDecisionRecord struct {
 }
 
 func (ChannelClosureDecisionRecord) TableName() string { return "channel_closure_decision_records" }
+
+// ---- FulfillmentAdjustment ----
+
+type FulfillmentAdjustment struct {
+	gorm.Model
+	WaveID            uint   `gorm:"not null;index"`
+	FulfillmentLineID uint   `gorm:"not null;index"`
+	AdjustmentKind    string `gorm:"not null"`
+	QuantityDelta     int    `gorm:"not null;default:0"`
+	ReasonCode        string
+	OperatorID        string `gorm:"not null"`
+	Note              string
+	EvidenceRef       string
+}
+
+func (FulfillmentAdjustment) TableName() string { return "fulfillment_adjustments" }

@@ -254,7 +254,17 @@ const (
 type ChannelClosureDecisionKind string
 
 const (
-	DecisionKindUnsupported        ChannelClosureDecisionKind = "mark_sync_unsupported"
-	DecisionKindSkipped            ChannelClosureDecisionKind = "mark_sync_skipped"
-	DecisionKindCompletedManually  ChannelClosureDecisionKind = "mark_sync_completed_manually"
+	DecisionKindUnsupported       ChannelClosureDecisionKind = "mark_sync_unsupported"
+	DecisionKindSkipped           ChannelClosureDecisionKind = "mark_sync_skipped"
+	DecisionKindCompletedManually ChannelClosureDecisionKind = "mark_sync_completed_manually"
+)
+
+// ---- AdjustmentKind ----
+
+const (
+	AdjustmentKindAddSend    = "add_send"
+	AdjustmentKindReduceSend = "reduce_send"
+	AdjustmentKindReplace    = "replace"
+	AdjustmentKindRemove     = "remove"
+	AdjustmentKindSupplement = "supplement"
 )

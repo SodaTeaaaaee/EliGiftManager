@@ -26,59 +26,59 @@
           :pagination="false"
           size="small"
         />
-        <n-empty
-          v-if="!loading && waves.length === 0"
-          description="暂无波次"
-        />
+        <n-empty v-if="!loading && waves.length === 0" description="暂无波次" />
       </n-card>
 
+      <!-- Wave Overview Summary -->
       <n-card v-if="overview" title="波次汇总">
-        <n-space vertical size="small">
-          <div><strong>波次号:</strong> {{ overview.wave.waveNo }}</div>
-          <div><strong>名称:</strong> {{ overview.wave.name }}</div>
-          <div><strong>阶段:</strong> {{ overview.wave.lifecycleStage }}</div>
-          <div><strong>需求数:</strong> {{ overview.demandCount }}</div>
-          <div><strong>履约行数:</strong> {{ overview.fulfillmentCount }}</div>
-          <div><strong>供应商订单数:</strong> {{ overview.supplierOrderCount }}</div>
-          <div><strong>发货单数:</strong> {{ overview?.shipmentCount ?? 0 }}</div>
-          <div><strong>已追踪履约行:</strong> {{ overview?.trackedFulfillmentCount ?? 0 }}</div>
-          <div><strong>预测阶段:</strong> {{ overview?.projectedLifecycleStage ?? '-' }}</div>
-          <div><strong>渠道同步作业总数:</strong> {{ overview?.channelSyncJobCount ?? 0 }}</div>
-          <div><strong>待执行:</strong> {{ overview?.channelSyncPendingCount ?? 0 }}</div>
-          <div><strong>执行中:</strong> {{ overview?.channelSyncRunningCount ?? 0 }}</div>
-          <div><strong>成功:</strong> {{ overview?.channelSyncSuccessCount ?? 0 }}</div>
-          <div><strong>部分成功:</strong> {{ overview?.channelSyncPartialSuccessCount ?? 0 }}</div>
-          <div><strong>失败:</strong> {{ overview?.channelSyncFailedCount ?? 0 }}</div>
-          <div><strong>手动关闭决策总数:</strong> {{ overview?.manualClosureDecisionCount ?? 0 }}</div>
-          <div><strong>不支持:</strong> {{ overview?.manualUnsupportedCount ?? 0 }}</div>
-          <div><strong>已跳过:</strong> {{ overview?.manualSkippedCount ?? 0 }}</div>
-          <div><strong>手动完成:</strong> {{ overview?.manualCompletedCount ?? 0 }}</div>
-        </n-space>
-      </n-card>
+        <!-- Projected lifecycle stage — prominent -->
+        <div class="mb-4">
+          <n-tag type="info" size="large">
+            预测阶段：{{ overview.projectedLifecycleStage || '-' }}
+          </n-tag>
+        </div>
 
-      <n-card title="录入发货信息" v-if="overview">
-        <n-form>
-          <n-space vertical size="small">
-            <n-input-number v-model:value="shipmentInput.supplierOrderId" placeholder="Supplier Order ID" :min="0" />
-            <n-input v-model:value="shipmentInput.supplierPlatform" placeholder="供应商平台" />
-            <n-input v-model:value="shipmentInput.shipmentNo" placeholder="发货单号" />
-            <n-input v-model:value="shipmentInput.trackingNo" placeholder="物流单号" />
-            <n-input v-model:value="shipmentInput.carrierCode" placeholder="承运商编码" />
-            <n-input v-model:value="shipmentInput.carrierName" placeholder="承运商名称" />
-            <div v-for="(line, index) in shipmentInput.lines" :key="index" style="margin-top: 8px">
-              <n-space align="center">
-                <n-input-number v-model:value="line.supplierOrderLineId" placeholder="Supplier Order Line ID" :min="0" style="width: 160px" />
-                <n-input-number v-model:value="line.fulfillmentLineId" placeholder="Fulfillment Line ID" :min="0" style="width: 160px" />
-                <n-input-number v-model:value="line.quantity" placeholder="数量" :min="1" style="width: 80px" />
-                <n-button size="small" @click="shipmentInput.lines.splice(index, 1)">删除</n-button>
-              </n-space>
-            </div>
-            <n-button size="small" @click="addShipmentLine" style="margin-top: 4px">添加行</n-button>
-            <n-button type="primary" @click="handleCreateShipment" :loading="creatingShipment">
-              录入发货
-            </n-button>
-          </n-space>
-        </n-form>
+        <!-- 基础统计 -->
+        <n-divider title-placement="left">基础统计</n-divider>
+        <n-space vertical size="small">
+          <div><strong>波次号：</strong>{{ overview.wave.waveNo }}</div>
+          <div><strong>名称：</strong>{{ overview.wave.name }}</div>
+          <div><strong>阶段：</strong>{{ overview.wave.lifecycleStage }}</div>
+          <div><strong>需求数：</strong>{{ overview.demandCount }}</div>
+          <div><strong>履约行数：</strong>{{ overview.fulfillmentCount }}</div>
+          <div><strong>供应商订单数：</strong>{{ overview.supplierOrderCount }}</div>
+          <div><strong>发货单数：</strong>{{ overview.shipmentCount ?? 0 }}</div>
+          <div><strong>已追踪履约行：</strong>{{ overview.trackedFulfillmentCount ?? 0 }}</div>
+        </n-space>
+
+        <!-- 渠道同步状态 -->
+        <n-divider title-placement="left">渠道同步状态</n-divider>
+        <n-space vertical size="small">
+          <div><strong>作业总数：</strong>{{ overview.channelSyncJobCount ?? 0 }}</div>
+          <div><strong>待执行：</strong>{{ overview.channelSyncPendingCount ?? 0 }}</div>
+          <div><strong>执行中：</strong>{{ overview.channelSyncRunningCount ?? 0 }}</div>
+          <div><strong>成功：</strong>{{ overview.channelSyncSuccessCount ?? 0 }}</div>
+          <div><strong>部分成功：</strong>{{ overview.channelSyncPartialSuccessCount ?? 0 }}</div>
+          <div><strong>失败：</strong>{{ overview.channelSyncFailedCount ?? 0 }}</div>
+        </n-space>
+
+        <!-- 手动闭环决策 -->
+        <n-divider title-placement="left">手动闭环决策</n-divider>
+        <n-space vertical size="small">
+          <div><strong>决策总数：</strong>{{ overview.manualClosureDecisionCount ?? 0 }}</div>
+          <div><strong>不支持：</strong>{{ overview.manualUnsupportedCount ?? 0 }}</div>
+          <div><strong>已跳过：</strong>{{ overview.manualSkippedCount ?? 0 }}</div>
+          <div><strong>手动完成：</strong>{{ overview.manualCompletedCount ?? 0 }}</div>
+        </n-space>
+
+        <!-- 基线偏移检测 -->
+        <n-divider title-placement="left">基线偏移检测</n-divider>
+        <n-alert
+          v-if="overview.hasDriftedBasis"
+          type="warning"
+          title="检测到基线偏移，请检查供应商订单与发货数据的一致性"
+        />
+        <n-text v-else depth="3">无偏移信号</n-text>
       </n-card>
 
       <n-alert v-if="actionMsg" type="info" :title="actionMsg" />
@@ -93,12 +93,13 @@ import {
   NCard,
   NButton,
   NInput,
-  NInputNumber,
   NSpace,
   NDataTable,
   NEmpty,
   NAlert,
-  NForm,
+  NTag,
+  NDivider,
+  NText,
 } from "naive-ui";
 import {
   listWaves,
@@ -106,7 +107,6 @@ import {
   applyAllocationRules,
   exportSupplierOrder,
   getWaveOverview,
-  createShipment,
 } from "@/shared/lib/wails/app";
 import { dto } from "@/../wailsjs/go/models";
 
@@ -117,23 +117,6 @@ const newWaveName = ref("");
 const actionMsg = ref("");
 const actionErr = ref("");
 const overview = ref<dto.WaveOverviewDTO | null>(null);
-
-const creatingShipment = ref(false)
-const shipmentInput = ref({
-  supplierOrderId: 0,
-  supplierPlatform: '',
-  shipmentNo: '',
-  externalShipmentNo: '',
-  carrierCode: '',
-  carrierName: '',
-  trackingNo: '',
-  status: 'shipped',
-  shippedAt: new Date().toISOString().replace('T', ' ').slice(0, 19),
-  basisHistoryNodeId: '',
-  basisProjectionHash: '',
-  basisPayloadSnapshot: '',
-  lines: [] as Array<{ supplierOrderLineId: number; fulfillmentLineId: number; quantity: number }>
-})
 
 const columns = [
   { title: "ID", key: "id", width: 60 },
@@ -184,8 +167,7 @@ async function handleCreateWave() {
   try {
     actionErr.value = "";
     const w = await createWave(newWaveName.value || undefined);
-    actionMsg.value =
-      `波次 "${w.waveNo}" 创建成功 (ID: ${w.id})`;
+    actionMsg.value = `波次 "${w.waveNo}" 创建成功 (ID: ${w.id})`;
     newWaveName.value = "";
     await loadWaves();
   } catch (e: any) {
@@ -200,8 +182,7 @@ async function handleAllocate(waveId: number) {
   actionErr.value = "";
   try {
     const lines = await applyAllocationRules(waveId);
-    actionMsg.value =
-      `分配完成：生成了 ${lines?.length ?? 0} 条 FulfillmentLine`;
+    actionMsg.value = `分配完成：生成了 ${lines?.length ?? 0} 条 FulfillmentLine`;
   } catch (e: any) {
     actionErr.value = e?.message ?? String(e);
   }
@@ -212,8 +193,7 @@ async function handleExport(waveId: number) {
   actionErr.value = "";
   try {
     const order = await exportSupplierOrder(waveId);
-    actionMsg.value =
-      `导出完成：SupplierOrder ID ${order.id}, 状态 ${order.status}`;
+    actionMsg.value = `导出完成：SupplierOrder ID ${order.id}, 状态 ${order.status}`;
   } catch (e: any) {
     actionErr.value = e?.message ?? String(e);
   }
@@ -227,36 +207,6 @@ async function handleOverview(waveId: number) {
     overview.value = await getWaveOverview(waveId);
   } catch (e: any) {
     actionErr.value = e?.message ?? String(e);
-  }
-}
-
-function addShipmentLine() {
-  shipmentInput.value.lines.push({
-    supplierOrderLineId: 0,
-    fulfillmentLineId: 0,
-    quantity: 1,
-  })
-}
-
-async function handleCreateShipment() {
-  creatingShipment.value = true
-  actionErr.value = ''
-  actionMsg.value = ''
-  try {
-    const result = await createShipment({
-      ...shipmentInput.value,
-      status: shipmentInput.value.status || 'shipped',
-      shippedAt: shipmentInput.value.shippedAt || new Date().toISOString(),
-    })
-    actionMsg.value = `发货单创建成功 (ID: ${result.id})`
-    // 刷新 overview 统计
-    if (overview.value) {
-      await handleOverview(overview.value.wave.id)
-    }
-  } catch (e: any) {
-    actionErr.value = e?.message ?? String(e)
-  } finally {
-    creatingShipment.value = false
   }
 }
 

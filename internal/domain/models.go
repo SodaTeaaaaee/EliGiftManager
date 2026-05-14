@@ -308,3 +308,19 @@ type ChannelClosureDecisionRecord struct {
 	CreatedAt            string
 	UpdatedAt            string
 }
+
+// ---- FulfillmentAdjustment ----
+
+type FulfillmentAdjustment struct {
+	ID                uint
+	WaveID            uint
+	FulfillmentLineID uint
+	AdjustmentKind    string
+	QuantityDelta     int
+	ReasonCode        string
+	OperatorID        string
+	Note              string
+	EvidenceRef       string
+	CreatedAt         string
+	UpdatedAt         string
+}

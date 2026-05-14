@@ -64,3 +64,8 @@ type WaveOverviewProjectionUseCase interface {
 type BasisDriftDetectionUseCase interface {
 	DetectWaveBasisDrift(waveID uint, currentProjectionHash string) ([]dto.BasisDriftSignalDTO, error)
 }
+
+type AdjustmentUseCase interface {
+	RecordAdjustment(input dto.RecordAdjustmentInput) (*domain.FulfillmentAdjustment, error)
+	ListAdjustmentsByWave(waveID uint) ([]dto.FulfillmentAdjustmentDTO, error)
+}
