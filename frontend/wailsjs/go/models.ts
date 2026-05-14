@@ -450,6 +450,17 @@ export namespace dto {
 	    supplierOrderCount: number;
 	    shipmentCount: number;
 	    trackedFulfillmentCount: number;
+	    channelSyncJobCount: number;
+	    channelSyncPendingCount: number;
+	    channelSyncRunningCount: number;
+	    channelSyncSuccessCount: number;
+	    channelSyncPartialSuccessCount: number;
+	    channelSyncFailedCount: number;
+	    manualClosureDecisionCount: number;
+	    manualUnsupportedCount: number;
+	    manualSkippedCount: number;
+	    manualCompletedCount: number;
+	    projectedLifecycleStage: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new WaveOverviewDTO(source);
@@ -463,6 +474,17 @@ export namespace dto {
 	        this.supplierOrderCount = source["supplierOrderCount"];
 	        this.shipmentCount = source["shipmentCount"];
 	        this.trackedFulfillmentCount = source["trackedFulfillmentCount"];
+	        this.channelSyncJobCount = source["channelSyncJobCount"];
+	        this.channelSyncPendingCount = source["channelSyncPendingCount"];
+	        this.channelSyncRunningCount = source["channelSyncRunningCount"];
+	        this.channelSyncSuccessCount = source["channelSyncSuccessCount"];
+	        this.channelSyncPartialSuccessCount = source["channelSyncPartialSuccessCount"];
+	        this.channelSyncFailedCount = source["channelSyncFailedCount"];
+	        this.manualClosureDecisionCount = source["manualClosureDecisionCount"];
+	        this.manualUnsupportedCount = source["manualUnsupportedCount"];
+	        this.manualSkippedCount = source["manualSkippedCount"];
+	        this.manualCompletedCount = source["manualCompletedCount"];
+	        this.projectedLifecycleStage = source["projectedLifecycleStage"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

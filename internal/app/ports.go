@@ -56,3 +56,11 @@ type RecordClosureDecisionUseCase interface {
 type RetrySyncUseCase interface {
 	RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncResult, error)
 }
+
+type WaveOverviewProjectionUseCase interface {
+	ProjectWaveOverview(base dto.WaveOverviewDTO) (dto.WaveOverviewDTO, error)
+}
+
+type BasisDriftDetectionUseCase interface {
+	DetectWaveBasisDrift(waveID uint, currentProjectionHash string) ([]dto.BasisDriftSignalDTO, error)
+}

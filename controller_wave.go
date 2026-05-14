@@ -19,6 +19,7 @@ type WaveController struct {
 	assignmentRepo domain.WaveDemandAssignmentRepository
 	demandRepo     domain.DemandDocumentRepository
 	shipmentRepo   domain.ShipmentRepository
+	overviewProjUC app.WaveOverviewProjectionUseCase
 }
 
 func NewWaveController() *WaveController {
@@ -30,6 +31,10 @@ func NewWaveController() *WaveController {
 	supplierRepo := infra.NewSupplierOrderRepository(gdb)
 	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
 	shipmentRepo := infra.NewShipmentRepository(gdb)
+	channelSyncRepo := infra.NewChannelSyncRepository(gdb)
+	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
+
+	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
 
 	return &WaveController{
 		waveUC:         app.NewWaveUseCase(waveRepo),
@@ -39,6 +44,7 @@ func NewWaveController() *WaveController {
 		assignmentRepo: assignmentRepo,
 		demandRepo:     demandRepo,
 		shipmentRepo:   shipmentRepo,
+		overviewProjUC: app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC),
 	}
 }
 
@@ -136,14 +142,15 @@ func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, erro
 		}
 	}
 
-	return dto.WaveOverviewDTO{
+	base := dto.WaveOverviewDTO{
 		Wave:                    domainToWaveDTO(w),
 		DemandCount:             demandCount,
 		FulfillmentCount:        len(fulfillLines),
 		SupplierOrderCount:      len(supplierOrders),
 		ShipmentCount:           shipmentCount,
 		TrackedFulfillmentCount: trackedFulfillmentCount,
-	}, nil
+	}
+	return c.overviewProjUC.ProjectWaveOverview(base)
 }
 
 // AssignDemandToWave assigns a demand document to a wave.

@@ -42,6 +42,17 @@
           <div><strong>供应商订单数:</strong> {{ overview.supplierOrderCount }}</div>
           <div><strong>发货单数:</strong> {{ overview?.shipmentCount ?? 0 }}</div>
           <div><strong>已追踪履约行:</strong> {{ overview?.trackedFulfillmentCount ?? 0 }}</div>
+          <div><strong>预测阶段:</strong> {{ overview?.projectedLifecycleStage ?? '-' }}</div>
+          <div><strong>渠道同步作业总数:</strong> {{ overview?.channelSyncJobCount ?? 0 }}</div>
+          <div><strong>待执行:</strong> {{ overview?.channelSyncPendingCount ?? 0 }}</div>
+          <div><strong>执行中:</strong> {{ overview?.channelSyncRunningCount ?? 0 }}</div>
+          <div><strong>成功:</strong> {{ overview?.channelSyncSuccessCount ?? 0 }}</div>
+          <div><strong>部分成功:</strong> {{ overview?.channelSyncPartialSuccessCount ?? 0 }}</div>
+          <div><strong>失败:</strong> {{ overview?.channelSyncFailedCount ?? 0 }}</div>
+          <div><strong>手动关闭决策总数:</strong> {{ overview?.manualClosureDecisionCount ?? 0 }}</div>
+          <div><strong>不支持:</strong> {{ overview?.manualUnsupportedCount ?? 0 }}</div>
+          <div><strong>已跳过:</strong> {{ overview?.manualSkippedCount ?? 0 }}</div>
+          <div><strong>手动完成:</strong> {{ overview?.manualCompletedCount ?? 0 }}</div>
         </n-space>
       </n-card>
 

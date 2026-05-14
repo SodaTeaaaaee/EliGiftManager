@@ -7,4 +7,20 @@ type WaveOverviewDTO struct {
 	SupplierOrderCount      int     `json:"supplierOrderCount"`
 	ShipmentCount           int     `json:"shipmentCount"`
 	TrackedFulfillmentCount int     `json:"trackedFulfillmentCount"`
+
+	ChannelSyncJobCount            int    `json:"channelSyncJobCount"`
+	ChannelSyncPendingCount        int    `json:"channelSyncPendingCount"`
+	ChannelSyncRunningCount        int    `json:"channelSyncRunningCount"`
+	ChannelSyncSuccessCount        int    `json:"channelSyncSuccessCount"`
+	ChannelSyncPartialSuccessCount int    `json:"channelSyncPartialSuccessCount"`
+	ChannelSyncFailedCount         int    `json:"channelSyncFailedCount"`
+	ManualClosureDecisionCount     int    `json:"manualClosureDecisionCount"`
+	ManualUnsupportedCount         int    `json:"manualUnsupportedCount"`
+	ManualSkippedCount             int    `json:"manualSkippedCount"`
+	ManualCompletedCount           int    `json:"manualCompletedCount"`
+	ProjectedLifecycleStage        string `json:"projectedLifecycleStage"`
+
+	BasisDriftSignals      []BasisDriftSignalDTO `json:"basisDriftSignals"`
+	HasDriftedBasis        bool                  `json:"hasDriftedBasis"`
+	HasRequiredReviewBasis bool                  `json:"hasRequiredReviewBasis"`
 }
