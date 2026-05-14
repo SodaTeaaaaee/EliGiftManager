@@ -71,6 +71,19 @@ func ResolveAssetsDir() (string, error) {
 	return dir, nil
 }
 
+// ResolveExportsDir returns data/exports/, the root for document_export executors.
+func ResolveExportsDir() (string, error) {
+	dataDir, err := ResolveDataDir()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(dataDir, "exports")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", fmt.Errorf("resolve exports dir: %w", err)
+	}
+	return dir, nil
+}
+
 // ResolveTempDir returns the app-managed temporary directory under data/tmp.
 func ResolveTempDir() (string, error) {
 	dataDir, err := ResolveDataDir()

@@ -233,6 +233,7 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncRes
 	} else {
 		job.Status = "partial_success"
 	}
+	job.RequestPayload = result.RequestPayload
 	job.ResponsePayload = result.ResponsePayload
 	job.ErrorMessage = result.ErrorMessage
 	job.FinishedAt = now

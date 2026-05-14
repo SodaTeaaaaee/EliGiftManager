@@ -2,6 +2,8 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -234,7 +236,6 @@ func TestExecuteChannelSyncJobFailsWhenNoExecutorIsAvailable(t *testing.T) {
 		ConnectorKey:      "unknown.connector",
 		ProfileKey:        "test.profile",
 	}
-	// runtimeExecutorProvider returns error for unknown connector_key
 	uc := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider())
 
 	jobID, _, _ := setupPendingJob(cs)
@@ -244,7 +245,6 @@ func TestExecuteChannelSyncJobFailsWhenNoExecutorIsAvailable(t *testing.T) {
 		t.Fatal("expected error when no executor is available, got nil")
 	}
 
-	// Verify job is persisted as failed, NOT stuck in running
 	job, _ := cs.FindJobByID(jobID)
 	if job.Status != "failed" {
 		t.Errorf("job status = %q, want failed (not running)", job.Status)
@@ -265,7 +265,6 @@ func TestExecuteChannelSyncJobPersistsFailedStateWhenExecutorReturnsError(t *tes
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
 
-	// Use an executor provider that always returns an error
 	errorProvider := &failingExecutorProvider{}
 	uc := NewExecuteSyncUseCase(cs, pr, errorProvider)
 
@@ -276,7 +275,6 @@ func TestExecuteChannelSyncJobPersistsFailedStateWhenExecutorReturnsError(t *tes
 		t.Fatal("expected error, got nil")
 	}
 
-	// Verify persisted state is failed, not running
 	job, _ := cs.FindJobByID(jobID)
 	if job.Status != "failed" {
 		t.Errorf("job status = %q, want failed", job.Status)
@@ -442,7 +440,6 @@ func TestRetryChannelSyncJobCanRetryAfterProviderResolutionFailure(t *testing.T)
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push", ConnectorKey: "unknown.connector"}
 
-	// First execute with failing provider → items marked failed
 	failingUC := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider())
 	jobID, _, _ := setupPendingJob(cs)
 	_, err := failingUC.ExecuteChannelSyncJob(jobID)
@@ -450,7 +447,6 @@ func TestRetryChannelSyncJobCanRetryAfterProviderResolutionFailure(t *testing.T)
 		t.Fatal("expected error from failing provider, got nil")
 	}
 
-	// Verify items are failed
 	items, _ := cs.ListItemsByJob(jobID)
 	failedCount := 0
 	for _, it := range items {
@@ -462,7 +458,6 @@ func TestRetryChannelSyncJobCanRetryAfterProviderResolutionFailure(t *testing.T)
 		t.Fatal("expected at least one failed item after provider resolution failure")
 	}
 
-	// Now retry with a succeeding executor
 	retryUC := NewRetrySyncUseCase(cs, pr, ep(NewFakeExecutor()))
 	result, err := retryUC.RetryChannelSyncJob(jobID)
 	if err != nil {
@@ -481,7 +476,6 @@ func TestRetryChannelSyncJobCanRetryAfterExecuteFailure(t *testing.T) {
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
 
-	// Execute with failing executor → job ends up as "failed"
 	failingUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakeFailingExecutor()))
 	jobID, _, _ := setupPendingJob(cs)
 	result1, err := failingUC.ExecuteChannelSyncJob(jobID)
@@ -492,13 +486,11 @@ func TestRetryChannelSyncJobCanRetryAfterExecuteFailure(t *testing.T) {
 		t.Fatalf("expected job status failed, got %q", result1.JobStatus)
 	}
 
-	// Verify persisted as failed
 	job, _ := cs.FindJobByID(jobID)
 	if job.Status != "failed" {
 		t.Fatalf("persisted job status = %q, want failed", job.Status)
 	}
 
-	// Now retry with a succeeding executor
 	retryUC := NewRetrySyncUseCase(cs, pr, ep(NewFakeExecutor()))
 	result2, err := retryUC.RetryChannelSyncJob(jobID)
 	if err != nil {
@@ -649,7 +641,6 @@ func TestRecordChannelClosureDecisionRejectsLineWithoutDemandDocument(t *testing
 	dm := newMockDemandRepoForClosure()
 
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, AllowsManualClosure: true}
-	// Fulfillment line has NO DemandDocumentID
 	fl.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
 
 	uc := NewRecordClosureDecisionUseCase(dr, fl, pr, dm)
@@ -676,10 +667,8 @@ func TestRecordChannelClosureDecisionDoesNotPersistPartialBatchOnValidationFailu
 	dm := newMockDemandRepoForClosure()
 
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, AllowsManualClosure: true}
-	// Entry 1: valid fulfillment line
 	fl.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1, DemandDocumentID: uintPtr(10)}
 	dm.docs[10] = &domain.DemandDocument{ID: 10, IntegrationProfileID: uintPtr(1)}
-	// Entry 2: fulfillment line belongs to a different profile (cross-profile → invalid)
 	fl.lines[2] = &domain.FulfillmentLine{ID: 2, WaveID: 1, DemandDocumentID: uintPtr(20)}
 	dm.docs[20] = &domain.DemandDocument{ID: 20, IntegrationProfileID: uintPtr(2)}
 
@@ -699,7 +688,6 @@ func TestRecordChannelClosureDecisionDoesNotPersistPartialBatchOnValidationFailu
 		t.Fatal("expected error for cross-profile entry in batch, got nil")
 	}
 
-	// Assert zero residual records
 	if len(dr.records) != 0 {
 		t.Errorf("expected 0 records after failed batch, got %d", len(dr.records))
 	}
@@ -714,7 +702,6 @@ func TestRecordChannelClosureDecisionRejectsLineWithoutIntegrationProfileID(t *t
 
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, AllowsManualClosure: true}
 	fl.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1, DemandDocumentID: uintPtr(10)}
-	// Demand document exists but has nil IntegrationProfileID
 	dm.docs[10] = &domain.DemandDocument{ID: 10}
 
 	uc := NewRecordClosureDecisionUseCase(dr, fl, pr, dm)
@@ -731,4 +718,278 @@ func TestRecordChannelClosureDecisionRejectsLineWithoutIntegrationProfileID(t *t
 	if err == nil {
 		t.Fatal("expected error for line without IntegrationProfileID, got nil")
 	}
+}
+
+// ── real document export executor tests ──
+
+func TestExecuteChannelSyncJobWithRegisteredDocumentExportExecutorSucceeds(t *testing.T) {
+	cs := newMockChannelSyncRepo()
+	pr := newMockProfileRepo()
+	pr.profiles[1] = &domain.IntegrationProfile{
+		ID:               1,
+		TrackingSyncMode: "document_export",
+		ConnectorKey:     "eli.local_export",
+	}
+
+	tmpDir := t.TempDir()
+	exportsDir := filepath.Join(tmpDir, "exports")
+	registry := map[string]map[string]ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": NewDocumentExportExecutor(exportsDir),
+		},
+	}
+	provider := NewRuntimeExecutorProviderWith(registry)
+	uc := NewExecuteSyncUseCase(cs, pr, provider)
+
+	jobID, _, _ := setupPendingJob(cs)
+
+	result, err := uc.ExecuteChannelSyncJob(jobID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.JobStatus != "success" {
+		t.Errorf("JobStatus = %q, want success", result.JobStatus)
+	}
+	if result.RequestPayload == "" {
+		t.Error("RequestPayload should not be empty")
+	}
+	if result.ResponsePayload == "" {
+		t.Error("ResponsePayload should not be empty")
+	}
+	if !contains(result.ResponsePayload, "output_file") {
+		t.Errorf("ResponsePayload should contain output_file, got %q", result.ResponsePayload)
+	}
+	for _, it := range result.Items {
+		if it.Status != "success" {
+			t.Errorf("item %d status = %q, want success", it.ID, it.Status)
+		}
+	}
+
+	entries, err := os.ReadDir(exportsDir)
+	if err != nil {
+		t.Fatalf("read exports dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 exported file, got %d", len(entries))
+	}
+	exportedPath := filepath.Join(exportsDir, entries[0].Name())
+	data, err := os.ReadFile(exportedPath)
+	if err != nil {
+		t.Fatalf("read exported file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("exported file should not be empty")
+	}
+	if !contains(string(data), `"job_id"`) {
+		t.Error("exported file should contain job_id field")
+	}
+}
+
+func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testing.T) {
+	cs := newMockChannelSyncRepo()
+	pr := newMockProfileRepo()
+	pr.profiles[1] = &domain.IntegrationProfile{
+		ID:               1,
+		TrackingSyncMode: "document_export",
+		ConnectorKey:     "eli.local_export",
+	}
+
+	tmpDir := t.TempDir()
+	blocker := filepath.Join(tmpDir, "not_a_dir")
+	if err := os.WriteFile(blocker, []byte("block"), 0o644); err != nil {
+		t.Fatalf("write blocker file: %v", err)
+	}
+	badDir := filepath.Join(blocker, "subdir", "exports")
+
+	registry := map[string]map[string]ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": NewDocumentExportExecutor(badDir),
+		},
+	}
+	provider := NewRuntimeExecutorProviderWith(registry)
+	uc := NewExecuteSyncUseCase(cs, pr, provider)
+
+	jobID, _, _ := setupPendingJob(cs)
+
+	_, err := uc.ExecuteChannelSyncJob(jobID)
+	if err == nil {
+		t.Fatal("expected error for unwritable output directory, got nil")
+	}
+
+	job, _ := cs.FindJobByID(jobID)
+	if job.Status != "failed" {
+		t.Errorf("job status = %q, want failed", job.Status)
+	}
+	if job.ErrorMessage == "" {
+		t.Error("job.ErrorMessage should be set")
+	}
+
+	items, _ := cs.ListItemsByJob(jobID)
+	failedCount := 0
+	for _, it := range items {
+		if it.Status == "failed" {
+			failedCount++
+		}
+	}
+	if failedCount == 0 {
+		t.Fatal("expected at least one failed item to enable retry")
+	}
+
+	fixedDir := filepath.Join(tmpDir, "fixed_exports")
+	fixedRegistry := map[string]map[string]ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": NewDocumentExportExecutor(fixedDir),
+		},
+	}
+	retryUC := NewRetrySyncUseCase(cs, pr, NewRuntimeExecutorProviderWith(fixedRegistry))
+	retryResult, err := retryUC.RetryChannelSyncJob(jobID)
+	if err != nil {
+		t.Fatalf("retry after fix: %v", err)
+	}
+	if retryResult.JobStatus != "success" {
+		t.Errorf("retry JobStatus = %q, want success", retryResult.JobStatus)
+	}
+}
+
+// ── mode mismatch tests ──
+
+func TestRuntimeExecutorProviderRejectsModeMismatch(t *testing.T) {
+	pr := newMockProfileRepo()
+	pr.profiles[1] = &domain.IntegrationProfile{
+		ID:               1,
+		ProfileKey:       "test.profile",
+		TrackingSyncMode: "api_push",
+		ConnectorKey:     "eli.local_export",
+	}
+
+	tmpDir := t.TempDir()
+	registry := map[string]map[string]ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": NewDocumentExportExecutor(filepath.Join(tmpDir, "exports")),
+		},
+	}
+	provider := NewRuntimeExecutorProviderWith(registry)
+
+	exec, err := provider.Resolve(pr.profiles[1])
+	if err == nil {
+		t.Fatalf("expected mode mismatch error, got executor %T", exec)
+	}
+	if exec != nil {
+		t.Error("expected nil executor on mode mismatch")
+	}
+}
+
+func TestExecuteChannelSyncJobRejectsModeMismatchAtRuntime(t *testing.T) {
+	t.Parallel()
+	cs := newMockChannelSyncRepo()
+	pr := newMockProfileRepo()
+	pr.profiles[1] = &domain.IntegrationProfile{
+		ID:               1,
+		TrackingSyncMode: "api_push",
+		ConnectorKey:     "eli.local_export",
+	}
+
+	tmpDir := t.TempDir()
+	registry := map[string]map[string]ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": NewDocumentExportExecutor(filepath.Join(tmpDir, "exports")),
+		},
+	}
+	provider := NewRuntimeExecutorProviderWith(registry)
+	uc := NewExecuteSyncUseCase(cs, pr, provider)
+
+	jobID, _, _ := setupPendingJob(cs)
+
+	_, err := uc.ExecuteChannelSyncJob(jobID)
+	if err == nil {
+		t.Fatal("expected error for mode mismatch at execute time, got nil")
+	}
+
+	// Verify no file was created
+	entries, _ := os.ReadDir(tmpDir)
+	for _, e := range entries {
+		if e.IsDir() && e.Name() == "exports" {
+			exportEntries, _ := os.ReadDir(filepath.Join(tmpDir, "exports"))
+			if len(exportEntries) > 0 {
+				t.Errorf("expected no exported files on mode mismatch, got %d", len(exportEntries))
+			}
+		}
+	}
+}
+
+// ── request payload truth tests ──
+
+func TestExecuteChannelSyncJobWithDocumentExportExecutorPersistsRealRequestPayload(t *testing.T) {
+	cs := newMockChannelSyncRepo()
+	pr := newMockProfileRepo()
+	pr.profiles[1] = &domain.IntegrationProfile{
+		ID:               1,
+		TrackingSyncMode: "document_export",
+		ConnectorKey:     "eli.local_export",
+	}
+
+	tmpDir := t.TempDir()
+	exportsDir := filepath.Join(tmpDir, "exports")
+	registry := map[string]map[string]ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": NewDocumentExportExecutor(exportsDir),
+		},
+	}
+	provider := NewRuntimeExecutorProviderWith(registry)
+	uc := NewExecuteSyncUseCase(cs, pr, provider)
+
+	jobID, _, _ := setupPendingJob(cs)
+
+	result, err := uc.ExecuteChannelSyncJob(jobID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// request_payload must contain real export fields, not just metadata
+	if result.RequestPayload == "" {
+		t.Fatal("RequestPayload should not be empty")
+	}
+	if !contains(result.RequestPayload, `"job_id"`) {
+		t.Error("RequestPayload should contain job_id field")
+	}
+	if !contains(result.RequestPayload, `"items"`) {
+		t.Error("RequestPayload should contain items array")
+	}
+	if !contains(result.RequestPayload, `"external_document_no"`) {
+		t.Error("RequestPayload should contain external_document_no")
+	}
+	if !contains(result.RequestPayload, `"tracking_no"`) {
+		t.Error("RequestPayload should contain tracking_no")
+	}
+	if !contains(result.RequestPayload, `"wave_id"`) {
+		t.Error("RequestPayload should contain wave_id")
+	}
+	// It must NOT be the old metadata-only format
+	if contains(result.RequestPayload, `"item_count"`) && !contains(result.RequestPayload, `"wave_id"`) {
+		t.Error("RequestPayload should contain real export content, not just metadata summary")
+	}
+
+	// response_payload must still contain result summary (output_file path)
+	if !contains(result.ResponsePayload, "output_file") {
+		t.Error("ResponsePayload should contain output_file path")
+	}
+
+	// The persisted job must also have the real request payload
+	job, _ := cs.FindJobByID(jobID)
+	if !contains(job.RequestPayload, `"items"`) {
+		t.Error("persisted job.RequestPayload should contain real export content")
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchSubstring(s, substr)
+}
+
+func searchSubstring(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }

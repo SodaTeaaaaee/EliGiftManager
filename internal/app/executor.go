@@ -17,7 +17,8 @@ type ChannelSyncItemResult struct {
 type ChannelSyncExecutionResult struct {
 	Items           []ChannelSyncItemResult
 	AggregateStatus string // "success", "partial_success", "failed"
-	ResponsePayload string
+	RequestPayload  string // real execution content snapshot (export payload, API request body)
+	ResponsePayload string // execution result summary (output path, external response)
 	ErrorMessage    string
 }
 
@@ -34,18 +35,37 @@ type ExecutorProvider interface {
 }
 
 // runtimeExecutorProvider is the real production wiring.
-// It returns an error for any connector_key that has no registered executor.
-type runtimeExecutorProvider struct{}
+// It resolves executors from a two-level registry keyed by
+// tracking_sync_mode → connector_key so that mode mismatches
+// are caught before execution.
+type runtimeExecutorProvider struct {
+	registry map[string]map[string]ChannelSyncExecutor
+}
 
+// NewRuntimeExecutorProvider returns a provider with an empty registry.
 func NewRuntimeExecutorProvider() ExecutorProvider {
-	return &runtimeExecutorProvider{}
+	return &runtimeExecutorProvider{registry: make(map[string]map[string]ChannelSyncExecutor)}
+}
+
+// NewRuntimeExecutorProviderWith returns a provider pre-populated with the
+// given tracking_sync_mode → connector_key → executor mapping.
+func NewRuntimeExecutorProviderWith(registry map[string]map[string]ChannelSyncExecutor) ExecutorProvider {
+	return &runtimeExecutorProvider{registry: registry}
 }
 
 func (p *runtimeExecutorProvider) Resolve(profile *domain.IntegrationProfile) (ChannelSyncExecutor, error) {
 	if profile.ConnectorKey == "" {
 		return nil, fmt.Errorf("no executor configured: integration profile %q has empty connector_key", profile.ProfileKey)
 	}
-	return nil, fmt.Errorf("no executor registered for connector_key %q (integration profile %q)", profile.ConnectorKey, profile.ProfileKey)
+	modeExecs, ok := p.registry[profile.TrackingSyncMode]
+	if !ok {
+		return nil, fmt.Errorf("no executor registered for tracking_sync_mode %q (integration profile %q, connector_key %q)", profile.TrackingSyncMode, profile.ProfileKey, profile.ConnectorKey)
+	}
+	exec, ok := modeExecs[profile.ConnectorKey]
+	if !ok {
+		return nil, fmt.Errorf("no executor registered for connector_key %q under tracking_sync_mode %q (integration profile %q)", profile.ConnectorKey, profile.TrackingSyncMode, profile.ProfileKey)
+	}
+	return exec, nil
 }
 
 
@@ -76,6 +96,7 @@ func (e *fakeExecutor) Execute(job *domain.ChannelSyncJob, items []domain.Channe
 	return &ChannelSyncExecutionResult{
 		Items:           results,
 		AggregateStatus: "success",
+		RequestPayload:  fmt.Sprintf(`{"kind":"fake_success","items":%d}`, len(items)),
 		ResponsePayload: `{"status":"ok"}`,
 	}, nil
 }
@@ -107,6 +128,7 @@ func (e *fakePartialExecutor) Execute(job *domain.ChannelSyncJob, items []domain
 	return &ChannelSyncExecutionResult{
 		Items:           results,
 		AggregateStatus: agg,
+		RequestPayload:  fmt.Sprintf(`{"kind":"fake_partial","items":%d}`, len(items)),
 		ResponsePayload: `{"status":"partial"}`,
 		ErrorMessage:    "mock failure",
 	}, nil
@@ -125,6 +147,7 @@ func (e *fakeFailingExecutor) Execute(job *domain.ChannelSyncJob, items []domain
 	return &ChannelSyncExecutionResult{
 		Items:           results,
 		AggregateStatus: "failed",
+		RequestPayload:  fmt.Sprintf(`{"kind":"fake_failing","items":%d}`, len(items)),
 		ResponsePayload: `{"error":"all failed"}`,
 		ErrorMessage:    "mock failure",
 	}, nil

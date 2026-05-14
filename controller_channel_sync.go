@@ -1,11 +1,16 @@
 package main
 
 import (
+	"log"
+	"os"
+	"path/filepath"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 )
 
 // ChannelSyncController exposes channel-sync Wails bindings.
@@ -28,7 +33,7 @@ func NewChannelSyncController() *ChannelSyncController {
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	decisionRepo := infra.NewClosureDecisionRepository(gdb)
 	channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo)
-	executorProvider := app.NewRuntimeExecutorProvider()
+	executorProvider := buildExecutorProvider()
 	return &ChannelSyncController{
 		channelSyncUC:    channelSyncUC,
 		channelSyncRepo:  channelSyncRepo,
@@ -128,6 +133,23 @@ func domainToChannelSyncJobDTO(j *domain.ChannelSyncJob) dto.ChannelSyncJobDTO {
 		CreatedAt:            j.CreatedAt,
 		UpdatedAt:            j.UpdatedAt,
 	}
+}
+
+// buildExecutorProvider resolves the exports directory and wires the
+// document_export executor for the "eli.local_export" connector key.
+func buildExecutorProvider() app.ExecutorProvider {
+	exportsDir, err := service.ResolveExportsDir()
+	if err != nil {
+		log.Printf("[channel_sync] resolve exports dir: %v — falling back to os.TempDir", err)
+		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
+	}
+	docExportExec := app.NewDocumentExportExecutor(exportsDir)
+	registry := map[string]map[string]app.ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": docExportExec,
+		},
+	}
+	return app.NewRuntimeExecutorProviderWith(registry)
 }
 
 func domainToChannelSyncItemDTO(it *domain.ChannelSyncItem) dto.ChannelSyncItemDTO {

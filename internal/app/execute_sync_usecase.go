@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -52,17 +51,6 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 	job.Status = "running"
 	job.StartedAt = now
 	job.UpdatedAt = now
-
-	// Build minimal request payload
-	reqPayload := map[string]interface{}{
-		"job_id":              job.ID,
-		"direction":           job.Direction,
-		"tracking_sync_mode":  profile.TrackingSyncMode,
-		"connector_key":       profile.ConnectorKey,
-		"item_count":          len(items),
-	}
-	payloadBytes, _ := json.Marshal(reqPayload)
-	job.RequestPayload = string(payloadBytes)
 	if err := uc.channelSyncRepo.SaveJob(job); err != nil {
 		return nil, fmt.Errorf("save job running state: %w", err)
 	}
@@ -121,6 +109,7 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 
 	// Update job aggregate
 	job.Status = result.AggregateStatus
+	job.RequestPayload = result.RequestPayload
 	job.ResponsePayload = result.ResponsePayload
 	job.ErrorMessage = result.ErrorMessage
 	job.FinishedAt = now
