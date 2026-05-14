@@ -29,6 +29,11 @@ const route = useRoute();
 
 const menuOptions: MenuOption[] = [
   {
+    label: "仪表盘",
+    key: "dashboard",
+    icon: () => h(NIcon, null, { default: () => "🏠" }),
+  },
+  {
     label: "需求导入",
     key: "demand-intake",
     icon: () => h(NIcon, null, { default: () => "📥" }),
@@ -50,7 +55,11 @@ const footerOptions: MenuOption[] = [
 
 const activeKey = computed(() => {
   const name = route.name;
-  if (typeof name === "string") return name;
+  if (typeof name === "string") {
+    // Map wizard child routes to the dashboard key for sidebar highlight
+    if (name.startsWith("wave-")) return "dashboard";
+    return name;
+  }
   return null;
 });
 
