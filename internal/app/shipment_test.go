@@ -17,6 +17,7 @@ type mockShipmentRepo struct {
 	shipmentLines     map[uint][]*domain.ShipmentLine
 	supplierOrderWave map[uint]uint // supplierOrderID → waveID
 	lastID            uint
+	failOnLineIndex   int // -1 = no failure; >=0 = return error when processing line at this index
 }
 
 func newMockShipmentRepo() *mockShipmentRepo {
@@ -24,6 +25,7 @@ func newMockShipmentRepo() *mockShipmentRepo {
 		shipments:         make(map[uint]*domain.Shipment),
 		shipmentLines:     make(map[uint][]*domain.ShipmentLine),
 		supplierOrderWave: make(map[uint]uint),
+		failOnLineIndex:   -1,
 	}
 }
 
@@ -85,14 +87,38 @@ func (m *mockShipmentRepo) CreateLine(line *domain.ShipmentLine) error {
 func (m *mockShipmentRepo) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	shipment.ID = m.next()
-	cp := *shipment
-	m.shipments[shipment.ID] = &cp
-	for _, line := range lines {
-		line.ShipmentID = shipment.ID
-		line.ID = m.next()
-		cpLine := *line
-		m.shipmentLines[shipment.ID] = append(m.shipmentLines[shipment.ID], &cpLine)
+
+	// Pre-allocate all IDs
+	shipmentID := m.next()
+	lineIDs := make([]uint, len(lines))
+	for i := range lines {
+		lineIDs[i] = m.next()
+	}
+
+	// Build pending copies without touching the map
+	pendingShipment := *shipment
+	pendingShipment.ID = shipmentID
+	pendingLines := make([]*domain.ShipmentLine, len(lines))
+	for i, line := range lines {
+		// Inject failure on the designated line — before any map write
+		if m.failOnLineIndex >= 0 && i == m.failOnLineIndex {
+			return fmt.Errorf("mock: fail on line index %d", i)
+		}
+		cp := *line
+		cp.ShipmentID = shipmentID
+		cp.ID = lineIDs[i]
+		pendingLines[i] = &cp
+	}
+
+	// All lines built successfully — commit to map atomically
+	m.shipments[shipmentID] = &pendingShipment
+	m.shipmentLines[shipmentID] = pendingLines
+
+	// Populate caller references so the use case can return domain objects with IDs
+	shipment.ID = shipmentID
+	for i := range lines {
+		lines[i].ShipmentID = shipmentID
+		lines[i].ID = lineIDs[i]
 	}
 	return nil
 }
@@ -389,6 +415,21 @@ func (m *mockSupplierRepoForShipment) FindLineByID(id uint) (*domain.SupplierOrd
 	return &cp, nil
 }
 
+// Stub methods to satisfy domain.SupplierOrderRepository — unused by shipment tests
+func (m *mockSupplierRepoForShipment) Create(order *domain.SupplierOrder) error { panic("not implemented") }
+func (m *mockSupplierRepoForShipment) List() ([]domain.SupplierOrder, error)    { panic("not implemented") }
+func (m *mockSupplierRepoForShipment) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForShipment) DeleteDraftsByWave(waveID uint) error { panic("not implemented") }
+func (m *mockSupplierRepoForShipment) CreateLine(line *domain.SupplierOrderLine) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForShipment) ListLinesByOrder(orderID uint) ([]domain.SupplierOrderLine, error) {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForShipment) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
+
 // ── mock fulfill repo for shipment validation tests ──
 
 type mockFulfillRepoForShipment struct {
@@ -409,6 +450,15 @@ func (m *mockFulfillRepoForShipment) FindByID(id uint) (*domain.FulfillmentLine,
 	}
 	cp := *l
 	return &cp, nil
+}
+
+// Stub methods to satisfy domain.FulfillmentLineRepository — unused by shipment tests
+func (m *mockFulfillRepoForShipment) Create(line *domain.FulfillmentLine) error { panic("not implemented") }
+func (m *mockFulfillRepoForShipment) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
+	panic("not implemented")
+}
+func (m *mockFulfillRepoForShipment) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
+	panic("not implemented")
 }
 
 // ── validation tests ──
@@ -616,7 +666,55 @@ func TestCreateShipmentPersistsShipmentAndLinesAtomically(t *testing.T) {
 	if lines[0].ShipmentID != shipment.ID {
 		t.Errorf("line shipment ID %d != shipment ID %d", lines[0].ShipmentID, shipment.ID)
 	}
+}
 
-	// Verify no leftover on error path — if AtomicCreateShipment failed, nothing should persist
-	// (The mock implements AtomicCreateShipment atomically by design)
+func TestCreateShipmentRollsBackWhenLinePersistenceFails(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo)
+
+	// Setup: supplier order 1 (wave 1), two supplier order lines -> two fulfillment lines
+	now := "2026-01-01T00:00:00Z"
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100}
+	supplierRepo.orderLines[11] = &domain.SupplierOrderLine{ID: 11, SupplierOrderID: 1, FulfillmentLineID: 101}
+	fulfillRepo.lines[100] = &domain.FulfillmentLine{ID: 100, WaveID: 1}
+	fulfillRepo.lines[101] = &domain.FulfillmentLine{ID: 101, WaveID: 1}
+
+	// Configure mock to fail on second line (line index 1)
+	shipmentRepo.failOnLineIndex = 1
+
+	input := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test-platform",
+		ShipmentNo:       "SHIP-FAIL",
+		Status:           "shipped",
+		Lines: []dto.CreateShipmentLineInput{
+			{SupplierOrderLineID: 10, FulfillmentLineID: 100, Quantity: 1},
+			{SupplierOrderLineID: 11, FulfillmentLineID: 101, Quantity: 1},
+		},
+	}
+
+	shipment, lines, err := uc.CreateShipment(input)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	// Use case returns nil on error
+	if shipment != nil {
+		t.Error("expected nil shipment on error")
+	}
+	if lines != nil {
+		t.Error("expected nil lines on error")
+	}
+
+	if len(shipmentRepo.shipments) != 0 {
+		t.Errorf("expected 0 shipments after rollback, got %d", len(shipmentRepo.shipments))
+	}
+	if len(shipmentRepo.shipmentLines) != 0 {
+		t.Errorf("expected 0 shipment lines after rollback, got %d", len(shipmentRepo.shipmentLines))
+	}
 }

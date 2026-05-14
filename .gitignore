@@ -35,6 +35,7 @@ go-build/
 go-cache/
 go.work
 go.work.sum
+.gocache/
 
 # Claude Code
 .claude/
