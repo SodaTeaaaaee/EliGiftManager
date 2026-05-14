@@ -26,7 +26,10 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 	// Validate fulfillment line exists and belongs to the wave
 	line, err := uc.fulfillRepo.FindByID(input.FulfillmentLineID)
 	if err != nil {
-		return nil, fmt.Errorf("fulfillment line %d not found: %w", input.FulfillmentLineID, err)
+		return nil, fmt.Errorf("fulfillment line %d lookup failed: %w", input.FulfillmentLineID, err)
+	}
+	if line == nil {
+		return nil, fmt.Errorf("fulfillment line %d not found", input.FulfillmentLineID)
 	}
 	if line.WaveID != input.WaveID {
 		return nil, fmt.Errorf("fulfillment line %d does not belong to wave %d", input.FulfillmentLineID, input.WaveID)

@@ -57,24 +57,12 @@ const router = createRouter({
             },
           ],
         },
-        // Legacy standalone routes — redirects to wizard workspace.
+        // Legacy standalone wave overview (kept — sidebar links here)
         {
           path: "wave-overview",
           name: "wave-overview",
           component: () =>
             import("@/pages/wave-overview/WaveOverviewPage.vue"),
-        },
-        {
-          path: "waves/:waveId/allocation",
-          redirect: (to: any) => ({ name: "wave-allocation", params: to.params }),
-        },
-        {
-          path: "waves/:waveId/demand-mapping",
-          redirect: (to: any) => ({ name: "wave-demand-mapping", params: to.params }),
-        },
-        {
-          path: "waves/:waveId/adjustment-review",
-          redirect: (to: any) => ({ name: "wave-adjustment-review", params: to.params }),
         },
         // TODO(V2): 完整实现 — 添加 AllocationReview, ExportPage 路由
       ],

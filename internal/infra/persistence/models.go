@@ -354,8 +354,8 @@ func (DocumentTemplate) TableName() string { return "document_templates" }
 
 type IntegrationProfileTemplateBinding struct {
 	gorm.Model
-	IntegrationProfileID uint   `gorm:"not null;index"`
-	DocumentType         string `gorm:"not null"`
+	IntegrationProfileID uint   `gorm:"not null;index:idx_binding_profile_type"`
+	DocumentType         string `gorm:"not null;index:idx_binding_profile_type"`
 	TemplateID           uint   `gorm:"not null;index"`
 	IsDefault            bool   `gorm:"not null;default:false"`
 }

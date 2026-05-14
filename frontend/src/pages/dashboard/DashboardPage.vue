@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, h } from 'vue'
 import { useRouter } from 'vue-router'
-import { NCard, NDataTable, NEmpty, type DataTableColumns } from 'naive-ui'
+import { NCard, NDataTable, NAlert, type DataTableColumns } from 'naive-ui'
 import { listWaves } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
 
 const router = useRouter()
 const waves = ref<dto.WaveDTO[]>([])
 const loading = ref(false)
+const error = ref('')
 
 const columns: DataTableColumns<dto.WaveDTO> = [
   { title: 'ID', key: 'id', width: 60 },
@@ -29,10 +30,11 @@ function handleRowClick(row: dto.WaveDTO) {
 
 async function loadWaves() {
   loading.value = true
+  error.value = ''
   try {
     waves.value = await listWaves()
-  } catch {
-    // guard — backend may not be connected in dev
+  } catch (e: any) {
+    error.value = e?.message ?? String(e)
   } finally {
     loading.value = false
   }
@@ -44,6 +46,8 @@ onMounted(loadWaves)
 <template>
   <div class="dashboard-page p-4">
     <h1 class="text-xl font-medium mb-4">仪表盘</h1>
+
+    <n-alert v-if="error" type="error" :title="error" class="mb-4" />
 
     <n-card title="活跃波次">
       <n-data-table

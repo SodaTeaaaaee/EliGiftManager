@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"errors"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
@@ -27,7 +29,7 @@ func (r *historyCheckpointRepository) Create(cp *domain.HistoryCheckpoint) error
 func (r *historyCheckpointRepository) FindByNodeID(nodeID uint) (*domain.HistoryCheckpoint, error) {
 	var p persistence.HistoryCheckpoint
 	if err := r.db.Where("history_node_id = ?", nodeID).First(&p).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err

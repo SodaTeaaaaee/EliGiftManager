@@ -55,7 +55,10 @@ func (s *BasisStampService) CreatePin(basisNodeID string, pinKind string, refTyp
 		return nil
 	}
 	var nodeID uint
-	if _, err := fmt.Sscanf(basisNodeID, "%d", &nodeID); err != nil || nodeID == 0 {
+	if _, err := fmt.Sscanf(basisNodeID, "%d", &nodeID); err != nil {
+		return fmt.Errorf("invalid basisNodeID %q: %w", basisNodeID, err)
+	}
+	if nodeID == 0 {
 		return nil
 	}
 	return s.pinRepo.Create(&domain.HistoryPin{

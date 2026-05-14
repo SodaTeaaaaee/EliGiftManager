@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"errors"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
@@ -27,7 +29,7 @@ func (r *historyNodeRepository) Create(node *domain.HistoryNode) error {
 func (r *historyNodeRepository) FindByID(id uint) (*domain.HistoryNode, error) {
 	var p persistence.HistoryNode
 	if err := r.db.First(&p, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, err
