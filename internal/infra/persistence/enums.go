@@ -249,3 +249,12 @@ const (
 	ClosurePolicyCloseAfterManualConfirmation ClosurePolicy = "close_after_manual_confirmation"
 	ClosurePolicyCloseAfterShipment           ClosurePolicy = "close_after_shipment"
 )
+
+// ChannelClosureDecisionRecord: DecisionKind
+type ChannelClosureDecisionKind string
+
+const (
+	DecisionKindUnsupported        ChannelClosureDecisionKind = "mark_sync_unsupported"
+	DecisionKindSkipped            ChannelClosureDecisionKind = "mark_sync_skipped"
+	DecisionKindCompletedManually  ChannelClosureDecisionKind = "mark_sync_completed_manually"
+)

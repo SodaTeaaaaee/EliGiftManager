@@ -10,9 +10,12 @@ import (
 
 // ChannelSyncController exposes channel-sync Wails bindings.
 type ChannelSyncController struct {
-	channelSyncUC   app.ChannelSyncUseCase
-	channelSyncRepo domain.ChannelSyncRepository
-	closureUC       app.ChannelClosureUseCase
+	channelSyncUC    app.ChannelSyncUseCase
+	channelSyncRepo  domain.ChannelSyncRepository
+	closureUC        app.ChannelClosureUseCase
+	executeSyncUC    app.ExecuteSyncUseCase
+	recordDecisionUC app.RecordClosureDecisionUseCase
+	retrySyncUC      app.RetrySyncUseCase
 }
 
 func NewChannelSyncController() *ChannelSyncController {
@@ -23,11 +26,16 @@ func NewChannelSyncController() *ChannelSyncController {
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
 	demandRepo := infra.NewDemandRepository(gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	decisionRepo := infra.NewClosureDecisionRepository(gdb)
 	channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo)
+	executorProvider := app.NewRuntimeExecutorProvider()
 	return &ChannelSyncController{
-		channelSyncUC:   channelSyncUC,
-		channelSyncRepo: channelSyncRepo,
-		closureUC:       app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC),
+		channelSyncUC:    channelSyncUC,
+		channelSyncRepo:  channelSyncRepo,
+		closureUC:        app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC),
+		executeSyncUC:    app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, executorProvider),
+		recordDecisionUC: app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo),
+		retrySyncUC:      app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, executorProvider),
 	}
 }
 
@@ -37,7 +45,6 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 	if err != nil {
 		return dto.ChannelSyncJobDTO{}, err
 	}
-
 	result := domainToChannelSyncJobDTO(job)
 	result.Items = make([]dto.ChannelSyncItemDTO, len(items))
 	for i, it := range items {
@@ -47,12 +54,33 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 }
 
 // PlanChannelClosure is the high-level orchestration entry point.
-// It reads the IntegrationProfile and decides whether to create a ChannelSyncJob,
-// route to manual closure, or mark as unsupported.
 func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureInput) (dto.PlanChannelClosureResult, error) {
 	result, err := c.closureUC.PlanChannelClosure(input)
 	if err != nil {
 		return dto.PlanChannelClosureResult{}, err
+	}
+	return *result, nil
+}
+
+// ExecuteChannelSyncJob executes a pending ChannelSyncJob.
+func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSyncResult, error) {
+	result, err := c.executeSyncUC.ExecuteChannelSyncJob(jobID)
+	if err != nil {
+		return dto.ExecuteSyncResult{}, err
+	}
+	return *result, nil
+}
+
+// RecordChannelClosureDecision persists manual closure decisions.
+func (c *ChannelSyncController) RecordChannelClosureDecision(input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error) {
+	return c.recordDecisionUC.RecordChannelClosureDecision(input)
+}
+
+// RetryChannelSyncJob retries failed items in a ChannelSyncJob.
+func (c *ChannelSyncController) RetryChannelSyncJob(jobID uint) (dto.ExecuteSyncResult, error) {
+	result, err := c.retrySyncUC.RetryChannelSyncJob(jobID)
+	if err != nil {
+		return dto.ExecuteSyncResult{}, err
 	}
 	return *result, nil
 }

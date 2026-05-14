@@ -25,8 +25,11 @@ import {
 } from "../../../../wailsjs/go/main/ShipmentController";
 import {
   CreateChannelSyncJob,
+  ExecuteChannelSyncJob,
   ListChannelSyncJobsByWave,
   PlanChannelClosure,
+  RecordChannelClosureDecision,
+  RetryChannelSyncJob,
 } from "../../../../wailsjs/go/main/ChannelSyncController";
 import {
   PickCSVFile,
@@ -205,6 +208,37 @@ export async function planChannelClosure(input: {
   assertWailsRuntime()
   const req = dto.PlanChannelClosureInput.createFrom(input)
   return PlanChannelClosure(req)
+}
+
+export async function executeChannelSyncJob(
+  jobId: number,
+): Promise<dto.ExecuteSyncResult> {
+  assertWailsRuntime()
+  return ExecuteChannelSyncJob(jobId)
+}
+
+export async function recordChannelClosureDecision(input: {
+  waveId: number
+  integrationProfileId: number
+  entries: Array<{
+    fulfillmentLineId: number
+    decisionKind: string
+    reasonCode: string
+    note: string
+    evidenceRef: string
+    operatorId: string
+  }>
+}): Promise<dto.ClosureDecisionRecordDTO[]> {
+  assertWailsRuntime()
+  const req = dto.RecordClosureDecisionInput.createFrom(input)
+  return RecordChannelClosureDecision(req)
+}
+
+export async function retryChannelSyncJob(
+  jobId: number,
+): Promise<dto.ExecuteSyncResult> {
+  assertWailsRuntime()
+  return RetryChannelSyncJob(jobId)
 }
 
 // ── App (utility) ──

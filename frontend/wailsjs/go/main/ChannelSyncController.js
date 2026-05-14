@@ -10,6 +10,18 @@ export function PlanChannelClosure(arg1) {
   return window['go']['main']['ChannelSyncController']['PlanChannelClosure'](arg1);
 }
 
+export function ExecuteChannelSyncJob(arg1) {
+  return window['go']['main']['ChannelSyncController']['ExecuteChannelSyncJob'](arg1);
+}
+
+export function RecordChannelClosureDecision(arg1) {
+  return window['go']['main']['ChannelSyncController']['RecordChannelClosureDecision'](arg1);
+}
+
+export function RetryChannelSyncJob(arg1) {
+  return window['go']['main']['ChannelSyncController']['RetryChannelSyncJob'](arg1);
+}
+
 export function ListChannelSyncJobsByWave(arg1) {
   return window['go']['main']['ChannelSyncController']['ListChannelSyncJobsByWave'](arg1);
 }

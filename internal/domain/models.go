@@ -292,3 +292,19 @@ type IntegrationProfile struct {
 	CreatedAt                 string
 	UpdatedAt                 string
 }
+
+// ---- ChannelClosureDecisionRecord ----
+
+type ChannelClosureDecisionRecord struct {
+	ID                   uint
+	WaveID               uint
+	IntegrationProfileID uint
+	FulfillmentLineID    uint
+	DecisionKind         string
+	ReasonCode           string
+	Note                 string
+	EvidenceRef          string
+	OperatorID           string
+	CreatedAt            string
+	UpdatedAt            string
+}

@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"time"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
@@ -30,6 +32,61 @@ func (r *channelSyncRepository) FindJobByID(id uint) (*domain.ChannelSyncJob, er
 	}
 	return persistence.FromPersistenceChannelSyncJob(&p), nil
 }
+
+func (r *channelSyncRepository) SaveJob(job *domain.ChannelSyncJob) error {
+	// Load existing row to avoid overwriting fields not carried by the domain object.
+	var existing persistence.ChannelSyncJob
+	if err := r.db.First(&existing, job.ID).Error; err != nil {
+		return err
+	}
+
+	// Only patch runtime action fields — never overwrite CreatedAt, DeletedAt, or
+	// future columns that the domain object doesn't carry.
+	existing.Status = persistence.ChannelSyncJobStatus(job.Status)
+	existing.RequestPayload = job.RequestPayload
+	existing.ResponsePayload = job.ResponsePayload
+	existing.ErrorMessage = job.ErrorMessage
+	existing.BasisHistoryNodeID = job.BasisHistoryNodeID
+	existing.BasisProjectionHash = job.BasisProjectionHash
+	existing.BasisPayloadSnapshot = job.BasisPayloadSnapshot
+
+	if job.StartedAt != "" {
+		t, _ := time.Parse(time.RFC3339, job.StartedAt)
+		existing.StartedAt = &t
+	}
+	if job.FinishedAt != "" {
+		t, _ := time.Parse(time.RFC3339, job.FinishedAt)
+		existing.FinishedAt = &t
+	}
+
+	if err := r.db.Save(&existing).Error; err != nil {
+		return err
+	}
+	*job = *persistence.FromPersistenceChannelSyncJob(&existing)
+	return nil
+}
+
+func (r *channelSyncRepository) SaveItem(item *domain.ChannelSyncItem) error {
+	var existing persistence.ChannelSyncItem
+	if err := r.db.First(&existing, item.ID).Error; err != nil {
+		return err
+	}
+
+	existing.Status = persistence.ChannelSyncItemStatus(item.Status)
+	existing.ErrorMessage = item.ErrorMessage
+	existing.ExternalDocumentNo = item.ExternalDocumentNo
+	existing.ExternalLineNo = item.ExternalLineNo
+	existing.TrackingNo = item.TrackingNo
+	existing.CarrierCode = item.CarrierCode
+
+	if err := r.db.Save(&existing).Error; err != nil {
+		return err
+	}
+	*item = *persistence.FromPersistenceChannelSyncItem(&existing)
+	return nil
+}
+
+
 
 func (r *channelSyncRepository) ListJobsByWave(waveID uint) ([]domain.ChannelSyncJob, error) {
 	var ps []persistence.ChannelSyncJob

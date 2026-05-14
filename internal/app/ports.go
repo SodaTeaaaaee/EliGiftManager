@@ -41,3 +41,18 @@ type ChannelSyncUseCase interface {
 type ChannelClosureUseCase interface {
 	PlanChannelClosure(input dto.PlanChannelClosureInput) (*dto.PlanChannelClosureResult, error)
 }
+
+// ExecuteSyncUseCase handles executing a pending ChannelSyncJob.
+type ExecuteSyncUseCase interface {
+	ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyncResult, error)
+}
+
+// RecordClosureDecisionUseCase handles persisting manual closure decisions.
+type RecordClosureDecisionUseCase interface {
+	RecordChannelClosureDecision(input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error)
+}
+
+// RetrySyncUseCase handles retrying failed items in a ChannelSyncJob.
+type RetrySyncUseCase interface {
+	RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncResult, error)
+}

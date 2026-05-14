@@ -88,12 +88,22 @@ type ChannelSyncRepository interface {
 	CreateJob(job *ChannelSyncJob) error
 	FindJobByID(id uint) (*ChannelSyncJob, error)
 	ListJobsByWave(waveID uint) ([]ChannelSyncJob, error)
+	SaveJob(job *ChannelSyncJob) error
 
 	CreateItem(item *ChannelSyncItem) error
+	SaveItem(item *ChannelSyncItem) error
 	ListItemsByJob(jobID uint) ([]ChannelSyncItem, error)
 
 	// AtomicCreateChannelSync creates a job and its items atomically.
 	AtomicCreateChannelSync(job *ChannelSyncJob, items []*ChannelSyncItem) error
+}
+
+// ChannelClosureDecisionRepository defines persistence operations for channel closure decision records.
+type ChannelClosureDecisionRepository interface {
+	Create(record *ChannelClosureDecisionRecord) error
+	AtomicCreate(records []*ChannelClosureDecisionRecord) error
+	ListByFulfillmentLine(fulfillmentLineID uint) ([]ChannelClosureDecisionRecord, error)
+	ListByWave(waveID uint) ([]ChannelClosureDecisionRecord, error)
 }
 
 // IntegrationProfileRepository defines persistence operations for IntegrationProfile.

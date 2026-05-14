@@ -304,3 +304,19 @@ type IntegrationProfile struct {
 }
 
 func (IntegrationProfile) TableName() string { return "integration_profiles" }
+
+// ---- ChannelClosureDecisionRecord ----
+
+type ChannelClosureDecisionRecord struct {
+	gorm.Model
+	WaveID               uint                        `gorm:"index;not null"`
+	IntegrationProfileID uint                        `gorm:"index;not null"`
+	FulfillmentLineID    uint                        `gorm:"index;not null"`
+	DecisionKind         ChannelClosureDecisionKind `gorm:"type:text;not null"`
+	ReasonCode           string
+	Note                 string                       `gorm:"type:text"`
+	EvidenceRef          string
+	OperatorID           string
+}
+
+func (ChannelClosureDecisionRecord) TableName() string { return "channel_closure_decision_records" }

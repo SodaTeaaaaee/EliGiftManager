@@ -60,6 +60,47 @@ type PlanChannelClosureResult struct {
 	Items              []ChannelSyncItemDTO  `json:"items,omitempty"`
 }
 
+// ── Action DTOs ──
+
+type ExecuteSyncResult struct {
+	JobID           uint                 `json:"jobId"`
+	JobStatus       string               `json:"jobStatus"`
+	RequestPayload  string               `json:"requestPayload"`
+	ResponsePayload string               `json:"responsePayload"`
+	ErrorMessage    string               `json:"errorMessage"`
+	StartedAt       string               `json:"startedAt"`
+	FinishedAt      string               `json:"finishedAt"`
+	Items           []ChannelSyncItemDTO `json:"items"`
+}
+
+type RecordClosureDecisionInput struct {
+	WaveID               uint                             `json:"waveId"`
+	IntegrationProfileID uint                             `json:"integrationProfileId"`
+	Entries              []RecordClosureDecisionEntry      `json:"entries"`
+}
+
+type RecordClosureDecisionEntry struct {
+	FulfillmentLineID uint   `json:"fulfillmentLineId"`
+	DecisionKind      string `json:"decisionKind"`
+	ReasonCode        string `json:"reasonCode"`
+	Note              string `json:"note"`
+	EvidenceRef       string `json:"evidenceRef"`
+	OperatorID        string `json:"operatorId"`
+}
+
+type ClosureDecisionRecordDTO struct {
+	ID                   uint   `json:"id"`
+	WaveID               uint   `json:"waveId"`
+	IntegrationProfileID uint   `json:"integrationProfileId"`
+	FulfillmentLineID    uint   `json:"fulfillmentLineId"`
+	DecisionKind         string `json:"decisionKind"`
+	ReasonCode           string `json:"reasonCode"`
+	Note                 string `json:"note"`
+	EvidenceRef          string `json:"evidenceRef"`
+	OperatorID           string `json:"operatorId"`
+	CreatedAt            string `json:"createdAt"`
+}
+
 type ChannelSyncItemDTO struct {
 	ID                 uint   `json:"id"`
 	ChannelSyncJobID   uint   `json:"channelSyncJobId"`

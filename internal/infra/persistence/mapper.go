@@ -608,3 +608,34 @@ func FromPersistenceIntegrationProfile(p *IntegrationProfile) *domain.Integratio
 		UpdatedAt:                 formatTime(p.UpdatedAt),
 	}
 }
+
+// ---- ChannelClosureDecisionRecord ----
+
+func ToPersistenceChannelClosureDecisionRecord(d *domain.ChannelClosureDecisionRecord) *ChannelClosureDecisionRecord {
+	return &ChannelClosureDecisionRecord{
+		WaveID:               d.WaveID,
+		IntegrationProfileID: d.IntegrationProfileID,
+		FulfillmentLineID:    d.FulfillmentLineID,
+		DecisionKind:         ChannelClosureDecisionKind(d.DecisionKind),
+		ReasonCode:           d.ReasonCode,
+		Note:                 d.Note,
+		EvidenceRef:          d.EvidenceRef,
+		OperatorID:           d.OperatorID,
+	}
+}
+
+func FromPersistenceChannelClosureDecisionRecord(p *ChannelClosureDecisionRecord) *domain.ChannelClosureDecisionRecord {
+	return &domain.ChannelClosureDecisionRecord{
+		ID:                   p.ID,
+		WaveID:               p.WaveID,
+		IntegrationProfileID: p.IntegrationProfileID,
+		FulfillmentLineID:    p.FulfillmentLineID,
+		DecisionKind:         string(p.DecisionKind),
+		ReasonCode:           p.ReasonCode,
+		Note:                 p.Note,
+		EvidenceRef:          p.EvidenceRef,
+		OperatorID:           p.OperatorID,
+		CreatedAt:            formatTime(p.CreatedAt),
+		UpdatedAt:            formatTime(p.UpdatedAt),
+	}
+}

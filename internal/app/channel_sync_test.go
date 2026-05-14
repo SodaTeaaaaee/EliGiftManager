@@ -49,6 +49,27 @@ func (m *mockChannelSyncRepo) FindJobByID(id uint) (*domain.ChannelSyncJob, erro
 	return &cp, nil
 }
 
+func (m *mockChannelSyncRepo) SaveJob(job *domain.ChannelSyncJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := *job
+	m.jobs[job.ID] = &cp
+	return nil
+}
+
+func (m *mockChannelSyncRepo) SaveItem(item *domain.ChannelSyncItem) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := *item
+	for i, existing := range m.jobItems[item.ChannelSyncJobID] {
+		if existing.ID == item.ID {
+			m.jobItems[item.ChannelSyncJobID][i] = &cp
+			return nil
+		}
+	}
+	return fmt.Errorf("item %d not found in job %d", item.ID, item.ChannelSyncJobID)
+}
+
 func (m *mockChannelSyncRepo) ListJobsByWave(waveID uint) ([]domain.ChannelSyncJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -689,6 +689,137 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class ClosureDecisionRecordDTO {
+	    id: number;
+	    waveId: number;
+	    integrationProfileId: number;
+	    fulfillmentLineId: number;
+	    decisionKind: string;
+	    reasonCode: string;
+	    note: string;
+	    evidenceRef: string;
+	    operatorId: string;
+	    createdAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ClosureDecisionRecordDTO(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveId = source["waveId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.decisionKind = source["decisionKind"];
+	        this.reasonCode = source["reasonCode"];
+	        this.note = source["note"];
+	        this.evidenceRef = source["evidenceRef"];
+	        this.operatorId = source["operatorId"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class RecordClosureDecisionEntry {
+	    fulfillmentLineId: number;
+	    decisionKind: string;
+	    reasonCode: string;
+	    note: string;
+	    evidenceRef: string;
+	    operatorId: string;
+
+	    static createFrom(source: any = {}) {
+	        return new RecordClosureDecisionEntry(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.decisionKind = source["decisionKind"];
+	        this.reasonCode = source["reasonCode"];
+	        this.note = source["note"];
+	        this.evidenceRef = source["evidenceRef"];
+	        this.operatorId = source["operatorId"];
+	    }
+	}
+	export class RecordClosureDecisionInput {
+	    waveId: number;
+	    integrationProfileId: number;
+	    entries: RecordClosureDecisionEntry[];
+
+	    static createFrom(source: any = {}) {
+	        return new RecordClosureDecisionInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.entries = this.convertValues(source["entries"], RecordClosureDecisionEntry);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ExecuteSyncResult {
+	    jobId: number;
+	    jobStatus: string;
+	    requestPayload: string;
+	    responsePayload: string;
+	    errorMessage: string;
+	    startedAt: string;
+	    finishedAt: string;
+	    items: ChannelSyncItemDTO[];
+
+	    static createFrom(source: any = {}) {
+	        return new ExecuteSyncResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.jobId = source["jobId"];
+	        this.jobStatus = source["jobStatus"];
+	        this.requestPayload = source["requestPayload"];
+	        this.responsePayload = source["responsePayload"];
+	        this.errorMessage = source["errorMessage"];
+	        this.startedAt = source["startedAt"];
+	        this.finishedAt = source["finishedAt"];
+	        this.items = this.convertValues(source["items"], ChannelSyncItemDTO);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 
 }
+
 
