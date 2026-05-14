@@ -65,6 +65,11 @@ type BasisDriftDetectionUseCase interface {
 	DetectWaveBasisDrift(waveID uint, currentProjectionHash string) ([]dto.BasisDriftSignalDTO, error)
 }
 
+type HistoryHeadQueryUseCase interface {
+	GetCurrentProjectionHash(waveID uint) (string, error)
+	GetCurrentHeadNodeIDAndHash(waveID uint) (nodeID uint, projectionHash string, err error)
+}
+
 type AdjustmentUseCase interface {
 	RecordAdjustment(input dto.RecordAdjustmentInput) (*domain.FulfillmentAdjustment, error)
 	ListAdjustmentsByWave(waveID uint) ([]dto.FulfillmentAdjustmentDTO, error)

@@ -15,6 +15,14 @@ func (noopDriftUC) DetectWaveBasisDrift(_ uint, _ string) ([]dto.BasisDriftSigna
 	return nil, nil
 }
 
+// noopHistoryHeadUC is a no-op HistoryHeadQueryUseCase that always returns empty values.
+type noopHistoryHeadUC struct{}
+
+func (noopHistoryHeadUC) GetCurrentProjectionHash(_ uint) (string, error) { return "", nil }
+func (noopHistoryHeadUC) GetCurrentHeadNodeIDAndHash(_ uint) (uint, string, error) {
+	return 0, "", nil
+}
+
 // ── test setup ──
 
 type projTestSetup struct {
@@ -29,7 +37,7 @@ func newProjTestSetup() *projTestSetup {
 	return &projTestSetup{
 		syncRepo:    sr,
 		closureRepo: cr,
-		uc:          NewWaveOverviewProjectionUseCase(sr, cr, noopDriftUC{}),
+		uc:          NewWaveOverviewProjectionUseCase(sr, cr, noopDriftUC{}, noopHistoryHeadUC{}),
 	}
 }
 

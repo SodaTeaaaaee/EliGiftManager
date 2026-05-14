@@ -9,17 +9,20 @@ type waveOverviewProjectionUseCase struct {
 	channelSyncRepo domain.ChannelSyncRepository
 	closureRepo     domain.ChannelClosureDecisionRepository
 	driftUC         BasisDriftDetectionUseCase
+	historyHeadUC   HistoryHeadQueryUseCase
 }
 
 func NewWaveOverviewProjectionUseCase(
 	channelSyncRepo domain.ChannelSyncRepository,
 	closureRepo domain.ChannelClosureDecisionRepository,
 	driftUC BasisDriftDetectionUseCase,
+	historyHeadUC HistoryHeadQueryUseCase,
 ) WaveOverviewProjectionUseCase {
 	return &waveOverviewProjectionUseCase{
 		channelSyncRepo: channelSyncRepo,
 		closureRepo:     closureRepo,
 		driftUC:         driftUC,
+		historyHeadUC:   historyHeadUC,
 	}
 }
 
@@ -91,8 +94,11 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 	base.ProjectedLifecycleStage = projectedStage
 
 	// Basis drift detection
-	// Phase 9: replace "" with computed projection hash from HistoryNode
-	signals, err := uc.driftUC.DetectWaveBasisDrift(waveID, "")
+	projHash, err := uc.historyHeadUC.GetCurrentProjectionHash(waveID)
+	if err != nil {
+		return dto.WaveOverviewDTO{}, err
+	}
+	signals, err := uc.driftUC.DetectWaveBasisDrift(waveID, projHash)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -101,7 +107,6 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 		if s.BasisDriftStatus == "drifted" {
 			base.HasDriftedBasis = true
 		}
-		// Phase 9: "required" level needs adjustment target mismatch detection
 		if s.ReviewRequirement == "required" {
 			base.HasRequiredReviewBasis = true
 		}

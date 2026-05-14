@@ -348,3 +348,53 @@ type IntegrationProfileTemplateBinding struct {
 	IsDefault            bool
 	CreatedAt            string
 }
+
+// ---- HistoryScope ----
+
+type HistoryScope struct {
+	ID                uint
+	ScopeType         string
+	ScopeKey          string
+	CurrentHeadNodeID uint
+	CreatedAt         string
+	UpdatedAt         string
+}
+
+// ---- HistoryNode ----
+
+type HistoryNode struct {
+	ID                   uint
+	HistoryScopeID       uint
+	ParentNodeID         uint
+	PreferredRedoChildID uint
+	CommandKind          string
+	CommandSummary       string
+	PatchPayload         string
+	InversePatchPayload  string
+	CheckpointHint       bool
+	ProjectionHash       string
+	CreatedBy            string
+	CreatedAt            string
+}
+
+// ---- HistoryCheckpoint ----
+
+type HistoryCheckpoint struct {
+	ID              uint
+	HistoryScopeID  uint
+	HistoryNodeID   uint
+	SnapshotPayload string
+	SchemaVersion   string
+	CreatedAt       string
+}
+
+// ---- HistoryPin ----
+
+type HistoryPin struct {
+	ID            uint
+	HistoryNodeID uint
+	PinKind       string
+	RefType       string
+	RefID         uint
+	CreatedAt     string
+}

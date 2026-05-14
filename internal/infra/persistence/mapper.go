@@ -721,3 +721,106 @@ func ProfileTemplateBindingFromDomain(d *domain.IntegrationProfileTemplateBindin
 		IsDefault:            d.IsDefault,
 	}
 }
+
+// ---- HistoryScope ----
+
+func HistoryScopeToDomain(p *HistoryScope) *domain.HistoryScope {
+	return &domain.HistoryScope{
+		ID:                p.ID,
+		ScopeType:         p.ScopeType,
+		ScopeKey:          p.ScopeKey,
+		CurrentHeadNodeID: p.CurrentHeadNodeID,
+		CreatedAt:         p.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:         p.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func HistoryScopeFromDomain(d *domain.HistoryScope) *HistoryScope {
+	return &HistoryScope{
+		Model:             gorm.Model{ID: d.ID},
+		ScopeType:         d.ScopeType,
+		ScopeKey:          d.ScopeKey,
+		CurrentHeadNodeID: d.CurrentHeadNodeID,
+	}
+}
+
+// ---- HistoryNode ----
+
+func HistoryNodeToDomain(p *HistoryNode) *domain.HistoryNode {
+	return &domain.HistoryNode{
+		ID:                   p.ID,
+		HistoryScopeID:       p.HistoryScopeID,
+		ParentNodeID:         p.ParentNodeID,
+		PreferredRedoChildID: p.PreferredRedoChildID,
+		CommandKind:          p.CommandKind,
+		CommandSummary:       p.CommandSummary,
+		PatchPayload:         p.PatchPayload,
+		InversePatchPayload:  p.InversePatchPayload,
+		CheckpointHint:       p.CheckpointHint,
+		ProjectionHash:       p.ProjectionHash,
+		CreatedBy:            p.CreatedBy,
+		CreatedAt:            p.CreatedAt.Format(time.RFC3339),
+	}
+}
+
+func HistoryNodeFromDomain(d *domain.HistoryNode) *HistoryNode {
+	return &HistoryNode{
+		Model:                gorm.Model{ID: d.ID},
+		HistoryScopeID:       d.HistoryScopeID,
+		ParentNodeID:         d.ParentNodeID,
+		PreferredRedoChildID: d.PreferredRedoChildID,
+		CommandKind:          d.CommandKind,
+		CommandSummary:       d.CommandSummary,
+		PatchPayload:         d.PatchPayload,
+		InversePatchPayload:  d.InversePatchPayload,
+		CheckpointHint:       d.CheckpointHint,
+		ProjectionHash:       d.ProjectionHash,
+		CreatedBy:            d.CreatedBy,
+	}
+}
+
+// ---- HistoryCheckpoint ----
+
+func HistoryCheckpointToDomain(p *HistoryCheckpoint) *domain.HistoryCheckpoint {
+	return &domain.HistoryCheckpoint{
+		ID:              p.ID,
+		HistoryScopeID:  p.HistoryScopeID,
+		HistoryNodeID:   p.HistoryNodeID,
+		SnapshotPayload: p.SnapshotPayload,
+		SchemaVersion:   p.SchemaVersion,
+		CreatedAt:       p.CreatedAt.Format(time.RFC3339),
+	}
+}
+
+func HistoryCheckpointFromDomain(d *domain.HistoryCheckpoint) *HistoryCheckpoint {
+	return &HistoryCheckpoint{
+		Model:           gorm.Model{ID: d.ID},
+		HistoryScopeID:  d.HistoryScopeID,
+		HistoryNodeID:   d.HistoryNodeID,
+		SnapshotPayload: d.SnapshotPayload,
+		SchemaVersion:   d.SchemaVersion,
+	}
+}
+
+// ---- HistoryPin ----
+
+func HistoryPinToDomain(p *HistoryPin) *domain.HistoryPin {
+	return &domain.HistoryPin{
+		ID:            p.ID,
+		HistoryNodeID: p.HistoryNodeID,
+		PinKind:       p.PinKind,
+		RefType:       p.RefType,
+		RefID:         p.RefID,
+		CreatedAt:     p.CreatedAt.Format(time.RFC3339),
+	}
+}
+
+func HistoryPinFromDomain(d *domain.HistoryPin) *HistoryPin {
+	return &HistoryPin{
+		Model:         gorm.Model{ID: d.ID},
+		HistoryNodeID: d.HistoryNodeID,
+		PinKind:       d.PinKind,
+		RefType:       d.RefType,
+		RefID:         d.RefID,
+	}
+}

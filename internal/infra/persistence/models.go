@@ -363,3 +363,56 @@ type IntegrationProfileTemplateBinding struct {
 func (IntegrationProfileTemplateBinding) TableName() string {
 	return "integration_profile_template_bindings"
 }
+
+// ---- HistoryScope ----
+
+type HistoryScope struct {
+	gorm.Model
+	ScopeType         string `gorm:"not null;uniqueIndex:idx_history_scope_type_key"`
+	ScopeKey          string `gorm:"not null;uniqueIndex:idx_history_scope_type_key"`
+	CurrentHeadNodeID uint   `gorm:"default:0"`
+}
+
+func (HistoryScope) TableName() string { return "history_scopes" }
+
+// ---- HistoryNode ----
+
+type HistoryNode struct {
+	gorm.Model
+	HistoryScopeID       uint   `gorm:"not null;index"`
+	ParentNodeID         uint   `gorm:"index"`
+	PreferredRedoChildID uint   `gorm:"default:0"`
+	CommandKind          string `gorm:"not null"`
+	CommandSummary       string
+	PatchPayload         string `gorm:"type:text"`
+	InversePatchPayload  string `gorm:"type:text"`
+	CheckpointHint       bool   `gorm:"not null;default:false"`
+	ProjectionHash       string
+	CreatedBy            string
+}
+
+func (HistoryNode) TableName() string { return "history_nodes" }
+
+// ---- HistoryCheckpoint ----
+
+type HistoryCheckpoint struct {
+	gorm.Model
+	HistoryScopeID  uint   `gorm:"not null;index"`
+	HistoryNodeID   uint   `gorm:"not null;uniqueIndex"`
+	SnapshotPayload string `gorm:"type:text"`
+	SchemaVersion   string `gorm:"not null"`
+}
+
+func (HistoryCheckpoint) TableName() string { return "history_checkpoints" }
+
+// ---- HistoryPin ----
+
+type HistoryPin struct {
+	gorm.Model
+	HistoryNodeID uint   `gorm:"not null;index"`
+	PinKind       string `gorm:"not null"`
+	RefType       string `gorm:"not null"`
+	RefID         uint   `gorm:"not null"`
+}
+
+func (HistoryPin) TableName() string { return "history_pins" }

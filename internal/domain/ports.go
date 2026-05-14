@@ -137,3 +137,31 @@ type ProfileTemplateBindingRepository interface {
 	FindDefaultByProfileAndType(profileID uint, docType string) (*IntegrationProfileTemplateBinding, error)
 	Delete(id uint) error
 }
+
+// HistoryScopeRepository defines persistence operations for HistoryScope.
+type HistoryScopeRepository interface {
+	Create(scope *HistoryScope) error
+	FindByID(id uint) (*HistoryScope, error)
+	FindByScopeTypeAndKey(scopeType string, scopeKey string) (*HistoryScope, error)
+	UpdateHead(scopeID uint, headNodeID uint) error
+}
+
+// HistoryNodeRepository defines persistence operations for HistoryNode.
+type HistoryNodeRepository interface {
+	Create(node *HistoryNode) error
+	FindByID(id uint) (*HistoryNode, error)
+	UpdatePreferredRedoChild(nodeID uint, childID uint) error
+}
+
+// HistoryCheckpointRepository defines persistence operations for HistoryCheckpoint.
+type HistoryCheckpointRepository interface {
+	Create(cp *HistoryCheckpoint) error
+	FindByNodeID(nodeID uint) (*HistoryCheckpoint, error)
+}
+
+// HistoryPinRepository defines persistence operations for HistoryPin.
+type HistoryPinRepository interface {
+	Create(pin *HistoryPin) error
+	ListByNodeID(nodeID uint) ([]HistoryPin, error)
+	CountByNodeID(nodeID uint) (int64, error)
+}

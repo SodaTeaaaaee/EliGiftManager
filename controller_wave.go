@@ -33,8 +33,11 @@ func NewWaveController() *WaveController {
 	shipmentRepo := infra.NewShipmentRepository(gdb)
 	channelSyncRepo := infra.NewChannelSyncRepository(gdb)
 	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
+	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
+	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 
 	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
+	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 
 	return &WaveController{
 		waveUC:         app.NewWaveUseCase(waveRepo),
@@ -44,7 +47,7 @@ func NewWaveController() *WaveController {
 		assignmentRepo: assignmentRepo,
 		demandRepo:     demandRepo,
 		shipmentRepo:   shipmentRepo,
-		overviewProjUC: app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC),
+		overviewProjUC: app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
 	}
 }
 
