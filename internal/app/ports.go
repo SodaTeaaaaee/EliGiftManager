@@ -69,3 +69,11 @@ type AdjustmentUseCase interface {
 	RecordAdjustment(input dto.RecordAdjustmentInput) (*domain.FulfillmentAdjustment, error)
 	ListAdjustmentsByWave(waveID uint) ([]dto.FulfillmentAdjustmentDTO, error)
 }
+
+type TemplateManagementUseCase interface {
+	CreateDocumentTemplate(input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error)
+	ListDocumentTemplates() ([]dto.DocumentTemplateDTO, error)
+	BindTemplateToProfile(input dto.BindTemplateToProfileInput) (*dto.ProfileTemplateBindingDTO, error)
+	ListBindingsByProfile(profileID uint) ([]dto.ProfileTemplateBindingDTO, error)
+	GetDefaultTemplateForProfile(profileID uint, docType string) (*dto.DocumentTemplateDTO, error)
+}

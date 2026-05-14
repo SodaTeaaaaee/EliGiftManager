@@ -672,3 +672,52 @@ func FulfillmentAdjustmentFromDomain(d *domain.FulfillmentAdjustment) *Fulfillme
 		EvidenceRef:       d.EvidenceRef,
 	}
 }
+
+// ---- DocumentTemplate ----
+
+func DocumentTemplateToDomain(p *DocumentTemplate) *domain.DocumentTemplate {
+	return &domain.DocumentTemplate{
+		ID:           p.ID,
+		TemplateKey:  p.TemplateKey,
+		DocumentType: p.DocumentType,
+		Format:       p.Format,
+		MappingRules: p.MappingRules,
+		ExtraData:    p.ExtraData,
+		CreatedAt:    p.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:    p.UpdatedAt.Format(time.RFC3339),
+	}
+}
+
+func DocumentTemplateFromDomain(d *domain.DocumentTemplate) *DocumentTemplate {
+	return &DocumentTemplate{
+		Model:        gorm.Model{ID: d.ID},
+		TemplateKey:  d.TemplateKey,
+		DocumentType: d.DocumentType,
+		Format:       d.Format,
+		MappingRules: d.MappingRules,
+		ExtraData:    d.ExtraData,
+	}
+}
+
+// ---- IntegrationProfileTemplateBinding ----
+
+func ProfileTemplateBindingToDomain(p *IntegrationProfileTemplateBinding) *domain.IntegrationProfileTemplateBinding {
+	return &domain.IntegrationProfileTemplateBinding{
+		ID:                   p.ID,
+		IntegrationProfileID: p.IntegrationProfileID,
+		DocumentType:         p.DocumentType,
+		TemplateID:           p.TemplateID,
+		IsDefault:            p.IsDefault,
+		CreatedAt:            p.CreatedAt.Format(time.RFC3339),
+	}
+}
+
+func ProfileTemplateBindingFromDomain(d *domain.IntegrationProfileTemplateBinding) *IntegrationProfileTemplateBinding {
+	return &IntegrationProfileTemplateBinding{
+		Model:                gorm.Model{ID: d.ID},
+		IntegrationProfileID: d.IntegrationProfileID,
+		DocumentType:         d.DocumentType,
+		TemplateID:           d.TemplateID,
+		IsDefault:            d.IsDefault,
+	}
+}

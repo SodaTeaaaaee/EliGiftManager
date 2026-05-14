@@ -120,3 +120,20 @@ type FulfillmentAdjustmentRepository interface {
 	ListByWave(waveID uint) ([]FulfillmentAdjustment, error)
 	ListByFulfillmentLine(fulfillmentLineID uint) ([]FulfillmentAdjustment, error)
 }
+
+// DocumentTemplateRepository defines persistence operations for DocumentTemplate.
+type DocumentTemplateRepository interface {
+	Create(t *DocumentTemplate) error
+	FindByID(id uint) (*DocumentTemplate, error)
+	FindByKey(key string) (*DocumentTemplate, error)
+	List() ([]DocumentTemplate, error)
+	ListByDocumentType(docType string) ([]DocumentTemplate, error)
+}
+
+// ProfileTemplateBindingRepository defines persistence operations for IntegrationProfileTemplateBinding.
+type ProfileTemplateBindingRepository interface {
+	Create(b *IntegrationProfileTemplateBinding) error
+	ListByProfile(profileID uint) ([]IntegrationProfileTemplateBinding, error)
+	FindDefaultByProfileAndType(profileID uint, docType string) (*IntegrationProfileTemplateBinding, error)
+	Delete(id uint) error
+}

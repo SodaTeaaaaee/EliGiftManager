@@ -268,3 +268,23 @@ const (
 	AdjustmentKindRemove     = "remove"
 	AdjustmentKindSupplement = "supplement"
 )
+
+// ---- DocumentType ----
+
+const (
+	DocumentTypeImportEntitlement    = "import_entitlement"
+	DocumentTypeImportSalesOrder     = "import_sales_order"
+	DocumentTypeImportProductCatalog = "import_product_catalog"
+	DocumentTypeExportSupplierOrder  = "export_supplier_order"
+	DocumentTypeImportShipment       = "import_supplier_shipment"
+	DocumentTypeExportTracking       = "export_source_tracking_update"
+)
+
+// ---- DocumentFormat ----
+
+const (
+	DocumentFormatCSV        = "csv"
+	DocumentFormatXLSX       = "xlsx"
+	DocumentFormatJSON       = "json"
+	DocumentFormatAPIPayload = "api_payload"
+)

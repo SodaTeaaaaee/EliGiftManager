@@ -336,3 +336,30 @@ type FulfillmentAdjustment struct {
 }
 
 func (FulfillmentAdjustment) TableName() string { return "fulfillment_adjustments" }
+
+// ---- DocumentTemplate ----
+
+type DocumentTemplate struct {
+	gorm.Model
+	TemplateKey  string `gorm:"not null;uniqueIndex"`
+	DocumentType string `gorm:"not null;index"`
+	Format       string `gorm:"not null"`
+	MappingRules string `gorm:"type:text"`
+	ExtraData    string `gorm:"type:text"`
+}
+
+func (DocumentTemplate) TableName() string { return "document_templates" }
+
+// ---- IntegrationProfileTemplateBinding ----
+
+type IntegrationProfileTemplateBinding struct {
+	gorm.Model
+	IntegrationProfileID uint   `gorm:"not null;index"`
+	DocumentType         string `gorm:"not null"`
+	TemplateID           uint   `gorm:"not null;index"`
+	IsDefault            bool   `gorm:"not null;default:false"`
+}
+
+func (IntegrationProfileTemplateBinding) TableName() string {
+	return "integration_profile_template_bindings"
+}

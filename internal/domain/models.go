@@ -324,3 +324,27 @@ type FulfillmentAdjustment struct {
 	CreatedAt         string
 	UpdatedAt         string
 }
+
+// ---- DocumentTemplate ----
+
+type DocumentTemplate struct {
+	ID           uint
+	TemplateKey  string
+	DocumentType string
+	Format       string
+	MappingRules string
+	ExtraData    string
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+// ---- IntegrationProfileTemplateBinding ----
+
+type IntegrationProfileTemplateBinding struct {
+	ID                   uint
+	IntegrationProfileID uint
+	DocumentType         string
+	TemplateID           uint
+	IsDefault            bool
+	CreatedAt            string
+}
