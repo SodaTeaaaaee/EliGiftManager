@@ -17,6 +17,7 @@ type DemandDocumentRepository interface {
 	List() ([]DemandDocument, error)
 
 	CreateLine(line *DemandLine) error
+	FindLineByID(id uint) (*DemandLine, error)
 	ListLinesByDocument(docID uint) ([]DemandLine, error)
 }
 
@@ -93,4 +94,12 @@ type ChannelSyncRepository interface {
 
 	// AtomicCreateChannelSync creates a job and its items atomically.
 	AtomicCreateChannelSync(job *ChannelSyncJob, items []*ChannelSyncItem) error
+}
+
+// IntegrationProfileRepository defines persistence operations for IntegrationProfile.
+type IntegrationProfileRepository interface {
+	Create(profile *IntegrationProfile) error
+	FindByID(id uint) (*IntegrationProfile, error)
+	FindByProfileKey(profileKey string) (*IntegrationProfile, error)
+	List() ([]IntegrationProfile, error)
 }

@@ -26,6 +26,7 @@ import {
 import {
   CreateChannelSyncJob,
   ListChannelSyncJobsByWave,
+  PlanChannelClosure,
 } from "../../../../wailsjs/go/main/ChannelSyncController";
 import {
   PickCSVFile,
@@ -195,6 +196,15 @@ export async function createChannelSyncJob(input: {
 export async function listChannelSyncJobsByWave(waveId: number): Promise<dto.ChannelSyncJobDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
   return ListChannelSyncJobsByWave(waveId)
+}
+
+export async function planChannelClosure(input: {
+  waveId: number
+  integrationProfileId: number
+}): Promise<dto.PlanChannelClosureResult> {
+  assertWailsRuntime()
+  const req = dto.PlanChannelClosureInput.createFrom(input)
+  return PlanChannelClosure(req)
 }
 
 // ── App (utility) ──

@@ -36,3 +36,8 @@ type ShipmentUseCase interface {
 type ChannelSyncUseCase interface {
 	CreateChannelSyncJob(input dto.CreateChannelSyncJobInput) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error)
 }
+
+// ChannelClosureUseCase handles profile-driven channel closure orchestration.
+type ChannelClosureUseCase interface {
+	PlanChannelClosure(input dto.PlanChannelClosureInput) (*dto.PlanChannelClosureResult, error)
+}

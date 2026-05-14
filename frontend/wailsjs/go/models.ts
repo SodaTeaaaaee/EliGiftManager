@@ -483,6 +483,60 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class PlanChannelClosureResult {
+	    decision: string;
+	    integrationProfileId: number;
+	    trackingSyncMode: string;
+	    closurePolicy: string;
+	    job?: ChannelSyncJobDTO;
+	    items?: ChannelSyncItemDTO[];
+
+	    static createFrom(source: any = {}) {
+	        return new PlanChannelClosureResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.decision = source["decision"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.trackingSyncMode = source["trackingSyncMode"];
+	        this.closurePolicy = source["closurePolicy"];
+	        this.job = this.convertValues(source["job"], ChannelSyncJobDTO);
+	        this.items = this.convertValues(source["items"], ChannelSyncItemDTO);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class PlanChannelClosureInput {
+	    waveId: number;
+	    integrationProfileId: number;
+
+	    static createFrom(source: any = {}) {
+	        return new PlanChannelClosureInput(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	    }
+	}
 	export class CreateChannelSyncItemInput {
 	    fulfillmentLineId: number;
 	    shipmentId: number;

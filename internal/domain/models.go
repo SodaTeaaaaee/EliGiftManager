@@ -263,3 +263,32 @@ type ChannelSyncItem struct {
 	CreatedAt          string
 	UpdatedAt          string
 }
+
+// ---- IntegrationProfile ----
+
+type IntegrationProfile struct {
+	ID                        uint
+	ProfileKey                string
+	SourceChannel             string
+	SourceSurface             string
+	DemandKind                string
+	InitialAllocationStrategy string
+	IdentityStrategy          string
+	EntitlementAuthorityMode  string
+	RecipientInputMode        string
+	ReferenceStrategy         string
+	TrackingSyncMode          string
+	ClosurePolicy             string
+	SupportsPartialShipment   bool
+	SupportsAPIImport         bool
+	SupportsAPIExport         bool
+	RequiresCarrierMapping    bool
+	RequiresExternalOrderNo   bool
+	AllowsManualClosure       bool
+	ConnectorKey              string
+	SupportedLocales          string
+	DefaultLocale             string
+	ExtraData                 string
+	CreatedAt                 string
+	UpdatedAt                 string
+}

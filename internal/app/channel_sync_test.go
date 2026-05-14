@@ -121,17 +121,23 @@ func (m *mockChannelSyncRepo) ListItemsByJob(jobID uint) ([]domain.ChannelSyncIt
 // ── mock shipment repo ──
 
 type mockShipmentRepoForSync struct {
-	mu        sync.Mutex
-	shipments map[uint]*domain.Shipment
-	lines     map[uint][]domain.ShipmentLine
-	lastID    uint
+	mu                sync.Mutex
+	shipments         map[uint]*domain.Shipment
+	lines             map[uint][]domain.ShipmentLine
+	lastID            uint
+	supplierOrderWave map[uint]uint // supplierOrderID → waveID
 }
 
 func newMockShipmentRepoForSync() *mockShipmentRepoForSync {
 	return &mockShipmentRepoForSync{
-		shipments: make(map[uint]*domain.Shipment),
-		lines:     make(map[uint][]domain.ShipmentLine),
+		shipments:         make(map[uint]*domain.Shipment),
+		lines:             make(map[uint][]domain.ShipmentLine),
+		supplierOrderWave: make(map[uint]uint),
 	}
+}
+
+func (m *mockShipmentRepoForSync) setSupplierOrderWave(supplierOrderID, waveID uint) {
+	m.supplierOrderWave[supplierOrderID] = waveID
 }
 
 func (m *mockShipmentRepoForSync) FindByID(id uint) (*domain.Shipment, error) {
@@ -174,7 +180,15 @@ func (m *mockShipmentRepoForSync) ListBySupplierOrder(supplierOrderID uint) ([]d
 	panic("not implemented")
 }
 func (m *mockShipmentRepoForSync) ListByWave(waveID uint) ([]domain.Shipment, error) {
-	panic("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Shipment
+	for _, s := range m.shipments {
+		if m.supplierOrderWave[s.SupplierOrderID] == waveID {
+			out = append(out, *s)
+		}
+	}
+	return out, nil
 }
 func (m *mockShipmentRepoForSync) CreateLine(line *domain.ShipmentLine) error { panic("not implemented") }
 func (m *mockShipmentRepoForSync) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine) error {
@@ -246,7 +260,15 @@ func (m *mockFulfillRepoForSync) FindByID(id uint) (*domain.FulfillmentLine, err
 // Stubs
 func (m *mockFulfillRepoForSync) Create(line *domain.FulfillmentLine) error { panic("not implemented") }
 func (m *mockFulfillRepoForSync) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
-	panic("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.FulfillmentLine
+	for _, l := range m.lines {
+		if l.WaveID == waveID {
+			out = append(out, *l)
+		}
+	}
+	return out, nil
 }
 func (m *mockFulfillRepoForSync) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
 	panic("not implemented")
@@ -276,6 +298,7 @@ func newSyncTestSetup() *syncTestSetup {
 	// Pre-create: supplier order 1 (wave 1) -> shipment 1 -> shipment line (fulfillLine 1)
 	so := &domain.SupplierOrder{ID: 1, WaveID: 1}
 	su.orders[1] = so
+	sh.setSupplierOrderWave(1, 1)
 	sh.add(&domain.Shipment{SupplierOrderID: 1})
 	sh.addLine(domain.ShipmentLine{ShipmentID: 1, FulfillmentLineID: 1})
 	fl.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
@@ -419,6 +442,7 @@ func TestCreateChannelSyncJobRejectsShipmentOutsideWave(t *testing.T) {
 
 	// Add a shipment linked to supplier order in wave 2
 	s.supplier.orders[2] = &domain.SupplierOrder{ID: 2, WaveID: 2}
+	s.shipment.setSupplierOrderWave(2, 2)
 	s.shipment.add(&domain.Shipment{SupplierOrderID: 2})
 	s.shipment.addLine(domain.ShipmentLine{ShipmentID: 2, FulfillmentLineID: 1})
 

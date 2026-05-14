@@ -177,3 +177,75 @@ const (
 	ChannelSyncItemStatusSuccess ChannelSyncItemStatus = "success"
 	ChannelSyncItemStatusFailed  ChannelSyncItemStatus = "failed"
 )
+
+// IntegrationProfile: DemandKind (reuses same values as DemandDocument.Kind)
+type ProfileDemandKind string
+
+const (
+	ProfileDemandKindMembershipEntitlement ProfileDemandKind = "membership_entitlement"
+	ProfileDemandKindRetailOrder           ProfileDemandKind = "retail_order"
+)
+
+// IntegrationProfile: InitialAllocationStrategy
+type InitialAllocationStrategy string
+
+const (
+	InitialAllocationStrategyPolicyDriven InitialAllocationStrategy = "policy_driven"
+	InitialAllocationStrategyDemandDriven InitialAllocationStrategy = "demand_driven"
+)
+
+// IntegrationProfile: IdentityStrategy
+type IdentityStrategy string
+
+const (
+	IdentityStrategyPlatformUID     IdentityStrategy = "platform_uid"
+	IdentityStrategyEmail           IdentityStrategy = "email"
+	IdentityStrategyExternalBuyerID IdentityStrategy = "external_buyer_id"
+)
+
+// IntegrationProfile: EntitlementAuthorityMode
+type EntitlementAuthorityMode string
+
+const (
+	EntitlementAuthorityModeLocalPolicy      EntitlementAuthorityMode = "local_policy"
+	EntitlementAuthorityModeUpstreamPlatform EntitlementAuthorityMode = "upstream_platform"
+	EntitlementAuthorityModeManualGrantOnly  EntitlementAuthorityMode = "manual_grant_only"
+)
+
+// IntegrationProfile: RecipientInputMode
+type RecipientInputMode string
+
+const (
+	RecipientInputModeNone             RecipientInputMode = "none"
+	RecipientInputModePlatformClaim    RecipientInputMode = "platform_claim"
+	RecipientInputModeExternalForm     RecipientInputMode = "external_form"
+	RecipientInputModeManualCollection RecipientInputMode = "manual_collection"
+)
+
+// IntegrationProfile: ReferenceStrategy
+type ReferenceStrategy string
+
+const (
+	ReferenceStrategyMemberLevel    ReferenceStrategy = "member_level"
+	ReferenceStrategyOrderLevel     ReferenceStrategy = "order_level"
+	ReferenceStrategyOrderLineLevel ReferenceStrategy = "order_line_level"
+)
+
+// IntegrationProfile: TrackingSyncMode
+type TrackingSyncMode string
+
+const (
+	TrackingSyncModeAPIPush            TrackingSyncMode = "api_push"
+	TrackingSyncModeDocumentExport     TrackingSyncMode = "document_export"
+	TrackingSyncModeManualConfirmation TrackingSyncMode = "manual_confirmation"
+	TrackingSyncModeUnsupported        TrackingSyncMode = "unsupported"
+)
+
+// IntegrationProfile: ClosurePolicy
+type ClosurePolicy string
+
+const (
+	ClosurePolicyCloseAfterSync               ClosurePolicy = "close_after_sync"
+	ClosurePolicyCloseAfterManualConfirmation ClosurePolicy = "close_after_manual_confirmation"
+	ClosurePolicyCloseAfterShipment           ClosurePolicy = "close_after_shipment"
+)

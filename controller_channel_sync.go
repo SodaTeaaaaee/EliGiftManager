@@ -12,6 +12,7 @@ import (
 type ChannelSyncController struct {
 	channelSyncUC   app.ChannelSyncUseCase
 	channelSyncRepo domain.ChannelSyncRepository
+	closureUC       app.ChannelClosureUseCase
 }
 
 func NewChannelSyncController() *ChannelSyncController {
@@ -20,9 +21,13 @@ func NewChannelSyncController() *ChannelSyncController {
 	shipmentRepo := infra.NewShipmentRepository(gdb)
 	supplierRepo := infra.NewSupplierOrderRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
+	demandRepo := infra.NewDemandRepository(gdb)
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo)
 	return &ChannelSyncController{
-		channelSyncUC:   app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo),
+		channelSyncUC:   channelSyncUC,
 		channelSyncRepo: channelSyncRepo,
+		closureUC:       app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC),
 	}
 }
 
@@ -39,6 +44,17 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 		result.Items[i] = domainToChannelSyncItemDTO(&it)
 	}
 	return result, nil
+}
+
+// PlanChannelClosure is the high-level orchestration entry point.
+// It reads the IntegrationProfile and decides whether to create a ChannelSyncJob,
+// route to manual closure, or mark as unsupported.
+func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureInput) (dto.PlanChannelClosureResult, error) {
+	result, err := c.closureUC.PlanChannelClosure(input)
+	if err != nil {
+		return dto.PlanChannelClosureResult{}, err
+	}
+	return *result, nil
 }
 
 // ListChannelSyncJobsByWave lists all channel sync jobs for a given wave.

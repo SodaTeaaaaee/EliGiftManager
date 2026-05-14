@@ -66,6 +66,20 @@ func (m *mockDemandRepo) CreateLine(line *domain.DemandLine) error {
 	return nil
 }
 
+func (m *mockDemandRepo) FindLineByID(id uint) (*domain.DemandLine, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, ll := range m.lines {
+		for _, l := range ll {
+			if l.ID == id {
+				cp := *l
+				return &cp, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("demand line %d not found", id)
+}
+
 func (m *mockDemandRepo) ListLinesByDocument(docID uint) ([]domain.DemandLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

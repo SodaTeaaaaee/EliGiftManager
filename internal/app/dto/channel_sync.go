@@ -35,6 +35,31 @@ type ChannelSyncJobDTO struct {
 	Items                []ChannelSyncItemDTO  `json:"items"`
 }
 
+// ClosureDecision enumerates the outcomes of PlanChannelClosure.
+type ClosureDecision string
+
+const (
+	ClosureDecisionCreateJob      ClosureDecision = "create_job"
+	ClosureDecisionManualClosure  ClosureDecision = "manual_closure"
+	ClosureDecisionUnsupported    ClosureDecision = "unsupported"
+)
+
+// PlanChannelClosureInput is the input for the orchestration use case.
+type PlanChannelClosureInput struct {
+	WaveID               uint `json:"waveId"`
+	IntegrationProfileID uint `json:"integrationProfileId"`
+}
+
+// PlanChannelClosureResult carries the high-level closure plan outcome.
+type PlanChannelClosureResult struct {
+	Decision           ClosureDecision       `json:"decision"`
+	IntegrationProfileID uint                 `json:"integrationProfileId"`
+	TrackingSyncMode   string                `json:"trackingSyncMode"`
+	ClosurePolicy      string                `json:"closurePolicy"`
+	Job                *ChannelSyncJobDTO    `json:"job,omitempty"`
+	Items              []ChannelSyncItemDTO  `json:"items,omitempty"`
+}
+
 type ChannelSyncItemDTO struct {
 	ID                 uint   `json:"id"`
 	ChannelSyncJobID   uint   `json:"channelSyncJobId"`

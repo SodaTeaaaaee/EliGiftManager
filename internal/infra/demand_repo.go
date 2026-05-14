@@ -52,6 +52,14 @@ func (r *demandRepository) CreateLine(line *domain.DemandLine) error {
 	return nil
 }
 
+func (r *demandRepository) FindLineByID(id uint) (*domain.DemandLine, error) {
+	var p persistence.DemandLine
+	if err := r.db.First(&p, id).Error; err != nil {
+		return nil, err
+	}
+	return persistence.FromPersistenceDemandLine(&p), nil
+}
+
 func (r *demandRepository) ListLinesByDocument(docID uint) ([]domain.DemandLine, error) {
 	var ps []persistence.DemandLine
 	if err := r.db.Where("demand_document_id = ?", docID).Find(&ps).Error; err != nil {

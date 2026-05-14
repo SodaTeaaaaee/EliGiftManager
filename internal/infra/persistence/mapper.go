@@ -551,3 +551,60 @@ func FromPersistenceChannelSyncItem(p *ChannelSyncItem) *domain.ChannelSyncItem 
 		UpdatedAt:          formatTime(p.UpdatedAt),
 	}
 }
+
+// ---- IntegrationProfile ----
+
+func ToPersistenceIntegrationProfile(d *domain.IntegrationProfile) *IntegrationProfile {
+	return &IntegrationProfile{
+		ProfileKey:                d.ProfileKey,
+		SourceChannel:             d.SourceChannel,
+		SourceSurface:             d.SourceSurface,
+		DemandKind:                ProfileDemandKind(d.DemandKind),
+		InitialAllocationStrategy: InitialAllocationStrategy(d.InitialAllocationStrategy),
+		IdentityStrategy:          IdentityStrategy(d.IdentityStrategy),
+		EntitlementAuthorityMode:  EntitlementAuthorityMode(d.EntitlementAuthorityMode),
+		RecipientInputMode:        RecipientInputMode(d.RecipientInputMode),
+		ReferenceStrategy:         ReferenceStrategy(d.ReferenceStrategy),
+		TrackingSyncMode:          TrackingSyncMode(d.TrackingSyncMode),
+		ClosurePolicy:             ClosurePolicy(d.ClosurePolicy),
+		SupportsPartialShipment:   d.SupportsPartialShipment,
+		SupportsAPIImport:         d.SupportsAPIImport,
+		SupportsAPIExport:         d.SupportsAPIExport,
+		RequiresCarrierMapping:    d.RequiresCarrierMapping,
+		RequiresExternalOrderNo:   d.RequiresExternalOrderNo,
+		AllowsManualClosure:       d.AllowsManualClosure,
+		ConnectorKey:              d.ConnectorKey,
+		SupportedLocales:          d.SupportedLocales,
+		DefaultLocale:             d.DefaultLocale,
+		ExtraData:                 d.ExtraData,
+	}
+}
+
+func FromPersistenceIntegrationProfile(p *IntegrationProfile) *domain.IntegrationProfile {
+	return &domain.IntegrationProfile{
+		ID:                        p.ID,
+		ProfileKey:                p.ProfileKey,
+		SourceChannel:             p.SourceChannel,
+		SourceSurface:             p.SourceSurface,
+		DemandKind:                string(p.DemandKind),
+		InitialAllocationStrategy: string(p.InitialAllocationStrategy),
+		IdentityStrategy:          string(p.IdentityStrategy),
+		EntitlementAuthorityMode:  string(p.EntitlementAuthorityMode),
+		RecipientInputMode:        string(p.RecipientInputMode),
+		ReferenceStrategy:         string(p.ReferenceStrategy),
+		TrackingSyncMode:          string(p.TrackingSyncMode),
+		ClosurePolicy:             string(p.ClosurePolicy),
+		SupportsPartialShipment:   p.SupportsPartialShipment,
+		SupportsAPIImport:         p.SupportsAPIImport,
+		SupportsAPIExport:         p.SupportsAPIExport,
+		RequiresCarrierMapping:    p.RequiresCarrierMapping,
+		RequiresExternalOrderNo:   p.RequiresExternalOrderNo,
+		AllowsManualClosure:       p.AllowsManualClosure,
+		ConnectorKey:              p.ConnectorKey,
+		SupportedLocales:          p.SupportedLocales,
+		DefaultLocale:             p.DefaultLocale,
+		ExtraData:                 p.ExtraData,
+		CreatedAt:                 formatTime(p.CreatedAt),
+		UpdatedAt:                 formatTime(p.UpdatedAt),
+	}
+}

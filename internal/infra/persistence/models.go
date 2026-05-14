@@ -275,3 +275,32 @@ type ChannelSyncItem struct {
 }
 
 func (ChannelSyncItem) TableName() string { return "channel_sync_items" }
+
+// ---- IntegrationProfile ----
+
+type IntegrationProfile struct {
+	gorm.Model
+	ProfileKey                string                   `gorm:"uniqueIndex;not null"`
+	SourceChannel             string
+	SourceSurface             string
+	DemandKind                ProfileDemandKind        `gorm:"type:text;not null;default:'membership_entitlement'"`
+	InitialAllocationStrategy InitialAllocationStrategy `gorm:"type:text;not null;default:'policy_driven'"`
+	IdentityStrategy          IdentityStrategy         `gorm:"type:text;not null;default:'platform_uid'"`
+	EntitlementAuthorityMode  EntitlementAuthorityMode  `gorm:"type:text;not null;default:'local_policy'"`
+	RecipientInputMode        RecipientInputMode        `gorm:"type:text;not null;default:'none'"`
+	ReferenceStrategy         ReferenceStrategy         `gorm:"type:text;not null;default:'member_level'"`
+	TrackingSyncMode          TrackingSyncMode          `gorm:"type:text;not null;default:'manual_confirmation'"`
+	ClosurePolicy             ClosurePolicy             `gorm:"type:text;not null;default:'close_after_sync'"`
+	SupportsPartialShipment   bool                      `gorm:"not null;default:false"`
+	SupportsAPIImport         bool                      `gorm:"not null;default:false"`
+	SupportsAPIExport         bool                      `gorm:"not null;default:false"`
+	RequiresCarrierMapping    bool                      `gorm:"not null;default:false"`
+	RequiresExternalOrderNo   bool                      `gorm:"not null;default:false"`
+	AllowsManualClosure       bool                      `gorm:"not null;default:false"`
+	ConnectorKey              string
+	SupportedLocales          string `gorm:"type:text"`
+	DefaultLocale             string
+	ExtraData                 string `gorm:"type:text"`
+}
+
+func (IntegrationProfile) TableName() string { return "integration_profiles" }

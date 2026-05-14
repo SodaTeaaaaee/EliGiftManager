@@ -6,6 +6,10 @@ export function CreateChannelSyncJob(arg1) {
   return window['go']['main']['ChannelSyncController']['CreateChannelSyncJob'](arg1);
 }
 
+export function PlanChannelClosure(arg1) {
+  return window['go']['main']['ChannelSyncController']['PlanChannelClosure'](arg1);
+}
+
 export function ListChannelSyncJobsByWave(arg1) {
   return window['go']['main']['ChannelSyncController']['ListChannelSyncJobsByWave'](arg1);
 }
