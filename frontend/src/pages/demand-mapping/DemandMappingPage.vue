@@ -8,6 +8,7 @@ import {
   NCard,
   NSpin,
   NSpace,
+  NPopconfirm,
   useMessage,
 } from "naive-ui"
 import type { DataTableColumns, DataTableExpandedRowKeys } from "naive-ui"
@@ -255,22 +256,30 @@ onMounted(() => loadBoth())
     <NCard title="已分配需求">
       <template #header-extra>
         <NSpace>
-          <NButton
-            size="small"
-            :loading="generatingParticipants"
-            @click="handleGenerate"
-          >
-            生成参与者
-          </NButton>
-          <NButton
-            type="primary"
-            size="small"
-            :loading="applyingRules"
-            :disabled="assignedDocs.length === 0 || !participantsGenerated"
-            @click="handleApplyRules"
-          >
-            生成履约行
-          </NButton>
+          <NPopconfirm @positive-click="handleGenerate">
+            <template #trigger>
+              <NButton
+                size="small"
+                :loading="generatingParticipants"
+              >
+                生成参与者
+              </NButton>
+            </template>
+            此操作不可撤销，确认执行？
+          </NPopconfirm>
+          <NPopconfirm @positive-click="handleApplyRules">
+            <template #trigger>
+              <NButton
+                type="primary"
+                size="small"
+                :loading="applyingRules"
+                :disabled="assignedDocs.length === 0 || !participantsGenerated"
+              >
+                生成履约行
+              </NButton>
+            </template>
+            此操作不可撤销，确认执行？
+          </NPopconfirm>
         </NSpace>
       </template>
       <NDataTable

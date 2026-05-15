@@ -364,13 +364,17 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
         <n-space>
           <n-button @click="openCreateDrawer">添加规则</n-button>
           <n-button @click="openCatalogModal">从商品目录添加</n-button>
-          <n-button
-            type="primary"
-            :loading="reconciling"
-            @click="handleReconcile"
-          >
-            执行分配
-          </n-button>
+          <n-popconfirm @positive-click="handleReconcile">
+            <template #trigger>
+              <n-button
+                type="primary"
+                :loading="reconciling"
+              >
+                执行分配
+              </n-button>
+            </template>
+            此操作不可撤销，确认执行？
+          </n-popconfirm>
         </n-space>
       </n-space>
 
