@@ -6,6 +6,7 @@ import {
   ImportDemandDocument,
   ListDemandDocuments,
   ListDemandLines,
+  ListUnassignedDemandDocuments,
 } from "../../../../wailsjs/go/main/DemandController";
 import {
   CreateWave,
@@ -75,6 +76,11 @@ export async function listDemandDocuments(): Promise<dto.DemandDocumentDTO[]> {
   return ListDemandDocuments();
 }
 
+export async function listUnassignedDemandDocuments(): Promise<dto.DemandDocumentDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListUnassignedDemandDocuments();
+}
+
 export async function getDemandDocument(
   id: number,
 ): Promise<dto.DemandDocumentDTO> {
@@ -88,6 +94,8 @@ export async function importDemandDocument(input: {
   captureMode: string;
   sourceChannel: string;
   sourceDocumentNo: string;
+  sourceCustomerRef?: string;
+  customerProfileId?: number;
   lines: Array<{
     lineType: string;
     obligationTriggerKind: string;

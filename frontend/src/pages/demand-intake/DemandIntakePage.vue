@@ -30,6 +30,21 @@
             />
           </n-space>
 
+          <n-space>
+            <n-input
+              v-model:value="form.sourceCustomerRef"
+              placeholder="客户引用标识 (Source Customer Ref)"
+              style="width: 280px"
+            />
+            <n-input-number
+              v-model:value="form.customerProfileId"
+              placeholder="客户档案ID (可选)"
+              :min="1"
+              clearable
+              style="width: 220px"
+            />
+          </n-space>
+
           <n-card
             v-for="(line, idx) in form.lines"
             :key="idx"
@@ -177,6 +192,8 @@ const form = reactive({
   captureMode: 'manual_entry',
   sourceChannel: '',
   sourceDocumentNo: '',
+  sourceCustomerRef: '',
+  customerProfileId: null as number | null,
   lines: [makeLine()] as LineForm[],
 })
 
@@ -215,6 +232,8 @@ async function importDemand() {
       captureMode: form.captureMode,
       sourceChannel: form.sourceChannel || 'manual',
       sourceDocumentNo: form.sourceDocumentNo || `IMPORT-${Date.now()}`,
+      sourceCustomerRef: form.sourceCustomerRef,
+      customerProfileId: form.customerProfileId || undefined,
       lines: form.lines.map((l) => ({ ...l })),
     }
     result.value = await importDemandDocument(input)

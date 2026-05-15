@@ -15,6 +15,7 @@ type DemandDocumentRepository interface {
 	Create(doc *DemandDocument) error
 	FindByID(id uint) (*DemandDocument, error)
 	List() ([]DemandDocument, error)
+	ListUnassigned() ([]DemandDocument, error)
 
 	CreateLine(line *DemandLine) error
 	FindLineByID(id uint) (*DemandLine, error)

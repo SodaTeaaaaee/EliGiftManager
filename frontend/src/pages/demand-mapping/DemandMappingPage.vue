@@ -13,7 +13,7 @@ import {
 import type { DataTableColumns, DataTableExpandedRowKeys } from "naive-ui"
 import {
   listAssignedDemandsByWave,
-  listDemandDocuments,
+  listUnassignedDemandDocuments,
   listDemandLines,
   assignDemandToWave,
   generateParticipants,
@@ -27,20 +27,16 @@ const waveId = computed(() => Number(route.params.waveId))
 
 // ── State ──
 const assignedDocs = ref<dto.DemandDocumentDTO[]>([])
-const allDocs = ref<dto.DemandDocumentDTO[]>([])
+const availableDocs = ref<dto.DemandDocumentDTO[]>([])
 const loadingAssigned = ref(true)
-const loadingAll = ref(true)
+const loadingAvailable = ref(true)
 const linesCache = ref<Record<number, dto.DemandLineDTO[]>>({})
 const linesLoading = ref<Record<number, boolean>>({})
 const expandedRowKeys = ref<DataTableExpandedRowKeys>([])
 const generatingParticipants = ref(false)
 const applyingRules = ref(false)
 const assigningId = ref<number | null>(null)
-
-const assignedIdSet = computed(() => new Set(assignedDocs.value.map((d) => d.id)))
-const availableDocs = computed(() =>
-  allDocs.value.filter((d) => !assignedIdSet.value.has(d.id)),
-)
+const participantsGenerated = ref(false)
 
 // ── Loaders ──
 async function loadAssigned() {
@@ -55,19 +51,19 @@ async function loadAssigned() {
   }
 }
 
-async function loadAll() {
-  loadingAll.value = true
+async function loadAvailable() {
+  loadingAvailable.value = true
   try {
-    allDocs.value = await listDemandDocuments()
+    availableDocs.value = await listUnassignedDemandDocuments()
   } catch (e: any) {
-    message.error(`加载需求列表失败: ${e?.message || e}`)
+    message.error(`加载可分配需求失败: ${e?.message || e}`)
   } finally {
-    loadingAll.value = false
+    loadingAvailable.value = false
   }
 }
 
 async function loadBoth() {
-  await Promise.all([loadAssigned(), loadAll()])
+  await Promise.all([loadAssigned(), loadAvailable()])
 }
 
 async function loadLines(docId: number) {
@@ -107,6 +103,7 @@ async function handleGenerate() {
   try {
     const count = await generateParticipants(waveId.value)
     message.success(`已生成 ${count} 个参与者`)
+    participantsGenerated.value = true
   } catch (e: any) {
     message.error(`生成参与者失败: ${e?.message || e}`)
   } finally {
@@ -269,7 +266,7 @@ onMounted(() => loadBoth())
             type="primary"
             size="small"
             :loading="applyingRules"
-            :disabled="assignedDocs.length === 0"
+            :disabled="assignedDocs.length === 0 || !participantsGenerated"
             @click="handleApplyRules"
           >
             生成履约行
@@ -292,7 +289,7 @@ onMounted(() => loadBoth())
       <NDataTable
         :columns="availableColumns"
         :data="availableDocs"
-        :loading="loadingAll"
+        :loading="loadingAvailable"
         :row-key="(row: dto.DemandDocumentDTO) => row.id"
         size="small"
       />

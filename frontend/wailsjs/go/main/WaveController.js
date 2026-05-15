@@ -22,12 +22,12 @@ export function GetWave(arg1) {
   return window['go']['main']['WaveController']['GetWave'](arg1);
 }
 
-export function ListAssignedDemandsByWave(arg1) {
-  return window['go']['main']['WaveController']['ListAssignedDemandsByWave'](arg1);
-}
-
 export function GetWaveOverview(arg1) {
   return window['go']['main']['WaveController']['GetWaveOverview'](arg1);
+}
+
+export function ListAssignedDemandsByWave(arg1) {
+  return window['go']['main']['WaveController']['ListAssignedDemandsByWave'](arg1);
 }
 
 export function ListWaves() {

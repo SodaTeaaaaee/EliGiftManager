@@ -85,6 +85,7 @@ func (m *mockDemandRepoForClosure) FindLineByID(id uint) (*domain.DemandLine, er
 
 func (m *mockDemandRepoForClosure) Create(doc *domain.DemandDocument) error               { panic("not implemented") }
 func (m *mockDemandRepoForClosure) List() ([]domain.DemandDocument, error)                 { panic("not implemented") }
+func (m *mockDemandRepoForClosure) ListUnassigned() ([]domain.DemandDocument, error)       { panic("not implemented") }
 func (m *mockDemandRepoForClosure) CreateLine(line *domain.DemandLine) error               { panic("not implemented") }
 func (m *mockDemandRepoForClosure) ListLinesByDocument(docID uint) ([]domain.DemandLine, error) {
 	panic("not implemented")

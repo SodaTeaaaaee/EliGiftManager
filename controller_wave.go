@@ -42,7 +42,7 @@ func NewWaveController() *WaveController {
 
 	return &WaveController{
 		waveUC:         app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
-		allocationUC:   app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo),
+		allocationUC:   app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo),
 		fulfillRepo:    fulfillRepo,
 		supplierRepo:   supplierRepo,
 		assignmentRepo: assignmentRepo,

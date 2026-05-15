@@ -57,6 +57,10 @@ func (m *mockDemandRepo) List() ([]domain.DemandDocument, error) {
 	return out, nil
 }
 
+func (m *mockDemandRepo) ListUnassigned() ([]domain.DemandDocument, error) {
+	return m.List()
+}
+
 func (m *mockDemandRepo) CreateLine(line *domain.DemandLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -97,9 +101,10 @@ func (m *mockDemandRepo) ListLinesByDocument(docID uint) ([]domain.DemandLine, e
 // ── mock wave repo ──
 
 type mockWaveRepo struct {
-	mu     sync.Mutex
-	waves  map[uint]*domain.Wave
-	lastID uint
+	mu           sync.Mutex
+	waves        map[uint]*domain.Wave
+	participants []domain.WaveParticipantSnapshot
+	lastID       uint
 }
 
 func newMockWaveRepo() *mockWaveRepo {
@@ -151,12 +156,22 @@ func (m *mockWaveRepo) List() ([]domain.Wave, error) {
 }
 
 func (m *mockWaveRepo) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
-	// no-op for tests
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	snap.ID = m.next()
 	return nil
 }
 
 func (m *mockWaveRepo) ListParticipantsByWave(waveID uint) ([]domain.WaveParticipantSnapshot, error) {
-	return nil, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.participants, nil
+}
+
+func (m *mockWaveRepo) SetParticipants(snaps []domain.WaveParticipantSnapshot) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.participants = snaps
 }
 
 // ── mock fulfill repo ──
@@ -548,14 +563,21 @@ func TestApplyRulesDemandDriven(t *testing.T) {
 	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	profileID := uint(100)
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 1, WaveID: 1, CustomerProfileID: profileID, SnapshotType: "buyer"},
+	})
 
 	// Setup: create a demand document with accepted + deferred lines
 	demandUC := NewDemandIntakeUseCase(demandRepo)
 	doc := &domain.DemandDocument{
-		Kind:             "retail_order",
-		CaptureMode:      "manual_entry",
-		SourceChannel:    "test",
-		SourceDocumentNo: "TEST-ALLOC",
+		Kind:              "retail_order",
+		CaptureMode:       "manual_entry",
+		SourceChannel:     "test",
+		SourceDocumentNo:  "TEST-ALLOC",
+		CustomerProfileID: &profileID,
 	}
 	lines := []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RequestedQuantity: 10, LineType: "sku_order"},
@@ -574,7 +596,7 @@ func TestApplyRulesDemandDriven(t *testing.T) {
 		t.Fatalf("setup assignment Create failed: %v", err)
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo)
+	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
 	allocLines, err := allocUC.ApplyRules(1)
 	if err != nil {
 		t.Fatalf("ApplyRules failed: %v", err)
@@ -594,6 +616,9 @@ func TestApplyRulesDemandDriven(t *testing.T) {
 		}
 		if fl.ID == 0 {
 			t.Errorf("fulfillment line %d: expected ID to be set", i)
+		}
+		if fl.WaveParticipantSnapshotID == nil || *fl.WaveParticipantSnapshotID != 1 {
+			t.Errorf("fulfillment line %d: expected WaveParticipantSnapshotID=1, got %v", i, fl.WaveParticipantSnapshotID)
 		}
 	}
 
@@ -669,13 +694,16 @@ func TestFullVerticalSlice(t *testing.T) {
 	supplierRepo := newMockSupplierRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
 
+	profileID := uint(400)
+
 	// Step 1: Demand Intake
 	demandUC := NewDemandIntakeUseCase(demandRepo)
 	doc := &domain.DemandDocument{
-		Kind:             "retail_order",
-		CaptureMode:      "manual_entry",
-		SourceChannel:    "test",
-		SourceDocumentNo: "VS-001",
+		Kind:              "retail_order",
+		CaptureMode:       "manual_entry",
+		SourceChannel:     "test",
+		SourceDocumentNo:  "VS-001",
+		CustomerProfileID: &profileID,
 	}
 	demandLines := []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RequestedQuantity: 7, LineType: "sku_order", ExternalTitle: "Widget A"},
@@ -703,8 +731,13 @@ func TestFullVerticalSlice(t *testing.T) {
 		t.Fatalf("setup assignment Create failed: %v", err)
 	}
 
+	// Setup participant snapshot for the profile
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 1, WaveID: wave.ID, CustomerProfileID: profileID, SnapshotType: "buyer"},
+	})
+
 	// Step 3: Apply Allocation Rules
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo)
+	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
 	allocLines, err := allocUC.ApplyRules(wave.ID)
 	if err != nil {
 		t.Fatalf("Step 3 ApplyRules failed: %v", err)
@@ -786,14 +819,21 @@ func TestApplyRulesIsIdempotentForSameWave(t *testing.T) {
 	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	profileID := uint(200)
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 1, WaveID: 1, CustomerProfileID: profileID, SnapshotType: "buyer"},
+	})
 
 	// Setup: demand + wave + assignment
 	demandUC := NewDemandIntakeUseCase(demandRepo)
 	doc := &domain.DemandDocument{
-		Kind:             "retail_order",
-		CaptureMode:      "manual_entry",
-		SourceChannel:    "test",
-		SourceDocumentNo: "IDEM-001",
+		Kind:              "retail_order",
+		CaptureMode:       "manual_entry",
+		SourceChannel:     "test",
+		SourceDocumentNo:  "IDEM-001",
+		CustomerProfileID: &profileID,
 	}
 	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RequestedQuantity: 5, LineType: "sku_order"},
@@ -807,7 +847,7 @@ func TestApplyRulesIsIdempotentForSameWave(t *testing.T) {
 		t.Fatalf("setup assignment failed: %v", err)
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo)
+	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
 
 	// Run allocation first time
 	lines1, err := allocUC.ApplyRules(1)
@@ -904,14 +944,21 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	profileID := uint(300)
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 1, WaveID: 1, CustomerProfileID: profileID, SnapshotType: "buyer"},
+	})
 
 	// Setup: demand + assignment
 	demandUC := NewDemandIntakeUseCase(demandRepo)
 	doc := &domain.DemandDocument{
-		Kind:             "retail_order",
-		CaptureMode:      "manual_entry",
-		SourceChannel:    "test",
-		SourceDocumentNo: "ERR-001",
+		Kind:              "retail_order",
+		CaptureMode:       "manual_entry",
+		SourceChannel:     "test",
+		SourceDocumentNo:  "ERR-001",
+		CustomerProfileID: &profileID,
 	}
 	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
@@ -925,7 +972,7 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 		t.Fatalf("setup assignment failed: %v", err)
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo)
+	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
 
 	// Apply rules — should succeed and return correct count
 	lines, err := allocUC.ApplyRules(1)

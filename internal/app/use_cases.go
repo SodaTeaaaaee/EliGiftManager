@@ -197,10 +197,11 @@ type allocationUseCase struct {
 	ruleRepo       domain.AllocationPolicyRuleRepository
 	fulfillRepo    domain.FulfillmentLineRepository
 	assignmentRepo domain.WaveDemandAssignmentRepository
+	waveRepo       domain.WaveRepository
 }
 
-func NewAllocationUseCase(demandRepo domain.DemandDocumentRepository, ruleRepo domain.AllocationPolicyRuleRepository, fulfillRepo domain.FulfillmentLineRepository, assignmentRepo domain.WaveDemandAssignmentRepository) AllocationUseCase {
-	return &allocationUseCase{demandRepo: demandRepo, ruleRepo: ruleRepo, fulfillRepo: fulfillRepo, assignmentRepo: assignmentRepo}
+func NewAllocationUseCase(demandRepo domain.DemandDocumentRepository, ruleRepo domain.AllocationPolicyRuleRepository, fulfillRepo domain.FulfillmentLineRepository, assignmentRepo domain.WaveDemandAssignmentRepository, waveRepo domain.WaveRepository) AllocationUseCase {
+	return &allocationUseCase{demandRepo: demandRepo, ruleRepo: ruleRepo, fulfillRepo: fulfillRepo, assignmentRepo: assignmentRepo, waveRepo: waveRepo}
 }
 
 func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, error) {
@@ -215,11 +216,44 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 		return nil, err
 	}
 
+	// Build profileID → snapshotID lookup for participant association
+	var profileToSnapshot map[uint]uint
+	if uc.waveRepo != nil {
+		participants, err := uc.waveRepo.ListParticipantsByWave(waveID)
+		if err != nil {
+			return nil, err
+		}
+		profileToSnapshot = make(map[uint]uint, len(participants))
+		for i := range participants {
+			profileToSnapshot[participants[i].CustomerProfileID] = participants[i].ID
+		}
+	}
+
 	now := time.Now().Format(time.RFC3339)
 	var lines []domain.FulfillmentLine
+	var missingSnapshotProfiles []uint
 
 	for docIdx := range docs {
 		doc := &docs[docIdx]
+		// demand-driven path only handles retail_order; membership_entitlement goes through policy-driven ReconcileWave
+		if doc.Kind != "retail_order" {
+			continue
+		}
+
+		// Enforce WaveParticipantSnapshot invariant: every demand-driven line must be associable
+		if doc.CustomerProfileID == nil {
+			continue
+		}
+		var snapID uint
+		if profileToSnapshot != nil {
+			sid, ok := profileToSnapshot[*doc.CustomerProfileID]
+			if !ok {
+				missingSnapshotProfiles = append(missingSnapshotProfiles, *doc.CustomerProfileID)
+				continue
+			}
+			snapID = sid
+		}
+
 		demandLines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
 		if err != nil {
 			return nil, err
@@ -230,27 +264,20 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 				continue
 			}
 
-			// Derive LineReason from the DemandDocument's Kind
-			lineReason := "retail_order"
-			if doc.Kind == "membership_entitlement" {
-				lineReason = "entitlement"
-			}
-
 			docID := doc.ID
 			lineID := dl.ID
 			fl := domain.FulfillmentLine{
-				WaveID:           waveID,
-				DemandDocumentID: &docID,
-				DemandLineID:     &lineID,
-				Quantity:         dl.RequestedQuantity,
-				AllocationState:  "allocated",
-				LineReason:       lineReason,
-				GeneratedBy:      "allocation_demand_driven",
-				CreatedAt:        now,
-				UpdatedAt:        now,
-			}
-			if doc.CustomerProfileID != nil {
-				fl.CustomerProfileID = doc.CustomerProfileID
+				WaveID:                    waveID,
+				DemandDocumentID:          &docID,
+				DemandLineID:              &lineID,
+				CustomerProfileID:         doc.CustomerProfileID,
+				WaveParticipantSnapshotID: &snapID,
+				Quantity:                  dl.RequestedQuantity,
+				AllocationState:           "allocated",
+				LineReason:                "retail_order",
+				GeneratedBy:               "allocation_demand_driven",
+				CreatedAt:                 now,
+				UpdatedAt:                 now,
 			}
 
 			if err := uc.fulfillRepo.Create(&fl); err != nil {
@@ -258,6 +285,10 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 			}
 			lines = append(lines, fl)
 		}
+	}
+
+	if len(missingSnapshotProfiles) > 0 && len(lines) == 0 {
+		return nil, fmt.Errorf("no participant snapshots found for customer profiles %v; run GenerateParticipants first", missingSnapshotProfiles)
 	}
 
 	return lines, nil

@@ -43,6 +43,18 @@ func (r *demandRepository) List() ([]domain.DemandDocument, error) {
 	return result, nil
 }
 
+func (r *demandRepository) ListUnassigned() ([]domain.DemandDocument, error) {
+	var ps []persistence.DemandDocument
+	if err := r.db.Where("id NOT IN (?)", r.db.Table("wave_demand_assignments").Select("demand_document_id")).Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.DemandDocument, len(ps))
+	for i, p := range ps {
+		result[i] = *persistence.FromPersistenceDemandDocument(&p)
+	}
+	return result, nil
+}
+
 func (r *demandRepository) CreateLine(line *domain.DemandLine) error {
 	p := persistence.ToPersistenceDemandLine(line)
 	if err := r.db.Create(p).Error; err != nil {

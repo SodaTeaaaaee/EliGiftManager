@@ -44,11 +44,13 @@ type DemandLineDTO struct {
 }
 
 type CreateDemandInput struct {
-	Kind             string                `json:"kind"`
-	CaptureMode      string                `json:"captureMode"`
-	SourceChannel    string                `json:"sourceChannel"`
-	SourceDocumentNo string                `json:"sourceDocumentNo"`
-	Lines            []CreateDemandLineInput `json:"lines"`
+	Kind              string                 `json:"kind"`
+	CaptureMode       string                 `json:"captureMode"`
+	SourceChannel     string                 `json:"sourceChannel"`
+	SourceDocumentNo  string                 `json:"sourceDocumentNo"`
+	SourceCustomerRef string                 `json:"sourceCustomerRef"`
+	CustomerProfileID *uint                  `json:"customerProfileId"`
+	Lines             []CreateDemandLineInput `json:"lines"`
 }
 
 type CreateDemandLineInput struct {

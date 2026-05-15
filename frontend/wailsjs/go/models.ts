@@ -362,6 +362,8 @@ export namespace dto {
 	    captureMode: string;
 	    sourceChannel: string;
 	    sourceDocumentNo: string;
+	    sourceCustomerRef: string;
+	    customerProfileId?: number;
 	    lines: CreateDemandLineInput[];
 	
 	    static createFrom(source: any = {}) {
@@ -374,6 +376,8 @@ export namespace dto {
 	        this.captureMode = source["captureMode"];
 	        this.sourceChannel = source["sourceChannel"];
 	        this.sourceDocumentNo = source["sourceDocumentNo"];
+	        this.sourceCustomerRef = source["sourceCustomerRef"];
+	        this.customerProfileId = source["customerProfileId"];
 	        this.lines = this.convertValues(source["lines"], CreateDemandLineInput);
 	    }
 	
@@ -748,11 +752,11 @@ export namespace dto {
 	    trackingSyncMode: string;
 	    closurePolicy: string;
 	    allowsManualClosure: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new IntegrationProfileDTO(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -1109,37 +1113,33 @@ export namespace dto {
 	    id: number;
 	    supplierOrderId: number;
 	    fulfillmentLineId: number;
-	    supplierLineNo: number | null;
+	    supplierLineNo?: number;
 	    supplierSku: string;
 	    submittedQuantity: number;
-	    acceptedQuantity: number | null;
+	    acceptedQuantity?: number;
 	    status: string;
 	    extraData: string;
 	    createdAt: string;
 	    updatedAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SupplierOrderLineDTO(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.supplierOrderId = source["supplierOrderId"];
 	        this.fulfillmentLineId = source["fulfillmentLineId"];
-	        this.supplierLineNo = source["supplierLineNo"] ?? null;
+	        this.supplierLineNo = source["supplierLineNo"];
 	        this.supplierSku = source["supplierSku"];
 	        this.submittedQuantity = source["submittedQuantity"];
-	        this.acceptedQuantity = source["acceptedQuantity"] ?? null;
+	        this.acceptedQuantity = source["acceptedQuantity"];
 	        this.status = source["status"];
 	        this.extraData = source["extraData"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
-
-		convertValues(a: any): any {
-		    return a;
-		}
 	}
 	export class UpdateAllocationPolicyRuleInput {
 	    id: number;

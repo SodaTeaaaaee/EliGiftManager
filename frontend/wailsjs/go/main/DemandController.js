@@ -17,3 +17,7 @@ export function ListDemandDocuments() {
 export function ListDemandLines(arg1) {
   return window['go']['main']['DemandController']['ListDemandLines'](arg1);
 }
+
+export function ListUnassignedDemandDocuments() {
+  return window['go']['main']['DemandController']['ListUnassignedDemandDocuments']();
+}

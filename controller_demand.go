@@ -26,10 +26,12 @@ func NewDemandController() *DemandController {
 // ImportDemandDocument imports a DemandDocument with its DemandLines.
 func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dto.DemandDocumentDTO, error) {
 	doc := domain.DemandDocument{
-		Kind:             input.Kind,
-		CaptureMode:      input.CaptureMode,
-		SourceChannel:    input.SourceChannel,
-		SourceDocumentNo: input.SourceDocumentNo,
+		Kind:              input.Kind,
+		CaptureMode:       input.CaptureMode,
+		SourceChannel:     input.SourceChannel,
+		SourceDocumentNo:  input.SourceDocumentNo,
+		SourceCustomerRef: input.SourceCustomerRef,
+		CustomerProfileID: input.CustomerProfileID,
 	}
 	lines := make([]*domain.DemandLine, len(input.Lines))
 	for i, l := range input.Lines {
@@ -51,6 +53,19 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 // ListDemandDocuments lists all demand documents.
 func (c *DemandController) ListDemandDocuments() ([]dto.DemandDocumentDTO, error) {
 	docs, err := c.demandRepo.List()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.DemandDocumentDTO, len(docs))
+	for i, doc := range docs {
+		result[i] = domainToDemandDTO(&doc)
+	}
+	return result, nil
+}
+
+// ListUnassignedDemandDocuments returns demand documents not assigned to any wave.
+func (c *DemandController) ListUnassignedDemandDocuments() ([]dto.DemandDocumentDTO, error) {
+	docs, err := c.demandRepo.ListUnassigned()
 	if err != nil {
 		return nil, err
 	}
