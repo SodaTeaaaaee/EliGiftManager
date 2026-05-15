@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/db"
@@ -10,21 +12,29 @@ import (
 
 // DemandController exposes demand-intake Wails bindings.
 type DemandController struct {
-	intakeUC   app.DemandIntakeUseCase
-	demandRepo domain.DemandDocumentRepository
+	intakeUC    app.DemandIntakeUseCase
+	demandRepo  domain.DemandDocumentRepository
+	profileRepo domain.CustomerProfileRepository
 }
 
 func NewDemandController() *DemandController {
 	gdb := db.GetDB()
 	demandRepo := infra.NewDemandRepository(gdb)
+	profileRepo := infra.NewProfileRepository(gdb)
 	return &DemandController{
-		intakeUC:   app.NewDemandIntakeUseCase(demandRepo),
-		demandRepo: demandRepo,
+		intakeUC:    app.NewDemandIntakeUseCase(demandRepo),
+		demandRepo:  demandRepo,
+		profileRepo: profileRepo,
 	}
 }
 
 // ImportDemandDocument imports a DemandDocument with its DemandLines.
 func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dto.DemandDocumentDTO, error) {
+	if input.CustomerProfileID != nil {
+		if _, err := c.profileRepo.FindByID(*input.CustomerProfileID); err != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("customer profile %d does not exist", *input.CustomerProfileID)
+		}
+	}
 	doc := domain.DemandDocument{
 		Kind:              input.Kind,
 		CaptureMode:       input.CaptureMode,

@@ -631,6 +631,102 @@ func TestApplyRulesDemandDriven(t *testing.T) {
 	}
 }
 
+func TestApplyRulesFailsOnPartialSnapshotMissing(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	ruleRepo := newMockRuleRepo()
+	fulfillRepo := newMockFulfillRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	profileA := uint(100)
+	profileB := uint(200)
+	// Only profileA has a snapshot; profileB does not
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 1, WaveID: 1, CustomerProfileID: profileA, SnapshotType: "buyer"},
+	})
+
+	demandUC := NewDemandIntakeUseCase(demandRepo)
+	docA := &domain.DemandDocument{
+		Kind: "retail_order", CaptureMode: "manual_entry",
+		SourceChannel: "test", SourceDocumentNo: "PARTIAL-A",
+		CustomerProfileID: &profileA,
+	}
+	docB := &domain.DemandDocument{
+		Kind: "retail_order", CaptureMode: "manual_entry",
+		SourceChannel: "test", SourceDocumentNo: "PARTIAL-B",
+		CustomerProfileID: &profileB,
+	}
+	if err := demandUC.ImportDemand(docA, []*domain.DemandLine{
+		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := demandUC.ImportDemand(docB, []*domain.DemandLine{
+		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, doc := range []*domain.DemandDocument{docA, docB} {
+		if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+			WaveID: 1, DemandDocumentID: doc.ID,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
+	_, err := allocUC.ApplyRules(1)
+	if err == nil {
+		t.Fatal("expected ApplyRules to fail when some retail docs lack participant snapshot, but got nil")
+	}
+	if !strings.Contains(err.Error(), "200") {
+		t.Errorf("error should mention missing profile ID 200, got: %v", err)
+	}
+
+	// Verify no fulfillment lines were created (fail-fast before delete+create)
+	allLines, _ := fulfillRepo.ListByWave(1)
+	if len(allLines) != 0 {
+		t.Errorf("expected 0 fulfillment lines after failed ApplyRules, got %d", len(allLines))
+	}
+}
+
+func TestApplyRulesFailsOnMissingCustomerProfileID(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	ruleRepo := newMockRuleRepo()
+	fulfillRepo := newMockFulfillRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	demandUC := NewDemandIntakeUseCase(demandRepo)
+	doc := &domain.DemandDocument{
+		Kind: "retail_order", CaptureMode: "manual_entry",
+		SourceChannel: "test", SourceDocumentNo: "NO-PROFILE",
+	}
+	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
+		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+		WaveID: 1, DemandDocumentID: doc.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
+	_, err := allocUC.ApplyRules(1)
+	if err == nil {
+		t.Fatal("expected ApplyRules to fail when retail doc has no CustomerProfileID, but got nil")
+	}
+	if !strings.Contains(err.Error(), "CustomerProfileID") {
+		t.Errorf("error should mention CustomerProfileID, got: %v", err)
+	}
+}
+
 func TestExportSupplierOrder(t *testing.T) {
 	t.Parallel()
 

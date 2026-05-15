@@ -205,11 +205,6 @@ func NewAllocationUseCase(demandRepo domain.DemandDocumentRepository, ruleRepo d
 }
 
 func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, error) {
-	// Delete existing allocation_demand_driven fulfillment lines for this wave (rebuild pattern for idempotency)
-	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(waveID, "allocation_demand_driven"); err != nil {
-		return nil, err
-	}
-
 	// Use assigned demands only (wave-demand linkage)
 	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
 	if err != nil {
@@ -229,30 +224,54 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 		}
 	}
 
-	now := time.Now().Format(time.RFC3339)
-	var lines []domain.FulfillmentLine
+	// Pre-check: every retail_order with accepted lines must be associable to a snapshot.
+	// Fail fast before deleting existing lines to avoid leaving the wave in a broken state.
+	var missingProfileDocs []uint
 	var missingSnapshotProfiles []uint
-
 	for docIdx := range docs {
 		doc := &docs[docIdx]
-		// demand-driven path only handles retail_order; membership_entitlement goes through policy-driven ReconcileWave
 		if doc.Kind != "retail_order" {
 			continue
 		}
-
-		// Enforce WaveParticipantSnapshot invariant: every demand-driven line must be associable
-		if doc.CustomerProfileID == nil {
+		hasAccepted, err := uc.docHasAcceptedLines(doc.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !hasAccepted {
 			continue
 		}
-		var snapID uint
-		if profileToSnapshot != nil {
-			sid, ok := profileToSnapshot[*doc.CustomerProfileID]
-			if !ok {
-				missingSnapshotProfiles = append(missingSnapshotProfiles, *doc.CustomerProfileID)
-				continue
-			}
-			snapID = sid
+		if doc.CustomerProfileID == nil {
+			missingProfileDocs = append(missingProfileDocs, doc.ID)
+			continue
 		}
+		if profileToSnapshot != nil {
+			if _, ok := profileToSnapshot[*doc.CustomerProfileID]; !ok {
+				missingSnapshotProfiles = append(missingSnapshotProfiles, *doc.CustomerProfileID)
+			}
+		}
+	}
+	if len(missingProfileDocs) > 0 {
+		return nil, fmt.Errorf("retail demand documents %v have accepted lines but no CustomerProfileID; cannot generate fulfillment lines", missingProfileDocs)
+	}
+	if len(missingSnapshotProfiles) > 0 {
+		return nil, fmt.Errorf("no participant snapshots found for customer profiles %v; run GenerateParticipants first", missingSnapshotProfiles)
+	}
+
+	// Pre-check passed — safe to rebuild
+	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(waveID, "allocation_demand_driven"); err != nil {
+		return nil, err
+	}
+
+	now := time.Now().Format(time.RFC3339)
+	var lines []domain.FulfillmentLine
+
+	for docIdx := range docs {
+		doc := &docs[docIdx]
+		if doc.Kind != "retail_order" || doc.CustomerProfileID == nil {
+			continue
+		}
+
+		snapID := profileToSnapshot[*doc.CustomerProfileID]
 
 		demandLines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
 		if err != nil {
@@ -287,11 +306,20 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 		}
 	}
 
-	if len(missingSnapshotProfiles) > 0 && len(lines) == 0 {
-		return nil, fmt.Errorf("no participant snapshots found for customer profiles %v; run GenerateParticipants first", missingSnapshotProfiles)
-	}
-
 	return lines, nil
+}
+
+func (uc *allocationUseCase) docHasAcceptedLines(docID uint) (bool, error) {
+	demandLines, err := uc.demandRepo.ListLinesByDocument(docID)
+	if err != nil {
+		return false, err
+	}
+	for i := range demandLines {
+		if demandLines[i].RoutingDisposition == "accepted" {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ---- Export ----
