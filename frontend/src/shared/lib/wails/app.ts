@@ -253,6 +253,46 @@ export async function retryChannelSyncJob(
   return RetryChannelSyncJob(jobId)
 }
 
+// ── AllocationPolicyController (runtime fallback — bindings not yet generated) ──
+
+import type {
+  AllocationPolicyRule,
+  CreateAllocationPolicyRuleInput,
+  UpdateAllocationPolicyRuleInput,
+  ReconcileResult,
+} from "@/entities/allocation-policy"
+
+export async function listAllocationPolicyRules(
+  waveID: number,
+): Promise<AllocationPolicyRule[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return (window as any).go.main.AllocationPolicyController.ListAllocationPolicyRules(waveID)
+}
+
+export async function createAllocationPolicyRule(
+  input: CreateAllocationPolicyRuleInput,
+): Promise<AllocationPolicyRule> {
+  assertWailsRuntime()
+  return (window as any).go.main.AllocationPolicyController.CreateAllocationPolicyRule(input)
+}
+
+export async function updateAllocationPolicyRule(
+  input: UpdateAllocationPolicyRuleInput,
+): Promise<AllocationPolicyRule> {
+  assertWailsRuntime()
+  return (window as any).go.main.AllocationPolicyController.UpdateAllocationPolicyRule(input)
+}
+
+export async function deleteAllocationPolicyRule(ruleID: number): Promise<void> {
+  assertWailsRuntime()
+  return (window as any).go.main.AllocationPolicyController.DeleteAllocationPolicyRule(ruleID)
+}
+
+export async function reconcileWave(waveID: number): Promise<ReconcileResult> {
+  assertWailsRuntime()
+  return (window as any).go.main.AllocationPolicyController.ReconcileWave(waveID)
+}
+
 // ── App (utility) ──
 
 export async function pickCsvFile(): Promise<string> {
