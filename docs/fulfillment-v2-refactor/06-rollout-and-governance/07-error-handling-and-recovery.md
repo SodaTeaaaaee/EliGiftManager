@@ -39,8 +39,23 @@
 ### 2.2 典型失败原因
 
 - 规则引用了已不存在的商品或参与者
+- 读取 `WaveDemandAssignment` 失败，无法判定当前波次接手了哪些 demand
+- 读取 backing `DemandLine` 失败，无法判定哪些项当前具备执行条件
 - 数据库写入失败（磁盘空间不足等）
 - 内部逻辑断言失败（不变量被违反）
+
+这里还要补一条：
+
+- “没有可执行项”是业务结果
+- “判定可执行项所需的数据读取失败”是系统错误
+
+因此 `ReconcileWave` 在做 eligibility 判定时：
+
+- 如果最终发现没有任何 `accepted + ready/not_required` 的 demand
+  - 可以返回创建 0 条的成功结果
+- 如果 assignment / demand line lookup 失败
+  - 必须整体失败
+  - 不得把这类失败静默降级成“创建 0 条”的成功结果
 
 ### 2.3 失败后的用户动作
 

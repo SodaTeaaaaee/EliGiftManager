@@ -126,6 +126,28 @@
 - `recipient_input_state = waiting_for_input / partially_collected`
   - 可以进入波次上下文，但不应被过早视为完全可执行履约
 
+这里还要再补一条实现边界：
+
+- “哪些 `accepted` 项当前具备执行条件”应由领域 service 基于
+  - `WaveDemandAssignment`
+  - 以及其背后的 `DemandLine`
+  来判定
+- 这不是页面层的临时过滤，也不应被 `WaveParticipantSnapshot` 单独偷换承载
+
+更准确地说：
+
+- `WaveParticipantSnapshot` 回答的是“谁已经进入当前波次上下文”
+- “谁现在可以稳定进入 `FulfillmentLine` 生成”仍应回到 assignment + demand truth 上判断
+
+因此：
+
+- 如果判定结果是“当前没有任何 `accepted + ready/not_required` 的项”
+  - 这是合法业务结果
+- 如果在判定过程中无法读取 assignment relation 或 backing demand lines
+  - 这是系统错误
+  - 不应被降级解释成“0 个 eligible participant”
+  - 更不应伪装成“本次 reconcile 成功，只是创建 0 条履约行”
+
 ## 5. 统计应如何呈现
 
 当前更合理的统计方式不是把所有导入项都混成“待处理”，而是分开显示：
