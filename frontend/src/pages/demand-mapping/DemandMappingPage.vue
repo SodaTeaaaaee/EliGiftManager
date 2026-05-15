@@ -17,6 +17,7 @@ import {
   listDemandLines,
   assignDemandToWave,
   generateParticipants,
+  applyAllocationRules,
 } from "@/shared/lib/wails/app"
 import { dto } from "@/../wailsjs/go/models"
 
@@ -33,6 +34,7 @@ const linesCache = ref<Record<number, dto.DemandLineDTO[]>>({})
 const linesLoading = ref<Record<number, boolean>>({})
 const expandedRowKeys = ref<DataTableExpandedRowKeys>([])
 const generatingParticipants = ref(false)
+const applyingRules = ref(false)
 const assigningId = ref<number | null>(null)
 
 const assignedIdSet = computed(() => new Set(assignedDocs.value.map((d) => d.id)))
@@ -109,6 +111,18 @@ async function handleGenerate() {
     message.error(`生成参与者失败: ${e?.message || e}`)
   } finally {
     generatingParticipants.value = false
+  }
+}
+
+async function handleApplyRules() {
+  applyingRules.value = true
+  try {
+    const lines = await applyAllocationRules(waveId.value)
+    message.success(`已生成 ${lines.length} 条履约行`)
+  } catch (e: any) {
+    message.error(`生成履约行失败: ${e?.message || e}`)
+  } finally {
+    applyingRules.value = false
   }
 }
 
@@ -243,14 +257,24 @@ onMounted(() => loadBoth())
   <div class="p-4 flex flex-col gap-4">
     <NCard title="已分配需求">
       <template #header-extra>
-        <NButton
-          type="primary"
-          size="small"
-          :loading="generatingParticipants"
-          @click="handleGenerate"
-        >
-          生成参与者
-        </NButton>
+        <NSpace>
+          <NButton
+            size="small"
+            :loading="generatingParticipants"
+            @click="handleGenerate"
+          >
+            生成参与者
+          </NButton>
+          <NButton
+            type="primary"
+            size="small"
+            :loading="applyingRules"
+            :disabled="assignedDocs.length === 0"
+            @click="handleApplyRules"
+          >
+            生成履约行
+          </NButton>
+        </NSpace>
       </template>
       <NDataTable
         :columns="docColumns"

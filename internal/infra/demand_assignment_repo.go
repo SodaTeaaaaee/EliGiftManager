@@ -18,6 +18,17 @@ func NewWaveDemandAssignmentRepository(db *gorm.DB) domain.WaveDemandAssignmentR
 }
 
 func (r *waveDemandAssignmentRepository) Create(assignment *domain.WaveDemandAssignment) error {
+	// Check cross-wave duplicate: current phase does not support assigning the same demand to multiple waves
+	existing, err := r.ListByDemandDocument(assignment.DemandDocumentID)
+	if err != nil {
+		return err
+	}
+	for _, a := range existing {
+		if a.WaveID != assignment.WaveID {
+			return fmt.Errorf("demand document %d is already assigned to wave %d; cross-wave assignment is not supported in the current phase", assignment.DemandDocumentID, a.WaveID)
+		}
+	}
+
 	p := persistence.ToPersistenceWaveDemandAssignment(assignment)
 	if err := r.db.Create(p).Error; err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "idx_wave_demand") {

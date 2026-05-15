@@ -62,6 +62,10 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 		if fl.WaveID != supplierOrder.WaveID {
 			return nil, nil, fmt.Errorf("fulfillment line %d belongs to wave %d, not wave %d", li.FulfillmentLineID, fl.WaveID, supplierOrder.WaveID)
 		}
+		// Validate quantity does not exceed supplier order line submitted quantity
+		if li.Quantity > sol.SubmittedQuantity {
+			return nil, nil, fmt.Errorf("shipment line quantity %d exceeds supplier order line %d submitted quantity %d", li.Quantity, li.SupplierOrderLineID, sol.SubmittedQuantity)
+		}
 	}
 
 	// 4. Resolve basis stamp from the supplier order's wave

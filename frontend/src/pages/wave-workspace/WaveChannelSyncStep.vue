@@ -51,11 +51,17 @@ interface ManualFormData {
 const manualForms = ref<Record<number, ManualFormData>>({})
 
 // ── Options ──
-const decisionKindOptions = [
-  { label: "标记为不支持同步", value: "mark_sync_unsupported" },
-  { label: "标记为跳过同步", value: "mark_sync_skipped" },
-  { label: "标记为已手动完成", value: "mark_sync_completed_manually" },
-]
+const decisionKindOptions = computed(() => {
+  const base = [
+    { label: "标记为不支持同步", value: "mark_sync_unsupported" },
+    { label: "标记为跳过同步", value: "mark_sync_skipped" },
+  ]
+  const selectedProfile = profiles.value.find((p) => p.id === selectedProfileId.value)
+  if (selectedProfile?.allowsManualClosure) {
+    base.push({ label: "标记为已手动完成", value: "mark_sync_completed_manually" })
+  }
+  return base
+})
 
 const jobStatusColor: Record<string, "default" | "info" | "success" | "warning" | "error"> = {
   pending: "default",

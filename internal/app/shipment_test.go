@@ -499,7 +499,7 @@ func TestCreateShipmentRejectsInconsistentLineChain(t *testing.T) {
 	// Pre-create supplier order 1 (wave 1)
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1}
 	// Pre-create supplier order line 10 (belongs to order 1, references fulfillment line 100)
-	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100}
+	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100, SubmittedQuantity: 10}
 	// Pre-create fulfillment line 100 (wave 1)
 	fulfillRepo.lines[100] = &domain.FulfillmentLine{ID: 100, WaveID: 1}
 
@@ -529,7 +529,7 @@ func TestCreateShipmentRejectsCrossWaveLine(t *testing.T) {
 	// Pre-create supplier order 1 (wave 1)
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1}
 	// Pre-create supplier order line 10 (belongs to order 1, references fulfillment line 100)
-	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100}
+	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100, SubmittedQuantity: 10}
 	// Pre-create fulfillment line 100 (wave 2 — different wave!)
 	fulfillRepo.lines[100] = &domain.FulfillmentLine{ID: 100, WaveID: 2}
 
@@ -645,7 +645,7 @@ func TestCreateShipmentPersistsShipmentAndLinesAtomically(t *testing.T) {
 	now := "2026-01-01T00:00:00Z"
 	supplierOrder := &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
 	supplierRepo.orders[1] = supplierOrder
-	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
 	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
 
 	input := dto.CreateShipmentInput{
@@ -685,8 +685,8 @@ func TestCreateShipmentRollsBackWhenLinePersistenceFails(t *testing.T) {
 	// Setup: supplier order 1 (wave 1), two supplier order lines -> two fulfillment lines
 	now := "2026-01-01T00:00:00Z"
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
-	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100}
-	supplierRepo.orderLines[11] = &domain.SupplierOrderLine{ID: 11, SupplierOrderID: 1, FulfillmentLineID: 101}
+	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100, SubmittedQuantity: 10}
+	supplierRepo.orderLines[11] = &domain.SupplierOrderLine{ID: 11, SupplierOrderID: 1, FulfillmentLineID: 101, SubmittedQuantity: 10}
 	fulfillRepo.lines[100] = &domain.FulfillmentLine{ID: 100, WaveID: 1}
 	fulfillRepo.lines[101] = &domain.FulfillmentLine{ID: 101, WaveID: 1}
 

@@ -116,12 +116,14 @@ func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
 	// Track profiles we generate in this run (dedup within batch)
 	generatedProfiles := make(map[uint]bool)
 	count := 0
+	skippedNoProfile := 0
 
 	for docIdx := range docs {
 		doc := &docs[docIdx]
 
-		// Skip documents without a CustomerProfileID
+		// Documents without a CustomerProfileID cannot generate participant snapshots
 		if doc.CustomerProfileID == nil {
+			skippedNoProfile++
 			continue
 		}
 		profileID := *doc.CustomerProfileID
@@ -153,10 +155,16 @@ func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
 			continue
 		}
 
+		// Determine snapshot type based on demand document kind
+		snapshotType := "member"
+		if doc.Kind == "retail_order" {
+			snapshotType = "buyer"
+		}
+
 		snap := domain.WaveParticipantSnapshot{
 			WaveID:             waveID,
 			CustomerProfileID:  profileID,
-			SnapshotType:       "member",
+			SnapshotType:       snapshotType,
 			IdentityPlatform:   doc.SourceChannel,
 			IdentityValue:      doc.SourceCustomerRef,
 			DisplayName:        "",
@@ -172,6 +180,11 @@ func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
 
 		generatedProfiles[profileID] = true
 		count++
+	}
+
+	// If documents were assigned but all lacked CustomerProfileID, signal explicitly
+	if count == 0 && skippedNoProfile > 0 {
+		return 0, fmt.Errorf("all %d assigned demand documents lack a CustomerProfileID; cannot generate participant snapshots", skippedNoProfile)
 	}
 
 	return count, nil
