@@ -79,12 +79,18 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	var participants []domain.WaveParticipantSnapshot
 	if uc.assignmentRepo != nil && uc.demandRepo != nil {
 		eligibleProfileIDs := make(map[uint]bool)
-		docs, _ := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+		docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+		if err != nil {
+			return nil, err
+		}
 		for _, doc := range docs {
 			if doc.CustomerProfileID == nil {
 				continue
 			}
-			lines, _ := uc.demandRepo.ListLinesByDocument(doc.ID)
+			lines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
+			if err != nil {
+				return nil, err
+			}
 			for _, line := range lines {
 				if line.RoutingDisposition == "accepted" &&
 					(line.RecipientInputState == "ready" || line.RecipientInputState == "not_required") {
