@@ -15,6 +15,7 @@ type profileManagementUseCase struct {
 	channelSyncRepo     domain.ChannelSyncRepository
 	templateBindingRepo domain.ProfileTemplateBindingRepository
 	closureDecisionRepo domain.ChannelClosureDecisionRepository
+	executorProvider    ExecutorProvider
 }
 
 func NewProfileManagementUseCase(
@@ -23,6 +24,7 @@ func NewProfileManagementUseCase(
 	channelSyncRepo domain.ChannelSyncRepository,
 	templateBindingRepo domain.ProfileTemplateBindingRepository,
 	closureDecisionRepo domain.ChannelClosureDecisionRepository,
+	executorProvider ExecutorProvider,
 ) ProfileManagementUseCase {
 	return &profileManagementUseCase{
 		repo:                repo,
@@ -30,6 +32,7 @@ func NewProfileManagementUseCase(
 		channelSyncRepo:     channelSyncRepo,
 		templateBindingRepo: templateBindingRepo,
 		closureDecisionRepo: closureDecisionRepo,
+		executorProvider:    executorProvider,
 	}
 }
 
@@ -106,7 +109,10 @@ func validateProfileEnums(input dto.CreateProfileInput) error {
 
 // validateExecutionReadiness checks that a profile's connector/mode configuration
 // is sufficient for runtime execution ("write-means-executable" invariant).
-func validateExecutionReadiness(input dto.CreateProfileInput) error {
+//
+// For executable modes, this should not stop at "non-empty connector_key".
+// It should also ensure the current runtime registry can resolve that pair.
+func validateExecutionReadiness(input dto.CreateProfileInput, executorProvider ExecutorProvider) error {
 	switch input.TrackingSyncMode {
 	case "manual_confirmation":
 		if !input.AllowsManualClosure {
@@ -115,6 +121,16 @@ func validateExecutionReadiness(input dto.CreateProfileInput) error {
 	case "api_push", "document_export":
 		if input.ConnectorKey == "" {
 			return fmt.Errorf("tracking_sync_mode=%q requires a non-empty connector_key", input.TrackingSyncMode)
+		}
+		if executorProvider != nil {
+			profile := &domain.IntegrationProfile{
+				ProfileKey:       input.ProfileKey,
+				TrackingSyncMode: input.TrackingSyncMode,
+				ConnectorKey:     input.ConnectorKey,
+			}
+			if _, err := executorProvider.Resolve(profile); err != nil {
+				return fmt.Errorf("execution readiness failed for tracking_sync_mode=%q and connector_key=%q: %w", input.TrackingSyncMode, input.ConnectorKey, err)
+			}
 		}
 	}
 	return nil
@@ -129,7 +145,7 @@ func (uc *profileManagementUseCase) CreateProfile(input dto.CreateProfileInput) 
 		return nil, err
 	}
 
-	if err := validateExecutionReadiness(input); err != nil {
+	if err := validateExecutionReadiness(input, uc.executorProvider); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +202,7 @@ func (uc *profileManagementUseCase) UpdateProfile(input dto.UpdateProfileInput) 
 	if err := validateProfileEnums(enumInput); err != nil {
 		return nil, err
 	}
-	if err := validateExecutionReadiness(enumInput); err != nil {
+	if err := validateExecutionReadiness(enumInput, uc.executorProvider); err != nil {
 		return nil, err
 	}
 
@@ -277,7 +293,7 @@ func (uc *profileManagementUseCase) ListProfiles() ([]dto.IntegrationProfileDTO,
 }
 
 func (uc *profileManagementUseCase) SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error) {
-	defaults := []domain.IntegrationProfile{
+	defaults := []dto.CreateProfileInput{
 		{
 			ProfileKey:                "membership_default",
 			SourceChannel:             "default_membership_channel",
@@ -305,7 +321,7 @@ func (uc *profileManagementUseCase) SeedDefaultProfiles() ([]dto.IntegrationProf
 			TrackingSyncMode:          "document_export",
 			ClosurePolicy:             "close_after_sync",
 			AllowsManualClosure:       false,
-			ConnectorKey:              "document_export_default",
+			ConnectorKey:              "eli.local_export",
 		},
 	}
 
@@ -313,13 +329,13 @@ func (uc *profileManagementUseCase) SeedDefaultProfiles() ([]dto.IntegrationProf
 	for _, def := range defaults {
 		_, err := uc.repo.FindByProfileKey(def.ProfileKey)
 		if err == nil {
-			// already exists, skip
 			continue
 		}
-		if err := uc.repo.Create(&def); err != nil {
-			return nil, err
+		created, err := uc.CreateProfile(def)
+		if err != nil {
+			return nil, fmt.Errorf("create default profile %q: %w", def.ProfileKey, err)
 		}
-		result = append(result, profileToDTO(&def))
+		result = append(result, *created)
 	}
 	return result, nil
 }

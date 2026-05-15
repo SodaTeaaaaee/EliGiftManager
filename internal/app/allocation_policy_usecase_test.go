@@ -198,6 +198,83 @@ func (m *policyAdjRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.
 	return out, nil
 }
 
+type policyProductRepo struct {
+	mu       sync.Mutex
+	products map[uint]*domain.Product
+}
+
+func newPolicyProductRepo() *policyProductRepo {
+	return &policyProductRepo{products: make(map[uint]*domain.Product)}
+}
+
+func (m *policyProductRepo) Create(product *domain.Product) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if product.ID == 0 {
+		product.ID = uint(len(m.products) + 1)
+	}
+	cp := *product
+	m.products[product.ID] = &cp
+	return nil
+}
+
+func (m *policyProductRepo) FindByID(id uint) (*domain.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.products[id]
+	if !ok {
+		return nil, fmt.Errorf("product %d not found", id)
+	}
+	cp := *p
+	return &cp, nil
+}
+
+func (m *policyProductRepo) FindByWaveAndID(waveID uint, id uint) (*domain.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	p, ok := m.products[id]
+	if !ok || p.WaveID != waveID {
+		return nil, fmt.Errorf("product %d not found in wave %d", id, waveID)
+	}
+	cp := *p
+	return &cp, nil
+}
+
+func (m *policyProductRepo) ListByWave(waveID uint) ([]domain.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.Product
+	for _, p := range m.products {
+		if p.WaveID == waveID {
+			out = append(out, *p)
+		}
+	}
+	return out, nil
+}
+
+func (m *policyProductRepo) FindByWaveAndSKU(waveID uint, platform, sku string) (*domain.Product, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, p := range m.products {
+		if p.WaveID == waveID && p.SupplierPlatform == platform && p.FactorySKU == sku {
+			cp := *p
+			return &cp, nil
+		}
+	}
+	return nil, fmt.Errorf("product not found")
+}
+
+func (m *policyProductRepo) DeleteByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, p := range m.products {
+		if p.WaveID == waveID {
+			delete(m.products, id)
+		}
+	}
+	return nil
+}
+
 // ── Tests ──
 
 func TestReconcileWave_EmptyRules_ReturnsZeroCreated(t *testing.T) {
@@ -373,7 +450,10 @@ func TestReconcileWave_InactiveRulesSkipped(t *testing.T) {
 		t.Fatalf("setup rule Create failed: %v", err)
 	}
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
+	productRepo := newPolicyProductRepo()
+	productRepo.products[10] = &domain.Product{ID: 10, WaveID: 1, Name: "Wave1 Product"}
+
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
 	result, err := uc.ReconcileWave(waveID)
 	if err != nil {
@@ -393,7 +473,10 @@ func TestCreateRule_And_ListRulesByWave(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	adjRepo := newPolicyAdjRepo()
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
+	productRepo := newPolicyProductRepo()
+	productRepo.products[10] = &domain.Product{ID: 10, WaveID: 1, Name: "Wave1 Product"}
+
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
 	input := dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
@@ -441,7 +524,10 @@ func TestUpdateRule(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	adjRepo := newPolicyAdjRepo()
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
+	productRepo := newPolicyProductRepo()
+	productRepo.products[10] = &domain.Product{ID: 10, WaveID: 1, Name: "Wave1 Product"}
+
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
 	// Create a rule first
 	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
@@ -506,5 +592,67 @@ func TestDeleteRule(t *testing.T) {
 	rules, _ := uc.ListRulesByWave(1)
 	if len(rules) != 0 {
 		t.Errorf("expected 0 rules after delete, got %d", len(rules))
+	}
+}
+
+func TestCreateRuleRejectsProductFromDifferentWave(t *testing.T) {
+	t.Parallel()
+
+	waveRepo := newPolicyWaveRepo()
+	ruleRepo := newPolicyRuleRepo()
+	fulfillRepo := newMockFulfillRepo()
+	adjRepo := newPolicyAdjRepo()
+	productRepo := newPolicyProductRepo()
+	productRepo.products[10] = &domain.Product{ID: 10, WaveID: 2, Name: "Wave2 Product"}
+
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
+
+	_, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            10,
+		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		ContributionQuantity: 1,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err == nil {
+		t.Fatal("expected error for cross-wave product, got nil")
+	}
+}
+
+func TestUpdateRuleRejectsProductFromDifferentWave(t *testing.T) {
+	t.Parallel()
+
+	waveRepo := newPolicyWaveRepo()
+	ruleRepo := newPolicyRuleRepo()
+	fulfillRepo := newMockFulfillRepo()
+	adjRepo := newPolicyAdjRepo()
+	productRepo := newPolicyProductRepo()
+	productRepo.products[10] = &domain.Product{ID: 10, WaveID: 1, Name: "Wave1 Product"}
+	productRepo.products[20] = &domain.Product{ID: 20, WaveID: 2, Name: "Wave2 Product"}
+
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
+
+	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            10,
+		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		ContributionQuantity: 1,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule failed: %v", err)
+	}
+
+	newProductID := uint(20)
+	_, err = uc.UpdateRule(dto.UpdateAllocationPolicyRuleInput{
+		ID:        created.ID,
+		ProductID: &newProductID,
+	})
+	if err == nil {
+		t.Fatal("expected error for cross-wave product update, got nil")
 	}
 }

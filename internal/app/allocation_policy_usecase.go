@@ -226,18 +226,7 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 
 func (uc *allocationPolicyUseCase) CreateRule(input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
 	if input.ProductID != 0 && uc.productRepo != nil {
-		products, err := uc.productRepo.ListByWave(input.WaveID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to list products for wave %d: %w", input.WaveID, err)
-		}
-		found := false
-		for _, p := range products {
-			if p.ID == input.ProductID {
-				found = true
-				break
-			}
-		}
-		if !found {
+		if _, err := uc.productRepo.FindByWaveAndID(input.WaveID, input.ProductID); err != nil {
 			return nil, fmt.Errorf("product %d does not exist in wave %d", input.ProductID, input.WaveID)
 		}
 	}
@@ -269,8 +258,8 @@ func (uc *allocationPolicyUseCase) UpdateRule(input dto.UpdateAllocationPolicyRu
 	}
 
 	if input.ProductID != nil && *input.ProductID != 0 && uc.productRepo != nil {
-		if _, err := uc.productRepo.FindByID(*input.ProductID); err != nil {
-			return nil, fmt.Errorf("product %d does not exist in this wave", *input.ProductID)
+		if _, err := uc.productRepo.FindByWaveAndID(rule.WaveID, *input.ProductID); err != nil {
+			return nil, fmt.Errorf("product %d does not exist in wave %d", *input.ProductID, rule.WaveID)
 		}
 	}
 

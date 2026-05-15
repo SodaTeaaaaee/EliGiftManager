@@ -159,6 +159,15 @@ func (s *stubClosureDecisionRepo) CountByProfileID(profileID uint) (int64, error
 func TestValidateExecutionReadiness(t *testing.T) {
 	t.Parallel()
 
+	provider := NewRuntimeExecutorProviderWith(map[string]map[string]ChannelSyncExecutor{
+		"api_push": {
+			"my.connector": NewFakeExecutor(),
+		},
+		"document_export": {
+			"eli.local_export": NewFakeExecutor(),
+		},
+	})
+
 	tests := []struct {
 		name    string
 		input   dto.CreateProfileInput
@@ -201,13 +210,31 @@ func TestValidateExecutionReadiness(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "api_push with unknown connectorKey is rejected",
+			input: dto.CreateProfileInput{
+				ProfileKey:       "test",
+				TrackingSyncMode: "api_push",
+				ConnectorKey:     "unknown.connector",
+			},
+			wantErr: true,
+		},
+		{
 			name: "document_export with valid connectorKey passes",
 			input: dto.CreateProfileInput{
 				ProfileKey:       "test",
 				TrackingSyncMode: "document_export",
-				ConnectorKey:     "export.connector",
+				ConnectorKey:     "eli.local_export",
 			},
 			wantErr: false,
+		},
+		{
+			name: "document_export with unknown connectorKey is rejected",
+			input: dto.CreateProfileInput{
+				ProfileKey:       "test",
+				TrackingSyncMode: "document_export",
+				ConnectorKey:     "unknown.connector",
+			},
+			wantErr: true,
 		},
 		{
 			name: "manual_confirmation with allowsManualClosure=true passes",
@@ -232,7 +259,7 @@ func TestValidateExecutionReadiness(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := validateExecutionReadiness(tc.input)
+			err := validateExecutionReadiness(tc.input, provider)
 			if tc.wantErr && err == nil {
 				t.Errorf("expected error, got nil")
 			}
@@ -289,18 +316,36 @@ func TestCreateProfileValidatesExecutionReadiness(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "document_export with unknown connectorKey rejected at CreateProfile level",
+			input: dto.CreateProfileInput{
+				ProfileKey:       "test-profile",
+				TrackingSyncMode: "document_export",
+				ConnectorKey:     "unknown.connector",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			execProvider := NewRuntimeExecutorProviderWith(map[string]map[string]ChannelSyncExecutor{
+				"api_push": {
+					"valid.connector": NewFakeExecutor(),
+				},
+				"document_export": {
+					"eli.local_export": NewFakeExecutor(),
+				},
+			})
 			uc := NewProfileManagementUseCase(
 				&stubIntegrationProfileRepo{},
 				&stubDemandDocumentRepo{},
 				&stubChannelSyncRepo{},
 				&stubProfileTemplateBindingRepo{},
 				&stubClosureDecisionRepo{},
+				execProvider,
 			)
 			_, err := uc.CreateProfile(tc.input)
 			if tc.wantErr && err == nil {
@@ -343,18 +388,37 @@ func TestUpdateProfileValidatesExecutionReadiness(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "document_export with unknown connectorKey rejected at UpdateProfile level",
+			input: dto.UpdateProfileInput{
+				ID:               1,
+				ProfileKey:       "test-profile",
+				TrackingSyncMode: "document_export",
+				ConnectorKey:     "unknown.connector",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+				execProvider := NewRuntimeExecutorProviderWith(map[string]map[string]ChannelSyncExecutor{
+					"api_push": {
+						"valid.connector": NewFakeExecutor(),
+					},
+					"document_export": {
+						"eli.local_export": NewFakeExecutor(),
+					},
+			})
 			uc := NewProfileManagementUseCase(
 				&stubIntegrationProfileRepo{},
 				&stubDemandDocumentRepo{},
 				&stubChannelSyncRepo{},
 				&stubProfileTemplateBindingRepo{},
 				&stubClosureDecisionRepo{},
+				execProvider,
 			)
 			_, err := uc.UpdateProfile(tc.input)
 			if tc.wantErr && err == nil {
@@ -414,6 +478,7 @@ func TestDeleteProfileClosureDecisionGating(t *testing.T) {
 				&stubClosureDecisionRepo{
 					CountByProfileIDFn: func(_ uint) (int64, error) { return tc.closureCount, nil },
 				},
+				nil,
 			)
 
 			err := uc.DeleteProfile(1)
@@ -430,5 +495,57 @@ func TestDeleteProfileClosureDecisionGating(t *testing.T) {
 				t.Error("repo.Delete should not be called when closure decision check fails")
 			}
 		})
+	}
+}
+
+func TestSeedDefaultProfilesUsesExecutableDefaults(t *testing.T) {
+	t.Parallel()
+
+	created := make(map[string]*domain.IntegrationProfile)
+	provider := NewRuntimeExecutorProviderWith(map[string]map[string]ChannelSyncExecutor{
+		"document_export": {
+			"eli.local_export": NewFakeExecutor(),
+		},
+	})
+
+	uc := NewProfileManagementUseCase(
+		&stubIntegrationProfileRepo{
+			FindByKeyFn: func(key string) (*domain.IntegrationProfile, error) {
+				if p, ok := created[key]; ok {
+					cp := *p
+					return &cp, nil
+				}
+				return nil, fmt.Errorf("not found")
+			},
+			CreateFn: func(profile *domain.IntegrationProfile) error {
+				cp := *profile
+				created[profile.ProfileKey] = &cp
+				return nil
+			},
+		},
+		&stubDemandDocumentRepo{},
+		&stubChannelSyncRepo{},
+		&stubProfileTemplateBindingRepo{},
+		&stubClosureDecisionRepo{},
+		provider,
+	)
+
+	profiles, err := uc.SeedDefaultProfiles()
+	if err != nil {
+		t.Fatalf("SeedDefaultProfiles failed: %v", err)
+	}
+	if len(profiles) != 2 {
+		t.Fatalf("expected 2 seeded profiles, got %d", len(profiles))
+	}
+
+	retail, ok := created["retail_default"]
+	if !ok {
+		t.Fatal("retail_default was not created")
+	}
+	if retail.ConnectorKey != "eli.local_export" {
+		t.Fatalf("retail_default connector_key = %q, want eli.local_export", retail.ConnectorKey)
+	}
+	if _, err := provider.Resolve(retail); err != nil {
+		t.Fatalf("retail_default should resolve in runtime executor provider, got error: %v", err)
 	}
 }

@@ -193,6 +193,7 @@ type ProductMasterRepository interface {
 type ProductRepository interface {
 	Create(product *Product) error
 	FindByID(id uint) (*Product, error)
+	FindByWaveAndID(waveID uint, id uint) (*Product, error)
 	ListByWave(waveID uint) ([]Product, error)
 	FindByWaveAndSKU(waveID uint, platform, sku string) (*Product, error)
 	DeleteByWave(waveID uint) error

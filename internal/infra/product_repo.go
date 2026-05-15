@@ -90,6 +90,14 @@ func (r *productRepository) FindByID(id uint) (*domain.Product, error) {
 	return persistence.FromPersistenceProduct(&p), nil
 }
 
+func (r *productRepository) FindByWaveAndID(waveID uint, id uint) (*domain.Product, error) {
+	var p persistence.Product
+	if err := r.db.Where("wave_id = ? AND id = ?", waveID, id).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return persistence.FromPersistenceProduct(&p), nil
+}
+
 func (r *productRepository) ListByWave(waveID uint) ([]domain.Product, error) {
 	var ps []persistence.Product
 	if err := r.db.Where("wave_id = ?", waveID).Find(&ps).Error; err != nil {
