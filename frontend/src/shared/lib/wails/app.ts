@@ -293,6 +293,11 @@ export async function reconcileWave(waveID: number): Promise<ReconcileResult> {
   return (window as any).go.main.AllocationPolicyController.ReconcileWave(waveID)
 }
 
+export async function generateParticipants(waveID: number): Promise<number> {
+  assertWailsRuntime()
+  return (window as any).go.main.WaveController.GenerateParticipants(waveID)
+}
+
 // ── App (utility) ──
 
 export async function pickCsvFile(): Promise<string> {

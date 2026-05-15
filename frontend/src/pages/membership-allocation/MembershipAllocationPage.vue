@@ -9,6 +9,7 @@ import {
   updateAllocationPolicyRule,
   deleteAllocationPolicyRule,
   reconcileWave,
+  generateParticipants,
 } from '@/shared/lib/wails/app'
 import type {
   AllocationPolicyRule,
@@ -154,8 +155,10 @@ async function handleReconcile() {
   reconciling.value = true
   reconcileResult.value = null
   try {
+    await generateParticipants(waveId.value)
     reconcileResult.value = await reconcileWave(waveId.value)
     message.success('分配执行完成')
+    await loadRules()
   } catch (e: any) {
     message.error(`执行分配失败: ${e?.message ?? e}`)
   } finally {
