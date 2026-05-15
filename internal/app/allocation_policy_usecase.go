@@ -192,27 +192,23 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	}
 
 	// ---- Phase 3: Persist (only reached when replay fully succeeded) ----
+	// Atomic replace: delete old + create new in a single transaction.
 
-	// Delete old policy-driven lines.
-	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(waveID, "allocation_policy_driven"); err != nil {
-		return nil, err
-	}
-
-	// Persist final lines (post-replay quantities).
-	created := 0
+	var persistLines []domain.FulfillmentLine
 	for i := range newLines {
 		if newLines[i].Quantity <= 0 {
 			continue
 		}
-		if err := uc.fulfillRepo.Create(&newLines[i]); err != nil {
-			return nil, err
-		}
-		created++
+		persistLines = append(persistLines, newLines[i])
+	}
+
+	if err := uc.fulfillRepo.ReplaceByWaveAndGeneratedBy(waveID, "allocation_policy_driven", persistLines); err != nil {
+		return nil, err
 	}
 
 	return &dto.ReconcileResultDTO{
-		Created:       created,
-		Deleted:       0, // DeleteByWaveAndGeneratedBy doesn't return count; first version omits
+		Created:       len(persistLines),
+		Deleted:       0,
 		ReplayedCount: len(adjustments) - len(failures),
 		Failures:      []dto.ReplayFailureDTO{},
 	}, nil

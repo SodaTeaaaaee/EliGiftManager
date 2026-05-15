@@ -463,6 +463,9 @@ func (m *mockFulfillRepoForShipment) ListByWave(waveID uint) ([]domain.Fulfillme
 func (m *mockFulfillRepoForShipment) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
 	panic("not implemented")
 }
+func (m *mockFulfillRepoForShipment) ReplaceByWaveAndGeneratedBy(_ uint, _ string, _ []domain.FulfillmentLine) error {
+	panic("not implemented")
+}
 
 // ── validation tests ──
 

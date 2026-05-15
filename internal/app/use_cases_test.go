@@ -216,6 +216,14 @@ func (m *mockFulfillRepo) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy st
 	return nil
 }
 
+func (m *mockFulfillRepo) ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []domain.FulfillmentLine) error {
+	m.DeleteByWaveAndGeneratedBy(waveID, generatedBy)
+	for i := range newLines {
+		m.Create(&newLines[i])
+	}
+	return nil
+}
+
 // ── mock rule repo ──
 
 type mockRuleRepo struct{}

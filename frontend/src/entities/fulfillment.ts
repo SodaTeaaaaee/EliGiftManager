@@ -62,10 +62,10 @@ export interface FulfillmentLine {
 
 /** Kinds of manual adjustments to fulfillment lines within a wave. */
 export type AdjustmentKind =
-  | "add_send"
-  | "reduce_send"
-  | "remove"
-  | "supplement";
+  | "add"
+  | "reduce"
+  | "compensation"
+  | "remove";
 
 /**
  * An explicit adjustment made against a fulfillment line during wave review.

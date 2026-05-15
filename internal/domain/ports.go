@@ -38,6 +38,7 @@ type FulfillmentLineRepository interface {
 	FindByID(id uint) (*FulfillmentLine, error)
 	ListByWave(waveID uint) ([]FulfillmentLine, error)
 	DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error
+	ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []FulfillmentLine) error
 }
 
 // SupplierOrderRepository defines persistence operations for SupplierOrder and SupplierOrderLine.

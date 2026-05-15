@@ -46,3 +46,19 @@ func (r *fulfillmentRepository) ListByWave(waveID uint) ([]domain.FulfillmentLin
 func (r *fulfillmentRepository) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
 	return r.db.Where("wave_id = ? AND generated_by = ?", waveID, generatedBy).Delete(&persistence.FulfillmentLine{}).Error
 }
+
+func (r *fulfillmentRepository) ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []domain.FulfillmentLine) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("wave_id = ? AND generated_by = ?", waveID, generatedBy).Delete(&persistence.FulfillmentLine{}).Error; err != nil {
+			return err
+		}
+		for i := range newLines {
+			p := persistence.ToPersistenceFulfillmentLine(&newLines[i])
+			if err := tx.Create(p).Error; err != nil {
+				return err
+			}
+			newLines[i] = *persistence.FromPersistenceFulfillmentLine(p)
+		}
+		return nil
+	})
+}
