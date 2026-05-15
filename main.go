@@ -70,6 +70,7 @@ func main() {
 			NewChannelSyncController(),
 			NewAdjustmentController(),
 			NewTemplateController(),
+			NewAllocationPolicyController(),
 		},
 	})
 	if err != nil {

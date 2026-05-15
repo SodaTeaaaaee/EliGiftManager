@@ -62,6 +62,8 @@ type AllocationPolicyRuleRepository interface {
 	Create(rule *AllocationPolicyRule) error
 	FindByID(id uint) (*AllocationPolicyRule, error)
 	ListByWave(waveID uint) ([]AllocationPolicyRule, error)
+	Update(rule *AllocationPolicyRule) error
+	Delete(id uint) error
 }
 
 // WaveDemandAssignmentRepository defines persistence operations for wave-demand linkage.

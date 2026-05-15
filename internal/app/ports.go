@@ -80,6 +80,15 @@ type UndoRedoUseCase interface {
 	Redo(waveID uint) (commandSummary string, err error)
 }
 
+// AllocationPolicyUseCase handles policy-driven allocation: reconcile wave (idempotent rebuild + adjustment replay) and rule CRUD.
+type AllocationPolicyUseCase interface {
+	ReconcileWave(waveID uint) (*dto.ReconcileResultDTO, error)
+	CreateRule(input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error)
+	UpdateRule(input dto.UpdateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error)
+	DeleteRule(ruleID uint) error
+	ListRulesByWave(waveID uint) ([]dto.AllocationPolicyRuleDTO, error)
+}
+
 type TemplateManagementUseCase interface {
 	CreateDocumentTemplate(input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error)
 	ListDocumentTemplates() ([]dto.DocumentTemplateDTO, error)

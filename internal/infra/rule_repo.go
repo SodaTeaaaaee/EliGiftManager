@@ -42,3 +42,17 @@ func (r *ruleRepository) ListByWave(waveID uint) ([]domain.AllocationPolicyRule,
 	}
 	return result, nil
 }
+
+func (r *ruleRepository) Update(rule *domain.AllocationPolicyRule) error {
+	p := persistence.ToPersistenceAllocationPolicyRule(rule)
+	p.ID = rule.ID
+	if err := r.db.Save(p).Error; err != nil {
+		return err
+	}
+	*rule = *persistence.FromPersistenceAllocationPolicyRule(p)
+	return nil
+}
+
+func (r *ruleRepository) Delete(id uint) error {
+	return r.db.Delete(&persistence.AllocationPolicyRule{}, id).Error
+}

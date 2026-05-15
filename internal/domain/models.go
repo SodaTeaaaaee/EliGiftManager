@@ -1,5 +1,54 @@
 package domain
 
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+)
+
+// ---- SelectorPayload ----
+// Custom type implementing database/sql.Scanner and driver.Valuer for JSON union serialization.
+// Stored as JSON TEXT in the database. Supports four selector types:
+// wave_all, platform_all, identity_level, explicit_override.
+
+type SelectorPayload struct {
+	Type           string `json:"type"`
+	Platform       string `json:"platform,omitempty"`
+	Level          string `json:"level,omitempty"`
+	ParticipantIDs []uint `json:"participant_ids,omitempty"`
+}
+
+// Value implements driver.Valuer — serializes to JSON string for DB storage.
+func (s SelectorPayload) Value() (driver.Value, error) {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return nil, fmt.Errorf("SelectorPayload.Value: %w", err)
+	}
+	return string(b), nil
+}
+
+// Scan implements sql.Scanner — deserializes JSON string from DB.
+func (s *SelectorPayload) Scan(src interface{}) error {
+	if src == nil {
+		*s = SelectorPayload{}
+		return nil
+	}
+	var data []byte
+	switch v := src.(type) {
+	case string:
+		data = []byte(v)
+	case []byte:
+		data = v
+	default:
+		return fmt.Errorf("SelectorPayload.Scan: unsupported type %T", src)
+	}
+	if len(data) == 0 {
+		*s = SelectorPayload{}
+		return nil
+	}
+	return json.Unmarshal(data, s)
+}
+
 // ---- CustomerProfile ----
 
 type CustomerProfile struct {
@@ -134,7 +183,7 @@ type AllocationPolicyRule struct {
 	ID                   uint
 	WaveID               uint
 	ProductID            uint
-	SelectorPayload      string
+	SelectorPayload      SelectorPayload
 	ProductTargetRef     string
 	ContributionQuantity int
 	RuleKind             string

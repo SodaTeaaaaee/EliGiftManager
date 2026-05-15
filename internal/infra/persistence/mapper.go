@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -291,10 +292,11 @@ func FromPersistenceFulfillmentLine(p *FulfillmentLine) *domain.FulfillmentLine 
 // ---- AllocationPolicyRule ----
 
 func ToPersistenceAllocationPolicyRule(d *domain.AllocationPolicyRule) *AllocationPolicyRule {
+	selectorJSON, _ := json.Marshal(d.SelectorPayload)
 	return &AllocationPolicyRule{
 		WaveID:               d.WaveID,
 		ProductID:            d.ProductID,
-		SelectorPayload:      d.SelectorPayload,
+		SelectorPayload:      string(selectorJSON),
 		ProductTargetRef:     d.ProductTargetRef,
 		ContributionQuantity: d.ContributionQuantity,
 		RuleKind:             d.RuleKind,
@@ -304,11 +306,15 @@ func ToPersistenceAllocationPolicyRule(d *domain.AllocationPolicyRule) *Allocati
 }
 
 func FromPersistenceAllocationPolicyRule(p *AllocationPolicyRule) *domain.AllocationPolicyRule {
+	var selector domain.SelectorPayload
+	if p.SelectorPayload != "" {
+		_ = json.Unmarshal([]byte(p.SelectorPayload), &selector)
+	}
 	return &domain.AllocationPolicyRule{
 		ID:                   p.ID,
 		WaveID:               p.WaveID,
 		ProductID:            p.ProductID,
-		SelectorPayload:      p.SelectorPayload,
+		SelectorPayload:      selector,
 		ProductTargetRef:     p.ProductTargetRef,
 		ContributionQuantity: p.ContributionQuantity,
 		RuleKind:             p.RuleKind,

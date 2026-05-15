@@ -229,6 +229,8 @@ func (m *mockRuleRepo) FindByID(id uint) (*domain.AllocationPolicyRule, error) {
 func (m *mockRuleRepo) ListByWave(waveID uint) ([]domain.AllocationPolicyRule, error) {
 	return nil, nil
 }
+func (m *mockRuleRepo) Update(rule *domain.AllocationPolicyRule) error { return nil }
+func (m *mockRuleRepo) Delete(id uint) error                          { return nil }
 
 // ── mock assignment repo ──
 
