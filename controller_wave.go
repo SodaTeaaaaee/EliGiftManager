@@ -25,6 +25,7 @@ type WaveController struct {
 	undoRedoUC          app.UndoRedoUseCase
 	historyRecordingSvc *app.HistoryRecordingService
 	projHashSvc         *app.ProjectionHashService
+	snapshotSvc         *app.WaveSnapshotService
 }
 
 func NewWaveController() *WaveController {
@@ -43,6 +44,7 @@ func NewWaveController() *WaveController {
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
 
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
+	snapshotSvc := app.NewWaveSnapshotService(ruleRepo, adjustmentRepo, assignmentRepo)
 
 	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
@@ -57,9 +59,10 @@ func NewWaveController() *WaveController {
 		shipmentRepo:        shipmentRepo,
 		nodeRepo:            historyNodeRepo,
 		overviewProjUC:      app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
-		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gdb)),
-		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo),
+		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gdb, snapshotSvc)),
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
+		snapshotSvc:         snapshotSvc,
 	}
 }
 
@@ -204,6 +207,8 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 
 // GenerateParticipants generates WaveParticipantSnapshots from accepted demand lines.
 func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
+	preSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
+
 	count, err := c.waveUC.GenerateParticipants(waveID)
 	if err != nil {
 		return 0, err
@@ -214,7 +219,8 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 		CommandKind:         domain.CmdGenerateParticipants,
 		CommandSummary:      fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
 		PatchPayload:        fmt.Sprintf(`{"op":"generate_participants","wave_id":%d}`, waveID),
-		InversePatchPayload: fmt.Sprintf(`{"op":"clear_participants","wave_id":%d}`, waveID),
+		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+		CheckpointHint:      true,
 		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
 	})
 	return count, nil
@@ -223,6 +229,8 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 // ApplyAllocationRules applies allocation policy rules to the given wave
 // and returns the generated FulfillmentLines.
 func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLineDTO, error) {
+	preSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
+
 	lines, err := c.allocationUC.ApplyRules(waveID)
 	if err != nil {
 		return nil, err
@@ -233,7 +241,8 @@ func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLin
 		CommandKind:         domain.CmdApplyAllocationRules,
 		CommandSummary:      fmt.Sprintf("apply allocation rules for wave %d (%d lines)", waveID, len(lines)),
 		PatchPayload:        fmt.Sprintf(`{"op":"apply_allocation_rules","wave_id":%d}`, waveID),
-		InversePatchPayload: fmt.Sprintf(`{"op":"clear_allocation_lines","wave_id":%d}`, waveID),
+		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+		CheckpointHint:      true,
 		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
 	})
 

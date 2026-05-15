@@ -373,7 +373,7 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
                 执行分配
               </n-button>
             </template>
-            此操作不可撤销，确认执行？
+            此操作会批量生成数据，确认执行？
           </n-popconfirm>
         </n-space>
       </n-space>

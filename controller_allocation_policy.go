@@ -31,11 +31,12 @@ func NewAllocationPolicyController() *AllocationPolicyController {
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
+	snapshotSvc := app.NewWaveSnapshotService(ruleRepo, adjustmentRepo, assignmentRepo)
 
 	return &AllocationPolicyController{
 		uc:                  app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo),
 		ruleRepo:            ruleRepo,
-		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo),
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
 	}
 }

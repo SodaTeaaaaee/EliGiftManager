@@ -10,18 +10,24 @@ type HistoryRecordingService struct {
 	scopeRepo      domain.HistoryScopeRepository
 	nodeRepo       domain.HistoryNodeRepository
 	checkpointRepo domain.HistoryCheckpointRepository
+	snapshotSvc    *WaveSnapshotService
 }
 
 func NewHistoryRecordingService(
 	scopeRepo domain.HistoryScopeRepository,
 	nodeRepo domain.HistoryNodeRepository,
 	checkpointRepo domain.HistoryCheckpointRepository,
+	snapshotSvc ...*WaveSnapshotService,
 ) *HistoryRecordingService {
-	return &HistoryRecordingService{
+	svc := &HistoryRecordingService{
 		scopeRepo:      scopeRepo,
 		nodeRepo:       nodeRepo,
 		checkpointRepo: checkpointRepo,
 	}
+	if len(snapshotSvc) > 0 && snapshotSvc[0] != nil {
+		svc.snapshotSvc = snapshotSvc[0]
+	}
+	return svc
 }
 
 func (s *HistoryRecordingService) FindScope(waveID uint) (*domain.HistoryScope, error) {
@@ -77,14 +83,21 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 		needsCheckpoint = s.shouldCreatePeriodicCheckpoint(node)
 	}
 
-	if needsCheckpoint && input.SnapshotPayload != "" {
-		cp := &domain.HistoryCheckpoint{
-			HistoryScopeID:  scope.ID,
-			HistoryNodeID:   node.ID,
-			SnapshotPayload: input.SnapshotPayload,
+	if needsCheckpoint {
+		snapshotPayload := input.SnapshotPayload
+		if snapshotPayload == "" && s.snapshotSvc != nil {
+			snapshotPayload, _ = s.snapshotSvc.CaptureSnapshot(input.WaveID)
 		}
-		if err := s.checkpointRepo.Create(cp); err != nil {
-			return nil, fmt.Errorf("history: create checkpoint: %w", err)
+		if snapshotPayload != "" {
+			cp := &domain.HistoryCheckpoint{
+				HistoryScopeID:  scope.ID,
+				HistoryNodeID:   node.ID,
+				SnapshotPayload: snapshotPayload,
+				SchemaVersion:   snapshotSchemaVersion,
+			}
+			if err := s.checkpointRepo.Create(cp); err != nil {
+				return nil, fmt.Errorf("history: create checkpoint: %w", err)
+			}
 		}
 	}
 

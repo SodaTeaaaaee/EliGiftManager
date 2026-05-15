@@ -13,11 +13,16 @@ import (
 var ErrOperationNotUndoable = errors.New("this operation cannot be undone")
 
 type PatchExecutor struct {
-	db *gorm.DB
+	db          *gorm.DB
+	snapshotSvc *WaveSnapshotService
 }
 
-func NewPatchExecutor(db *gorm.DB) *PatchExecutor {
-	return &PatchExecutor{db: db}
+func NewPatchExecutor(db *gorm.DB, snapshotSvc ...*WaveSnapshotService) *PatchExecutor {
+	pe := &PatchExecutor{db: db}
+	if len(snapshotSvc) > 0 && snapshotSvc[0] != nil {
+		pe.snapshotSvc = snapshotSvc[0]
+	}
+	return pe
 }
 
 type patchOp struct {
@@ -69,6 +74,8 @@ func (pe *PatchExecutor) execute(op patchOp) error {
 		return pe.assignDemand(op)
 	case "unassign_demand":
 		return pe.unassignDemand(op)
+	case "restore_checkpoint":
+		return pe.restoreCheckpoint(op)
 	case "generate_participants", "clear_participants",
 		"apply_allocation_rules", "clear_allocation_lines":
 		return ErrOperationNotUndoable
@@ -159,4 +166,20 @@ func (pe *PatchExecutor) unassignDemand(op patchOp) error {
 	}
 	return pe.db.Where("wave_id = ? AND demand_document_id = ?", op.WaveID, op.DemandDocumentID).
 		Delete(&persistence.WaveDemandAssignment{}).Error
+}
+
+func (pe *PatchExecutor) restoreCheckpoint(op patchOp) error {
+	if pe.snapshotSvc == nil {
+		return fmt.Errorf("patch: restore_checkpoint requires snapshot service")
+	}
+	if op.Data == nil {
+		return fmt.Errorf("patch: restore_checkpoint missing data")
+	}
+	// op.Data contains the raw snapshot JSON string (quoted)
+	var payload string
+	if err := json.Unmarshal(op.Data, &payload); err != nil {
+		// op.Data may already be the unquoted JSON object
+		payload = string(op.Data)
+	}
+	return pe.snapshotSvc.RestoreSnapshot(payload)
 }

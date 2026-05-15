@@ -266,6 +266,7 @@ func (m *mockRuleRepo) ListByWave(waveID uint) ([]domain.AllocationPolicyRule, e
 }
 func (m *mockRuleRepo) Update(rule *domain.AllocationPolicyRule) error { return nil }
 func (m *mockRuleRepo) Delete(id uint) error                          { return nil }
+func (m *mockRuleRepo) DeleteByWave(waveID uint) error                { return nil }
 
 // ── mock assignment repo ──
 
@@ -335,6 +336,13 @@ func (m *mockAssignmentRepo) DeleteByWaveAndDocument(waveID uint, demandDocument
 			return nil
 		}
 	}
+	return nil
+}
+
+func (m *mockAssignmentRepo) DeleteByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.assignments, waveID)
 	return nil
 }
 

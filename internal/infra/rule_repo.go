@@ -56,3 +56,7 @@ func (r *ruleRepository) Update(rule *domain.AllocationPolicyRule) error {
 func (r *ruleRepository) Delete(id uint) error {
 	return r.db.Delete(&persistence.AllocationPolicyRule{}, id).Error
 }
+
+func (r *ruleRepository) DeleteByWave(waveID uint) error {
+	return r.db.Unscoped().Where("wave_id = ?", waveID).Delete(&persistence.AllocationPolicyRule{}).Error
+}

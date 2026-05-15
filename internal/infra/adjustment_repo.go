@@ -52,6 +52,10 @@ func (r *fulfillmentAdjustmentRepository) Delete(id uint) error {
 	return r.db.Delete(&persistence.FulfillmentAdjustment{}, id).Error
 }
 
+func (r *fulfillmentAdjustmentRepository) DeleteByWave(waveID uint) error {
+	return r.db.Unscoped().Where("wave_id = ?", waveID).Delete(&persistence.FulfillmentAdjustment{}).Error
+}
+
 func (r *fulfillmentAdjustmentRepository) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.FulfillmentAdjustment, error) {
 	var records []persistence.FulfillmentAdjustment
 	if err := r.db.Where("fulfillment_line_id = ?", fulfillmentLineID).Order("created_at DESC").Find(&records).Error; err != nil {

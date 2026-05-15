@@ -67,12 +67,14 @@ type AllocationPolicyRuleRepository interface {
 	ListByWave(waveID uint) ([]AllocationPolicyRule, error)
 	Update(rule *AllocationPolicyRule) error
 	Delete(id uint) error
+	DeleteByWave(waveID uint) error
 }
 
 // WaveDemandAssignmentRepository defines persistence operations for wave-demand linkage.
 type WaveDemandAssignmentRepository interface {
 	Create(assignment *WaveDemandAssignment) error
 	DeleteByWaveAndDocument(waveID uint, demandDocumentID uint) error
+	DeleteByWave(waveID uint) error
 	ListByWave(waveID uint) ([]WaveDemandAssignment, error)
 	ListByDemandDocument(docID uint) ([]WaveDemandAssignment, error)
 	ListDemandDocumentsByWave(waveID uint) ([]DemandDocument, error)
@@ -133,6 +135,7 @@ type FulfillmentAdjustmentRepository interface {
 	Create(adj *FulfillmentAdjustment) error
 	FindByID(id uint) (*FulfillmentAdjustment, error)
 	Delete(id uint) error
+	DeleteByWave(waveID uint) error
 	ListByWave(waveID uint) ([]FulfillmentAdjustment, error)
 	ListByFulfillmentLine(fulfillmentLineID uint) ([]FulfillmentAdjustment, error)
 }

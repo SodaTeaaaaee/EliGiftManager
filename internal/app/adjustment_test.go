@@ -84,6 +84,19 @@ func (m *mockAdjustmentRepo) Delete(id uint) error {
 	return nil
 }
 
+func (m *mockAdjustmentRepo) DeleteByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var kept []domain.FulfillmentAdjustment
+	for _, r := range m.records {
+		if r.WaveID != waveID {
+			kept = append(kept, r)
+		}
+	}
+	m.records = kept
+	return nil
+}
+
 // ── mock FulfillmentLineRepository (adjustment tests) ──
 
 type mockFulfillRepoForAdjustment struct {

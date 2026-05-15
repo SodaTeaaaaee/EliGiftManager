@@ -23,12 +23,14 @@ func NewAdjustmentController() *AdjustmentController {
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
 	waveRepo := infra.NewWaveRepository(gdb)
 	ruleRepo := infra.NewRuleRepository(gdb)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
+	snapshotSvc := app.NewWaveSnapshotService(ruleRepo, adjustmentRepo, assignmentRepo)
 	return &AdjustmentController{
 		adjustmentUC:        app.NewAdjustmentUseCase(adjustmentRepo, fulfillRepo, waveRepo),
-		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo),
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
 	}
 }

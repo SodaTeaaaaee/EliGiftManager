@@ -153,6 +153,17 @@ func (m *policyRuleRepo) Delete(id uint) error {
 	return nil
 }
 
+func (m *policyRuleRepo) DeleteByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, r := range m.rules {
+		if r.WaveID == waveID {
+			delete(m.rules, id)
+		}
+	}
+	return nil
+}
+
 // policyAdjRepo is a minimal mock FulfillmentAdjustmentRepository.
 type policyAdjRepo struct {
 	mu     sync.Mutex
@@ -218,6 +229,19 @@ func (m *policyAdjRepo) Delete(id uint) error {
 			return nil
 		}
 	}
+	return nil
+}
+
+func (m *policyAdjRepo) DeleteByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var kept []domain.FulfillmentAdjustment
+	for _, a := range m.adjs {
+		if a.WaveID != waveID {
+			kept = append(kept, a)
+		}
+	}
+	m.adjs = kept
 	return nil
 }
 

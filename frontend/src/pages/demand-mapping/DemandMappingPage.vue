@@ -265,7 +265,7 @@ onMounted(() => loadBoth())
                 生成参与者
               </NButton>
             </template>
-            此操作不可撤销，确认执行？
+            此操作会批量生成数据，确认执行？
           </NPopconfirm>
           <NPopconfirm @positive-click="handleApplyRules">
             <template #trigger>
@@ -278,7 +278,7 @@ onMounted(() => loadBoth())
                 生成履约行
               </NButton>
             </template>
-            此操作不可撤销，确认执行？
+            此操作会批量生成数据，确认执行？
           </NPopconfirm>
         </NSpace>
       </template>
