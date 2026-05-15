@@ -2,7 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { createRouter, createWebHashHistory } from "vue-router";
 import { createPinia } from "pinia";
-import { defineComponent, h, nextTick } from "vue";
+import { nextTick } from "vue";
+import App from "@/app/App.vue";
 
 const routes = [
   {
@@ -67,58 +68,28 @@ async function mountAtRoute(path: string) {
   const router = createTestRouter(path);
   const pinia = createPinia();
 
-  const wrapper = mount(
-    defineComponent({
-      template: `<router-view />`,
-    }),
-    {
-      global: {
-        plugins: [router, pinia],
-        stubs: {
-          NConfigProvider: { template: "<div><slot /></div>" },
-          NGlobalStyle: { template: "<div />" },
-          NMessageProvider: { template: "<div><slot /></div>" },
-          NDialogProvider: { template: "<div><slot /></div>" },
-          NResult: { template: "<div class='n-result'><slot /></div>" },
-          NButton: { template: "<button><slot /></button>" },
-          NDataTable: { template: "<div class='n-data-table' />" },
-          NSpace: { template: "<div><slot /></div>" },
-          NTag: { template: "<span><slot /></span>" },
-          NModal: { template: "<div><slot /></div>" },
-          NPopconfirm: { template: "<div><slot /></div>" },
-          NSelect: { template: "<div />" },
-          NInput: { template: "<div />" },
-          NInputNumber: { template: "<div />" },
-          NForm: { template: "<div><slot /></div>" },
-          NFormItem: { template: "<div><slot /></div>" },
-          NCard: { template: "<div><slot /></div>" },
-          NGrid: { template: "<div><slot /></div>" },
-          NGi: { template: "<div><slot /></div>" },
-          NStatistic: { template: "<div />" },
-          NAlert: { template: "<div><slot /></div>" },
-          NCollapse: { template: "<div><slot /></div>" },
-          NCollapseItem: { template: "<div><slot /></div>" },
-          NList: { template: "<div><slot /></div>" },
-          NListItem: { template: "<div><slot /></div>" },
-          NSteps: { template: "<div><slot /></div>" },
-          NStep: { template: "<div><slot /></div>" },
-          NSwitch: { template: "<div />" },
-          NRadioGroup: { template: "<div><slot /></div>" },
-          NRadio: { template: "<div><slot /></div>" },
-          NCheckbox: { template: "<div />" },
-          NDivider: { template: "<div />" },
-          NIcon: { template: "<span />" },
-          NTooltip: { template: "<div><slot /></div>" },
-          NEmpty: { template: "<div />" },
-          NSpin: { template: "<div><slot /></div>" },
-          NPageHeader: { template: "<div><slot /></div>" },
-          NBreadcrumb: { template: "<div><slot /></div>" },
-          NBreadcrumbItem: { template: "<div><slot /></div>" },
-          ContextMenu: { template: "<div />" },
-        },
+  const wrapper = mount(App, {
+    global: {
+      plugins: [router, pinia],
+      stubs: {
+        NDataTable: { template: "<div class='n-data-table' />" },
+        NDrawer: { template: "<div><slot /></div>" },
+        NDrawerContent: { template: "<div><slot /></div>" },
+        NModal: { template: "<div><slot /></div>" },
+        NPopconfirm: { template: "<div><slot name='trigger' /><slot /></div>" },
+        NInput: { template: "<input />" },
+        NInputNumber: { template: "<input />" },
+        NSelect: { template: "<div />" },
+        NForm: { template: "<form><slot /></form>" },
+        NFormItem: { template: "<div><slot /></div>" },
+        NCollapse: { template: "<div><slot /></div>" },
+        NCollapseItem: { template: "<div><slot /></div>" },
+        NList: { template: "<div><slot /></div>" },
+        NListItem: { template: "<div><slot /></div>" },
+        NRadioButton: { template: "<button><slot /></button>" },
       },
-    }
-  );
+    },
+  });
 
   await router.push(path);
   await router.isReady();

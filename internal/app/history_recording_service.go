@@ -41,6 +41,7 @@ type RecordNodeInput struct {
 	PatchPayload        string
 	InversePatchPayload string
 	CheckpointHint      bool
+	BaselineSnapshotPayload string
 	SnapshotPayload     string
 	ProjectionHash      string
 	CreatedBy           string
@@ -50,6 +51,19 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 	scope, err := s.scopeRepo.FindOrCreate("wave", fmt.Sprintf("%d", input.WaveID))
 	if err != nil {
 		return nil, fmt.Errorf("history: find or create scope: %w", err)
+	}
+
+	if scope.CurrentHeadNodeID == 0 {
+		if _, err := s.createSystemBaseline(scope, input.WaveID, input.BaselineSnapshotPayload); err != nil {
+			return nil, err
+		}
+		scope, err = s.scopeRepo.FindByID(scope.ID)
+		if err != nil {
+			return nil, fmt.Errorf("history: reload scope after baseline: %w", err)
+		}
+		if scope == nil {
+			return nil, fmt.Errorf("history: scope disappeared after baseline creation")
+		}
 	}
 
 	node := &domain.HistoryNode{
@@ -86,7 +100,11 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 	if needsCheckpoint {
 		snapshotPayload := input.SnapshotPayload
 		if snapshotPayload == "" && s.snapshotSvc != nil {
-			snapshotPayload, _ = s.snapshotSvc.CaptureSnapshot(input.WaveID)
+			var captureErr error
+			snapshotPayload, captureErr = s.snapshotSvc.CaptureSnapshot(input.WaveID)
+			if captureErr != nil {
+				return nil, fmt.Errorf("history: capture checkpoint snapshot: %w", captureErr)
+			}
 		}
 		if snapshotPayload != "" {
 			cp := &domain.HistoryCheckpoint{
@@ -101,6 +119,55 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 		}
 	}
 
+	return node, nil
+}
+
+func (s *HistoryRecordingService) createSystemBaseline(scope *domain.HistoryScope, waveID uint, snapshotPayload string) (*domain.HistoryNode, error) {
+	node := &domain.HistoryNode{
+		HistoryScopeID:      scope.ID,
+		ParentNodeID:        0,
+		CommandKind:         domain.CmdSystemBaseline,
+		CommandSummary:      "system baseline",
+		PatchPayload:        "",
+		InversePatchPayload: "",
+		CheckpointHint:      true,
+		CreatedBy:           "system",
+	}
+
+	if snapshotPayload == "" && s.snapshotSvc != nil {
+		capturedPayload, err := s.snapshotSvc.CaptureSnapshot(waveID)
+		if err != nil {
+			return nil, fmt.Errorf("history: capture baseline snapshot: %w", err)
+		}
+		snapshotPayload = capturedPayload
+	}
+
+	if snapshotPayload != "" {
+			node.CheckpointHint = true
+			if err := s.nodeRepo.Create(node); err != nil {
+				return nil, fmt.Errorf("history: create baseline node: %w", err)
+			}
+			cp := &domain.HistoryCheckpoint{
+				HistoryScopeID:  scope.ID,
+				HistoryNodeID:   node.ID,
+				SnapshotPayload: snapshotPayload,
+				SchemaVersion:   snapshotSchemaVersion,
+			}
+			if err := s.checkpointRepo.Create(cp); err != nil {
+				return nil, fmt.Errorf("history: create baseline checkpoint: %w", err)
+			}
+			if err := s.scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+				return nil, fmt.Errorf("history: update head to baseline: %w", err)
+			}
+			return node, nil
+	}
+
+	if err := s.nodeRepo.Create(node); err != nil {
+		return nil, fmt.Errorf("history: create baseline node: %w", err)
+	}
+	if err := s.scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+		return nil, fmt.Errorf("history: update head to baseline: %w", err)
+	}
 	return node, nil
 }
 

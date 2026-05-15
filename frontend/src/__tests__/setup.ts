@@ -83,10 +83,3 @@ vi.mock("@/shared/lib/wails/app.ts", () => ({
   pickZipFile: vi.fn(async () => ""),
   saveZoom: vi.fn(async () => {}),
 }));
-
-vi.mock("@/shared/composables/useUndoRedo.ts", () => ({
-  useUndoRedo: vi.fn(() => ({
-    canUndo: { value: false },
-    canRedo: { value: false },
-  })),
-}));

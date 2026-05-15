@@ -746,3 +746,57 @@ func TestIntegration_RecordNodeError_NotSilent(t *testing.T) {
 	}
 	t.Logf("got expected error: %v", err)
 }
+
+func TestIntegration_FirstRecordedActionHasUndoableBaselineParent(t *testing.T) {
+	f := newHistoryIntegrationFixture(t)
+	waveID := mustCreateWave(t, f)
+
+	rule := &domain.AllocationPolicyRule{
+		WaveID:               waveID,
+		ProductID:            77,
+		ContributionQuantity: 1,
+		RuleKind:             "direct",
+		Priority:             1,
+		Active:               true,
+	}
+	if err := f.ruleRepo.Create(rule); err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	payload, err := BuildRuleRestorePatch("restore_rule", rule)
+	if err != nil {
+		t.Fatalf("build restore payload: %v", err)
+	}
+
+	node, err := f.recording.RecordNode(RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         domain.CmdCreateRule,
+		CommandSummary:      "first user action",
+		PatchPayload:        payload,
+		InversePatchPayload: `{"op":"delete_rule","rule_id":1}`,
+	})
+	if err != nil {
+		t.Fatalf("RecordNode first action: %v", err)
+	}
+	if node.ParentNodeID == 0 {
+		t.Fatal("expected first user action to be parented to system baseline, got parent 0")
+	}
+
+	parent, err := f.nodeRepo.FindByID(node.ParentNodeID)
+	if err != nil {
+		t.Fatalf("FindByID baseline parent: %v", err)
+	}
+	if parent == nil || parent.CommandKind != domain.CmdSystemBaseline {
+		t.Fatalf("expected parent command kind %q, got %+v", domain.CmdSystemBaseline, parent)
+	}
+
+	if _, err := f.undoRedo.Undo(waveID); err != nil {
+		t.Fatalf("Undo first user action: %v", err)
+	}
+	rules, err := f.ruleRepo.ListByWave(waveID)
+	if err != nil {
+		t.Fatalf("ListByWave after undo: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected 0 rules after undoing first user action, got %d", len(rules))
+	}
+}

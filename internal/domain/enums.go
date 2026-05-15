@@ -153,6 +153,7 @@ const (
 
 // History command kinds — user-intent operations only
 const (
+	CmdSystemBaseline       = "_system_baseline"
 	CmdAssignDemand          = "assign_demand"
 	CmdGenerateParticipants  = "generate_participants"
 	CmdApplyAllocationRules  = "apply_allocation_rules"

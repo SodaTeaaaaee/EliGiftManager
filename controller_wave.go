@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
@@ -10,6 +9,7 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"gorm.io/gorm"
 )
 
 // WaveController exposes wave-management Wails bindings.
@@ -21,6 +21,7 @@ type WaveController struct {
 	assignmentRepo      domain.WaveDemandAssignmentRepository
 	demandRepo          domain.DemandDocumentRepository
 	shipmentRepo        domain.ShipmentRepository
+	gdb                 *gorm.DB
 	nodeRepo            domain.HistoryNodeRepository
 	overviewProjUC      app.WaveOverviewProjectionUseCase
 	undoRedoUC          app.UndoRedoUseCase
@@ -30,22 +31,22 @@ type WaveController struct {
 }
 
 func NewWaveController() *WaveController {
-	gdb := db.GetDB()
-	waveRepo := infra.NewWaveRepository(gdb)
-	demandRepo := infra.NewDemandRepository(gdb)
-	ruleRepo := infra.NewRuleRepository(gdb)
-	fulfillRepo := infra.NewFulfillmentRepository(gdb)
-	supplierRepo := infra.NewSupplierOrderRepository(gdb)
-	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
-	shipmentRepo := infra.NewShipmentRepository(gdb)
-	channelSyncRepo := infra.NewChannelSyncRepository(gdb)
-	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
-	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
-	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
-	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
+	gormDB := db.GetDB()
+	waveRepo := infra.NewWaveRepository(gormDB)
+	demandRepo := infra.NewDemandRepository(gormDB)
+	ruleRepo := infra.NewRuleRepository(gormDB)
+	fulfillRepo := infra.NewFulfillmentRepository(gormDB)
+	supplierRepo := infra.NewSupplierOrderRepository(gormDB)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gormDB)
+	shipmentRepo := infra.NewShipmentRepository(gormDB)
+	channelSyncRepo := infra.NewChannelSyncRepository(gormDB)
+	closureDecisionRepo := infra.NewClosureDecisionRepository(gormDB)
+	historyScopeRepo := infra.NewHistoryScopeRepository(gormDB)
+	historyNodeRepo := infra.NewHistoryNodeRepository(gormDB)
+	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gormDB)
 
-	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
-	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gormDB)
+	snapshotSvc := app.NewWaveSnapshotService(gormDB, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
 
 	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
@@ -60,7 +61,8 @@ func NewWaveController() *WaveController {
 		shipmentRepo:        shipmentRepo,
 		nodeRepo:            historyNodeRepo,
 		overviewProjUC:      app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
-		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gdb, snapshotSvc)),
+		gdb:                gormDB,
+		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gormDB, snapshotSvc)),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
 		snapshotSvc:         snapshotSvc,
@@ -174,6 +176,8 @@ func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, erro
 
 // AssignDemandToWave assigns a demand document to a wave.
 func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) error {
+	gormDB := c.gdb
+
 	// Validate wave existence
 	if _, err := c.waveUC.GetWave(waveID); err != nil {
 		return err
@@ -183,51 +187,102 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		return err
 	}
 
-	now := time.Now().Format(time.RFC3339)
-	assignment := &domain.WaveDemandAssignment{
-		WaveID:           waveID,
-		DemandDocumentID: demandDocumentID,
-		AcceptedAt:       now,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-	}
-	if err := c.assignmentRepo.Create(assignment); err != nil {
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
+	if err != nil {
 		return err
 	}
 
-	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
-		WaveID:              waveID,
-		CommandKind:         domain.CmdAssignDemand,
-		CommandSummary:      fmt.Sprintf("assign demand %d to wave %d", demandDocumentID, waveID),
-		PatchPayload:        fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
-		InversePatchPayload: fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
-		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
-	}); err != nil {
-		log.Printf("WARNING: history recording failed for assign_demand wave %d demand %d: %v", waveID, demandDocumentID, err)
-	}
-	return nil
+	return gormDB.Transaction(func(tx *gorm.DB) error {
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
+
+		now := time.Now().Format(time.RFC3339)
+		assignment := &domain.WaveDemandAssignment{
+			WaveID:           waveID,
+			DemandDocumentID: demandDocumentID,
+			AcceptedAt:       now,
+			CreatedAt:        now,
+			UpdatedAt:        now,
+		}
+		if err := assignmentRepo.Create(assignment); err != nil {
+			return err
+		}
+
+		_, err := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                 waveID,
+			CommandKind:            domain.CmdAssignDemand,
+			CommandSummary:         fmt.Sprintf("assign demand %d to wave %d", demandDocumentID, waveID),
+			PatchPayload:           fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
+			InversePatchPayload:    fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:         projHashSvc.ComputeHash(waveID),
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 // GenerateParticipants generates WaveParticipantSnapshots from accepted demand lines.
 func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
-	preSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
-
-	count, err := c.waveUC.GenerateParticipants(waveID)
+	gormDB := c.gdb
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
 	if err != nil {
 		return 0, err
 	}
 
-	postSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
-	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
-		WaveID:              waveID,
-		CommandKind:         domain.CmdGenerateParticipants,
-		CommandSummary:      fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
-		PatchPayload:        fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
-		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
-		CheckpointHint:      true,
-		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
-	}); err != nil {
-		log.Printf("WARNING: history recording failed for generate_participants wave %d: %v", waveID, err)
+	var count int
+	err = gormDB.Transaction(func(tx *gorm.DB) error {
+		waveRepo := infra.NewWaveRepository(tx)
+		demandRepo := infra.NewDemandRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		waveUC := app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
+
+		generatedCount, genErr := waveUC.GenerateParticipants(waveID)
+		if genErr != nil {
+			return genErr
+		}
+		count = generatedCount
+
+		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(waveID)
+		if snapErr != nil {
+			return snapErr
+		}
+
+		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                 waveID,
+			CommandKind:            domain.CmdGenerateParticipants,
+			CommandSummary:         fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
+			PatchPayload:           fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
+			InversePatchPayload:    fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+			CheckpointHint:         true,
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:         projHashSvc.ComputeHash(waveID),
+		})
+		return recordErr
+	})
+	if err != nil {
+		return 0, err
 	}
 	return count, nil
 }
@@ -235,24 +290,54 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 // ApplyAllocationRules applies allocation policy rules to the given wave
 // and returns the generated FulfillmentLines.
 func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLineDTO, error) {
-	preSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
-
-	lines, err := c.allocationUC.ApplyRules(waveID)
+	gormDB := c.gdb
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
 	if err != nil {
 		return nil, err
 	}
 
-	postSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
-	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
-		WaveID:              waveID,
-		CommandKind:         domain.CmdApplyAllocationRules,
-		CommandSummary:      fmt.Sprintf("apply allocation rules for wave %d (%d lines)", waveID, len(lines)),
-		PatchPayload:        fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
-		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
-		CheckpointHint:      true,
-		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
-	}); err != nil {
-		log.Printf("WARNING: history recording failed for apply_allocation_rules wave %d: %v", waveID, err)
+	var lines []domain.FulfillmentLine
+	err = gormDB.Transaction(func(tx *gorm.DB) error {
+		waveRepo := infra.NewWaveRepository(tx)
+		demandRepo := infra.NewDemandRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		allocationUC := app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
+
+		generatedLines, applyErr := allocationUC.ApplyRules(waveID)
+		if applyErr != nil {
+			return applyErr
+		}
+		lines = generatedLines
+
+		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(waveID)
+		if snapErr != nil {
+			return snapErr
+		}
+
+		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                 waveID,
+			CommandKind:            domain.CmdApplyAllocationRules,
+			CommandSummary:         fmt.Sprintf("apply allocation rules for wave %d (%d lines)", waveID, len(lines)),
+			PatchPayload:           fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
+			InversePatchPayload:    fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+			CheckpointHint:         true,
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:         projHashSvc.ComputeHash(waveID),
+		})
+		return recordErr
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	result := make([]dto.FulfillmentLineDTO, len(lines))
@@ -349,6 +434,9 @@ func (c *WaveController) ListRecentHistory(waveID uint, limit int) ([]dto.Histor
 	}
 	result := make([]dto.HistoryNodeDTO, len(nodes))
 	for i, n := range nodes {
+		if n.CommandKind == domain.CmdSystemBaseline {
+			continue
+		}
 		result[i] = dto.HistoryNodeDTO{
 			ID:             n.ID,
 			CommandKind:    n.CommandKind,
@@ -357,5 +445,12 @@ func (c *WaveController) ListRecentHistory(waveID uint, limit int) ([]dto.Histor
 			CreatedBy:      n.CreatedBy,
 		}
 	}
-	return result, nil
+	filtered := make([]dto.HistoryNodeDTO, 0, len(result))
+	for _, item := range result {
+		if item.CommandKind == "" {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	return filtered, nil
 }
