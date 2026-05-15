@@ -13,6 +13,9 @@ const steps = [
   { title: '需求映射', routeName: 'wave-demand-mapping', path: 'demand-mapping' },
   { title: '分配规则', routeName: 'wave-allocation', path: 'allocation' },
   { title: '履约调整', routeName: 'wave-adjustment-review', path: 'adjustment-review' },
+  { title: '导出', routeName: 'wave-export', path: 'export' },
+  { title: '物流', routeName: 'wave-shipment', path: 'shipment' },
+  { title: '回填', routeName: 'wave-channel-sync', path: 'channel-sync' },
 ]
 
 const currentStep = computed(() => {

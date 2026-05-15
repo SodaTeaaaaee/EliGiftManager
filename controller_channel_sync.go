@@ -21,6 +21,7 @@ type ChannelSyncController struct {
 	executeSyncUC    app.ExecuteSyncUseCase
 	recordDecisionUC app.RecordClosureDecisionUseCase
 	retrySyncUC      app.RetrySyncUseCase
+	profileRepo      domain.IntegrationProfileRepository
 }
 
 func NewChannelSyncController() *ChannelSyncController {
@@ -48,6 +49,7 @@ func NewChannelSyncController() *ChannelSyncController {
 		executeSyncUC:    app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, executorProvider),
 		recordDecisionUC: app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo),
 		retrySyncUC:      app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, executorProvider),
+		profileRepo:      profileRepo,
 	}
 }
 
@@ -95,6 +97,26 @@ func (c *ChannelSyncController) RetryChannelSyncJob(jobID uint) (dto.ExecuteSync
 		return dto.ExecuteSyncResult{}, err
 	}
 	return *result, nil
+}
+
+// ListIntegrationProfiles returns all integration profiles.
+func (c *ChannelSyncController) ListIntegrationProfiles() ([]dto.IntegrationProfileDTO, error) {
+	profiles, err := c.profileRepo.List()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.IntegrationProfileDTO, len(profiles))
+	for i, p := range profiles {
+		result[i] = dto.IntegrationProfileDTO{
+			ID:                  p.ID,
+			ProfileKey:          p.ProfileKey,
+			SourceChannel:       p.SourceChannel,
+			TrackingSyncMode:    p.TrackingSyncMode,
+			ClosurePolicy:       p.ClosurePolicy,
+			AllowsManualClosure: p.AllowsManualClosure,
+		}
+	}
+	return result, nil
 }
 
 // ListChannelSyncJobsByWave lists all channel sync jobs for a given wave.

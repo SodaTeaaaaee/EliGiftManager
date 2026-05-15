@@ -115,3 +115,12 @@ type ChannelSyncItemDTO struct {
 	CreatedAt          string `json:"createdAt"`
 	UpdatedAt          string `json:"updatedAt"`
 }
+
+type IntegrationProfileDTO struct {
+	ID                  uint   `json:"id"`
+	ProfileKey          string `json:"profileKey"`
+	SourceChannel       string `json:"sourceChannel"`
+	TrackingSyncMode    string `json:"trackingSyncMode"`
+	ClosurePolicy       string `json:"closurePolicy"`
+	AllowsManualClosure bool   `json:"allowsManualClosure"`
+}

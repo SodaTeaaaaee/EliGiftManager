@@ -8,9 +8,13 @@ export function AssignDemandToWave(arg1:number,arg2:number):Promise<void>;
 
 export function CreateWave(arg1:dto.CreateWaveInput):Promise<dto.WaveDTO>;
 
+export function GenerateParticipants(arg1:number):Promise<number>;
+
 export function GetWave(arg1:number):Promise<dto.WaveDTO>;
 
 export function GetWaveOverview(arg1:number):Promise<dto.WaveOverviewDTO>;
+
+export function ListAssignedDemandsByWave(arg1:number):Promise<Array<dto.DemandDocumentDTO>>;
 
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
 

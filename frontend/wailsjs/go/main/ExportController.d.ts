@@ -4,4 +4,8 @@ import {dto} from '../models';
 
 export function ExportSupplierOrder(arg1:number):Promise<dto.SupplierOrderDTO>;
 
+export function GetSupplierOrderByWave(arg1:number):Promise<dto.SupplierOrderDTO>;
+
+export function ListLinesBySupplierOrder(arg1:number):Promise<Array<dto.SupplierOrderLineDTO>>;
+
 export function ListSupplierOrders():Promise<Array<dto.SupplierOrderDTO>>;

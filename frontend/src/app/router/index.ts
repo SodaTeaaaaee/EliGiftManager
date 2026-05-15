@@ -55,6 +55,24 @@ const router = createRouter({
                   "@/pages/adjustment-review/AdjustmentReviewPage.vue"
                 ),
             },
+            {
+              path: "export",
+              name: "wave-export",
+              component: () =>
+                import("@/pages/wave-workspace/WaveExportStep.vue"),
+            },
+            {
+              path: "shipment",
+              name: "wave-shipment",
+              component: () =>
+                import("@/pages/wave-workspace/WaveShipmentStep.vue"),
+            },
+            {
+              path: "channel-sync",
+              name: "wave-channel-sync",
+              component: () =>
+                import("@/pages/wave-workspace/WaveChannelSyncStep.vue"),
+            },
           ],
         },
         // Legacy wave-overview route — redirect to dashboard (consolidated into workspace wizard)

@@ -4,12 +4,14 @@ import {dto} from '../models';
 
 export function CreateChannelSyncJob(arg1:dto.CreateChannelSyncJobInput):Promise<dto.ChannelSyncJobDTO>;
 
-export function PlanChannelClosure(arg1:dto.PlanChannelClosureInput):Promise<dto.PlanChannelClosureResult>;
-
 export function ExecuteChannelSyncJob(arg1:number):Promise<dto.ExecuteSyncResult>;
+
+export function ListChannelSyncJobsByWave(arg1:number):Promise<Array<dto.ChannelSyncJobDTO>>;
+
+export function ListIntegrationProfiles():Promise<Array<dto.IntegrationProfileDTO>>;
+
+export function PlanChannelClosure(arg1:dto.PlanChannelClosureInput):Promise<dto.PlanChannelClosureResult>;
 
 export function RecordChannelClosureDecision(arg1:dto.RecordClosureDecisionInput):Promise<Array<dto.ClosureDecisionRecordDTO>>;
 
 export function RetryChannelSyncJob(arg1:number):Promise<dto.ExecuteSyncResult>;
-
-export function ListChannelSyncJobsByWave(arg1:number):Promise<Array<dto.ChannelSyncJobDTO>>;

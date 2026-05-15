@@ -245,6 +245,19 @@ func domainToFulfillmentLineDTO(fl *domain.FulfillmentLine) dto.FulfillmentLineD
 	}
 }
 
+// ListAssignedDemandsByWave returns all demand documents assigned to the given wave.
+func (c *WaveController) ListAssignedDemandsByWave(waveID uint) ([]dto.DemandDocumentDTO, error) {
+	docs, err := c.assignmentRepo.ListDemandDocumentsByWave(waveID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.DemandDocumentDTO, len(docs))
+	for i := range docs {
+		result[i] = domainToDemandDTO(&docs[i])
+	}
+	return result, nil
+}
+
 // UndoWaveAction undoes the last action for the given wave.
 func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
 	return c.undoRedoUC.Undo(waveID)

@@ -14,13 +14,21 @@ import {
   GetWaveOverview,
   ApplyAllocationRules,
   AssignDemandToWave,
+  GenerateParticipants,
+  ListAssignedDemandsByWave,
   UndoWaveAction,
   RedoWaveAction,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
   ExportSupplierOrder,
+  GetSupplierOrderByWave,
+  ListLinesBySupplierOrder,
   ListSupplierOrders,
 } from "../../../../wailsjs/go/main/ExportController";
+import {
+  ListAdjustmentsByWave,
+  RecordAdjustment,
+} from "../../../../wailsjs/go/main/AdjustmentController";
 import {
   CreateShipment,
   ListShipmentsByWave,
@@ -29,6 +37,7 @@ import {
   CreateChannelSyncJob,
   ExecuteChannelSyncJob,
   ListChannelSyncJobsByWave,
+  ListIntegrationProfiles,
   PlanChannelClosure,
   RecordChannelClosureDecision,
   RetryChannelSyncJob,
@@ -159,6 +168,20 @@ export async function listSupplierOrders(): Promise<dto.SupplierOrderDTO[]> {
   return ListSupplierOrders();
 }
 
+export async function getSupplierOrderByWave(
+  waveId: number,
+): Promise<dto.SupplierOrderDTO> {
+  if (!isWailsRuntimeAvailable()) return new dto.SupplierOrderDTO();
+  return GetSupplierOrderByWave(waveId);
+}
+
+export async function listLinesBySupplierOrder(
+  orderId: number,
+): Promise<dto.SupplierOrderLineDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListLinesBySupplierOrder(orderId);
+}
+
 // ── ShipmentController ──
 
 export async function createShipment(input: {
@@ -253,6 +276,11 @@ export async function retryChannelSyncJob(
   return RetryChannelSyncJob(jobId)
 }
 
+export async function listIntegrationProfiles(): Promise<dto.IntegrationProfileDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListIntegrationProfiles()
+}
+
 // ── AllocationPolicyController (runtime fallback — bindings not yet generated) ──
 
 import type {
@@ -293,9 +321,43 @@ export async function reconcileWave(waveID: number): Promise<ReconcileResult> {
   return (window as any).go.main.AllocationPolicyController.ReconcileWave(waveID)
 }
 
+export async function listAssignedDemandsByWave(
+  waveId: number,
+): Promise<dto.DemandDocumentDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListAssignedDemandsByWave(waveId);
+}
+
 export async function generateParticipants(waveID: number): Promise<number> {
   assertWailsRuntime()
-  return (window as any).go.main.WaveController.GenerateParticipants(waveID)
+  return GenerateParticipants(waveID)
+}
+
+// ── AdjustmentController ──
+
+export async function listAdjustmentsByWave(
+  waveId: number,
+): Promise<dto.FulfillmentAdjustmentDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListAdjustmentsByWave(waveId);
+}
+
+export async function recordAdjustment(
+  input: {
+    waveId: number;
+    targetKind: string;
+    fulfillmentLineId?: number | null;
+    waveParticipantSnapshotId?: number | null;
+    adjustmentKind: string;
+    quantityDelta: number;
+    reasonCode: string;
+    operatorId: string;
+    note: string;
+    evidenceRef: string;
+  },
+): Promise<dto.FulfillmentAdjustmentDTO> {
+  assertWailsRuntime();
+  return RecordAdjustment(dto.RecordAdjustmentInput.createFrom(input));
 }
 
 // ── App (utility) ──
