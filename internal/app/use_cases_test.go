@@ -180,6 +180,19 @@ func (m *mockWaveRepo) ListParticipantsByWave(waveID uint) ([]domain.WavePartici
 	return m.participants, nil
 }
 
+func (m *mockWaveRepo) DeleteParticipantsByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var kept []domain.WaveParticipantSnapshot
+	for _, p := range m.participants {
+		if p.WaveID != waveID {
+			kept = append(kept, p)
+		}
+	}
+	m.participants = kept
+	return nil
+}
+
 func (m *mockWaveRepo) SetParticipants(snaps []domain.WaveParticipantSnapshot) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -247,6 +260,17 @@ func (m *mockFulfillRepo) ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy s
 	m.DeleteByWaveAndGeneratedBy(waveID, generatedBy)
 	for i := range newLines {
 		m.Create(&newLines[i])
+	}
+	return nil
+}
+
+func (m *mockFulfillRepo) DeleteByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, l := range m.lines {
+		if l.WaveID == waveID {
+			delete(m.lines, id)
+		}
 	}
 	return nil
 }

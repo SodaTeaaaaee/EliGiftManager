@@ -134,6 +134,10 @@ func (m *mockFulfillRepoForAdjustment) ReplaceByWaveAndGeneratedBy(_ uint, _ str
 	panic("not implemented")
 }
 
+func (m *mockFulfillRepoForAdjustment) DeleteByWave(waveID uint) error {
+	panic("not implemented")
+}
+
 // ── mock WaveRepository (adjustment tests) ──
 
 type mockWaveRepoForAdjustment struct {
@@ -174,6 +178,13 @@ func (m *mockWaveRepoForAdjustment) ListParticipantsByWave(waveID uint) ([]domai
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.participants[waveID], nil
+}
+
+func (m *mockWaveRepoForAdjustment) DeleteParticipantsByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.participants, waveID)
+	return nil
 }
 
 // ── helpers ──

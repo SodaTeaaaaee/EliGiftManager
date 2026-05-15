@@ -71,3 +71,8 @@ func (r *waveRepository) ListParticipantsByWave(waveID uint) ([]domain.WaveParti
 	}
 	return result, nil
 }
+
+func (r *waveRepository) DeleteParticipantsByWave(waveID uint) error {
+	// WaveParticipantSnapshot has no DeletedAt (no soft-delete); this is a hard delete.
+	return r.db.Where("wave_id = ?", waveID).Delete(&persistence.WaveParticipantSnapshot{}).Error
+}

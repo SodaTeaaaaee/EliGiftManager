@@ -87,6 +87,13 @@ func (m *policyWaveRepo) ListParticipantsByWave(waveID uint) ([]domain.WaveParti
 	return out, nil
 }
 
+func (m *policyWaveRepo) DeleteParticipantsByWave(waveID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.participants, waveID)
+	return nil
+}
+
 // policyRuleRepo is a mock AllocationPolicyRuleRepository with full CRUD.
 type policyRuleRepo struct {
 	mu     sync.Mutex

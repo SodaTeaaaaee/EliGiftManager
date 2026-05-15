@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -17,6 +18,7 @@ type AllocationPolicyController struct {
 	ruleRepo            domain.AllocationPolicyRuleRepository
 	historyRecordingSvc *app.HistoryRecordingService
 	projHashSvc         *app.ProjectionHashService
+	snapshotSvc         *app.WaveSnapshotService
 }
 
 func NewAllocationPolicyController() *AllocationPolicyController {
@@ -31,20 +33,41 @@ func NewAllocationPolicyController() *AllocationPolicyController {
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
-	snapshotSvc := app.NewWaveSnapshotService(ruleRepo, adjustmentRepo, assignmentRepo)
+	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
 
 	return &AllocationPolicyController{
 		uc:                  app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo),
 		ruleRepo:            ruleRepo,
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
+		snapshotSvc:         snapshotSvc,
 	}
 }
 
 // ReconcileWave idempotently rebuilds policy-driven fulfillment lines for the wave,
 // replaying any recorded adjustments.
 func (c *AllocationPolicyController) ReconcileWave(waveID uint) (*dto.ReconcileResultDTO, error) {
-	return c.uc.ReconcileWave(waveID)
+	preSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
+
+	result, err := c.uc.ReconcileWave(waveID)
+	if err != nil {
+		return nil, err
+	}
+
+	postSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
+	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         domain.CmdReconcileWave,
+		CommandSummary:      fmt.Sprintf("reconcile wave %d (%d created, %d deleted)", waveID, result.Created, result.Deleted),
+		PatchPayload:        fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
+		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+		CheckpointHint:      true,
+		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
+	}); err != nil {
+		log.Printf("WARNING: history recording failed for reconcile_wave wave %d: %v", waveID, err)
+	}
+
+	return result, nil
 }
 
 // CreateAllocationPolicyRule creates a new allocation policy rule.
@@ -55,14 +78,16 @@ func (c *AllocationPolicyController) CreateAllocationPolicyRule(input dto.Create
 	}
 
 	ruleData, _ := json.Marshal(rule)
-	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              input.WaveID,
 		CommandKind:         domain.CmdCreateRule,
 		CommandSummary:      fmt.Sprintf("create allocation rule %d for wave %d", rule.ID, input.WaveID),
 		PatchPayload:        fmt.Sprintf(`{"op":"restore_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, input.WaveID, ruleData),
 		InversePatchPayload: fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, rule.ID),
 		ProjectionHash:      c.projHashSvc.ComputeHash(input.WaveID),
-	})
+	}); err != nil {
+		log.Printf("WARNING: history recording failed for create_rule wave %d rule %d: %v", input.WaveID, rule.ID, err)
+	}
 	return rule, nil
 }
 
@@ -80,14 +105,16 @@ func (c *AllocationPolicyController) UpdateAllocationPolicyRule(input dto.Update
 	}
 
 	newData, _ := json.Marshal(rule)
-	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              rule.WaveID,
 		CommandKind:         domain.CmdUpdateRule,
 		CommandSummary:      fmt.Sprintf("update allocation rule %d for wave %d", rule.ID, rule.WaveID),
 		PatchPayload:        fmt.Sprintf(`{"op":"update_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, rule.WaveID, newData),
 		InversePatchPayload: fmt.Sprintf(`{"op":"update_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, rule.WaveID, oldData),
 		ProjectionHash:      c.projHashSvc.ComputeHash(rule.WaveID),
-	})
+	}); err != nil {
+		log.Printf("WARNING: history recording failed for update_rule wave %d rule %d: %v", rule.WaveID, rule.ID, err)
+	}
 	return rule, nil
 }
 
@@ -104,14 +131,16 @@ func (c *AllocationPolicyController) DeleteAllocationPolicyRule(ruleID uint) err
 
 	if rule != nil {
 		ruleData, _ := json.Marshal(rule)
-		_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+		if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 			WaveID:              rule.WaveID,
 			CommandKind:         domain.CmdDeleteRule,
 			CommandSummary:      fmt.Sprintf("delete allocation rule %d from wave %d", ruleID, rule.WaveID),
 			PatchPayload:        fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, ruleID),
 			InversePatchPayload: fmt.Sprintf(`{"op":"restore_rule","rule_id":%d,"wave_id":%d,"data":%s}`, ruleID, rule.WaveID, ruleData),
 			ProjectionHash:      c.projHashSvc.ComputeHash(rule.WaveID),
-		})
+		}); err != nil {
+			log.Printf("WARNING: history recording failed for delete_rule wave %d rule %d: %v", rule.WaveID, ruleID, err)
+		}
 	}
 	return nil
 }

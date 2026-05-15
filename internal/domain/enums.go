@@ -156,6 +156,7 @@ const (
 	CmdAssignDemand          = "assign_demand"
 	CmdGenerateParticipants  = "generate_participants"
 	CmdApplyAllocationRules  = "apply_allocation_rules"
+	CmdReconcileWave         = "reconcile_wave"
 	CmdCreateRule            = "create_rule"
 	CmdUpdateRule            = "update_rule"
 	CmdDeleteRule            = "delete_rule"

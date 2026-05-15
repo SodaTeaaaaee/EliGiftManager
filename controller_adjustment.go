@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -27,7 +28,7 @@ func NewAdjustmentController() *AdjustmentController {
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
-	snapshotSvc := app.NewWaveSnapshotService(ruleRepo, adjustmentRepo, assignmentRepo)
+	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
 	return &AdjustmentController{
 		adjustmentUC:        app.NewAdjustmentUseCase(adjustmentRepo, fulfillRepo, waveRepo),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
@@ -41,14 +42,16 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 		return dto.FulfillmentAdjustmentDTO{}, err
 	}
 
-	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              adj.WaveID,
 		CommandKind:         domain.CmdRecordAdjustment,
 		CommandSummary:      fmt.Sprintf("record adjustment %d (%s) for wave %d", adj.ID, adj.AdjustmentKind, adj.WaveID),
 		PatchPayload:        buildAdjustmentPatch("record_adjustment", adj),
 		InversePatchPayload: fmt.Sprintf(`{"op":"delete_adjustment","adjustment_id":%d}`, adj.ID),
 		ProjectionHash:      c.projHashSvc.ComputeHash(adj.WaveID),
-	})
+	}); err != nil {
+		log.Printf("WARNING: history recording failed for record_adjustment wave %d adjustment %d: %v", adj.WaveID, adj.ID, err)
+	}
 
 	return dto.FulfillmentAdjustmentDTO{
 		ID:                        adj.ID,

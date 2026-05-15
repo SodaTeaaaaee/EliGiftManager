@@ -312,6 +312,9 @@ func (m *mockFulfillRepoForSync) DeleteByWaveAndGeneratedBy(waveID uint, generat
 func (m *mockFulfillRepoForSync) ReplaceByWaveAndGeneratedBy(_ uint, _ string, _ []domain.FulfillmentLine) error {
 	panic("not implemented")
 }
+func (m *mockFulfillRepoForSync) DeleteByWave(waveID uint) error {
+	panic("not implemented")
+}
 
 // ── helper: build valid setup ──
 

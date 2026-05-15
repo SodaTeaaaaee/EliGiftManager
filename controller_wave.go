@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
@@ -44,7 +45,7 @@ func NewWaveController() *WaveController {
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
 
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
-	snapshotSvc := app.NewWaveSnapshotService(ruleRepo, adjustmentRepo, assignmentRepo)
+	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
 
 	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
@@ -194,14 +195,16 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		return err
 	}
 
-	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              waveID,
 		CommandKind:         domain.CmdAssignDemand,
 		CommandSummary:      fmt.Sprintf("assign demand %d to wave %d", demandDocumentID, waveID),
 		PatchPayload:        fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
 		InversePatchPayload: fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
 		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
-	})
+	}); err != nil {
+		log.Printf("WARNING: history recording failed for assign_demand wave %d demand %d: %v", waveID, demandDocumentID, err)
+	}
 	return nil
 }
 
@@ -215,7 +218,7 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 	}
 
 	postSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
-	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              waveID,
 		CommandKind:         domain.CmdGenerateParticipants,
 		CommandSummary:      fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
@@ -223,7 +226,9 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
 		CheckpointHint:      true,
 		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
-	})
+	}); err != nil {
+		log.Printf("WARNING: history recording failed for generate_participants wave %d: %v", waveID, err)
+	}
 	return count, nil
 }
 
@@ -238,7 +243,7 @@ func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLin
 	}
 
 	postSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
-	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+	if _, err := c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              waveID,
 		CommandKind:         domain.CmdApplyAllocationRules,
 		CommandSummary:      fmt.Sprintf("apply allocation rules for wave %d (%d lines)", waveID, len(lines)),
@@ -246,7 +251,9 @@ func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLin
 		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
 		CheckpointHint:      true,
 		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
-	})
+	}); err != nil {
+		log.Printf("WARNING: history recording failed for apply_allocation_rules wave %d: %v", waveID, err)
+	}
 
 	result := make([]dto.FulfillmentLineDTO, len(lines))
 	for i := range lines {

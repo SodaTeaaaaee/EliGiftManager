@@ -32,6 +32,7 @@ type WaveRepository interface {
 
 	AddParticipant(snap *WaveParticipantSnapshot) error
 	ListParticipantsByWave(waveID uint) ([]WaveParticipantSnapshot, error)
+	DeleteParticipantsByWave(waveID uint) error
 }
 
 // FulfillmentLineRepository defines persistence operations for FulfillmentLine.
@@ -39,6 +40,7 @@ type FulfillmentLineRepository interface {
 	Create(line *FulfillmentLine) error
 	FindByID(id uint) (*FulfillmentLine, error)
 	ListByWave(waveID uint) ([]FulfillmentLine, error)
+	DeleteByWave(waveID uint) error
 	DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error
 	ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []FulfillmentLine) error
 }

@@ -92,8 +92,21 @@ func (pe *PatchExecutor) createRule(op patchOp) error {
 	if err := json.Unmarshal(op.Data, &rule); err != nil {
 		return fmt.Errorf("patch: unmarshal rule data: %w", err)
 	}
-	p := persistence.ToPersistenceAllocationPolicyRule(&rule)
-	p.ID = 0
+	// Preserve the original ID from patch data so that downstream references
+	// (history node patches, basis pins) stored at record time remain valid.
+	// The row was hard-deleted by the inverse op so there is no ID conflict.
+	selectorJSON, _ := json.Marshal(rule.SelectorPayload)
+	p := &persistence.AllocationPolicyRule{
+		WaveID:               rule.WaveID,
+		ProductID:            rule.ProductID,
+		SelectorPayload:      string(selectorJSON),
+		ProductTargetRef:     rule.ProductTargetRef,
+		ContributionQuantity: rule.ContributionQuantity,
+		RuleKind:             rule.RuleKind,
+		Priority:             rule.Priority,
+		Active:               rule.Active,
+	}
+	p.ID = rule.ID
 	return pe.db.Create(p).Error
 }
 
@@ -101,7 +114,10 @@ func (pe *PatchExecutor) deleteRule(op patchOp) error {
 	if op.RuleID == 0 {
 		return fmt.Errorf("patch: delete_rule missing rule_id")
 	}
-	return pe.db.Delete(&persistence.AllocationPolicyRule{}, op.RuleID).Error
+	// Use Unscoped so that the row is hard-deleted; the paired restore_rule /
+	// create_rule op re-inserts with the original ID, which requires the row to
+	// be fully gone (not merely soft-deleted).
+	return pe.db.Unscoped().Delete(&persistence.AllocationPolicyRule{}, op.RuleID).Error
 }
 
 func (pe *PatchExecutor) restoreRule(op patchOp) error {
@@ -112,7 +128,20 @@ func (pe *PatchExecutor) restoreRule(op patchOp) error {
 	if err := json.Unmarshal(op.Data, &rule); err != nil {
 		return fmt.Errorf("patch: unmarshal rule data: %w", err)
 	}
-	p := persistence.ToPersistenceAllocationPolicyRule(&rule)
+	// Preserve the original ID (undo-of-delete path); the row was hard-deleted
+	// by deleteRule so there is no conflict.
+	selectorJSON, _ := json.Marshal(rule.SelectorPayload)
+	p := &persistence.AllocationPolicyRule{
+		WaveID:               rule.WaveID,
+		ProductID:            rule.ProductID,
+		SelectorPayload:      string(selectorJSON),
+		ProductTargetRef:     rule.ProductTargetRef,
+		ContributionQuantity: rule.ContributionQuantity,
+		RuleKind:             rule.RuleKind,
+		Priority:             rule.Priority,
+		Active:               rule.Active,
+	}
+	p.ID = rule.ID
 	return pe.db.Create(p).Error
 }
 
@@ -137,8 +166,9 @@ func (pe *PatchExecutor) createAdjustment(op patchOp) error {
 	if err := json.Unmarshal(op.Data, &adj); err != nil {
 		return fmt.Errorf("patch: unmarshal adjustment data: %w", err)
 	}
+	// Preserve the original ID so that FulfillmentLineID back-references remain
+	// stable; FulfillmentAdjustmentFromDomain already embeds it via gorm.Model{ID}.
 	p := persistence.FulfillmentAdjustmentFromDomain(&adj)
-	p.ID = 0
 	return pe.db.Create(p).Error
 }
 
@@ -146,7 +176,9 @@ func (pe *PatchExecutor) deleteAdjustment(op patchOp) error {
 	if op.AdjustmentID == 0 {
 		return fmt.Errorf("patch: delete_adjustment missing adjustment_id")
 	}
-	return pe.db.Delete(&persistence.FulfillmentAdjustment{}, op.AdjustmentID).Error
+	// Hard delete so the original ID is free for re-insertion by the paired
+	// record_adjustment / create_adjustment op.
+	return pe.db.Unscoped().Delete(&persistence.FulfillmentAdjustment{}, op.AdjustmentID).Error
 }
 
 func (pe *PatchExecutor) assignDemand(op patchOp) error {
