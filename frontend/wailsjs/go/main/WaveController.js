@@ -30,6 +30,10 @@ export function ListAssignedDemandsByWave(arg1) {
   return window['go']['main']['WaveController']['ListAssignedDemandsByWave'](arg1);
 }
 
+export function ListRecentHistory(arg1, arg2) {
+  return window['go']['main']['WaveController']['ListRecentHistory'](arg1, arg2);
+}
+
 export function ListWaves() {
   return window['go']['main']['WaveController']['ListWaves']();
 }

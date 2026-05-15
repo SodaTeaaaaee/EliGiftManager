@@ -821,6 +821,26 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class HistoryNodeDTO {
+	    id: number;
+	    commandKind: string;
+	    commandSummary: string;
+	    createdAt: string;
+	    createdBy: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryNodeDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.commandKind = source["commandKind"];
+	        this.commandSummary = source["commandSummary"];
+	        this.createdAt = source["createdAt"];
+	        this.createdBy = source["createdBy"];
+	    }
+	}
 	export class IntegrationProfileDTO {
 	    id: number;
 	    profileKey: string;

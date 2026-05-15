@@ -4,7 +4,7 @@
 **Task ID**: 2026-05-15-v2-health-first-stabilization-and-phase-9-advance
 **Status**: Completed
 **Operator**: Claude Opus 4.6 (1M context)
-**Commits**: `d703016`, `2aa6177`, `7b9d710`, `3262c12`
+**Commits**: `d703016`, `2aa6177`, `7b9d710`, `8318eb1`, `9c1c5f0`, `67f46bc`
 
 ---
 
@@ -104,7 +104,22 @@ Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-
 | `internal/app/use_cases_test.go` | Added DeleteByWaveAndDocument to mockAssignmentRepo |
 | `internal/app/history_head_query_test.go` | Added FindOrCreate + ListByScopeRecent to mockHistoryNodeRepo |
 
-### Cycle 2 — Phase 9 Maturation (Commits `2aa6177`, `7b9d710`, `3262c12`)
+### Cycle 3 — Full Undo/Redo Coverage + Wails Binding (Commits `9c1c5f0`, `67f46bc`)
+
+| File | Change |
+|---|---|
+| `internal/app/wave_snapshot_service.go` | New — WaveSnapshot struct + CaptureSnapshot (serialize rules/adjustments/assignments) + RestoreSnapshot (hard-delete + re-create) |
+| `internal/app/history_recording_service.go` | Added snapshotSvc (variadic); auto-captures snapshot when checkpoint needed; added SchemaVersion |
+| `internal/app/patch_executor.go` | Added snapshotSvc (variadic); new `restore_checkpoint` op |
+| `internal/domain/ports.go` | Added DeleteByWave to AllocationPolicyRuleRepository, FulfillmentAdjustmentRepository, WaveDemandAssignmentRepository |
+| `internal/infra/rule_repo.go` | Implemented DeleteByWave (Unscoped hard delete) |
+| `internal/infra/adjustment_repo.go` | Implemented DeleteByWave (Unscoped hard delete) |
+| `internal/infra/demand_assignment_repo.go` | Implemented DeleteByWave (Unscoped hard delete) |
+| `controller_wave.go` | Added snapshotSvc field; GenerateParticipants + ApplyAllocationRules now capture pre/post snapshots for bidirectional checkpoint restore |
+| `controller_allocation_policy.go` | Wired snapshotSvc into HistoryRecordingService |
+| `controller_adjustment.go` | Wired snapshotSvc into HistoryRecordingService |
+| `frontend/wailsjs/` | Regenerated via `wails generate module` — ListRecentHistory now has typed binding |
+| `frontend/src/shared/lib/wails/app.ts` | ListRecentHistory switched from runtime fallback to typed import |
 
 | File | Change |
 |---|---|
@@ -140,20 +155,23 @@ Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-
 
 **Before this task**: Early Phase 8 (read-side infrastructure existed but was inert)
 
-**After this task**: Mid-to-Late Phase 9
+**After this task**: Late Phase 9
 
 Evidence:
-- 5 wave operations have real local undo/redo with DB state restoration
+- ALL 7 wave operations have real local undo/redo with DB state restoration (bidirectional)
 - History nodes are persistently recorded across app restart
 - Tree-branching structure preserved (undo-then-edit creates new branch, old branch retained in DB)
-- Periodic checkpoint every ~20 nodes implemented
+- Periodic checkpoint every ~20 nodes with real snapshot data
+- WaveSnapshotService captures/restores full mutable wave state (rules + adjustments + assignments)
+- Batch operations (GenerateParticipants, ApplyAllocationRules) use pre/post checkpoint snapshots for both undo and redo
 - ProjectionHash computed on every write operation (SHA-256 over rules + lines + adjustments)
 - BasisStampService stamps real node IDs → drift detection produces `projection_changed` signals when wave state diverges from stamped basis
 - Frontend connected to real undo/redo backend with toast feedback
 - RefreshKey forces child route remount after undo/redo for automatic data reload
 - Regression guardrails: 9 route-mount smoke tests + 5 backend correctness tests
 - Recent action timeline visible in WaveOverview (user can see history is real)
-- Non-undoable operations show confirmation dialog before execution (truthful UX)
+- Batch operations show confirmation dialog before execution (truthful UX)
+- Wails bindings regenerated — ListRecentHistory uses typed import
 - RefreshKey forces child route remount after undo/redo for automatic data reload
 - Regression guardrails: 9 route-mount smoke tests + 5 backend correctness tests
 
@@ -163,22 +181,22 @@ Phase 9 requirements satisfied:
 | `wave` scope history behavior | ✅ Real — nodes recorded, head advances, branches preserved |
 | Persistent local history | ✅ SQLite WAL, survives app restart |
 | Branch-preserving semantics | ✅ Verified against docs — old branches retained, preferred_redo_child updated |
-| Real undo/redo restoration for meaningful subset | ✅ 5 operations: create/update/delete rule, record adjustment, assign demand |
+| Real undo/redo restoration for meaningful subset | ✅ ALL 7 operations: create/update/delete rule, record adjustment, assign demand, generate participants, apply allocation rules |
 | Basis-aware coordination with SupplierOrder/Shipment/ChannelSyncJob | ✅ ProjectionHash + BasisStamp + drift detection end-to-end |
-| Truthful UX around undo/redo capabilities | ✅ ErrOperationNotUndoable returns clear message; NPopconfirm on non-undoable ops; toast shows result |
+| Truthful UX around undo/redo capabilities | ✅ All ops undoable; batch ops show confirmation; toast shows result |
 | User-facing recent-action receipt surface | ✅ Timeline panel in WaveOverview showing last 10 operations |
-| Periodic checkpoints | ✅ Every ~20 nodes via parent chain walk |
+| Periodic checkpoints | ✅ Every ~20 nodes + CheckpointHint for batch ops; real snapshot data stored |
+| Checkpoint-based restoration | ✅ WaveSnapshotService CaptureSnapshot/RestoreSnapshot; batch ops use pre/post snapshots |
 
 ---
 
-## Remaining Work (beyond mid-to-late Phase 9)
+## Remaining Work (beyond late Phase 9)
 
-- `generate_participants` / `apply_allocation_rules` undo (batch operations, need checkpoint-based full restore)
 - History graph UI for branch switching (docs say "not required for v1")
 - Full scope coverage beyond wave (global scope)
 - Branch pruning / GC for old unpinned branches (docs allow but don't require)
 - Per-object drift attribution in frontend (currently wave-level summary only)
-- Wails binding generation for WaveController.ListRecentHistory (currently uses runtime fallback)
+- AllocationPolicyController Wails binding regeneration (still uses runtime fallback for CRUD)
 
 ---
 

@@ -19,6 +19,7 @@ import {
   ListAssignedDemandsByWave,
   UndoWaveAction,
   RedoWaveAction,
+  ListRecentHistory,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
   ExportSupplierOrder,
@@ -493,7 +494,7 @@ export async function listAdjustmentsByWave(
   return ListAdjustmentsByWave(waveId);
 }
 
-// ── History (runtime fallback — bindings not yet generated) ──
+// ── History ──
 
 export interface HistoryNodeDTO {
   id: number
@@ -508,7 +509,7 @@ export async function listRecentHistory(
   limit: number = 10,
 ): Promise<HistoryNodeDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
-  return (window as any).go.main.WaveController.ListRecentHistory(waveId, limit)
+  return ListRecentHistory(waveId, limit) as Promise<HistoryNodeDTO[]>
 }
 
 export async function recordAdjustment(

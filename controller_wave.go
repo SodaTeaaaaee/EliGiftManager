@@ -214,11 +214,12 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 		return 0, err
 	}
 
+	postSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
 	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              waveID,
 		CommandKind:         domain.CmdGenerateParticipants,
 		CommandSummary:      fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
-		PatchPayload:        fmt.Sprintf(`{"op":"generate_participants","wave_id":%d}`, waveID),
+		PatchPayload:        fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
 		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
 		CheckpointHint:      true,
 		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
@@ -236,11 +237,12 @@ func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLin
 		return nil, err
 	}
 
+	postSnapshot, _ := c.snapshotSvc.CaptureSnapshot(waveID)
 	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
 		WaveID:              waveID,
 		CommandKind:         domain.CmdApplyAllocationRules,
 		CommandSummary:      fmt.Sprintf("apply allocation rules for wave %d (%d lines)", waveID, len(lines)),
-		PatchPayload:        fmt.Sprintf(`{"op":"apply_allocation_rules","wave_id":%d}`, waveID),
+		PatchPayload:        fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
 		InversePatchPayload: fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
 		CheckpointHint:      true,
 		ProjectionHash:      c.projHashSvc.ComputeHash(waveID),
