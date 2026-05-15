@@ -4,7 +4,7 @@
 **Task ID**: 2026-05-15-v2-health-first-stabilization-and-phase-9-advance
 **Status**: Completed
 **Operator**: Claude Opus 4.6 (1M context)
-**Commits**: `d703016`, `556ba94`
+**Commits**: `d703016`, `2aa6177`, `7b9d710`, `3262c12`
 
 ---
 
@@ -23,6 +23,8 @@ Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-
 9. Periodic checkpoint implementation (every ~20 nodes)
 10. ProjectionHash computation and end-to-end basis drift activation
 11. Branch-preserving behavior verification against docs
+12. Truthful UX: non-undoable operation confirmation dialogs
+13. Recent action history panel (user-visible history timeline)
 
 ---
 
@@ -100,7 +102,25 @@ Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-
 | `internal/app/adjustment_test.go` | Added FindByID + Delete to mockAdjustmentRepo |
 | `internal/app/allocation_policy_usecase_test.go` | Added FindByID + Delete to policyAdjRepo |
 | `internal/app/use_cases_test.go` | Added DeleteByWaveAndDocument to mockAssignmentRepo |
-| `internal/app/history_head_query_test.go` | Added FindOrCreate to mockHistoryScopeRepo |
+| `internal/app/history_head_query_test.go` | Added FindOrCreate + ListByScopeRecent to mockHistoryNodeRepo |
+
+### Cycle 2 — Phase 9 Maturation (Commits `2aa6177`, `7b9d710`, `3262c12`)
+
+| File | Change |
+|---|---|
+| `frontend/src/pages/wave-workspace/WaveWorkspaceLayout.vue` | Added refreshKey ref + provide; `<router-view :key="refreshKey">` forces remount on undo/redo |
+| `internal/app/history_recording_service.go` | Added periodic checkpoint logic (every ~20 nodes via parent chain walk); added FindScope public method |
+| `internal/app/projection_hash_service.go` | New — SHA-256 over sorted rules + fulfillment lines + adjustments |
+| `controller_wave.go` | Added projHashSvc + nodeRepo fields; all 3 RecordNode calls now pass ProjectionHash; new ListRecentHistory method |
+| `controller_allocation_policy.go` | Added projHashSvc; all 3 RecordNode calls now pass ProjectionHash |
+| `controller_adjustment.go` | Added projHashSvc; RecordNode call now passes ProjectionHash |
+| `internal/app/dto/history.go` | New — HistoryNodeDTO (id, commandKind, commandSummary, createdAt, createdBy) |
+| `internal/domain/ports.go` | HistoryNodeRepository: added ListByScopeRecent |
+| `internal/infra/history_node_repo.go` | Implemented ListByScopeRecent (ORDER BY created_at DESC LIMIT n) |
+| `frontend/src/shared/lib/wails/app.ts` | Added listRecentHistory bridge function + HistoryNodeDTO interface |
+| `frontend/src/pages/wave-workspace/WaveOverviewStep.vue` | Added "最近操作" timeline panel (NTimeline) showing recent history nodes |
+| `frontend/src/pages/demand-mapping/DemandMappingPage.vue` | Generate participants + apply rules buttons wrapped in NPopconfirm ("此操作不可撤销") |
+| `frontend/src/pages/membership-allocation/MembershipAllocationPage.vue` | Execute allocation button wrapped in NPopconfirm ("此操作不可撤销") |
 
 ---
 
@@ -132,6 +152,10 @@ Evidence:
 - Frontend connected to real undo/redo backend with toast feedback
 - RefreshKey forces child route remount after undo/redo for automatic data reload
 - Regression guardrails: 9 route-mount smoke tests + 5 backend correctness tests
+- Recent action timeline visible in WaveOverview (user can see history is real)
+- Non-undoable operations show confirmation dialog before execution (truthful UX)
+- RefreshKey forces child route remount after undo/redo for automatic data reload
+- Regression guardrails: 9 route-mount smoke tests + 5 backend correctness tests
 
 Phase 9 requirements satisfied:
 | Requirement | Status |
@@ -141,7 +165,9 @@ Phase 9 requirements satisfied:
 | Branch-preserving semantics | ✅ Verified against docs — old branches retained, preferred_redo_child updated |
 | Real undo/redo restoration for meaningful subset | ✅ 5 operations: create/update/delete rule, record adjustment, assign demand |
 | Basis-aware coordination with SupplierOrder/Shipment/ChannelSyncJob | ✅ ProjectionHash + BasisStamp + drift detection end-to-end |
-| Truthful UX around undo/redo capabilities | ✅ ErrOperationNotUndoable returns clear message; toast shows result |
+| Truthful UX around undo/redo capabilities | ✅ ErrOperationNotUndoable returns clear message; NPopconfirm on non-undoable ops; toast shows result |
+| User-facing recent-action receipt surface | ✅ Timeline panel in WaveOverview showing last 10 operations |
+| Periodic checkpoints | ✅ Every ~20 nodes via parent chain walk |
 
 ---
 
@@ -152,6 +178,7 @@ Phase 9 requirements satisfied:
 - Full scope coverage beyond wave (global scope)
 - Branch pruning / GC for old unpinned branches (docs allow but don't require)
 - Per-object drift attribution in frontend (currently wave-level summary only)
+- Wails binding generation for WaveController.ListRecentHistory (currently uses runtime fallback)
 
 ---
 

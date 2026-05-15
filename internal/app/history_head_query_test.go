@@ -136,6 +136,21 @@ func (m *mockHistoryNodeRepo) UpdatePreferredRedoChild(nodeID uint, childID uint
 	return nil
 }
 
+func (m *mockHistoryNodeRepo) ListByScopeRecent(scopeID uint, limit int) ([]domain.HistoryNode, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []domain.HistoryNode
+	for _, n := range m.nodes {
+		if n.HistoryScopeID == scopeID {
+			result = append(result, *n)
+		}
+	}
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
+}
+
 // ── tests: HistoryHeadQueryUseCase ──
 
 // When no HistoryScope exists for a wave, GetCurrentProjectionHash must return ("", nil).

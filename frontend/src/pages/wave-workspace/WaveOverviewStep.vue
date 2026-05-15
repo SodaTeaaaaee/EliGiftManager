@@ -11,13 +11,18 @@ import {
   NTag,
   NText,
   NSpace,
+  NTimeline,
+  NTimelineItem,
+  NEmpty,
 } from 'naive-ui'
-import { getWaveOverview } from '@/shared/lib/wails/app'
+import { getWaveOverview, listRecentHistory } from '@/shared/lib/wails/app'
+import type { HistoryNodeDTO } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
 
 const route = useRoute()
 const waveId = computed(() => Number(route.params.waveId) || 0)
 const overview = ref<dto.WaveOverviewDTO | null>(null)
+const recentHistory = ref<HistoryNodeDTO[]>([])
 const loading = ref(false)
 const error = ref('')
 
@@ -59,6 +64,7 @@ async function loadOverview() {
   error.value = ''
   try {
     overview.value = await getWaveOverview(waveId.value)
+    recentHistory.value = await listRecentHistory(waveId.value, 10)
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -161,6 +167,20 @@ onMounted(loadOverview)
           部分基线引用需要人工确认。
         </n-alert>
         <n-text v-else depth="3">无偏移信号</n-text>
+      </n-card>
+
+      <n-card title="最近操作" class="mt-4" size="small">
+        <n-empty v-if="recentHistory.length === 0" description="暂无操作记录" />
+        <n-timeline v-else>
+          <n-timeline-item
+            v-for="node in recentHistory"
+            :key="node.id"
+            :title="node.commandSummary"
+            :time="node.createdAt ? new Date(node.createdAt).toLocaleString('zh-CN') : ''"
+          >
+            <n-tag size="tiny" :bordered="false">{{ node.commandKind }}</n-tag>
+          </n-timeline-item>
+        </n-timeline>
       </n-card>
     </template>
   </div>

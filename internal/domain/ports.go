@@ -169,6 +169,7 @@ type HistoryNodeRepository interface {
 	Create(node *HistoryNode) error
 	FindByID(id uint) (*HistoryNode, error)
 	UpdatePreferredRedoChild(nodeID uint, childID uint) error
+	ListByScopeRecent(scopeID uint, limit int) ([]HistoryNode, error)
 }
 
 // HistoryCheckpointRepository defines persistence operations for HistoryCheckpoint.

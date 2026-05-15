@@ -24,6 +24,10 @@ func NewHistoryRecordingService(
 	}
 }
 
+func (s *HistoryRecordingService) FindScope(waveID uint) (*domain.HistoryScope, error) {
+	return s.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+}
+
 type RecordNodeInput struct {
 	WaveID              uint
 	CommandKind         string

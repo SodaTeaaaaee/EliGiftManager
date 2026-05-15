@@ -40,3 +40,15 @@ func (r *historyNodeRepository) FindByID(id uint) (*domain.HistoryNode, error) {
 func (r *historyNodeRepository) UpdatePreferredRedoChild(nodeID uint, childID uint) error {
 	return r.db.Model(&persistence.HistoryNode{}).Where("id = ?", nodeID).Update("preferred_redo_child_id", childID).Error
 }
+
+func (r *historyNodeRepository) ListByScopeRecent(scopeID uint, limit int) ([]domain.HistoryNode, error) {
+	var ps []persistence.HistoryNode
+	if err := r.db.Where("history_scope_id = ?", scopeID).Order("created_at DESC").Limit(limit).Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.HistoryNode, len(ps))
+	for i := range ps {
+		result[i] = *persistence.HistoryNodeToDomain(&ps[i])
+	}
+	return result, nil
+}

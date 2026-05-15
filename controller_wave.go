@@ -20,6 +20,7 @@ type WaveController struct {
 	assignmentRepo      domain.WaveDemandAssignmentRepository
 	demandRepo          domain.DemandDocumentRepository
 	shipmentRepo        domain.ShipmentRepository
+	nodeRepo            domain.HistoryNodeRepository
 	overviewProjUC      app.WaveOverviewProjectionUseCase
 	undoRedoUC          app.UndoRedoUseCase
 	historyRecordingSvc *app.HistoryRecordingService
@@ -54,6 +55,7 @@ func NewWaveController() *WaveController {
 		assignmentRepo:      assignmentRepo,
 		demandRepo:          demandRepo,
 		shipmentRepo:        shipmentRepo,
+		nodeRepo:            historyNodeRepo,
 		overviewProjUC:      app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
 		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gdb)),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo),
@@ -309,4 +311,33 @@ func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
 // RedoWaveAction redoes the last undone action for the given wave.
 func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
 	return c.undoRedoUC.Redo(waveID)
+}
+
+// ListRecentHistory returns the most recent history nodes for a wave.
+func (c *WaveController) ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	scope, err := c.historyRecordingSvc.FindScope(waveID)
+	if err != nil {
+		return nil, err
+	}
+	if scope == nil {
+		return []dto.HistoryNodeDTO{}, nil
+	}
+	nodes, err := c.nodeRepo.ListByScopeRecent(scope.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.HistoryNodeDTO, len(nodes))
+	for i, n := range nodes {
+		result[i] = dto.HistoryNodeDTO{
+			ID:             n.ID,
+			CommandKind:    n.CommandKind,
+			CommandSummary: n.CommandSummary,
+			CreatedAt:      n.CreatedAt,
+			CreatedBy:      n.CreatedBy,
+		}
+	}
+	return result, nil
 }

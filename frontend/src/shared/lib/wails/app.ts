@@ -493,6 +493,24 @@ export async function listAdjustmentsByWave(
   return ListAdjustmentsByWave(waveId);
 }
 
+// ── History (runtime fallback — bindings not yet generated) ──
+
+export interface HistoryNodeDTO {
+  id: number
+  commandKind: string
+  commandSummary: string
+  createdAt: string
+  createdBy: string
+}
+
+export async function listRecentHistory(
+  waveId: number,
+  limit: number = 10,
+): Promise<HistoryNodeDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return (window as any).go.main.WaveController.ListRecentHistory(waveId, limit)
+}
+
 export async function recordAdjustment(
   input: {
     waveId: number;
