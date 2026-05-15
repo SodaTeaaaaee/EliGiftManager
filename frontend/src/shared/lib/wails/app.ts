@@ -433,7 +433,15 @@ export async function listProductsByWave(waveId: number): Promise<dto.ProductDTO
   return ListProductsByWave(waveId)
 }
 
-// ── AllocationPolicyController (runtime fallback — bindings not yet generated) ──
+// ── AllocationPolicyController ──
+
+import {
+  CreateAllocationPolicyRule,
+  UpdateAllocationPolicyRule,
+  DeleteAllocationPolicyRule,
+  ListAllocationPolicyRules,
+  ReconcileWave,
+} from "../../../../wailsjs/go/main/AllocationPolicyController";
 
 import type {
   AllocationPolicyRule,
@@ -446,31 +454,31 @@ export async function listAllocationPolicyRules(
   waveID: number,
 ): Promise<AllocationPolicyRule[]> {
   if (!isWailsRuntimeAvailable()) return []
-  return (window as any).go.main.AllocationPolicyController.ListAllocationPolicyRules(waveID)
+  return ListAllocationPolicyRules(waveID) as Promise<AllocationPolicyRule[]>
 }
 
 export async function createAllocationPolicyRule(
   input: CreateAllocationPolicyRuleInput,
 ): Promise<AllocationPolicyRule> {
   assertWailsRuntime()
-  return (window as any).go.main.AllocationPolicyController.CreateAllocationPolicyRule(input)
+  return CreateAllocationPolicyRule(input as any) as Promise<AllocationPolicyRule>
 }
 
 export async function updateAllocationPolicyRule(
   input: UpdateAllocationPolicyRuleInput,
 ): Promise<AllocationPolicyRule> {
   assertWailsRuntime()
-  return (window as any).go.main.AllocationPolicyController.UpdateAllocationPolicyRule(input)
+  return UpdateAllocationPolicyRule(input as any) as Promise<AllocationPolicyRule>
 }
 
 export async function deleteAllocationPolicyRule(ruleID: number): Promise<void> {
   assertWailsRuntime()
-  return (window as any).go.main.AllocationPolicyController.DeleteAllocationPolicyRule(ruleID)
+  return DeleteAllocationPolicyRule(ruleID)
 }
 
 export async function reconcileWave(waveID: number): Promise<ReconcileResult> {
   assertWailsRuntime()
-  return (window as any).go.main.AllocationPolicyController.ReconcileWave(waveID)
+  return ReconcileWave(waveID) as Promise<ReconcileResult>
 }
 
 export async function listAssignedDemandsByWave(

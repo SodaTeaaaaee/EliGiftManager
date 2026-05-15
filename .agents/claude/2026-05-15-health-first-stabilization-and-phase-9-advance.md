@@ -4,7 +4,7 @@
 **Task ID**: 2026-05-15-v2-health-first-stabilization-and-phase-9-advance
 **Status**: Completed
 **Operator**: Claude Opus 4.6 (1M context)
-**Commits**: `d703016`, `2aa6177`, `7b9d710`, `8318eb1`, `9c1c5f0`, `67f46bc`
+**Commits**: `d703016`, `2aa6177`, `7b9d710`, `8318eb1`, `9c1c5f0`, `67f46bc` → `44f19e7`, `9cc0ea2`
 
 ---
 
@@ -196,7 +196,6 @@ Phase 9 requirements satisfied:
 - Full scope coverage beyond wave (global scope)
 - Branch pruning / GC for old unpinned branches (docs allow but don't require)
 - Per-object drift attribution in frontend (currently wave-level summary only)
-- AllocationPolicyController Wails binding regeneration (still uses runtime fallback for CRUD)
 
 ---
 
