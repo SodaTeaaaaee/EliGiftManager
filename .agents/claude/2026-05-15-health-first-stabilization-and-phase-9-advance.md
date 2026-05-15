@@ -4,12 +4,13 @@
 **Task ID**: 2026-05-15-v2-health-first-stabilization-and-phase-9-advance
 **Status**: Completed
 **Operator**: Claude Opus 4.6 (1M context)
+**Commits**: `d703016`, `556ba94`
 
 ---
 
 ## Scope
 
-Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-task/2026-05-15-v2-health-first-stabilization-and-phase-9-advance.md`, covering:
+Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-task/2026-05-15-v2-health-first-stabilization-and-phase-9-advance.md`, then push further into mid-to-late Phase 9 with:
 
 1. Baseline assessment and phase positioning
 2. Frontend stabilization and crash containment
@@ -18,6 +19,10 @@ Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-
 5. Phase 8 read-side UI advancement
 6. Phase 9 history system materialization (patch-first, checkpoint-backed)
 7. Frontend undo/redo bridge activation
+8. RefreshKey mechanism for automatic data reload after undo/redo
+9. Periodic checkpoint implementation (every ~20 nodes)
+10. ProjectionHash computation and end-to-end basis drift activation
+11. Branch-preserving behavior verification against docs
 
 ---
 
@@ -73,19 +78,20 @@ Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-
 | `internal/infra/history_scope_repo.go` | Implemented FindOrCreate |
 | `internal/infra/adjustment_repo.go` | Implemented FindByID + Delete |
 | `internal/infra/demand_assignment_repo.go` | Implemented DeleteByWaveAndDocument |
-| `internal/app/history_recording_service.go` | New — HistoryRecordingService with RecordNode (find/create scope, create node, advance head, optional checkpoint) |
+| `internal/app/history_recording_service.go` | New — HistoryRecordingService with RecordNode (find/create scope, create node, advance head, periodic checkpoint every ~20 nodes) |
 | `internal/app/patch_executor.go` | New — PatchExecutor with ApplyPatch/ApplyInversePatch supporting 8 operation types |
-| `internal/app/undo_redo_usecase.go` | Enhanced — now applies inverse/forward patches before moving head pointer |
-| `controller_wave.go` | Added historyRecordingSvc; instrumented AssignDemandToWave, GenerateParticipants, ApplyAllocationRules; wired PatchExecutor into UndoRedoUseCase |
-| `controller_allocation_policy.go` | Added historyRecordingSvc; instrumented CreateRule, UpdateRule, DeleteRule with full data payloads |
-| `controller_adjustment.go` | Added historyRecordingSvc; instrumented RecordAdjustment with full data payload |
+| `internal/app/projection_hash_service.go` | New — SHA-256 hash over rules + fulfillment lines + adjustments for drift detection |
+| `internal/app/undo_redo_usecase.go` | Enhanced — now applies inverse/forward patches before moving head pointer; variadic PatchExecutor for backward compat |
+| `controller_wave.go` | Added historyRecordingSvc + projHashSvc; instrumented AssignDemandToWave, GenerateParticipants, ApplyAllocationRules with ProjectionHash; wired PatchExecutor into UndoRedoUseCase |
+| `controller_allocation_policy.go` | Added historyRecordingSvc + projHashSvc; instrumented CreateRule, UpdateRule, DeleteRule with full data payloads + ProjectionHash |
+| `controller_adjustment.go` | Added historyRecordingSvc + projHashSvc; instrumented RecordAdjustment with full data payload + ProjectionHash |
 
-### Stage G — Frontend Undo/Redo Bridge Activation
+### Stage G — Frontend Undo/Redo Bridge Activation + RefreshKey
 
 | File | Change |
 |---|---|
-| `frontend/src/shared/composables/useUndoRedo.ts` | Rewritten — now calls undoWaveAction/redoWaveAction bridge functions; onSuccess/onError callbacks |
-| `frontend/src/pages/wave-workspace/WaveWorkspaceLayout.vue` | Updated — wires onSuccess (toast), onError (warning), onNotReady (info) |
+| `frontend/src/shared/composables/useUndoRedo.ts` | Rewritten — now calls undoWaveAction/redoWaveAction bridge functions; onSuccess/onError callbacks; returns handleUndo/handleRedo |
+| `frontend/src/pages/wave-workspace/WaveWorkspaceLayout.vue` | Updated — wires onSuccess (toast + refreshKey++), onError (warning), onNotReady (info); provides refreshKey to child routes; `<router-view :key="refreshKey">` forces remount on undo/redo |
 
 ### Test Mock Updates (interface compliance)
 
@@ -114,33 +120,49 @@ Execute the full 7-stage execution plan (Stage A through G) from `.agents/codex-
 
 **Before this task**: Early Phase 8 (read-side infrastructure existed but was inert)
 
-**After this task**: Mid Phase 9
+**After this task**: Mid-to-Late Phase 9
 
 Evidence:
 - 5 wave operations have real local undo/redo with DB state restoration
 - History nodes are persistently recorded across app restart
-- BasisStampService now has real nodes to stamp against (drift detection activated)
-- Frontend is connected to real undo/redo backend
-- Regression guardrails exist for route-mount stability
+- Tree-branching structure preserved (undo-then-edit creates new branch, old branch retained in DB)
+- Periodic checkpoint every ~20 nodes implemented
+- ProjectionHash computed on every write operation (SHA-256 over rules + lines + adjustments)
+- BasisStampService stamps real node IDs → drift detection produces `projection_changed` signals when wave state diverges from stamped basis
+- Frontend connected to real undo/redo backend with toast feedback
+- RefreshKey forces child route remount after undo/redo for automatic data reload
+- Regression guardrails: 9 route-mount smoke tests + 5 backend correctness tests
+
+Phase 9 requirements satisfied:
+| Requirement | Status |
+|---|---|
+| `wave` scope history behavior | ✅ Real — nodes recorded, head advances, branches preserved |
+| Persistent local history | ✅ SQLite WAL, survives app restart |
+| Branch-preserving semantics | ✅ Verified against docs — old branches retained, preferred_redo_child updated |
+| Real undo/redo restoration for meaningful subset | ✅ 5 operations: create/update/delete rule, record adjustment, assign demand |
+| Basis-aware coordination with SupplierOrder/Shipment/ChannelSyncJob | ✅ ProjectionHash + BasisStamp + drift detection end-to-end |
+| Truthful UX around undo/redo capabilities | ✅ ErrOperationNotUndoable returns clear message; toast shows result |
 
 ---
 
-## Remaining Work
+## Remaining Work (beyond mid-to-late Phase 9)
 
-- `generate_participants` / `apply_allocation_rules` undo (batch operations, need checkpoint restore)
-- Periodic checkpoint every ~20 nodes (only CheckpointHint path implemented)
-- ProjectionHash computation
-- Frontend refreshKey after undo/redo for automatic data reload
-- History graph UI (not required for mid Phase 9)
+- `generate_participants` / `apply_allocation_rules` undo (batch operations, need checkpoint-based full restore)
+- History graph UI for branch switching (docs say "not required for v1")
 - Full scope coverage beyond wave (global scope)
+- Branch pruning / GC for old unpinned branches (docs allow but don't require)
+- Per-object drift attribution in frontend (currently wave-level summary only)
 
 ---
 
 ## Architecture Decisions Made
 
-1. **Patch-first, checkpoint-backed hybrid** (user-confirmed): daily nodes store patch/inverse patch; periodic checkpoints; heavy ops can hint checkpoint
+1. **Patch-first, checkpoint-backed hybrid** (user-confirmed): daily nodes store patch/inverse patch; periodic checkpoints every ~20 nodes; heavy ops can hint checkpoint
 2. **History recording in controller layer**: avoids breaking existing use case test constructors; minimal invasion
 3. **RecordNode failure silently ignored**: history is side-channel, must not block main operations
 4. **PatchExecutor uses direct GORM access**: avoids circular dependencies with use case layer
 5. **ErrOperationNotUndoable for complex batch ops**: clear error rather than silent failure or fake undo
 6. **HistoryNode = user intent only**: ReconcileWave and other derived operations are NOT recorded
+7. **ProjectionHash = SHA-256 over sorted rules + fulfillment lines + adjustments**: deterministic, cheap, captures all mutable wave state
+8. **Branch-preserving via preferred_redo_child**: new edit after undo overwrites the pointer but old nodes remain in DB; matches doc requirement "旧未来分支继续保留"
+9. **RefreshKey via provide/inject + router-view :key**: simplest mechanism to force child route remount without complex event bus

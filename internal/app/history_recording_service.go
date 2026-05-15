@@ -68,7 +68,12 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 		return nil, fmt.Errorf("history: update head: %w", err)
 	}
 
-	if input.CheckpointHint && input.SnapshotPayload != "" {
+	needsCheckpoint := input.CheckpointHint
+	if !needsCheckpoint {
+		needsCheckpoint = s.shouldCreatePeriodicCheckpoint(node)
+	}
+
+	if needsCheckpoint && input.SnapshotPayload != "" {
 		cp := &domain.HistoryCheckpoint{
 			HistoryScopeID:  scope.ID,
 			HistoryNodeID:   node.ID,
@@ -80,4 +85,27 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 	}
 
 	return node, nil
+}
+
+const checkpointInterval = 20
+
+func (s *HistoryRecordingService) shouldCreatePeriodicCheckpoint(node *domain.HistoryNode) bool {
+	count := 0
+	current := node
+	for current != nil && current.ParentNodeID != 0 {
+		cp, _ := s.checkpointRepo.FindByNodeID(current.ID)
+		if cp != nil {
+			return false
+		}
+		count++
+		if count >= checkpointInterval {
+			return true
+		}
+		parent, err := s.nodeRepo.FindByID(current.ParentNodeID)
+		if err != nil || parent == nil {
+			break
+		}
+		current = parent
+	}
+	return count >= checkpointInterval
 }

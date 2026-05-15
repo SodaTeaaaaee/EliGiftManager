@@ -16,6 +16,7 @@ type AllocationPolicyController struct {
 	uc                  app.AllocationPolicyUseCase
 	ruleRepo            domain.AllocationPolicyRuleRepository
 	historyRecordingSvc *app.HistoryRecordingService
+	projHashSvc         *app.ProjectionHashService
 }
 
 func NewAllocationPolicyController() *AllocationPolicyController {
@@ -35,6 +36,7 @@ func NewAllocationPolicyController() *AllocationPolicyController {
 		uc:                  app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo),
 		ruleRepo:            ruleRepo,
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo),
+		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
 	}
 }
 
@@ -58,6 +60,7 @@ func (c *AllocationPolicyController) CreateAllocationPolicyRule(input dto.Create
 		CommandSummary:      fmt.Sprintf("create allocation rule %d for wave %d", rule.ID, input.WaveID),
 		PatchPayload:        fmt.Sprintf(`{"op":"restore_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, input.WaveID, ruleData),
 		InversePatchPayload: fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, rule.ID),
+		ProjectionHash:      c.projHashSvc.ComputeHash(input.WaveID),
 	})
 	return rule, nil
 }
@@ -82,6 +85,7 @@ func (c *AllocationPolicyController) UpdateAllocationPolicyRule(input dto.Update
 		CommandSummary:      fmt.Sprintf("update allocation rule %d for wave %d", rule.ID, rule.WaveID),
 		PatchPayload:        fmt.Sprintf(`{"op":"update_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, rule.WaveID, newData),
 		InversePatchPayload: fmt.Sprintf(`{"op":"update_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, rule.WaveID, oldData),
+		ProjectionHash:      c.projHashSvc.ComputeHash(rule.WaveID),
 	})
 	return rule, nil
 }
@@ -105,6 +109,7 @@ func (c *AllocationPolicyController) DeleteAllocationPolicyRule(ruleID uint) err
 			CommandSummary:      fmt.Sprintf("delete allocation rule %d from wave %d", ruleID, rule.WaveID),
 			PatchPayload:        fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, ruleID),
 			InversePatchPayload: fmt.Sprintf(`{"op":"restore_rule","rule_id":%d,"wave_id":%d,"data":%s}`, ruleID, rule.WaveID, ruleData),
+			ProjectionHash:      c.projHashSvc.ComputeHash(rule.WaveID),
 		})
 	}
 	return nil

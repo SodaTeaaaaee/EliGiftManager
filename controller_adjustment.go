@@ -14,6 +14,7 @@ import (
 type AdjustmentController struct {
 	adjustmentUC        app.AdjustmentUseCase
 	historyRecordingSvc *app.HistoryRecordingService
+	projHashSvc         *app.ProjectionHashService
 }
 
 func NewAdjustmentController() *AdjustmentController {
@@ -21,12 +22,14 @@ func NewAdjustmentController() *AdjustmentController {
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
 	waveRepo := infra.NewWaveRepository(gdb)
+	ruleRepo := infra.NewRuleRepository(gdb)
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
 	return &AdjustmentController{
 		adjustmentUC:        app.NewAdjustmentUseCase(adjustmentRepo, fulfillRepo, waveRepo),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo),
+		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
 	}
 }
 
@@ -42,6 +45,7 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 		CommandSummary:      fmt.Sprintf("record adjustment %d (%s) for wave %d", adj.ID, adj.AdjustmentKind, adj.WaveID),
 		PatchPayload:        buildAdjustmentPatch("record_adjustment", adj),
 		InversePatchPayload: fmt.Sprintf(`{"op":"delete_adjustment","adjustment_id":%d}`, adj.ID),
+		ProjectionHash:      c.projHashSvc.ComputeHash(adj.WaveID),
 	})
 
 	return dto.FulfillmentAdjustmentDTO{
