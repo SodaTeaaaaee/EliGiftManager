@@ -32,24 +32,49 @@ func NewAllocationPolicyUseCase(
 }
 
 func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileResultDTO, error) {
-	// Step 1: Idempotent delete of old policy-driven lines.
-	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(waveID, "allocation_policy_driven"); err != nil {
+	// ---- Phase 1: Load all inputs (no mutations yet) ----
+
+	// Load old policy-driven lines BEFORE deletion — needed for stable target hints.
+	oldLines, err := uc.fulfillRepo.ListByWave(waveID)
+	if err != nil {
 		return nil, err
 	}
 
-	// Step 2: Load active rules (sorted by Priority ASC via repo).
+	// Build LineHints: oldLineID → (WaveParticipantSnapshotID, ProductID) for stable
+	// target resolution after ID-breaking rebuild.
+	lineHints := make(map[uint]LineHint)
+	for _, ol := range oldLines {
+		if ol.GeneratedBy == "allocation_policy_driven" &&
+			ol.WaveParticipantSnapshotID != nil &&
+			ol.ProductID != nil {
+			lineHints[ol.ID] = LineHint{
+				WaveParticipantSnapshotID: *ol.WaveParticipantSnapshotID,
+				ProductID:                 *ol.ProductID,
+			}
+		}
+	}
+
+	// Load active rules (sorted by Priority ASC via repo).
 	rules, err := uc.ruleRepo.ListByWave(waveID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Step 3: Load all participants for this wave.
+	// Load all participants for this wave.
 	participants, err := uc.waveRepo.ListParticipantsByWave(waveID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Steps 4-6: Evaluate rules → accumulate contribution map.
+	// Load adjustments for replay (sorted by created_at ASC via repo).
+	adjustments, err := uc.adjustmentRepo.ListByWave(waveID)
+	if err != nil {
+		return nil, err
+	}
+
+	// ---- Phase 2: In-memory computation (no DB writes) ----
+
+	// Evaluate rules → accumulate contribution map.
 	// contributionMap[participantID][productID] = summed quantity
 	type contribKey struct {
 		participantIdx int
@@ -69,7 +94,7 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 		}
 	}
 
-	// Step 7: Generate FulfillmentLines from contribution map.
+	// Generate FulfillmentLines from contribution map.
 	now := time.Now().Format(time.RFC3339)
 	var newLines []domain.FulfillmentLine
 
@@ -101,22 +126,42 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 		newLines = append(newLines, fl)
 	}
 
-	// Step 9: Load adjustments for replay.
-	adjustments, err := uc.adjustmentRepo.ListByWave(waveID)
-	if err != nil {
+	// Replay adjustments on in-memory lines BEFORE persisting.
+	// Use halt-on-first-failure mode: if any adjustment fails to resolve,
+	// abort the entire reconcile to preserve the old data.
+	var failures []ReplayFailure
+	if len(adjustments) > 0 {
+		newLines, failures = ReplayAdjustments(newLines, adjustments, ReplayOptions{
+			Mode:      ReplayHaltOnFirstFailure,
+			LineHints: lineHints,
+		})
+	}
+
+	// If replay produced failures, do NOT delete old data — return failures immediately.
+	if len(failures) > 0 {
+		failureDTOs := make([]dto.ReplayFailureDTO, 0, len(failures))
+		for _, f := range failures {
+			failureDTOs = append(failureDTOs, dto.ReplayFailureDTO{
+				AdjustmentID: f.AdjustmentID,
+				Reason:       f.Reason,
+			})
+		}
+		return &dto.ReconcileResultDTO{
+			Created:       0,
+			Deleted:       0,
+			ReplayedCount: 0,
+			Failures:      failureDTOs,
+		}, nil
+	}
+
+	// ---- Phase 3: Persist (only reached when replay fully succeeded) ----
+
+	// Delete old policy-driven lines.
+	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(waveID, "allocation_policy_driven"); err != nil {
 		return nil, err
 	}
 
-	// Step 10: Replay adjustments on in-memory lines BEFORE persisting.
-	// Design decision: replay before Create so we don't need a repo Update method.
-	// Participant-targeted adjustments resolve via WaveParticipantSnapshotID (already set).
-	var failures []ReplayFailure
-	replayedCount := len(adjustments)
-	if len(adjustments) > 0 {
-		newLines, failures = ReplayAdjustments(newLines, adjustments)
-	}
-
-	// Step 8/11: Persist final lines (post-replay quantities).
+	// Persist final lines (post-replay quantities).
 	created := 0
 	for i := range newLines {
 		if newLines[i].Quantity <= 0 {
@@ -128,20 +173,11 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 		created++
 	}
 
-	// Step 12: Build result DTO.
-	failureDTOs := make([]dto.ReplayFailureDTO, 0, len(failures))
-	for _, f := range failures {
-		failureDTOs = append(failureDTOs, dto.ReplayFailureDTO{
-			AdjustmentID: f.AdjustmentID,
-			Reason:       f.Reason,
-		})
-	}
-
 	return &dto.ReconcileResultDTO{
 		Created:       created,
 		Deleted:       0, // DeleteByWaveAndGeneratedBy doesn't return count; first version omits
-		ReplayedCount: replayedCount,
-		Failures:      failureDTOs,
+		ReplayedCount: len(adjustments) - len(failures),
+		Failures:      []dto.ReplayFailureDTO{},
 	}, nil
 }
 

@@ -274,3 +274,166 @@ func TestReplayAdjustments_FailureDoesNotInterruptSubsequent(t *testing.T) {
 		t.Fatalf("expected quantity 7 (5+2), got %d", result[0].Quantity)
 	}
 }
+
+func TestReplayAdjustments_HaltOnFirstFailure(t *testing.T) {
+	baselines := []domain.FulfillmentLine{
+		{ID: 1, Quantity: 5},
+	}
+	adjustments := []domain.FulfillmentAdjustment{
+		{
+			ID:                10,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(999), // orphaned — triggers halt
+			AdjustmentKind:    "add",
+			QuantityDelta:     100,
+		},
+		{
+			ID:                11,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(1), // valid but should NOT be applied
+			AdjustmentKind:    "add",
+			QuantityDelta:     2,
+		},
+	}
+
+	result, failures := ReplayAdjustments(baselines, adjustments, ReplayOptions{
+		Mode: ReplayHaltOnFirstFailure,
+	})
+	if len(failures) != 1 {
+		t.Fatalf("expected exactly 1 failure (halted), got %d", len(failures))
+	}
+	if failures[0].AdjustmentID != 10 {
+		t.Fatalf("expected failed adjustment 10, got %d", failures[0].AdjustmentID)
+	}
+	// Second adjustment must NOT have been applied.
+	if result[0].Quantity != 5 {
+		t.Fatalf("expected quantity unchanged at 5 (halted before second adj), got %d", result[0].Quantity)
+	}
+}
+
+func TestReplayAdjustments_StableTargetFallback_UniqueMatch(t *testing.T) {
+	// Simulate post-rebuild baselines: new IDs, but same (participant, product).
+	pid := uint(300)
+	prodID := uint(42)
+	baselines := []domain.FulfillmentLine{
+		{ID: 1000, WaveParticipantSnapshotID: &pid, ProductID: &prodID, Quantity: 10},
+	}
+	// Adjustment was recorded against old line ID 50 — not in new baselines.
+	adjustments := []domain.FulfillmentAdjustment{
+		{
+			ID:                1,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(50), // old ID, not in baselines
+			AdjustmentKind:    "add",
+			QuantityDelta:     3,
+		},
+	}
+	hints := map[uint]LineHint{
+		50: {WaveParticipantSnapshotID: 300, ProductID: 42},
+	}
+
+	result, failures := ReplayAdjustments(baselines, adjustments, ReplayOptions{
+		LineHints: hints,
+	})
+	if len(failures) != 0 {
+		t.Fatalf("expected no failures (stable fallback), got %v", failures)
+	}
+	if result[0].Quantity != 13 {
+		t.Fatalf("expected quantity 13 (10+3), got %d", result[0].Quantity)
+	}
+}
+
+func TestReplayAdjustments_StableTargetFallback_NoHint_Orphaned(t *testing.T) {
+	pid := uint(300)
+	prodID := uint(42)
+	baselines := []domain.FulfillmentLine{
+		{ID: 1000, WaveParticipantSnapshotID: &pid, ProductID: &prodID, Quantity: 10},
+	}
+	adjustments := []domain.FulfillmentAdjustment{
+		{
+			ID:                1,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(50),
+			AdjustmentKind:    "add",
+			QuantityDelta:     3,
+		},
+	}
+	// No hints provided — fallback not possible.
+	result, failures := ReplayAdjustments(baselines, adjustments)
+	if len(failures) != 1 {
+		t.Fatalf("expected 1 failure, got %d", len(failures))
+	}
+	if failures[0].Reason != "orphaned_line" {
+		t.Fatalf("expected orphaned_line, got %s", failures[0].Reason)
+	}
+	if result[0].Quantity != 10 {
+		t.Fatalf("expected quantity unchanged at 10, got %d", result[0].Quantity)
+	}
+}
+
+func TestReplayAdjustments_StableTargetFallback_Ambiguous(t *testing.T) {
+	// Two new lines share the same (participant, product) — ambiguous fallback.
+	pid := uint(300)
+	prodID := uint(42)
+	baselines := []domain.FulfillmentLine{
+		{ID: 1000, WaveParticipantSnapshotID: &pid, ProductID: &prodID, Quantity: 5},
+		{ID: 1001, WaveParticipantSnapshotID: &pid, ProductID: &prodID, Quantity: 8},
+	}
+	adjustments := []domain.FulfillmentAdjustment{
+		{
+			ID:                1,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(50),
+			AdjustmentKind:    "add",
+			QuantityDelta:     3,
+		},
+	}
+	hints := map[uint]LineHint{
+		50: {WaveParticipantSnapshotID: 300, ProductID: 42},
+	}
+
+	_, failures := ReplayAdjustments(baselines, adjustments, ReplayOptions{
+		LineHints: hints,
+	})
+	if len(failures) != 1 {
+		t.Fatalf("expected 1 failure, got %d", len(failures))
+	}
+	if failures[0].Reason != "ambiguous_target" {
+		t.Fatalf("expected ambiguous_target, got %s", failures[0].Reason)
+	}
+}
+
+func TestReplayAdjustments_ASCOrder_Semantic(t *testing.T) {
+	// Verify that adjustments applied in ASC chronological order produce correct results.
+	// The "add" must happen before the "remove" — if order were reversed,
+	// remove would zero out first, then add would bump to 3.
+	baselines := []domain.FulfillmentLine{
+		{ID: 1, Quantity: 10},
+	}
+	adjustments := []domain.FulfillmentAdjustment{
+		{
+			ID:                1,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(1),
+			AdjustmentKind:    "add",
+			QuantityDelta:     5,
+			CreatedAt:         "2026-01-01T00:00:00Z", // earlier
+		},
+		{
+			ID:                2,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(1),
+			AdjustmentKind:    "remove",
+			QuantityDelta:     0,
+			CreatedAt:         "2026-01-02T00:00:00Z", // later
+		},
+	}
+	// In ASC order: add(+5) → remove(=0). Result = 0.
+	result, failures := ReplayAdjustments(baselines, adjustments)
+	if len(failures) != 0 {
+		t.Fatalf("expected no failures, got %v", failures)
+	}
+	if result[0].Quantity != 0 {
+		t.Fatalf("expected quantity 0 (add then remove), got %d", result[0].Quantity)
+	}
+}

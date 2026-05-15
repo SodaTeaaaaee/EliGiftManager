@@ -421,8 +421,8 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
             <n-form-item label="分配数量">
               <n-input-number
                 v-model:value="form.contribution_quantity"
-                :min="1"
                 style="width: 100%"
+                placeholder="正数为加赠，负数为规则层抵扣"
               />
             </n-form-item>
 

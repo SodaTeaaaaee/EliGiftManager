@@ -27,7 +27,7 @@ func (r *fulfillmentAdjustmentRepository) Create(adj *domain.FulfillmentAdjustme
 
 func (r *fulfillmentAdjustmentRepository) ListByWave(waveID uint) ([]domain.FulfillmentAdjustment, error) {
 	var records []persistence.FulfillmentAdjustment
-	if err := r.db.Where("wave_id = ?", waveID).Order("created_at DESC").Find(&records).Error; err != nil {
+	if err := r.db.Where("wave_id = ?", waveID).Order("created_at ASC").Find(&records).Error; err != nil {
 		return nil, err
 	}
 	out := make([]domain.FulfillmentAdjustment, len(records))

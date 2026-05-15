@@ -8,17 +8,45 @@ type ReplayFailure struct {
 	Reason       string // "orphaned_line" | "ambiguous_target"
 }
 
+// ReplayMode controls how failures are handled during replay.
+type ReplayMode int
+
+const (
+	// ReplayMarkAndContinue skips failed adjustments and continues with the rest.
+	ReplayMarkAndContinue ReplayMode = iota
+	// ReplayHaltOnFirstFailure stops replay on the first failed adjustment.
+	ReplayHaltOnFirstFailure
+)
+
+// LineHint stores the stable identity of a fulfillment line for target resolution
+// after reconcile rebuild (where line IDs change).
+type LineHint struct {
+	WaveParticipantSnapshotID uint
+	ProductID                 uint
+}
+
+// ReplayOptions configures replay behaviour. Zero value = mark-and-continue + no hints.
+type ReplayOptions struct {
+	Mode      ReplayMode
+	LineHints map[uint]LineHint // oldLineID → stable identity; nil if not needed
+}
+
 // ReplayAdjustments applies a chronologically-ordered slice of adjustments onto
-// the given baselines. Adjustments that cannot be matched to a target line are
-// collected as failures without interrupting the remaining replay.
+// the given baselines.
 //
 // Caller guarantees: adjustments are sorted by CreatedAt ascending.
 func ReplayAdjustments(
 	baselines []domain.FulfillmentLine,
 	adjustments []domain.FulfillmentAdjustment,
+	opts ...ReplayOptions,
 ) ([]domain.FulfillmentLine, []ReplayFailure) {
 	if len(adjustments) == 0 {
 		return baselines, nil
+	}
+
+	var opt ReplayOptions
+	if len(opts) > 0 {
+		opt = opts[0]
 	}
 
 	// Build index: line ID → slice index for O(1) lookup.
@@ -30,12 +58,15 @@ func ReplayAdjustments(
 	var failures []ReplayFailure
 
 	for _, adj := range adjustments {
-		idx, ok := resolveTarget(baselines, idIndex, adj)
+		idx, ok := resolveTarget(baselines, idIndex, adj, opt.LineHints)
 		if !ok {
 			failures = append(failures, ReplayFailure{
 				AdjustmentID: adj.ID,
-				Reason:       resolveFailureReason(baselines, adj),
+				Reason:       resolveFailureReason(baselines, adj, opt.LineHints),
 			})
+			if opt.Mode == ReplayHaltOnFirstFailure {
+				break
+			}
 			continue
 		}
 		applyAdjustment(&baselines[idx], adj)
@@ -58,6 +89,7 @@ func resolveTarget(
 	baselines []domain.FulfillmentLine,
 	idIndex map[uint]int,
 	adj domain.FulfillmentAdjustment,
+	lineHints map[uint]LineHint,
 ) (int, bool) {
 	switch adj.TargetKind {
 	case "fulfillment_line":
@@ -65,7 +97,12 @@ func resolveTarget(
 			return 0, false
 		}
 		idx, found := idIndex[*adj.FulfillmentLineID]
-		return idx, found
+		if found {
+			return idx, true
+		}
+		// Stable target fallback: old line ID not in baselines (post-rebuild).
+		// Use LineHints to resolve via (WaveParticipantSnapshotID, ProductID).
+		return stableTargetFallback(baselines, *adj.FulfillmentLineID, lineHints)
 
 	case "participant":
 		if adj.WaveParticipantSnapshotID == nil {
@@ -91,9 +128,46 @@ func resolveTarget(
 	}
 }
 
+// stableTargetFallback resolves an orphaned fulfillment_line target using
+// (WaveParticipantSnapshotID, ProductID) from LineHints. Returns (index, true) if
+// exactly one baseline matches; (0, false) otherwise.
+func stableTargetFallback(
+	baselines []domain.FulfillmentLine,
+	oldLineID uint,
+	lineHints map[uint]LineHint,
+) (int, bool) {
+	if lineHints == nil {
+		return 0, false
+	}
+	hint, ok := lineHints[oldLineID]
+	if !ok {
+		return 0, false
+	}
+
+	matchIdx := -1
+	matchCount := 0
+	for i := range baselines {
+		if baselines[i].WaveParticipantSnapshotID != nil &&
+			*baselines[i].WaveParticipantSnapshotID == hint.WaveParticipantSnapshotID &&
+			baselines[i].ProductID != nil &&
+			*baselines[i].ProductID == hint.ProductID {
+			matchIdx = i
+			matchCount++
+		}
+	}
+	if matchCount == 1 {
+		return matchIdx, true
+	}
+	return 0, false
+}
+
 // resolveFailureReason determines the appropriate failure reason string when
 // target resolution fails.
-func resolveFailureReason(baselines []domain.FulfillmentLine, adj domain.FulfillmentAdjustment) string {
+func resolveFailureReason(
+	baselines []domain.FulfillmentLine,
+	adj domain.FulfillmentAdjustment,
+	lineHints map[uint]LineHint,
+) string {
 	if adj.TargetKind == "participant" && adj.WaveParticipantSnapshotID != nil {
 		targetID := *adj.WaveParticipantSnapshotID
 		count := 0
@@ -107,6 +181,26 @@ func resolveFailureReason(baselines []domain.FulfillmentLine, adj domain.Fulfill
 			return "ambiguous_target"
 		}
 	}
+
+	// For fulfillment_line targets with hints, check if the hint matched multiple baselines.
+	if adj.TargetKind == "fulfillment_line" && adj.FulfillmentLineID != nil && lineHints != nil {
+		hint, ok := lineHints[*adj.FulfillmentLineID]
+		if ok {
+			count := 0
+			for i := range baselines {
+				if baselines[i].WaveParticipantSnapshotID != nil &&
+					*baselines[i].WaveParticipantSnapshotID == hint.WaveParticipantSnapshotID &&
+					baselines[i].ProductID != nil &&
+					*baselines[i].ProductID == hint.ProductID {
+					count++
+				}
+			}
+			if count > 1 {
+				return "ambiguous_target"
+			}
+		}
+	}
+
 	return "orphaned_line"
 }
 

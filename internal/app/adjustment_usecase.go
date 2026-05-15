@@ -32,9 +32,9 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		targetKind = "fulfillment_line"
 	}
 
-	// Validate adjustment kind
+	// Validate adjustment kind — must match replay.go's recognised vocabulary.
 	switch input.AdjustmentKind {
-	case "add_send", "reduce_send", "remove", "supplement":
+	case "add", "reduce", "compensation", "replace", "remove":
 		// valid
 	default:
 		return nil, fmt.Errorf("invalid adjustment kind: %q", input.AdjustmentKind)
@@ -43,8 +43,8 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 	// Validate target kind and enforce kind-target constraints
 	switch targetKind {
 	case "fulfillment_line":
-		// supplement is only allowed with participant target
-		if input.AdjustmentKind == "supplement" {
+		// compensation is only allowed with participant target
+		if input.AdjustmentKind == "compensation" {
 			return nil, fmt.Errorf("adjustment kind %q requires target_kind \"participant\"", input.AdjustmentKind)
 		}
 		if input.FulfillmentLineID == nil || *input.FulfillmentLineID == 0 {
@@ -63,9 +63,9 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		}
 
 	case "participant":
-		// add_send/reduce_send/remove require fulfillment_line target
+		// add/reduce/remove require fulfillment_line target
 		switch input.AdjustmentKind {
-		case "add_send", "reduce_send", "remove":
+		case "add", "reduce", "remove":
 			return nil, fmt.Errorf("adjustment kind %q requires target_kind \"fulfillment_line\"", input.AdjustmentKind)
 		}
 		if input.WaveParticipantSnapshotID == nil || *input.WaveParticipantSnapshotID == 0 {

@@ -167,7 +167,7 @@ func validAdjustmentInput() dto.RecordAdjustmentInput {
 		WaveID:            10,
 		TargetKind:        "fulfillment_line",
 		FulfillmentLineID: uintPtr(1),
-		AdjustmentKind:    "add_send",
+		AdjustmentKind:    "add",
 		QuantityDelta:     2,
 		ReasonCode:        "restock",
 		OperatorID:        "op-1",
@@ -195,8 +195,8 @@ func TestRecordAdjustmentSuccess(t *testing.T) {
 	if adj.FulfillmentLineID == nil || *adj.FulfillmentLineID != 1 {
 		t.Errorf("FulfillmentLineID = %v, want 1", adj.FulfillmentLineID)
 	}
-	if adj.AdjustmentKind != "add_send" {
-		t.Errorf("AdjustmentKind = %q, want add_send", adj.AdjustmentKind)
+	if adj.AdjustmentKind != "add" {
+		t.Errorf("AdjustmentKind = %q, want add", adj.AdjustmentKind)
 	}
 	if adj.QuantityDelta != 2 {
 		t.Errorf("QuantityDelta = %d, want 2", adj.QuantityDelta)
@@ -316,11 +316,11 @@ func TestRecordSupplementAdjustmentWithParticipantTarget(t *testing.T) {
 		WaveID:                    10,
 		TargetKind:                "participant",
 		WaveParticipantSnapshotID: uintPtr(100),
-		AdjustmentKind:            "supplement",
+		AdjustmentKind:            "compensation",
 		QuantityDelta:             1,
 		ReasonCode:                "bonus",
 		OperatorID:                "op-1",
-		Note:                      "supplement for participant",
+		Note:                      "compensation for participant",
 		EvidenceRef:               "ref-002",
 	}
 
@@ -334,8 +334,8 @@ func TestRecordSupplementAdjustmentWithParticipantTarget(t *testing.T) {
 	if adj.WaveParticipantSnapshotID == nil || *adj.WaveParticipantSnapshotID != 100 {
 		t.Errorf("WaveParticipantSnapshotID = %v, want 100", adj.WaveParticipantSnapshotID)
 	}
-	if adj.AdjustmentKind != "supplement" {
-		t.Errorf("AdjustmentKind = %q, want supplement", adj.AdjustmentKind)
+	if adj.AdjustmentKind != "compensation" {
+		t.Errorf("AdjustmentKind = %q, want compensation", adj.AdjustmentKind)
 	}
 }
 
@@ -344,12 +344,12 @@ func TestRecordSupplementAdjustmentRejectsFulfillmentLineTarget(t *testing.T) {
 	s := newAdjustmentTestSetup()
 
 	input := validAdjustmentInput()
-	input.AdjustmentKind = "supplement"
+	input.AdjustmentKind = "compensation"
 	input.TargetKind = "fulfillment_line"
 
 	_, err := s.uc.RecordAdjustment(input)
 	if err == nil {
-		t.Fatal("expected error: supplement should require participant target, got nil")
+		t.Fatal("expected error: compensation should require participant target, got nil")
 	}
 }
 
@@ -361,7 +361,7 @@ func TestRecordAddSendRejectsParticipantTarget(t *testing.T) {
 		WaveID:                    10,
 		TargetKind:                "participant",
 		WaveParticipantSnapshotID: uintPtr(100),
-		AdjustmentKind:            "add_send",
+		AdjustmentKind:            "add",
 		QuantityDelta:             1,
 		ReasonCode:                "test",
 		OperatorID:                "op-1",
@@ -369,6 +369,6 @@ func TestRecordAddSendRejectsParticipantTarget(t *testing.T) {
 
 	_, err := s.uc.RecordAdjustment(input)
 	if err == nil {
-		t.Fatal("expected error: add_send should require fulfillment_line target, got nil")
+		t.Fatal("expected error: add should require fulfillment_line target, got nil")
 	}
 }
