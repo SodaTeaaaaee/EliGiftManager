@@ -361,9 +361,11 @@ export namespace dto {
 	    kind: string;
 	    captureMode: string;
 	    sourceChannel: string;
+	    sourceSurface: string;
 	    sourceDocumentNo: string;
 	    sourceCustomerRef: string;
 	    customerProfileId?: number;
+	    integrationProfileId?: number;
 	    lines: CreateDemandLineInput[];
 	
 	    static createFrom(source: any = {}) {
@@ -375,9 +377,11 @@ export namespace dto {
 	        this.kind = source["kind"];
 	        this.captureMode = source["captureMode"];
 	        this.sourceChannel = source["sourceChannel"];
+	        this.sourceSurface = source["sourceSurface"];
 	        this.sourceDocumentNo = source["sourceDocumentNo"];
 	        this.sourceCustomerRef = source["sourceCustomerRef"];
 	        this.customerProfileId = source["customerProfileId"];
+	        this.integrationProfileId = source["integrationProfileId"];
 	        this.lines = this.convertValues(source["lines"], CreateDemandLineInput);
 	    }
 	
@@ -417,6 +421,78 @@ export namespace dto {
 	        this.documentType = source["documentType"];
 	        this.format = source["format"];
 	        this.mappingRules = source["mappingRules"];
+	        this.extraData = source["extraData"];
+	    }
+	}
+	export class CreateProductMasterInput {
+	    supplierPlatform: string;
+	    factorySku: string;
+	    supplierProductRef: string;
+	    name: string;
+	    productKind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateProductMasterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.factorySku = source["factorySku"];
+	        this.supplierProductRef = source["supplierProductRef"];
+	        this.name = source["name"];
+	        this.productKind = source["productKind"];
+	    }
+	}
+	export class CreateProfileInput {
+	    profileKey: string;
+	    sourceChannel: string;
+	    sourceSurface: string;
+	    demandKind: string;
+	    initialAllocationStrategy: string;
+	    identityStrategy: string;
+	    entitlementAuthorityMode: string;
+	    recipientInputMode: string;
+	    referenceStrategy: string;
+	    trackingSyncMode: string;
+	    closurePolicy: string;
+	    supportsPartialShipment: boolean;
+	    supportsApiImport: boolean;
+	    supportsApiExport: boolean;
+	    requiresCarrierMapping: boolean;
+	    requiresExternalOrderNo: boolean;
+	    allowsManualClosure: boolean;
+	    connectorKey: string;
+	    supportedLocales: string;
+	    defaultLocale: string;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateProfileInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileKey = source["profileKey"];
+	        this.sourceChannel = source["sourceChannel"];
+	        this.sourceSurface = source["sourceSurface"];
+	        this.demandKind = source["demandKind"];
+	        this.initialAllocationStrategy = source["initialAllocationStrategy"];
+	        this.identityStrategy = source["identityStrategy"];
+	        this.entitlementAuthorityMode = source["entitlementAuthorityMode"];
+	        this.recipientInputMode = source["recipientInputMode"];
+	        this.referenceStrategy = source["referenceStrategy"];
+	        this.trackingSyncMode = source["trackingSyncMode"];
+	        this.closurePolicy = source["closurePolicy"];
+	        this.supportsPartialShipment = source["supportsPartialShipment"];
+	        this.supportsApiImport = source["supportsApiImport"];
+	        this.supportsApiExport = source["supportsApiExport"];
+	        this.requiresCarrierMapping = source["requiresCarrierMapping"];
+	        this.requiresExternalOrderNo = source["requiresExternalOrderNo"];
+	        this.allowsManualClosure = source["allowsManualClosure"];
+	        this.connectorKey = source["connectorKey"];
+	        this.supportedLocales = source["supportedLocales"];
+	        this.defaultLocale = source["defaultLocale"];
 	        this.extraData = source["extraData"];
 	    }
 	}
@@ -749,12 +825,70 @@ export namespace dto {
 	    id: number;
 	    profileKey: string;
 	    sourceChannel: string;
+	    sourceSurface: string;
+	    demandKind: string;
+	    initialAllocationStrategy: string;
+	    identityStrategy: string;
+	    entitlementAuthorityMode: string;
+	    recipientInputMode: string;
+	    referenceStrategy: string;
+	    trackingSyncMode: string;
+	    closurePolicy: string;
+	    supportsPartialShipment: boolean;
+	    supportsApiImport: boolean;
+	    supportsApiExport: boolean;
+	    requiresCarrierMapping: boolean;
+	    requiresExternalOrderNo: boolean;
+	    allowsManualClosure: boolean;
+	    connectorKey: string;
+	    supportedLocales: string;
+	    defaultLocale: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new IntegrationProfileDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.profileKey = source["profileKey"];
+	        this.sourceChannel = source["sourceChannel"];
+	        this.sourceSurface = source["sourceSurface"];
+	        this.demandKind = source["demandKind"];
+	        this.initialAllocationStrategy = source["initialAllocationStrategy"];
+	        this.identityStrategy = source["identityStrategy"];
+	        this.entitlementAuthorityMode = source["entitlementAuthorityMode"];
+	        this.recipientInputMode = source["recipientInputMode"];
+	        this.referenceStrategy = source["referenceStrategy"];
+	        this.trackingSyncMode = source["trackingSyncMode"];
+	        this.closurePolicy = source["closurePolicy"];
+	        this.supportsPartialShipment = source["supportsPartialShipment"];
+	        this.supportsApiImport = source["supportsApiImport"];
+	        this.supportsApiExport = source["supportsApiExport"];
+	        this.requiresCarrierMapping = source["requiresCarrierMapping"];
+	        this.requiresExternalOrderNo = source["requiresExternalOrderNo"];
+	        this.allowsManualClosure = source["allowsManualClosure"];
+	        this.connectorKey = source["connectorKey"];
+	        this.supportedLocales = source["supportedLocales"];
+	        this.defaultLocale = source["defaultLocale"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class IntegrationProfileSummaryDTO {
+	    id: number;
+	    profileKey: string;
+	    sourceChannel: string;
 	    trackingSyncMode: string;
 	    closurePolicy: string;
 	    allowsManualClosure: boolean;
 	
 	    static createFrom(source: any = {}) {
-	        return new IntegrationProfileDTO(source);
+	        return new IntegrationProfileSummaryDTO(source);
 	    }
 	
 	    constructor(source: any = {}) {
@@ -820,6 +954,64 @@ export namespace dto {
 		    }
 		    return a;
 		}
+	}
+	export class ProductDTO {
+	    id: number;
+	    waveId: number;
+	    productMasterId?: number;
+	    supplierPlatform: string;
+	    factorySku: string;
+	    name: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveId = source["waveId"];
+	        this.productMasterId = source["productMasterId"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.factorySku = source["factorySku"];
+	        this.name = source["name"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class ProductMasterDTO {
+	    id: number;
+	    supplierPlatform: string;
+	    factorySku: string;
+	    supplierProductRef: string;
+	    name: string;
+	    productKind: string;
+	    archived: boolean;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMasterDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.factorySku = source["factorySku"];
+	        this.supplierProductRef = source["supplierProductRef"];
+	        this.name = source["name"];
+	        this.productKind = source["productKind"];
+	        this.archived = source["archived"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
 	}
 	export class ProfileTemplateBindingDTO {
 	    id: number;
@@ -1065,6 +1257,20 @@ export namespace dto {
 		}
 	}
 	
+	export class SnapshotProductsInput {
+	    waveId: number;
+	    masterIds: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SnapshotProductsInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.masterIds = source["masterIds"];
+	    }
+	}
 	export class SupplierOrderDTO {
 	    id: number;
 	    waveId: number;
@@ -1184,6 +1390,84 @@ export namespace dto {
 		    }
 		    return a;
 		}
+	}
+	export class UpdateProductMasterInput {
+	    id: number;
+	    supplierPlatform: string;
+	    factorySku: string;
+	    supplierProductRef: string;
+	    name: string;
+	    productKind: string;
+	    archived: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateProductMasterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.factorySku = source["factorySku"];
+	        this.supplierProductRef = source["supplierProductRef"];
+	        this.name = source["name"];
+	        this.productKind = source["productKind"];
+	        this.archived = source["archived"];
+	    }
+	}
+	export class UpdateProfileInput {
+	    id: number;
+	    profileKey: string;
+	    sourceChannel: string;
+	    sourceSurface: string;
+	    demandKind: string;
+	    initialAllocationStrategy: string;
+	    identityStrategy: string;
+	    entitlementAuthorityMode: string;
+	    recipientInputMode: string;
+	    referenceStrategy: string;
+	    trackingSyncMode: string;
+	    closurePolicy: string;
+	    supportsPartialShipment: boolean;
+	    supportsApiImport: boolean;
+	    supportsApiExport: boolean;
+	    requiresCarrierMapping: boolean;
+	    requiresExternalOrderNo: boolean;
+	    allowsManualClosure: boolean;
+	    connectorKey: string;
+	    supportedLocales: string;
+	    defaultLocale: string;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateProfileInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.profileKey = source["profileKey"];
+	        this.sourceChannel = source["sourceChannel"];
+	        this.sourceSurface = source["sourceSurface"];
+	        this.demandKind = source["demandKind"];
+	        this.initialAllocationStrategy = source["initialAllocationStrategy"];
+	        this.identityStrategy = source["identityStrategy"];
+	        this.entitlementAuthorityMode = source["entitlementAuthorityMode"];
+	        this.recipientInputMode = source["recipientInputMode"];
+	        this.referenceStrategy = source["referenceStrategy"];
+	        this.trackingSyncMode = source["trackingSyncMode"];
+	        this.closurePolicy = source["closurePolicy"];
+	        this.supportsPartialShipment = source["supportsPartialShipment"];
+	        this.supportsApiImport = source["supportsApiImport"];
+	        this.supportsApiExport = source["supportsApiExport"];
+	        this.requiresCarrierMapping = source["requiresCarrierMapping"];
+	        this.requiresExternalOrderNo = source["requiresExternalOrderNo"];
+	        this.allowsManualClosure = source["allowsManualClosure"];
+	        this.connectorKey = source["connectorKey"];
+	        this.supportedLocales = source["supportedLocales"];
+	        this.defaultLocale = source["defaultLocale"];
+	        this.extraData = source["extraData"];
+	    }
 	}
 	export class WaveDTO {
 	    id: number;

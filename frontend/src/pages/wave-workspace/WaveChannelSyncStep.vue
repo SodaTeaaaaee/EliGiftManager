@@ -34,7 +34,7 @@ const profilesLoading = ref(true)
 const planLoading = ref(false)
 const submitLoading = ref(false)
 
-const profiles = ref<dto.IntegrationProfileDTO[]>([])
+const profiles = ref<dto.IntegrationProfileSummaryDTO[]>([])
 const selectedProfileId = ref<number | null>(null)
 const jobs = ref<dto.ChannelSyncJobDTO[]>([])
 const planResult = ref<dto.PlanChannelClosureResult | null>(null)

@@ -50,3 +50,12 @@ func (r *integrationProfileRepository) List() ([]domain.IntegrationProfile, erro
 	}
 	return result, nil
 }
+
+func (r *integrationProfileRepository) Update(profile *domain.IntegrationProfile) error {
+	p := persistence.ToPersistenceIntegrationProfile(profile)
+	return r.db.Save(p).Error
+}
+
+func (r *integrationProfileRepository) Delete(id uint) error {
+	return r.db.Delete(&persistence.IntegrationProfile{}, id).Error
+}

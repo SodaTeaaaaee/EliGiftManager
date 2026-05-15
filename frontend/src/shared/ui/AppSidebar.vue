@@ -38,6 +38,16 @@ const menuOptions: MenuOption[] = [
     key: "demand-intake",
     icon: () => h(NIcon, null, { default: () => "📥" }),
   },
+  {
+    label: "Profile 管理",
+    key: "profiles",
+    icon: () => h(NIcon, null, { default: () => "📋" }),
+  },
+  {
+    label: "商品管理",
+    key: "products",
+    icon: () => h(NIcon, null, { default: () => "📦" }),
+  },
 ];
 
 const footerOptions: MenuOption[] = [

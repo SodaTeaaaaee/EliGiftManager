@@ -178,6 +178,14 @@ func (m *mockIntegrationProfileRepoForTemplate) List() ([]domain.IntegrationProf
 	panic("not implemented")
 }
 
+func (m *mockIntegrationProfileRepoForTemplate) Update(profile *domain.IntegrationProfile) error {
+	panic("not implemented")
+}
+
+func (m *mockIntegrationProfileRepoForTemplate) Delete(id uint) error {
+	panic("not implemented")
+}
+
 // ── test setup ──
 
 type templateTestSetup struct {

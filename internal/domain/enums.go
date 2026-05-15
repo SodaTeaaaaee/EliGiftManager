@@ -150,3 +150,16 @@ const (
 	ShipmentStatusException ShipmentStatus = "exception"
 	ShipmentStatusReturned  ShipmentStatus = "returned"
 )
+
+// ProductMaster: ProductKind
+type ProductKind string
+
+const (
+	ProductKindBadge    ProductKind = "badge"
+	ProductKindStandee  ProductKind = "standee"
+	ProductKindCharm    ProductKind = "charm"
+	ProductKindPostcard ProductKind = "postcard"
+	ProductKindPrint    ProductKind = "print"
+	ProductKindBundle   ProductKind = "bundle"
+	ProductKindOther    ProductKind = "other"
+)

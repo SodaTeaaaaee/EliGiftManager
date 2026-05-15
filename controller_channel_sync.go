@@ -100,14 +100,14 @@ func (c *ChannelSyncController) RetryChannelSyncJob(jobID uint) (dto.ExecuteSync
 }
 
 // ListIntegrationProfiles returns all integration profiles.
-func (c *ChannelSyncController) ListIntegrationProfiles() ([]dto.IntegrationProfileDTO, error) {
+func (c *ChannelSyncController) ListIntegrationProfiles() ([]dto.IntegrationProfileSummaryDTO, error) {
 	profiles, err := c.profileRepo.List()
 	if err != nil {
 		return nil, err
 	}
-	result := make([]dto.IntegrationProfileDTO, len(profiles))
+	result := make([]dto.IntegrationProfileSummaryDTO, len(profiles))
 	for i, p := range profiles {
-		result[i] = dto.IntegrationProfileDTO{
+		result[i] = dto.IntegrationProfileSummaryDTO{
 			ID:                  p.ID,
 			ProfileKey:          p.ProfileKey,
 			SourceChannel:       p.SourceChannel,

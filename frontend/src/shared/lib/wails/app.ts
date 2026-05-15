@@ -44,6 +44,21 @@ import {
   RetryChannelSyncJob,
 } from "../../../../wailsjs/go/main/ChannelSyncController";
 import {
+  CreateProfile,
+  DeleteProfile,
+  GetProfile,
+  ListProfiles,
+  SeedDefaultProfiles,
+  UpdateProfile,
+} from "../../../../wailsjs/go/main/ProfileController";
+import {
+  CreateProductMaster,
+  ListProductMasters,
+  ListProductsByWave,
+  SnapshotProductsForWave,
+  UpdateProductMaster,
+} from "../../../../wailsjs/go/main/ProductController";
+import {
   PickCSVFile,
   PickZIPFile,
   SaveZoom,
@@ -96,6 +111,7 @@ export async function importDemandDocument(input: {
   sourceDocumentNo: string;
   sourceCustomerRef?: string;
   customerProfileId?: number;
+  integrationProfileId?: number;
   lines: Array<{
     lineType: string;
     obligationTriggerKind: string;
@@ -284,9 +300,135 @@ export async function retryChannelSyncJob(
   return RetryChannelSyncJob(jobId)
 }
 
-export async function listIntegrationProfiles(): Promise<dto.IntegrationProfileDTO[]> {
+export async function listIntegrationProfiles(): Promise<dto.IntegrationProfileSummaryDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
   return ListIntegrationProfiles()
+}
+
+// ── ProfileController ──
+
+export async function listProfiles(): Promise<dto.IntegrationProfileDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListProfiles()
+}
+
+export async function getProfile(id: number): Promise<dto.IntegrationProfileDTO> {
+  assertWailsRuntime()
+  return GetProfile(id)
+}
+
+export async function createProfile(input: {
+  profileKey: string
+  sourceChannel: string
+  sourceSurface: string
+  demandKind: string
+  initialAllocationStrategy: string
+  identityStrategy: string
+  entitlementAuthorityMode: string
+  recipientInputMode: string
+  referenceStrategy: string
+  trackingSyncMode: string
+  closurePolicy: string
+  supportsPartialShipment: boolean
+  supportsApiImport: boolean
+  supportsApiExport: boolean
+  requiresCarrierMapping: boolean
+  requiresExternalOrderNo: boolean
+  allowsManualClosure: boolean
+  connectorKey: string
+  supportedLocales: string
+  defaultLocale: string
+  extraData: string
+}): Promise<dto.IntegrationProfileDTO> {
+  assertWailsRuntime()
+  const req = dto.CreateProfileInput.createFrom(input)
+  return CreateProfile(req)
+}
+
+export async function updateProfile(input: {
+  id: number
+  profileKey: string
+  sourceChannel: string
+  sourceSurface: string
+  demandKind: string
+  initialAllocationStrategy: string
+  identityStrategy: string
+  entitlementAuthorityMode: string
+  recipientInputMode: string
+  referenceStrategy: string
+  trackingSyncMode: string
+  closurePolicy: string
+  supportsPartialShipment: boolean
+  supportsApiImport: boolean
+  supportsApiExport: boolean
+  requiresCarrierMapping: boolean
+  requiresExternalOrderNo: boolean
+  allowsManualClosure: boolean
+  connectorKey: string
+  supportedLocales: string
+  defaultLocale: string
+  extraData: string
+}): Promise<dto.IntegrationProfileDTO> {
+  assertWailsRuntime()
+  const req = dto.UpdateProfileInput.createFrom(input)
+  return UpdateProfile(req)
+}
+
+export async function deleteProfile(id: number): Promise<void> {
+  assertWailsRuntime()
+  return DeleteProfile(id)
+}
+
+export async function seedDefaultProfiles(): Promise<dto.IntegrationProfileDTO[]> {
+  assertWailsRuntime()
+  return SeedDefaultProfiles()
+}
+
+// ── ProductController ──
+
+export async function createProductMaster(input: {
+  supplierPlatform: string
+  factorySku: string
+  supplierProductRef: string
+  name: string
+  productKind: string
+}): Promise<dto.ProductMasterDTO> {
+  assertWailsRuntime()
+  const req = dto.CreateProductMasterInput.createFrom(input)
+  return CreateProductMaster(req)
+}
+
+export async function listProductMasters(): Promise<dto.ProductMasterDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListProductMasters()
+}
+
+export async function updateProductMaster(input: {
+  id: number
+  supplierPlatform: string
+  factorySku: string
+  supplierProductRef: string
+  name: string
+  productKind: string
+  archived: boolean
+}): Promise<dto.ProductMasterDTO> {
+  assertWailsRuntime()
+  const req = dto.UpdateProductMasterInput.createFrom(input)
+  return UpdateProductMaster(req)
+}
+
+export async function snapshotProductsForWave(input: {
+  waveId: number
+  masterIds: number[]
+}): Promise<dto.ProductDTO[]> {
+  assertWailsRuntime()
+  const req = dto.SnapshotProductsInput.createFrom(input)
+  return SnapshotProductsForWave(req)
+}
+
+export async function listProductsByWave(waveId: number): Promise<dto.ProductDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListProductsByWave(waveId)
 }
 
 // ── AllocationPolicyController (runtime fallback — bindings not yet generated) ──

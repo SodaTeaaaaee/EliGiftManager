@@ -116,7 +116,7 @@ type ChannelSyncItemDTO struct {
 	UpdatedAt          string `json:"updatedAt"`
 }
 
-type IntegrationProfileDTO struct {
+type IntegrationProfileSummaryDTO struct {
 	ID                  uint   `json:"id"`
 	ProfileKey          string `json:"profileKey"`
 	SourceChannel       string `json:"sourceChannel"`

@@ -45,6 +45,8 @@ func (m *mockProfileRepo) FindByProfileKey(key string) (*domain.IntegrationProfi
 
 func (m *mockProfileRepo) Create(profile *domain.IntegrationProfile) error { panic("not implemented") }
 func (m *mockProfileRepo) List() ([]domain.IntegrationProfile, error)       { panic("not implemented") }
+func (m *mockProfileRepo) Update(profile *domain.IntegrationProfile) error  { panic("not implemented") }
+func (m *mockProfileRepo) Delete(id uint) error                             { panic("not implemented") }
 
 // ── mock demand repo for closure ──
 
@@ -86,6 +88,7 @@ func (m *mockDemandRepoForClosure) FindLineByID(id uint) (*domain.DemandLine, er
 func (m *mockDemandRepoForClosure) Create(doc *domain.DemandDocument) error               { panic("not implemented") }
 func (m *mockDemandRepoForClosure) List() ([]domain.DemandDocument, error)                 { panic("not implemented") }
 func (m *mockDemandRepoForClosure) ListUnassigned() ([]domain.DemandDocument, error)       { panic("not implemented") }
+func (m *mockDemandRepoForClosure) CountByProfileID(profileID uint) (int64, error)         { return 0, nil }
 func (m *mockDemandRepoForClosure) CreateLine(line *domain.DemandLine) error               { panic("not implemented") }
 func (m *mockDemandRepoForClosure) ListLinesByDocument(docID uint) ([]domain.DemandLine, error) {
 	panic("not implemented")

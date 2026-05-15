@@ -43,6 +43,14 @@ func (r *demandRepository) List() ([]domain.DemandDocument, error) {
 	return result, nil
 }
 
+func (r *demandRepository) CountByProfileID(profileID uint) (int64, error) {
+	var count int64
+	if err := r.db.Model(&persistence.DemandDocument{}).Where("integration_profile_id = ?", profileID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 func (r *demandRepository) ListUnassigned() ([]domain.DemandDocument, error) {
 	var ps []persistence.DemandDocument
 	if err := r.db.Where("id NOT IN (?)", r.db.Table("wave_demand_assignments").Select("demand_document_id")).Find(&ps).Error; err != nil {

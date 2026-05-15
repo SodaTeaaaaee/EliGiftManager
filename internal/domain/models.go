@@ -457,3 +457,32 @@ type BasisPinParam struct {
 	PinKind       string
 	RefType       string
 }
+
+// ---- ProductMaster ----
+
+type ProductMaster struct {
+	ID                 uint
+	SupplierPlatform   string
+	FactorySKU         string
+	SupplierProductRef string
+	Name               string
+	ProductKind        ProductKind
+	Archived           bool
+	ExtraData          string
+	CreatedAt          string
+	UpdatedAt          string
+}
+
+// ---- Product ----
+
+type Product struct {
+	ID               uint
+	WaveID           uint
+	ProductMasterID  *uint
+	SupplierPlatform string
+	FactorySKU       string
+	Name             string
+	ExtraData        string
+	CreatedAt        string
+	UpdatedAt        string
+}

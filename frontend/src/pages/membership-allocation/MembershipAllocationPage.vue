@@ -10,6 +10,7 @@ import {
   deleteAllocationPolicyRule,
   reconcileWave,
   generateParticipants,
+  listProductsByWave,
 } from '@/shared/lib/wails/app'
 import type {
   AllocationPolicyRule,
@@ -18,10 +19,28 @@ import type {
   SelectorPayload,
   ReconcileResult,
 } from '@/entities/allocation-policy'
+import { dto } from '@/../wailsjs/go/models'
 
 const route = useRoute()
 const message = useMessage()
 const waveId = computed(() => Number(route.params.waveId) || 0)
+
+// ── Product options ──
+
+const productOptions = ref<Array<{ label: string; value: number }>>([])
+
+async function loadProducts() {
+  if (!waveId.value) return
+  try {
+    const products = await listProductsByWave(waveId.value)
+    productOptions.value = products.map((p: dto.ProductDTO) => ({
+      label: `${p.name} (${p.factorySku})`,
+      value: p.id,
+    }))
+  } catch {
+    // fallback — products not yet snapshotted
+  }
+}
 
 // ── List state ──
 
@@ -40,7 +59,10 @@ async function loadRules() {
   }
 }
 
-onMounted(loadRules)
+onMounted(() => {
+  loadRules()
+  loadProducts()
+})
 
 // ── Drawer state ──
 
@@ -353,11 +375,12 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
       <n-drawer v-model:show="drawerVisible" :width="480" placement="right">
         <n-drawer-content :title="editingRule ? '编辑规则' : '添加规则'">
           <n-space vertical size="large">
-            <n-form-item label="商品 ID">
-              <n-input-number
+            <n-form-item label="商品">
+              <n-select
                 v-model:value="form.product_id"
-                placeholder="商品 ID"
-                :min="1"
+                :options="productOptions"
+                placeholder="选择商品"
+                filterable
                 style="width: 100%"
               />
             </n-form-item>

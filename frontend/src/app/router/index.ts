@@ -75,12 +75,24 @@ const router = createRouter({
             },
           ],
         },
+        {
+          path: "profiles",
+          name: "profiles",
+          component: () =>
+            import("@/pages/profile/ProfileManagementPage.vue"),
+        },
+        {
+          path: "products",
+          name: "products",
+          component: () =>
+            import("@/pages/product/ProductManagementPage.vue"),
+        },
         // Legacy wave-overview route — redirect to dashboard (consolidated into workspace wizard)
         {
           path: "wave-overview",
           redirect: "/dashboard",
         },
-        // TODO(V2): 完整实现 — 添加 AllocationReview, ExportPage 路由
+
       ],
     },
   ],

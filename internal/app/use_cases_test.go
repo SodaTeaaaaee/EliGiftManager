@@ -61,6 +61,18 @@ func (m *mockDemandRepo) ListUnassigned() ([]domain.DemandDocument, error) {
 	return m.List()
 }
 
+func (m *mockDemandRepo) CountByProfileID(profileID uint) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var count int64
+	for _, doc := range m.docs {
+		if doc.IntegrationProfileID != nil && *doc.IntegrationProfileID == profileID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func (m *mockDemandRepo) CreateLine(line *domain.DemandLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

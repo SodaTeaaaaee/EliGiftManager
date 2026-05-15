@@ -288,3 +288,17 @@ const (
 	DocumentFormatJSON       = "json"
 	DocumentFormatAPIPayload = "api_payload"
 )
+
+// ---- ProductKind ----
+
+type ProductKind string
+
+const (
+	ProductKindBadge    ProductKind = "badge"
+	ProductKindStandee  ProductKind = "standee"
+	ProductKindCharm    ProductKind = "charm"
+	ProductKindPostcard ProductKind = "postcard"
+	ProductKindPrint    ProductKind = "print"
+	ProductKindBundle   ProductKind = "bundle"
+	ProductKindOther    ProductKind = "other"
+)

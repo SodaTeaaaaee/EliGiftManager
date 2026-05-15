@@ -97,3 +97,22 @@ type TemplateManagementUseCase interface {
 	ListBindingsByProfile(profileID uint) ([]dto.ProfileTemplateBindingDTO, error)
 	GetDefaultTemplateForProfile(profileID uint, docType string) (*dto.DocumentTemplateDTO, error)
 }
+
+// ProductUseCase handles product master CRUD and wave-scoped product snapshots.
+type ProductUseCase interface {
+	CreateProductMaster(input dto.CreateProductMasterInput) (*dto.ProductMasterDTO, error)
+	ListProductMasters() ([]dto.ProductMasterDTO, error)
+	UpdateProductMaster(input dto.UpdateProductMasterInput) (*dto.ProductMasterDTO, error)
+	SnapshotProductsForWave(input dto.SnapshotProductsInput) ([]dto.ProductDTO, error)
+	ListProductsByWave(waveID uint) ([]dto.ProductDTO, error)
+}
+
+// ProfileManagementUseCase handles IntegrationProfile CRUD and seeding.
+type ProfileManagementUseCase interface {
+	CreateProfile(input dto.CreateProfileInput) (*dto.IntegrationProfileDTO, error)
+	UpdateProfile(input dto.UpdateProfileInput) (*dto.IntegrationProfileDTO, error)
+	DeleteProfile(id uint) error
+	GetProfile(id uint) (*dto.IntegrationProfileDTO, error)
+	ListProfiles() ([]dto.IntegrationProfileDTO, error)
+	SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error)
+}

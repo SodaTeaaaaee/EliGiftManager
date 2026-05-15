@@ -834,3 +834,67 @@ func HistoryPinFromDomain(d *domain.HistoryPin) *HistoryPin {
 		RefID:         d.RefID,
 	}
 }
+
+// ---- ProductMaster ----
+
+func ToPersistenceProductMaster(d *domain.ProductMaster) *ProductMaster {
+	p := &ProductMaster{
+		SupplierPlatform:   d.SupplierPlatform,
+		FactorySKU:         d.FactorySKU,
+		SupplierProductRef: d.SupplierProductRef,
+		Name:               d.Name,
+		ProductKind:        string(d.ProductKind),
+		Archived:           d.Archived,
+		ExtraData:          d.ExtraData,
+	}
+	if d.ID != 0 {
+		p.ID = d.ID
+	}
+	return p
+}
+
+func FromPersistenceProductMaster(p *ProductMaster) *domain.ProductMaster {
+	return &domain.ProductMaster{
+		ID:                 p.ID,
+		SupplierPlatform:   p.SupplierPlatform,
+		FactorySKU:         p.FactorySKU,
+		SupplierProductRef: p.SupplierProductRef,
+		Name:               p.Name,
+		ProductKind:        domain.ProductKind(p.ProductKind),
+		Archived:           p.Archived,
+		ExtraData:          p.ExtraData,
+		CreatedAt:          formatTime(p.CreatedAt),
+		UpdatedAt:          formatTime(p.UpdatedAt),
+	}
+}
+
+// ---- Product ----
+
+func ToPersistenceProduct(d *domain.Product) *Product {
+	p := &Product{
+		WaveID:           d.WaveID,
+		ProductMasterID:  d.ProductMasterID,
+		SupplierPlatform: d.SupplierPlatform,
+		FactorySKU:       d.FactorySKU,
+		Name:             d.Name,
+		ExtraData:        d.ExtraData,
+	}
+	if d.ID != 0 {
+		p.ID = d.ID
+	}
+	return p
+}
+
+func FromPersistenceProduct(p *Product) *domain.Product {
+	return &domain.Product{
+		ID:               p.ID,
+		WaveID:           p.WaveID,
+		ProductMasterID:  p.ProductMasterID,
+		SupplierPlatform: p.SupplierPlatform,
+		FactorySKU:       p.FactorySKU,
+		Name:             p.Name,
+		ExtraData:        p.ExtraData,
+		CreatedAt:        formatTime(p.CreatedAt),
+		UpdatedAt:        formatTime(p.UpdatedAt),
+	}
+}

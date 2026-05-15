@@ -16,6 +16,7 @@ type DemandDocumentRepository interface {
 	FindByID(id uint) (*DemandDocument, error)
 	List() ([]DemandDocument, error)
 	ListUnassigned() ([]DemandDocument, error)
+	CountByProfileID(profileID uint) (int64, error)
 
 	CreateLine(line *DemandLine) error
 	FindLineByID(id uint) (*DemandLine, error)
@@ -119,6 +120,8 @@ type IntegrationProfileRepository interface {
 	FindByID(id uint) (*IntegrationProfile, error)
 	FindByProfileKey(profileKey string) (*IntegrationProfile, error)
 	List() ([]IntegrationProfile, error)
+	Update(profile *IntegrationProfile) error
+	Delete(id uint) error
 }
 
 // FulfillmentAdjustmentRepository defines persistence operations for FulfillmentAdjustment.
@@ -171,4 +174,22 @@ type HistoryPinRepository interface {
 	Create(pin *HistoryPin) error
 	ListByNodeID(nodeID uint) ([]HistoryPin, error)
 	CountByNodeID(nodeID uint) (int64, error)
+}
+
+// ProductMasterRepository defines persistence operations for ProductMaster.
+type ProductMasterRepository interface {
+	Create(master *ProductMaster) error
+	FindByID(id uint) (*ProductMaster, error)
+	List() ([]ProductMaster, error)
+	FindByPlatformAndSKU(platform, sku string) (*ProductMaster, error)
+	Update(master *ProductMaster) error
+}
+
+// ProductRepository defines persistence operations for Product.
+type ProductRepository interface {
+	Create(product *Product) error
+	FindByID(id uint) (*Product, error)
+	ListByWave(waveID uint) ([]Product, error)
+	FindByWaveAndSKU(waveID uint, platform, sku string) (*Product, error)
+	DeleteByWave(waveID uint) error
 }

@@ -12,19 +12,22 @@ import (
 
 // DemandController exposes demand-intake Wails bindings.
 type DemandController struct {
-	intakeUC    app.DemandIntakeUseCase
-	demandRepo  domain.DemandDocumentRepository
-	profileRepo domain.CustomerProfileRepository
+	intakeUC           app.DemandIntakeUseCase
+	demandRepo         domain.DemandDocumentRepository
+	profileRepo        domain.CustomerProfileRepository
+	integrationProfile domain.IntegrationProfileRepository
 }
 
 func NewDemandController() *DemandController {
 	gdb := db.GetDB()
 	demandRepo := infra.NewDemandRepository(gdb)
 	profileRepo := infra.NewProfileRepository(gdb)
+	integrationProfileRepo := infra.NewIntegrationProfileRepository(gdb)
 	return &DemandController{
-		intakeUC:    app.NewDemandIntakeUseCase(demandRepo),
-		demandRepo:  demandRepo,
-		profileRepo: profileRepo,
+		intakeUC:           app.NewDemandIntakeUseCase(demandRepo),
+		demandRepo:         demandRepo,
+		profileRepo:        profileRepo,
+		integrationProfile: integrationProfileRepo,
 	}
 }
 
@@ -35,13 +38,20 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 			return dto.DemandDocumentDTO{}, fmt.Errorf("customer profile %d does not exist", *input.CustomerProfileID)
 		}
 	}
+	if input.IntegrationProfileID != nil {
+		if _, err := c.integrationProfile.FindByID(*input.IntegrationProfileID); err != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d does not exist", *input.IntegrationProfileID)
+		}
+	}
 	doc := domain.DemandDocument{
-		Kind:              input.Kind,
-		CaptureMode:       input.CaptureMode,
-		SourceChannel:     input.SourceChannel,
-		SourceDocumentNo:  input.SourceDocumentNo,
-		SourceCustomerRef: input.SourceCustomerRef,
-		CustomerProfileID: input.CustomerProfileID,
+		Kind:                 input.Kind,
+		CaptureMode:          input.CaptureMode,
+		SourceChannel:        input.SourceChannel,
+		SourceSurface:        input.SourceSurface,
+		SourceDocumentNo:     input.SourceDocumentNo,
+		SourceCustomerRef:    input.SourceCustomerRef,
+		CustomerProfileID:    input.CustomerProfileID,
+		IntegrationProfileID: input.IntegrationProfileID,
 	}
 	lines := make([]*domain.DemandLine, len(input.Lines))
 	for i, l := range input.Lines {

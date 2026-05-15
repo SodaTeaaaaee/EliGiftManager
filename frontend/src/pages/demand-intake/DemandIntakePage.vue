@@ -7,10 +7,19 @@
         <n-space vertical :size="16">
           <n-space>
             <n-select
+              v-model:value="form.integrationProfileId"
+              :options="profileOptions"
+              :loading="profilesLoading"
+              placeholder="集成配置 (必选)"
+              style="width: 280px"
+              filterable
+            />
+            <n-select
               v-model:value="form.kind"
               :options="kindOptions"
               placeholder="Kind"
               style="width: 200px"
+              :disabled="profileSelected"
             />
             <n-select
               v-model:value="form.captureMode"
@@ -22,6 +31,13 @@
               v-model:value="form.sourceChannel"
               placeholder="Source Channel"
               style="width: 200px"
+              :disabled="profileSelected"
+            />
+            <n-input
+              v-model:value="form.sourceSurface"
+              placeholder="Source Surface"
+              style="width: 200px"
+              :disabled="profileSelected"
             />
             <n-input
               v-model:value="form.sourceDocumentNo"
@@ -134,12 +150,53 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { NCard, NButton, NInput, NInputNumber, NSelect, NSpace, NAlert, NDivider } from 'naive-ui'
-import { importDemandDocument, listWaves, assignDemandToWave } from '@/shared/lib/wails/app'
+import { importDemandDocument, listWaves, assignDemandToWave, listProfiles } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
 
 // ── Options ──
+
+const profileOptions = ref<Array<{ label: string; value: number }>>([])
+const profilesLoading = ref(false)
+const profilesList = ref<dto.IntegrationProfileDTO[]>([])
+
+async function loadProfiles() {
+  profilesLoading.value = true
+  try {
+    const list = await listProfiles()
+    profilesList.value = list
+    profileOptions.value = list.map((p) => ({
+      label: `${p.profileKey} (${p.sourceChannel})`,
+      value: p.id,
+    }))
+  } catch {
+    // offline — handled by guard
+  } finally {
+    profilesLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadProfiles()
+})
+
+// Profile-driven auto-fill
+const profileSelected = computed(() => form.integrationProfileId != null)
+
+watch(
+  () => form.integrationProfileId,
+  (newId) => {
+    if (newId != null) {
+      const profile = profilesList.value.find((p) => p.id === newId)
+      if (profile) {
+        form.kind = profile.demandKind || form.kind
+        form.sourceChannel = profile.sourceChannel || form.sourceChannel
+        form.sourceSurface = profile.sourceSurface || ''
+      }
+    }
+  },
+)
 
 const kindOptions = [
   { label: 'Membership Entitlement', value: 'membership_entitlement' },
@@ -191,14 +248,17 @@ const form = reactive({
   kind: 'membership_entitlement',
   captureMode: 'manual_entry',
   sourceChannel: '',
+  sourceSurface: '',
   sourceDocumentNo: '',
   sourceCustomerRef: '',
   customerProfileId: null as number | null,
+  integrationProfileId: null as number | null,
   lines: [makeLine()] as LineForm[],
 })
 
 const formValid = computed(() => {
   if (!form.kind || !form.captureMode) return false
+  if (!form.integrationProfileId) return false
   for (const line of form.lines) {
     if (!line.lineType || !line.routingDisposition || line.requestedQuantity < 1) return false
   }
@@ -234,6 +294,7 @@ async function importDemand() {
       sourceDocumentNo: form.sourceDocumentNo || `IMPORT-${Date.now()}`,
       sourceCustomerRef: form.sourceCustomerRef,
       customerProfileId: form.customerProfileId || undefined,
+      integrationProfileId: form.integrationProfileId || undefined,
       lines: form.lines.map((l) => ({ ...l })),
     }
     result.value = await importDemandDocument(input)

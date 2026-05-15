@@ -32,42 +32,40 @@ cd frontend && deno task preview      # preview production build
 | -------------------------------------- | ----------------------------------------------------------------------------------- |
 | `main.go`                              | Wails bootstrap, DB singleton init, controller binding                              |
 | `app.go`                               | Lifecycle hooks (startup) + PickCSVFile/PickZIPFile + shared types/functions        |
-| `controller_*.go`                      | Domain-specific Wails bound methods (Member/Product/Wave/System/Template)           |
+| `controller_*.go`                      | Domain-specific Wails bound methods (Demand/Wave/Export/Shipment/ChannelSync/Adjustment/Product/Profile/Template/AllocationPolicy) |
 | `internal/config/`                     | App metadata, window sizing                                                         |
 | `internal/db/`                         | SQLite init (WAL mode), auto-migration, DB singleton                                |
+| `internal/domain/`                     | Pure business structs, repository interfaces, enums                                 |
+| `internal/app/`                        | Use cases, DTO definitions, business orchestration                                  |
+| `internal/app/dto/`                    | Data transfer objects (JSON-tagged, camelCase)                                      |
+| `internal/infra/`                      | Repository implementations (GORM), one file per aggregate                           |
+| `internal/infra/persistence/`          | GORM models, enum mapping, domain↔persistence mappers                              |
 | `internal/middleware/`                 | Wails AssetServer middleware for `/local-images/`                                   |
-| `internal/model/`                      | DB tables (GORM), enums, payload types                                              |
-| `internal/service/`                    | Business logic: CSV transformers, import pipeline, image storage, path resolution   |
+| `internal/service/`                    | Path resolution only (`path_service.go`)                                            |
 | `frontend/src/app/`                    | App shell, layout, router                                                           |
 | `frontend/src/pages/`                  | Route-level screens                                                                 |
+| `frontend/src/entities/`              | TypeScript entity type definitions (mirrors Go DTOs)                                |
 | `frontend/src/shared/`                 | Reusable UI, types, Wails wrappers, composables                                     |
-| `frontend/src/shared/composables/`     | Vue 3 composables (useContextMenu, useAdaptiveTable)                                |
+| `frontend/src/shared/composables/`     | Vue 3 composables (useUndoRedo, useContextMenu, useAdaptiveTable)                   |
 | `frontend/src/shared/model/`           | Reactive singletons (settings — scrollMode, zoom persistence; theme)                |
 | `frontend/src/shared/ui/`              | Shared UI components (ContextMenu.vue — floating right-click menu)                  |
-| `frontend/src/shared/lib/wails/app.ts` | **Single entry point for all Wails bridge calls** (imports from 6 controller files) |
+| `frontend/src/shared/lib/wails/app.ts` | **Single entry point for all Wails bridge calls** (imports from generated bindings) |
 | `frontend/wailsjs/`                    | Generated Wails bindings (committed)                                                |
 
 ## Key Conventions
 
-1. **Wails bridge boundary**: Pages and composables MUST call through `frontend/src/shared/lib/wails/app.ts`. Never import from `wailsjs` directly outside that layer. Bridge imports are split across App.js + 5 Controller.js files.
+1. **Wails bridge boundary**: Pages and composables MUST call through `frontend/src/shared/lib/wails/app.ts`. Never import from `wailsjs` directly outside that layer. Bridge imports use generated TypeScript bindings from `frontend/wailsjs/go/main/`.
 2. **Deno-only frontend**: Use `deno task` for all frontend commands. `npm`/`yarn`/`pnpm` are not used in this project.
-3. **Temporary UI shell**: The current frontend is a prototype. Business logic is not finalized. Keep UI close to Naive UI stock patterns.
+3. **V2 architecture**: Backend uses 4-layer architecture: `domain` (pure structs + interfaces) → `app` (use cases + DTOs) → `infra` (GORM repos) → `controller` (Wails bindings). Frontend uses entities layer mirroring Go DTOs.
 4. **`.cache/`**: Use `.cache/` directories for local build/test caches. Already gitignored.
 5. **Generated vs authored**: `frontend/wailsjs/` is generated but committed. `frontend/dist/`, `frontend/node_modules/`, and `build/bin/` are generated and ignored.
-6. **Controller pattern**: All Wails bound methods live in `controller_*.go` files (package main). Each controller gets its own generated JS binding file. New business methods should be added to the appropriate controller.
+6. **Controller pattern**: All Wails bound methods live in `controller_*.go` files (package main). Each controller is self-contained (constructs its own repos/use cases from `database.GetDB()`). New controllers require `wails generate module` to produce JS/TS bindings.
 7. **DB access**: Controllers use `database.GetDB()` singleton (initialized in `main.go`). Do NOT open/close DB per request.
 8. **Path resolution**: Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths. Three tiers: dev (Temp→workdir), portable (`.portable` marker), system (`UserConfigDir`).
-9. **Context menu**: Use `useContextMenu` composable (`frontend/src/shared/composables/useContextMenu.ts`) — singleton with `register(key, handler)` for DOM-level right-click. Add `data-contextmenu="key"` to target elements, call `register('key', handler)` in `onMounted`. Global `contextmenu` listener in `App.vue` always calls `preventDefault()` — browser menu never appears.
-10. **Adaptive paging pattern**: Table panels use a flex-column parent (with `ref` for `ResizeObserver`), table wrapper (content height, no `flex-1`), indicator div (`flex-1` with dynamic `<`/`>` arrow chars), scaled pagination, and `-12` in the `packByHeights` formula for indicator margin. Three pages (WaveImport/WaveTag/WavePreview) share this pattern.
-11. **Tailwind in h() render functions**: Tailwind JIT does NOT scan Vue `h()` string literals. Use `<style>`-block CSS classes or inline styles instead of Tailwind utilities in render functions.
-12. **User tag display name**: `wmNicknameMap` (computed from `waveMembers`) maps `waveMemberId → latestNickname` for user tag chip rendering.
-13. **Tag color model**: `tagColors(tag)` in `WaveTagStep.vue` returns `{bg, text, accent, number, border}`. Three color roles: `bg` (platform@20%), `text` (var(--text)), `accent` (platform solid — colon + positive number). Negative tags add 2px red border + red number. Drawer tags share the same function.
-14. **Adaptive table composable**: `useAdaptiveTable<T>(items, {tableParentRef,tableWrapperRef,paginationRef,indicatorRef})` in `frontend/src/shared/composables/useAdaptiveTable.ts`. Encapsulates ResizeObserver, DOM row-height measurement, packByHeights, indicator arrow chars. Returns `{visibleItems, currentPage, totalPages, scrollMode, indicatorFontSize/Left/Right, init, remeasure, teardown, ...}`. `scrollMode` (Ref<boolean>) is a global singleton from `useScrollMode()` in `settings.ts`.
-15. **Scroll mode toggle**: SettingsPage radio group switches `scrollMode` global ref (persisted to localStorage). When true, table wrapper uses `overflow-y-auto flex-1 min-h-0`, pagination + indicator hidden via `v-if="!scrollMode"`.
-16. **Zoom persistence**: App startup — `main.go` reads `zoom.cfg` from data dir → `windows.Options{ZoomFactor}`. App shutdown — Go `OnBeforeClose` → `WindowExecJS("window.__persistZoom()")` → JS reads `devicePixelRatio`, computes `currentDPR/baseDPR` ratio, calls `saveZoom` Go binding → writes `zoom.cfg`. `localStorage` as backup. `IsZoomControlEnabled: true` must be explicit in Windows options (Go bool zero-value is false).
-17. **Font**: Noto Sans SC — local WOFF2 segments (101 files, unicode-range) served from `public/fonts/` via `index.html` `<link>`. Font stack: `'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif`. Base weight 500. `font-display: block`. Anti-aliasing: `-webkit-font-smoothing` is macOS-only (no effect on Windows); on Windows WebView2, text rendering is determined by Skia + ClearType, not CSS.
-18. **Text selection**: `body { user-select: none }` in `main.css`. Form elements exempted.
-19. **Formatting**: Deno + Prettier 3.x. Vue files: `--parser vue`. TypeScript files: `--parser typescript`. Config in `frontend/.prettierrc`. **Never run Prettier Vue parser on .ts files** — it compresses them to single lines.
+9. **DTO convention**: Go DTOs use camelCase `json:"fieldName"` tags. Frontend entity types mirror these exactly. Go DTO is the authoritative source for field names.
+10. **Enum alignment**: Go `domain/enums.go` and frontend `entities/*.ts` enum values must be identical strings. No code generation — manual sync required.
+11. **Undo/Redo**: `useUndoRedo` composable handles Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y with focus guard (skips text inputs). After success, `refreshKey` increments to force child route remount.
+12. **Tailwind in h() render functions**: Tailwind JIT does NOT scan Vue `h()` string literals. Use `<style>`-block CSS classes or inline styles instead of Tailwind utilities in render functions.
 
 ## Code Style
 

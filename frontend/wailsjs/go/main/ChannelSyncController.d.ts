@@ -8,7 +8,7 @@ export function ExecuteChannelSyncJob(arg1:number):Promise<dto.ExecuteSyncResult
 
 export function ListChannelSyncJobsByWave(arg1:number):Promise<Array<dto.ChannelSyncJobDTO>>;
 
-export function ListIntegrationProfiles():Promise<Array<dto.IntegrationProfileDTO>>;
+export function ListIntegrationProfiles():Promise<Array<dto.IntegrationProfileSummaryDTO>>;
 
 export function PlanChannelClosure(arg1:dto.PlanChannelClosureInput):Promise<dto.PlanChannelClosureResult>;
 

@@ -71,6 +71,8 @@ func main() {
 			NewAdjustmentController(),
 			NewTemplateController(),
 			NewAllocationPolicyController(),
+			NewProductController(),
+			NewProfileController(),
 		},
 	})
 	if err != nil {

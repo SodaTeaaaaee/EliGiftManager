@@ -418,3 +418,32 @@ type HistoryPin struct {
 }
 
 func (HistoryPin) TableName() string { return "history_pins" }
+
+// ---- ProductMaster ----
+
+type ProductMaster struct {
+	gorm.Model
+	SupplierPlatform   string `gorm:"not null;uniqueIndex:idx_pm_platform_sku"`
+	FactorySKU         string `gorm:"not null;uniqueIndex:idx_pm_platform_sku"`
+	SupplierProductRef string
+	Name               string `gorm:"not null"`
+	ProductKind        string `gorm:"not null;default:other"`
+	Archived           bool   `gorm:"not null;default:false"`
+	ExtraData          string `gorm:"type:text"`
+}
+
+func (ProductMaster) TableName() string { return "product_masters" }
+
+// ---- Product ----
+
+type Product struct {
+	gorm.Model
+	WaveID           uint   `gorm:"not null;index;uniqueIndex:idx_product_wave_platform_sku"`
+	ProductMasterID  *uint  `gorm:"index"`
+	SupplierPlatform string `gorm:"not null;uniqueIndex:idx_product_wave_platform_sku"`
+	FactorySKU       string `gorm:"not null;uniqueIndex:idx_product_wave_platform_sku"`
+	Name             string `gorm:"not null"`
+	ExtraData        string `gorm:"type:text"`
+}
+
+func (Product) TableName() string { return "products" }
