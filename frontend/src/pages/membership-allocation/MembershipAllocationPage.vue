@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
 import { useRoute } from 'vue-router'
-import { NButton, NPopconfirm, NTag, NModal, NDataTable, NSpace, useMessage } from 'naive-ui'
+import { NButton, NPopconfirm, NTag, NModal, NDataTable, NSpace, NCollapse, NCollapseItem, NList, NListItem, useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import {
   listAllocationPolicyRules,

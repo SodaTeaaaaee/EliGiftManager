@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, watchEffect } from "vue";
+import { computed, onErrorCaptured, onMounted, onUnmounted, ref, watchEffect } from "vue";
 import { RouterView } from "vue-router";
 import {
+  NButton,
   NConfigProvider,
   NGlobalStyle,
   NDialogProvider,
   NMessageProvider,
+  NResult,
   darkTheme,
   useOsTheme,
   type GlobalThemeOverrides,
@@ -97,9 +99,34 @@ function persistZoom() {
 // Exposed for Go OnBeforeClose → WindowExecJS call.
 ;(window as any).__persistZoom = persistZoom
 
+// ── Error boundary ──
+const renderError = ref<Error | null>(null)
+const renderErrorInfo = ref('')
+const chunkError = ref(false)
+
+onErrorCaptured((err: Error, _instance, info: string) => {
+  // Wails bridge not ready during dev — non-fatal, let it propagate normally
+  const msg = err?.message ?? ''
+  if (msg.includes('wails') || msg.includes('runtime.')) {
+    console.warn('[App] Wails bridge error (non-fatal):', err)
+    return false
+  }
+  console.error('[App] Render error captured:', err, '\nComponent info:', info)
+  renderError.value = err
+  renderErrorInfo.value = info
+  return false
+})
+
+function reloadPage() {
+  window.location.reload()
+}
+
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
   baseDPR = window.devicePixelRatio
+  window.addEventListener('router-chunk-error', () => {
+    chunkError.value = true
+  })
 })
 
 onUnmounted(() => {
@@ -113,7 +140,35 @@ onUnmounted(() => {
     <NGlobalStyle />
     <NMessageProvider>
       <NDialogProvider>
-        <RouterView />
+        <!-- Chunk load failure banner — shown above router content, nav stays visible -->
+        <div v-if="chunkError" style="padding: 16px">
+          <NResult
+            status="error"
+            title="页面加载失败"
+            description="路由模块加载出错，可能是网络问题或版本更新导致。"
+          >
+            <template #footer>
+              <NButton type="primary" @click="reloadPage">重新加载</NButton>
+            </template>
+          </NResult>
+        </div>
+        <!-- Render error boundary — replaces router-view area only, nav stays visible -->
+        <div v-else-if="renderError" style="padding: 16px">
+          <NResult
+            status="error"
+            title="页面渲染出错"
+            :description="renderError.message"
+          >
+            <template #footer>
+              <NButton type="primary" @click="reloadPage">重新加载</NButton>
+            </template>
+          </NResult>
+          <pre
+            v-if="renderErrorInfo"
+            style="margin-top: 12px; font-size: 12px; opacity: 0.6; white-space: pre-wrap; word-break: break-all"
+          >{{ renderErrorInfo }}</pre>
+        </div>
+        <RouterView v-else />
       </NDialogProvider>
     </NMessageProvider>
     <ContextMenu />

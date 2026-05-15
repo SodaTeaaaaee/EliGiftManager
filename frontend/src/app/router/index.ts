@@ -98,4 +98,17 @@ const router = createRouter({
   ],
 });
 
+router.onError((error) => {
+  // Chunk load failures from dynamic imports (network issues, stale deployment, etc.)
+  const msg = error?.message ?? '';
+  const isChunkError =
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Unable to preload CSS') ||
+    msg.includes('error loading dynamically imported module');
+  if (isChunkError) {
+    window.dispatchEvent(new CustomEvent('router-chunk-error', { detail: error }));
+  }
+});
+
 export { router };

@@ -260,30 +260,6 @@ const submitting = ref(false);
 const dialog = useDialog();
 const formRef = ref<FormInst | null>(null);
 
-// ── Computed: dynamic validation ──
-
-const connectorKeyRequired = computed(() =>
-  formData.trackingSyncMode === "api_push" ||
-  formData.trackingSyncMode === "document_export"
-);
-
-const formRules = computed<FormRules>(() => ({
-  profileKey: [
-    { required: true, message: "Profile Key 不能为空", trigger: "blur" },
-  ],
-  connectorKey: connectorKeyRequired.value
-    ? [{ required: true, message: "当前同步模式需要填写 Connector Key", trigger: "blur" }]
-    : [],
-}));
-
-// Clear stale validation state when trackingSyncMode changes
-watch(
-  () => formData.trackingSyncMode,
-  () => {
-    formRef.value?.restoreValidation();
-  }
-);
-
 // ── Form ──
 
 const makeEmptyForm = () => ({
@@ -315,6 +291,30 @@ const formData = reactive(makeEmptyForm());
 function resetForm() {
   Object.assign(formData, makeEmptyForm());
 }
+
+// ── Computed: dynamic validation ──
+
+const connectorKeyRequired = computed(() =>
+  formData.trackingSyncMode === "api_push" ||
+  formData.trackingSyncMode === "document_export"
+);
+
+const formRules = computed<FormRules>(() => ({
+  profileKey: [
+    { required: true, message: "Profile Key 不能为空", trigger: "blur" },
+  ],
+  connectorKey: connectorKeyRequired.value
+    ? [{ required: true, message: "当前同步模式需要填写 Connector Key", trigger: "blur" }]
+    : [],
+}));
+
+// Clear stale validation state when trackingSyncMode changes
+watch(
+  () => formData.trackingSyncMode,
+  () => {
+    formRef.value?.restoreValidation();
+  }
+);
 
 // ── Table columns ──
 

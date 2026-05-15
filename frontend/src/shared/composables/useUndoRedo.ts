@@ -1,14 +1,46 @@
 import { onMounted, onUnmounted } from 'vue'
+import { undoWaveAction, redoWaveAction, isWailsRuntimeAvailable } from '@/shared/lib/wails/app'
 
 export interface UseUndoRedoOptions {
   scopeType: 'wave' | 'global'
   scopeKey: () => number | null
+  onSuccess?: (summary: string, action: 'undo' | 'redo') => void
+  onError?: (error: string) => void
   onNotReady?: () => void
 }
 
 export function useUndoRedo(options: UseUndoRedoOptions) {
+  async function handleUndo() {
+    const key = options.scopeKey()
+    if (!key || !isWailsRuntimeAvailable()) {
+      options.onNotReady?.()
+      return
+    }
+    try {
+      const summary = await undoWaveAction(key)
+      options.onSuccess?.(summary, 'undo')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      options.onError?.(msg)
+    }
+  }
+
+  async function handleRedo() {
+    const key = options.scopeKey()
+    if (!key || !isWailsRuntimeAvailable()) {
+      options.onNotReady?.()
+      return
+    }
+    try {
+      const summary = await redoWaveAction(key)
+      options.onSuccess?.(summary, 'redo')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      options.onError?.(msg)
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
-    // Don't intercept when focus is in a text input
     const target = e.target as HTMLElement
     if (
       target.tagName === 'INPUT' ||
@@ -20,22 +52,20 @@ export function useUndoRedo(options: UseUndoRedoOptions) {
 
     const isCtrl = e.ctrlKey || e.metaKey
 
-    // Ctrl+Shift+Z or Ctrl+Y → redo
     if (isCtrl && e.shiftKey && e.key === 'Z') {
       e.preventDefault()
-      options.onNotReady?.()
+      handleRedo()
       return
     }
     if (isCtrl && e.key === 'y') {
       e.preventDefault()
-      options.onNotReady?.()
+      handleRedo()
       return
     }
 
-    // Ctrl+Z → undo
     if (isCtrl && e.key === 'z' && !e.shiftKey) {
       e.preventDefault()
-      options.onNotReady?.()
+      handleUndo()
     }
   }
 
@@ -46,4 +76,6 @@ export function useUndoRedo(options: UseUndoRedoOptions) {
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown)
   })
+
+  return { handleUndo, handleRedo }
 }

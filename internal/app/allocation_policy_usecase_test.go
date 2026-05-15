@@ -198,6 +198,29 @@ func (m *policyAdjRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.
 	return out, nil
 }
 
+func (m *policyAdjRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, a := range m.adjs {
+		if a.ID == id {
+			return &a, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *policyAdjRepo) Delete(id uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, a := range m.adjs {
+		if a.ID == id {
+			m.adjs = append(m.adjs[:i], m.adjs[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
 type policyProductRepo struct {
 	mu       sync.Mutex
 	products map[uint]*domain.Product

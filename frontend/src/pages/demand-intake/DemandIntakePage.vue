@@ -181,23 +181,6 @@ onMounted(() => {
   loadProfiles()
 })
 
-// Profile-driven auto-fill
-const profileSelected = computed(() => form.integrationProfileId != null)
-
-watch(
-  () => form.integrationProfileId,
-  (newId) => {
-    if (newId != null) {
-      const profile = profilesList.value.find((p) => p.id === newId)
-      if (profile) {
-        form.kind = profile.demandKind || form.kind
-        form.sourceChannel = profile.sourceChannel || form.sourceChannel
-        form.sourceSurface = profile.sourceSurface || ''
-      }
-    }
-  },
-)
-
 const kindOptions = [
   { label: 'Membership Entitlement', value: 'membership_entitlement' },
   { label: 'Retail Order', value: 'retail_order' },
@@ -255,6 +238,23 @@ const form = reactive({
   integrationProfileId: null as number | null,
   lines: [makeLine()] as LineForm[],
 })
+
+// Profile-driven auto-fill
+const profileSelected = computed(() => form.integrationProfileId != null)
+
+watch(
+  () => form.integrationProfileId,
+  (newId) => {
+    if (newId != null) {
+      const profile = profilesList.value.find((p) => p.id === newId)
+      if (profile) {
+        form.kind = profile.demandKind || form.kind
+        form.sourceChannel = profile.sourceChannel || form.sourceChannel
+        form.sourceSurface = profile.sourceSurface || ''
+      }
+    }
+  },
+)
 
 const formValid = computed(() => {
   if (!form.kind || !form.captureMode) return false

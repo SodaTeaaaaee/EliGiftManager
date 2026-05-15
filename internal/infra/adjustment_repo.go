@@ -37,6 +37,21 @@ func (r *fulfillmentAdjustmentRepository) ListByWave(waveID uint) ([]domain.Fulf
 	return out, nil
 }
 
+func (r *fulfillmentAdjustmentRepository) FindByID(id uint) (*domain.FulfillmentAdjustment, error) {
+	var p persistence.FulfillmentAdjustment
+	if err := r.db.First(&p, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return persistence.FulfillmentAdjustmentToDomain(&p), nil
+}
+
+func (r *fulfillmentAdjustmentRepository) Delete(id uint) error {
+	return r.db.Delete(&persistence.FulfillmentAdjustment{}, id).Error
+}
+
 func (r *fulfillmentAdjustmentRepository) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.FulfillmentAdjustment, error) {
 	var records []persistence.FulfillmentAdjustment
 	if err := r.db.Where("fulfillment_line_id = ?", fulfillmentLineID).Order("created_at DESC").Find(&records).Error; err != nil {

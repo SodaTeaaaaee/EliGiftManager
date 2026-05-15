@@ -61,6 +61,29 @@ func (m *mockAdjustmentRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]do
 	return out, nil
 }
 
+func (m *mockAdjustmentRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, r := range m.records {
+		if r.ID == id {
+			return &r, nil
+		}
+	}
+	return nil, nil
+}
+
+func (m *mockAdjustmentRepo) Delete(id uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i, r := range m.records {
+		if r.ID == id {
+			m.records = append(m.records[:i], m.records[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
 // ── mock FulfillmentLineRepository (adjustment tests) ──
 
 type mockFulfillRepoForAdjustment struct {

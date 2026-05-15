@@ -50,3 +50,21 @@ func (r *historyScopeRepository) FindByScopeTypeAndKey(scopeType string, scopeKe
 func (r *historyScopeRepository) UpdateHead(scopeID uint, headNodeID uint) error {
 	return r.db.Model(&persistence.HistoryScope{}).Where("id = ?", scopeID).Update("current_head_node_id", headNodeID).Error
 }
+
+func (r *historyScopeRepository) FindOrCreate(scopeType string, scopeKey string) (*domain.HistoryScope, error) {
+	existing, err := r.FindByScopeTypeAndKey(scopeType, scopeKey)
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return existing, nil
+	}
+	scope := &domain.HistoryScope{
+		ScopeType: scopeType,
+		ScopeKey:  scopeKey,
+	}
+	if err := r.Create(scope); err != nil {
+		return nil, err
+	}
+	return scope, nil
+}

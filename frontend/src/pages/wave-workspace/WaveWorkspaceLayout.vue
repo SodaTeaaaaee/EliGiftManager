@@ -16,8 +16,15 @@ const waveId = computed(() => {
 useUndoRedo({
   scopeType: 'wave',
   scopeKey: () => waveId.value,
+  onSuccess: (summary, action) => {
+    const label = action === 'undo' ? '撤销' : '重做'
+    message.success(`${label}：${summary}`)
+  },
+  onError: (err) => {
+    message.warning(err)
+  },
   onNotReady: () => {
-    message.info('撤销/重做功能开发中')
+    message.info('撤销/重做：后端未连接')
   },
 })
 </script>

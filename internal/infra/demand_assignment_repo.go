@@ -40,6 +40,11 @@ func (r *waveDemandAssignmentRepository) Create(assignment *domain.WaveDemandAss
 	return nil
 }
 
+func (r *waveDemandAssignmentRepository) DeleteByWaveAndDocument(waveID uint, demandDocumentID uint) error {
+	return r.db.Where("wave_id = ? AND demand_document_id = ?", waveID, demandDocumentID).
+		Delete(&persistence.WaveDemandAssignment{}).Error
+}
+
 func (r *waveDemandAssignmentRepository) ListByWave(waveID uint) ([]domain.WaveDemandAssignment, error) {
 	var ps []persistence.WaveDemandAssignment
 	if err := r.db.Where("wave_id = ?", waveID).Find(&ps).Error; err != nil {

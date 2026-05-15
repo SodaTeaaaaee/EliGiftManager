@@ -72,6 +72,7 @@ type AllocationPolicyRuleRepository interface {
 // WaveDemandAssignmentRepository defines persistence operations for wave-demand linkage.
 type WaveDemandAssignmentRepository interface {
 	Create(assignment *WaveDemandAssignment) error
+	DeleteByWaveAndDocument(waveID uint, demandDocumentID uint) error
 	ListByWave(waveID uint) ([]WaveDemandAssignment, error)
 	ListByDemandDocument(docID uint) ([]WaveDemandAssignment, error)
 	ListDemandDocumentsByWave(waveID uint) ([]DemandDocument, error)
@@ -130,6 +131,8 @@ type IntegrationProfileRepository interface {
 // FulfillmentAdjustmentRepository defines persistence operations for FulfillmentAdjustment.
 type FulfillmentAdjustmentRepository interface {
 	Create(adj *FulfillmentAdjustment) error
+	FindByID(id uint) (*FulfillmentAdjustment, error)
+	Delete(id uint) error
 	ListByWave(waveID uint) ([]FulfillmentAdjustment, error)
 	ListByFulfillmentLine(fulfillmentLineID uint) ([]FulfillmentAdjustment, error)
 }
@@ -158,6 +161,7 @@ type HistoryScopeRepository interface {
 	FindByID(id uint) (*HistoryScope, error)
 	FindByScopeTypeAndKey(scopeType string, scopeKey string) (*HistoryScope, error)
 	UpdateHead(scopeID uint, headNodeID uint) error
+	FindOrCreate(scopeType string, scopeKey string) (*HistoryScope, error)
 }
 
 // HistoryNodeRepository defines persistence operations for HistoryNode.

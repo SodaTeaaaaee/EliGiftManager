@@ -325,6 +325,19 @@ func (m *mockAssignmentRepo) ListByDemandDocument(docID uint) ([]domain.WaveDema
 	return out, nil
 }
 
+func (m *mockAssignmentRepo) DeleteByWaveAndDocument(waveID uint, demandDocumentID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	aa := m.assignments[waveID]
+	for i, a := range aa {
+		if a.DemandDocumentID == demandDocumentID {
+			m.assignments[waveID] = append(aa[:i], aa[i+1:]...)
+			return nil
+		}
+	}
+	return nil
+}
+
 func (m *mockAssignmentRepo) ListDemandDocumentsByWave(waveID uint) ([]domain.DemandDocument, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

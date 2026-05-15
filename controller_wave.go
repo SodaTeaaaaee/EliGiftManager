@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
@@ -12,15 +13,16 @@ import (
 
 // WaveController exposes wave-management Wails bindings.
 type WaveController struct {
-	waveUC         app.WaveUseCase
-	allocationUC   app.AllocationUseCase
-	fulfillRepo    domain.FulfillmentLineRepository
-	supplierRepo   domain.SupplierOrderRepository
-	assignmentRepo domain.WaveDemandAssignmentRepository
-	demandRepo     domain.DemandDocumentRepository
-	shipmentRepo   domain.ShipmentRepository
-	overviewProjUC app.WaveOverviewProjectionUseCase
-	undoRedoUC     app.UndoRedoUseCase
+	waveUC              app.WaveUseCase
+	allocationUC        app.AllocationUseCase
+	fulfillRepo         domain.FulfillmentLineRepository
+	supplierRepo        domain.SupplierOrderRepository
+	assignmentRepo      domain.WaveDemandAssignmentRepository
+	demandRepo          domain.DemandDocumentRepository
+	shipmentRepo        domain.ShipmentRepository
+	overviewProjUC      app.WaveOverviewProjectionUseCase
+	undoRedoUC          app.UndoRedoUseCase
+	historyRecordingSvc *app.HistoryRecordingService
 }
 
 func NewWaveController() *WaveController {
@@ -36,20 +38,22 @@ func NewWaveController() *WaveController {
 	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
+	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
 
 	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 
 	return &WaveController{
-		waveUC:         app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
-		allocationUC:   app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo),
-		fulfillRepo:    fulfillRepo,
-		supplierRepo:   supplierRepo,
-		assignmentRepo: assignmentRepo,
-		demandRepo:     demandRepo,
-		shipmentRepo:   shipmentRepo,
-		overviewProjUC: app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
-		undoRedoUC:     app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo),
+		waveUC:              app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
+		allocationUC:        app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo),
+		fulfillRepo:         fulfillRepo,
+		supplierRepo:        supplierRepo,
+		assignmentRepo:      assignmentRepo,
+		demandRepo:          demandRepo,
+		shipmentRepo:        shipmentRepo,
+		overviewProjUC:      app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
+		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gdb)),
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo),
 	}
 }
 
@@ -177,12 +181,35 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		CreatedAt:        now,
 		UpdatedAt:        now,
 	}
-	return c.assignmentRepo.Create(assignment)
+	if err := c.assignmentRepo.Create(assignment); err != nil {
+		return err
+	}
+
+	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         domain.CmdAssignDemand,
+		CommandSummary:      fmt.Sprintf("assign demand %d to wave %d", demandDocumentID, waveID),
+		PatchPayload:        fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
+		InversePatchPayload: fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
+	})
+	return nil
 }
 
 // GenerateParticipants generates WaveParticipantSnapshots from accepted demand lines.
 func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
-	return c.waveUC.GenerateParticipants(waveID)
+	count, err := c.waveUC.GenerateParticipants(waveID)
+	if err != nil {
+		return 0, err
+	}
+
+	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         domain.CmdGenerateParticipants,
+		CommandSummary:      fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
+		PatchPayload:        fmt.Sprintf(`{"op":"generate_participants","wave_id":%d}`, waveID),
+		InversePatchPayload: fmt.Sprintf(`{"op":"clear_participants","wave_id":%d}`, waveID),
+	})
+	return count, nil
 }
 
 // ApplyAllocationRules applies allocation policy rules to the given wave
@@ -192,6 +219,15 @@ func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLin
 	if err != nil {
 		return nil, err
 	}
+
+	_, _ = c.historyRecordingSvc.RecordNode(app.RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         domain.CmdApplyAllocationRules,
+		CommandSummary:      fmt.Sprintf("apply allocation rules for wave %d (%d lines)", waveID, len(lines)),
+		PatchPayload:        fmt.Sprintf(`{"op":"apply_allocation_rules","wave_id":%d}`, waveID),
+		InversePatchPayload: fmt.Sprintf(`{"op":"clear_allocation_lines","wave_id":%d}`, waveID),
+	})
+
 	result := make([]dto.FulfillmentLineDTO, len(lines))
 	for i := range lines {
 		result[i] = domainToFulfillmentLineDTO(&lines[i])

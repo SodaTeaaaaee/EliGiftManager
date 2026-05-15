@@ -151,6 +151,17 @@ const (
 	ShipmentStatusReturned  ShipmentStatus = "returned"
 )
 
+// History command kinds — user-intent operations only
+const (
+	CmdAssignDemand          = "assign_demand"
+	CmdGenerateParticipants  = "generate_participants"
+	CmdApplyAllocationRules  = "apply_allocation_rules"
+	CmdCreateRule            = "create_rule"
+	CmdUpdateRule            = "update_rule"
+	CmdDeleteRule            = "delete_rule"
+	CmdRecordAdjustment      = "record_adjustment"
+)
+
 // ProductMaster: ProductKind
 type ProductKind string
 
