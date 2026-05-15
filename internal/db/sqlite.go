@@ -81,6 +81,13 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 		return nil, fmt.Errorf("initialize SQLite database failed: auto migrate: %w", err)
 	}
 
+	// Partial unique index: at most one default binding per (profile, document_type).
+	if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_binding_one_default
+		ON integration_profile_template_bindings (integration_profile_id, document_type)
+		WHERE is_default = true`).Error; err != nil {
+		return nil, fmt.Errorf("initialize SQLite database failed: create idx_binding_one_default: %w", err)
+	}
+
 	return db, nil
 }
 

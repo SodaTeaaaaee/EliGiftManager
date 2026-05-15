@@ -104,3 +104,35 @@ func (r *supplierOrderRepository) DeleteDraftsByWave(waveID uint) error {
 	}
 	return nil
 }
+
+func (r *supplierOrderRepository) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		p := persistence.ToPersistenceSupplierOrder(order)
+		if err := tx.Create(p).Error; err != nil {
+			return err
+		}
+		*order = *persistence.FromPersistenceSupplierOrder(p)
+
+		for _, line := range lines {
+			line.SupplierOrderID = order.ID
+			pLine := persistence.ToPersistenceSupplierOrderLine(line)
+			if err := tx.Create(pLine).Error; err != nil {
+				return err
+			}
+			*line = *persistence.FromPersistenceSupplierOrderLine(pLine)
+		}
+
+		if pin != nil && pin.HistoryNodeID != 0 {
+			pPin := &persistence.HistoryPin{
+				HistoryNodeID: pin.HistoryNodeID,
+				PinKind:       pin.PinKind,
+				RefType:       pin.RefType,
+				RefID:         order.ID,
+			}
+			if err := tx.Create(pPin).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}

@@ -52,6 +52,9 @@ type SupplierOrderRepository interface {
 	ListLinesByOrder(orderID uint) ([]SupplierOrderLine, error)
 	FindLineByID(id uint) (*SupplierOrderLine, error)
 	DeleteLinesByOrder(orderID uint) error
+
+	// AtomicCreateSupplierOrder creates order + lines + optional basis pin in one transaction.
+	AtomicCreateSupplierOrder(order *SupplierOrder, lines []*SupplierOrderLine, pin *BasisPinParam) error
 }
 
 // AllocationPolicyRuleRepository defines persistence operations for AllocationPolicyRule.
@@ -79,8 +82,8 @@ type ShipmentRepository interface {
 	CreateLine(line *ShipmentLine) error
 	ListLinesByShipment(shipmentID uint) ([]ShipmentLine, error)
 
-	// AtomicCreateShipment creates a shipment and its lines atomically.
-	AtomicCreateShipment(shipment *Shipment, lines []*ShipmentLine) error
+	// AtomicCreateShipment creates a shipment, its lines, and optional basis pin atomically.
+	AtomicCreateShipment(shipment *Shipment, lines []*ShipmentLine, pin *BasisPinParam) error
 }
 
 // ChannelSyncRepository defines persistence operations for ChannelSyncJob and ChannelSyncItem.
@@ -94,8 +97,8 @@ type ChannelSyncRepository interface {
 	SaveItem(item *ChannelSyncItem) error
 	ListItemsByJob(jobID uint) ([]ChannelSyncItem, error)
 
-	// AtomicCreateChannelSync creates a job and its items atomically.
-	AtomicCreateChannelSync(job *ChannelSyncJob, items []*ChannelSyncItem) error
+	// AtomicCreateChannelSync creates a job, its items, and optional basis pin atomically.
+	AtomicCreateChannelSync(job *ChannelSyncJob, items []*ChannelSyncItem, pin *BasisPinParam) error
 }
 
 // ChannelClosureDecisionRepository defines persistence operations for channel closure decision records.

@@ -62,11 +62,10 @@ export interface FulfillmentLine {
 
 /** Kinds of manual adjustments to fulfillment lines within a wave. */
 export type AdjustmentKind =
-  | "add"
-  | "reduce"
-  | "replace"
-  | "compensation"
-  | "remove";
+  | "add_send"
+  | "reduce_send"
+  | "remove"
+  | "supplement";
 
 /**
  * An explicit adjustment made against a fulfillment line during wave review.
@@ -76,14 +75,12 @@ export interface FulfillmentAdjustment {
   waveId: number;
   fulfillmentLineId: number | null;
   waveParticipantSnapshotId: number | null;
-  fromProductId: number | null;
-  toProductId: number | null;
   adjustmentKind: AdjustmentKind;
   quantityDelta: number;
   reasonCode: string | null;
   note: string;
-  createdBy: string;
-  extraData: string | null;
+  operatorId: string;
+  evidenceRef: string | null;
   createdAt: string;
   updatedAt: string;
 }

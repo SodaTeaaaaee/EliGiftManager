@@ -89,11 +89,15 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 
 	// Resolve basis stamp before persisting
 	var basisNodeID, basisHash string
+	var pinNodeID uint
 	if uc.basisStamp != nil {
 		var err error
 		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(input.WaveID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve basis for channel sync job: %w", err)
+		}
+		if basisNodeID != "" {
+			fmt.Sscanf(basisNodeID, "%d", &pinNodeID)
 		}
 	}
 
@@ -124,15 +128,17 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 		}
 	}
 
-	if err := uc.channelSyncRepo.AtomicCreateChannelSync(job, items); err != nil {
-		return nil, nil, err
+	var pin *domain.BasisPinParam
+	if pinNodeID != 0 {
+		pin = &domain.BasisPinParam{
+			HistoryNodeID: pinNodeID,
+			PinKind:       "channel_sync_basis",
+			RefType:       "channel_sync_job",
+		}
 	}
 
-	// Create basis pin after persistence (job.ID is now set)
-	if uc.basisStamp != nil && basisNodeID != "" {
-		if err := uc.basisStamp.CreatePin(basisNodeID, "channel_sync_basis", "channel_sync_job", job.ID); err != nil {
-			return nil, nil, fmt.Errorf("create basis pin for channel sync job: %w", err)
-		}
+	if err := uc.channelSyncRepo.AtomicCreateChannelSync(job, items, pin); err != nil {
+		return nil, nil, err
 	}
 
 	domainItems := make([]domain.ChannelSyncItem, len(items))

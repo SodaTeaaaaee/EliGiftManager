@@ -34,7 +34,7 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 
 	// Validate adjustment kind
 	switch input.AdjustmentKind {
-	case "add_send", "reduce_send", "replace", "remove", "supplement":
+	case "add_send", "reduce_send", "remove", "supplement":
 		// valid
 	default:
 		return nil, fmt.Errorf("invalid adjustment kind: %q", input.AdjustmentKind)
@@ -63,9 +63,9 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		}
 
 	case "participant":
-		// add_send/reduce_send/replace/remove require fulfillment_line target
+		// add_send/reduce_send/remove require fulfillment_line target
 		switch input.AdjustmentKind {
-		case "add_send", "reduce_send", "replace", "remove":
+		case "add_send", "reduce_send", "remove":
 			return nil, fmt.Errorf("adjustment kind %q requires target_kind \"fulfillment_line\"", input.AdjustmentKind)
 		}
 		if input.WaveParticipantSnapshotID == nil || *input.WaveParticipantSnapshotID == 0 {

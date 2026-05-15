@@ -423,6 +423,21 @@ func (m *mockSupplierRepo) DeleteDraftsByWave(waveID uint) error {
 	return nil
 }
 
+func (m *mockSupplierRepo) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, _ *domain.BasisPinParam) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	orderID := m.next()
+	order.ID = orderID
+	m.orders[orderID] = order
+	for _, line := range lines {
+		lineID := m.next()
+		line.ID = lineID
+		line.SupplierOrderID = orderID
+		m.orderLines[orderID] = append(m.orderLines[orderID], line)
+	}
+	return nil
+}
+
 // ── Tests ──
 
 func TestImportDemand(t *testing.T) {

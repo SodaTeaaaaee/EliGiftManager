@@ -84,7 +84,7 @@ func (m *mockShipmentRepo) CreateLine(line *domain.ShipmentLine) error {
 	return nil
 }
 
-func (m *mockShipmentRepo) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine) error {
+func (m *mockShipmentRepo) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine, _ *domain.BasisPinParam) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -429,6 +429,9 @@ func (m *mockSupplierRepoForShipment) ListLinesByOrder(orderID uint) ([]domain.S
 	panic("not implemented")
 }
 func (m *mockSupplierRepoForShipment) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
+func (m *mockSupplierRepoForShipment) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
+	panic("not implemented")
+}
 
 // ── mock fulfill repo for shipment validation tests ──
 

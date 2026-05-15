@@ -109,7 +109,7 @@ func (r *channelSyncRepository) CreateItem(item *domain.ChannelSyncItem) error {
 	return nil
 }
 
-func (r *channelSyncRepository) AtomicCreateChannelSync(job *domain.ChannelSyncJob, items []*domain.ChannelSyncItem) error {
+func (r *channelSyncRepository) AtomicCreateChannelSync(job *domain.ChannelSyncJob, items []*domain.ChannelSyncItem, pin *domain.BasisPinParam) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		pJob := persistence.ToPersistenceChannelSyncJob(job)
 		if err := tx.Create(pJob).Error; err != nil {
@@ -123,6 +123,17 @@ func (r *channelSyncRepository) AtomicCreateChannelSync(job *domain.ChannelSyncJ
 				return err
 			}
 			*item = *persistence.FromPersistenceChannelSyncItem(pItem)
+		}
+		if pin != nil && pin.HistoryNodeID != 0 {
+			pPin := &persistence.HistoryPin{
+				HistoryNodeID: pin.HistoryNodeID,
+				PinKind:       pin.PinKind,
+				RefType:       pin.RefType,
+				RefID:         job.ID,
+			}
+			if err := tx.Create(pPin).Error; err != nil {
+				return err
+			}
 		}
 		return nil
 	})

@@ -67,7 +67,7 @@ func (r *shipmentRepository) CreateLine(line *domain.ShipmentLine) error {
 	return nil
 }
 
-func (r *shipmentRepository) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine) error {
+func (r *shipmentRepository) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine, pin *domain.BasisPinParam) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		pShip := persistence.ToPersistenceShipment(shipment)
 		if err := tx.Create(pShip).Error; err != nil {
@@ -81,6 +81,17 @@ func (r *shipmentRepository) AtomicCreateShipment(shipment *domain.Shipment, lin
 				return err
 			}
 			*line = *persistence.FromPersistenceShipmentLine(pLine)
+		}
+		if pin != nil && pin.HistoryNodeID != 0 {
+			pPin := &persistence.HistoryPin{
+				HistoryNodeID: pin.HistoryNodeID,
+				PinKind:       pin.PinKind,
+				RefType:       pin.RefType,
+				RefID:         shipment.ID,
+			}
+			if err := tx.Create(pPin).Error; err != nil {
+				return err
+			}
 		}
 		return nil
 	})

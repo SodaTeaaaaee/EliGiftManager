@@ -87,15 +87,13 @@ export namespace dto {
 	    trackingNo: string;
 	    status: string;
 	    shippedAt: string;
-	    basisHistoryNodeId: string;
-	    basisProjectionHash: string;
 	    basisPayloadSnapshot: string;
 	    lines: CreateShipmentLineInput[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CreateShipmentInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.supplierOrderId = source["supplierOrderId"];
@@ -107,8 +105,6 @@ export namespace dto {
 	        this.trackingNo = source["trackingNo"];
 	        this.status = source["status"];
 	        this.shippedAt = source["shippedAt"];
-	        this.basisHistoryNodeId = source["basisHistoryNodeId"];
-	        this.basisProjectionHash = source["basisProjectionHash"];
 	        this.basisPayloadSnapshot = source["basisPayloadSnapshot"];
 	        this.lines = this.convertValues(source["lines"], CreateShipmentLineInput);
 	    }

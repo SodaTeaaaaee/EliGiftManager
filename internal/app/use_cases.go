@@ -187,11 +187,15 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder
 
 	// Resolve basis stamp before persisting
 	var basisNodeID, basisHash string
+	var pinNodeID uint
 	if uc.basisStamp != nil {
 		var err error
 		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(waveID)
 		if err != nil {
 			return nil, fmt.Errorf("resolve basis for supplier order: %w", err)
+		}
+		if basisNodeID != "" {
+			fmt.Sscanf(basisNodeID, "%d", &pinNodeID)
 		}
 	}
 
@@ -211,30 +215,30 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder
 		CreatedAt:           now,
 		UpdatedAt:           now,
 	}
-	if err := uc.supplierRepo.Create(order); err != nil {
-		return nil, err
-	}
 
-	// Create pin after persistence (order.ID is now set)
-	if uc.basisStamp != nil && basisNodeID != "" {
-		if err := uc.basisStamp.CreatePin(basisNodeID, "supplier_order_basis", "supplier_order", order.ID); err != nil {
-			return nil, fmt.Errorf("create basis pin for supplier order: %w", err)
-		}
-	}
-
+	lines := make([]*domain.SupplierOrderLine, len(fulfillLines))
 	for i := range fulfillLines {
 		fl := &fulfillLines[i]
-		line := &domain.SupplierOrderLine{
-			SupplierOrderID:   order.ID,
+		lines[i] = &domain.SupplierOrderLine{
 			FulfillmentLineID: fl.ID,
 			SubmittedQuantity: fl.Quantity,
 			Status:            "draft",
 			CreatedAt:         now,
 			UpdatedAt:         now,
 		}
-		if err := uc.supplierRepo.CreateLine(line); err != nil {
-			return nil, err
+	}
+
+	var pin *domain.BasisPinParam
+	if pinNodeID != 0 {
+		pin = &domain.BasisPinParam{
+			HistoryNodeID: pinNodeID,
+			PinKind:       "supplier_order_basis",
+			RefType:       "supplier_order",
 		}
+	}
+
+	if err := uc.supplierRepo.AtomicCreateSupplierOrder(order, lines, pin); err != nil {
+		return nil, err
 	}
 
 	return order, nil

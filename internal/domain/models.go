@@ -400,3 +400,11 @@ type HistoryPin struct {
 	RefID         uint
 	CreatedAt     string
 }
+
+// BasisPinParam carries the parameters needed to create a HistoryPin
+// inside an atomic transaction alongside the parent object.
+type BasisPinParam struct {
+	HistoryNodeID uint
+	PinKind       string
+	RefType       string
+}

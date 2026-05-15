@@ -10,8 +10,6 @@ type CreateShipmentInput struct {
 	TrackingNo           string                    `json:"trackingNo"`
 	Status               string                    `json:"status"`
 	ShippedAt            string                    `json:"shippedAt"`
-	BasisHistoryNodeID   string                    `json:"basisHistoryNodeId"`
-	BasisProjectionHash  string                    `json:"basisProjectionHash"`
 	BasisPayloadSnapshot string                    `json:"basisPayloadSnapshot"`
 	Lines                []CreateShipmentLineInput `json:"lines"`
 }

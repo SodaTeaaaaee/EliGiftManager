@@ -65,13 +65,16 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 	}
 
 	// 4. Resolve basis stamp from the supplier order's wave
-	basisNodeID := input.BasisHistoryNodeID
-	basisHash := input.BasisProjectionHash
-	if uc.basisStamp != nil && basisNodeID == "" {
+	var basisNodeID, basisHash string
+	var pinNodeID uint
+	if uc.basisStamp != nil {
 		var err error
 		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(supplierOrder.WaveID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve basis for shipment: %w", err)
+		}
+		if basisNodeID != "" {
+			fmt.Sscanf(basisNodeID, "%d", &pinNodeID)
 		}
 	}
 
@@ -104,16 +107,17 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 		}
 	}
 
-	// 6. Atomic persistence
-	if err := uc.shipmentRepo.AtomicCreateShipment(shipment, lines); err != nil {
-		return nil, nil, err
-	}
-
-	// 7. Create basis pin after persistence
-	if uc.basisStamp != nil && basisNodeID != "" {
-		if err := uc.basisStamp.CreatePin(basisNodeID, "shipment_basis", "shipment", shipment.ID); err != nil {
-			return nil, nil, fmt.Errorf("create basis pin for shipment: %w", err)
+	// 6. Atomic persistence (shipment + lines + basis pin)
+	var pin *domain.BasisPinParam
+	if pinNodeID != 0 {
+		pin = &domain.BasisPinParam{
+			HistoryNodeID: pinNodeID,
+			PinKind:       "shipment_basis",
+			RefType:       "shipment",
 		}
+	}
+	if err := uc.shipmentRepo.AtomicCreateShipment(shipment, lines, pin); err != nil {
+		return nil, nil, err
 	}
 
 	// 8. Return domain objects

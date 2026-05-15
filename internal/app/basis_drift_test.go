@@ -54,6 +54,9 @@ func (m *mockSupplierRepoForDrift) FindLineByID(id uint) (*domain.SupplierOrderL
 	panic("not implemented")
 }
 func (m *mockSupplierRepoForDrift) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
+func (m *mockSupplierRepoForDrift) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
+	panic("not implemented")
+}
 
 // ── test setup ──
 

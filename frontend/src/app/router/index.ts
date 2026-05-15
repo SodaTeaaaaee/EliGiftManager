@@ -57,12 +57,10 @@ const router = createRouter({
             },
           ],
         },
-        // Legacy standalone wave overview (kept — sidebar links here)
+        // Legacy wave-overview route — redirect to dashboard (consolidated into workspace wizard)
         {
           path: "wave-overview",
-          name: "wave-overview",
-          component: () =>
-            import("@/pages/wave-overview/WaveOverviewPage.vue"),
+          redirect: "/dashboard",
         },
         // TODO(V2): 完整实现 — 添加 AllocationReview, ExportPage 路由
       ],

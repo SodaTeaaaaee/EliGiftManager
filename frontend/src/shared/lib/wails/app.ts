@@ -171,8 +171,6 @@ export async function createShipment(input: {
   trackingNo: string
   status: string
   shippedAt: string
-  basisHistoryNodeId: string
-  basisProjectionHash: string
   basisPayloadSnapshot: string
   lines: Array<{
     supplierOrderLineId: number

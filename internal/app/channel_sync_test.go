@@ -91,7 +91,7 @@ func (m *mockChannelSyncRepo) CreateItem(item *domain.ChannelSyncItem) error {
 	return nil
 }
 
-func (m *mockChannelSyncRepo) AtomicCreateChannelSync(job *domain.ChannelSyncJob, items []*domain.ChannelSyncItem) error {
+func (m *mockChannelSyncRepo) AtomicCreateChannelSync(job *domain.ChannelSyncJob, items []*domain.ChannelSyncItem, _ *domain.BasisPinParam) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -212,7 +212,7 @@ func (m *mockShipmentRepoForSync) ListByWave(waveID uint) ([]domain.Shipment, er
 	return out, nil
 }
 func (m *mockShipmentRepoForSync) CreateLine(line *domain.ShipmentLine) error { panic("not implemented") }
-func (m *mockShipmentRepoForSync) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine) error {
+func (m *mockShipmentRepoForSync) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine, _ *domain.BasisPinParam) error {
 	panic("not implemented")
 }
 
@@ -255,6 +255,9 @@ func (m *mockSupplierRepoForSync) FindLineByID(id uint) (*domain.SupplierOrderLi
 	panic("not implemented")
 }
 func (m *mockSupplierRepoForSync) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
+func (m *mockSupplierRepoForSync) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
+	panic("not implemented")
+}
 
 // ── mock fulfill repo ──
 
