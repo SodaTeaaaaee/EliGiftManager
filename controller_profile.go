@@ -18,8 +18,9 @@ func NewProfileController() *ProfileController {
 	demandRepo := infra.NewDemandRepository(gdb)
 	channelSyncRepo := infra.NewChannelSyncRepository(gdb)
 	templateBindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
 	return &ProfileController{
-		uc: app.NewProfileManagementUseCase(profileRepo, demandRepo, channelSyncRepo, templateBindingRepo),
+		uc: app.NewProfileManagementUseCase(profileRepo, demandRepo, channelSyncRepo, templateBindingRepo, closureDecisionRepo),
 	}
 }
 

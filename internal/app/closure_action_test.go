@@ -69,6 +69,18 @@ func (m *mockClosureDecisionRepo) ListByWave(waveID uint) ([]domain.ChannelClosu
 	return out, nil
 }
 
+func (m *mockClosureDecisionRepo) CountByProfileID(profileID uint) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var count int64
+	for _, r := range m.records {
+		if r.IntegrationProfileID == profileID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 func setupPendingJob(cs *mockChannelSyncRepo) (jobID uint, item1ID uint, item2ID uint) {
 	job := &domain.ChannelSyncJob{
 		WaveID:               1,

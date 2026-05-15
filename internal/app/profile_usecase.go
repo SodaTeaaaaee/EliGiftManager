@@ -14,6 +14,7 @@ type profileManagementUseCase struct {
 	demandRepo          domain.DemandDocumentRepository
 	channelSyncRepo     domain.ChannelSyncRepository
 	templateBindingRepo domain.ProfileTemplateBindingRepository
+	closureDecisionRepo domain.ChannelClosureDecisionRepository
 }
 
 func NewProfileManagementUseCase(
@@ -21,12 +22,14 @@ func NewProfileManagementUseCase(
 	demandRepo domain.DemandDocumentRepository,
 	channelSyncRepo domain.ChannelSyncRepository,
 	templateBindingRepo domain.ProfileTemplateBindingRepository,
+	closureDecisionRepo domain.ChannelClosureDecisionRepository,
 ) ProfileManagementUseCase {
 	return &profileManagementUseCase{
 		repo:                repo,
 		demandRepo:          demandRepo,
 		channelSyncRepo:     channelSyncRepo,
 		templateBindingRepo: templateBindingRepo,
+		closureDecisionRepo: closureDecisionRepo,
 	}
 }
 
@@ -98,11 +101,22 @@ func validateProfileEnums(input dto.CreateProfileInput) error {
 		return fmt.Errorf("invalid entitlement_authority_mode: %q", input.EntitlementAuthorityMode)
 	}
 
-	// Cross-field validation: manual_confirmation requires manual closure to be allowed
-	if input.TrackingSyncMode == "manual_confirmation" && !input.AllowsManualClosure {
-		return fmt.Errorf("tracking_sync_mode=manual_confirmation requires allows_manual_closure=true")
-	}
+	return nil
+}
 
+// validateExecutionReadiness checks that a profile's connector/mode configuration
+// is sufficient for runtime execution ("write-means-executable" invariant).
+func validateExecutionReadiness(input dto.CreateProfileInput) error {
+	switch input.TrackingSyncMode {
+	case "manual_confirmation":
+		if !input.AllowsManualClosure {
+			return fmt.Errorf("tracking_sync_mode=manual_confirmation requires allows_manual_closure=true")
+		}
+	case "api_push", "document_export":
+		if input.ConnectorKey == "" {
+			return fmt.Errorf("tracking_sync_mode=%q requires a non-empty connector_key", input.TrackingSyncMode)
+		}
+	}
 	return nil
 }
 
@@ -112,6 +126,10 @@ func (uc *profileManagementUseCase) CreateProfile(input dto.CreateProfileInput) 
 	}
 
 	if err := validateProfileEnums(input); err != nil {
+		return nil, err
+	}
+
+	if err := validateExecutionReadiness(input); err != nil {
 		return nil, err
 	}
 
@@ -163,8 +181,12 @@ func (uc *profileManagementUseCase) UpdateProfile(input dto.UpdateProfileInput) 
 		TrackingSyncMode:          input.TrackingSyncMode,
 		ClosurePolicy:             input.ClosurePolicy,
 		AllowsManualClosure:       input.AllowsManualClosure,
+		ConnectorKey:              input.ConnectorKey,
 	}
 	if err := validateProfileEnums(enumInput); err != nil {
+		return nil, err
+	}
+	if err := validateExecutionReadiness(enumInput); err != nil {
 		return nil, err
 	}
 
@@ -222,6 +244,14 @@ func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
 		return fmt.Errorf("cannot delete profile: referenced by template bindings")
 	}
 
+	closureCount, err := uc.closureDecisionRepo.CountByProfileID(id)
+	if err != nil {
+		return fmt.Errorf("failed to check closure decision references: %w", err)
+	}
+	if closureCount > 0 {
+		return fmt.Errorf("cannot delete profile: referenced by closure decisions")
+	}
+
 	return uc.repo.Delete(id)
 }
 
@@ -275,6 +305,7 @@ func (uc *profileManagementUseCase) SeedDefaultProfiles() ([]dto.IntegrationProf
 			TrackingSyncMode:          "document_export",
 			ClosurePolicy:             "close_after_sync",
 			AllowsManualClosure:       false,
+			ConnectorKey:              "document_export_default",
 		},
 	}
 

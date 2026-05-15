@@ -59,3 +59,11 @@ func (r *closureDecisionRepository) ListByWave(waveID uint) ([]domain.ChannelClo
 	}
 	return result, nil
 }
+
+func (r *closureDecisionRepository) CountByProfileID(profileID uint) (int64, error) {
+	var count int64
+	if err := r.db.Model(&persistence.ChannelClosureDecisionRecord{}).Where("integration_profile_id = ?", profileID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}

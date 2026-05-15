@@ -114,6 +114,7 @@ type ChannelClosureDecisionRepository interface {
 	AtomicCreate(records []*ChannelClosureDecisionRecord) error
 	ListByFulfillmentLine(fulfillmentLineID uint) ([]ChannelClosureDecisionRecord, error)
 	ListByWave(waveID uint) ([]ChannelClosureDecisionRecord, error)
+	CountByProfileID(profileID uint) (int64, error)
 }
 
 // IntegrationProfileRepository defines persistence operations for IntegrationProfile.

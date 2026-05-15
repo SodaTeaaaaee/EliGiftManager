@@ -27,15 +27,21 @@
     <!-- Create / Edit Drawer -->
     <n-drawer v-model:show="drawerVisible" :width="520" placement="right">
       <n-drawer-content :title="editingId ? '编辑 Profile' : '创建 Profile'">
-        <n-form label-placement="left" label-width="160" :model="formData">
-          <n-form-item label="Profile Key" required>
-            <n-input v-model:value="formData.profileKey" placeholder="e.g. bilibili_live" />
+        <n-form
+          ref="formRef"
+          label-placement="left"
+          label-width="160"
+          :model="formData"
+          :rules="formRules"
+        >
+          <n-form-item label="Profile Key" path="profileKey">
+            <n-input v-model:value="formData.profileKey" placeholder="bilibili_live_membership" />
           </n-form-item>
-          <n-form-item label="Source Channel">
-            <n-input v-model:value="formData.sourceChannel" placeholder="e.g. taobao" />
+          <n-form-item label="Source Channel" path="sourceChannel">
+            <n-input v-model:value="formData.sourceChannel" placeholder="bilibili / douyin / shopee" />
           </n-form-item>
-          <n-form-item label="Source Surface">
-            <n-input v-model:value="formData.sourceSurface" placeholder="e.g. storefront" />
+          <n-form-item label="Source Surface" path="sourceSurface">
+            <n-input v-model:value="formData.sourceSurface" placeholder="live_room / storefront / mini_program" />
           </n-form-item>
           <n-form-item label="Demand Kind">
             <n-select
@@ -79,7 +85,7 @@
               placeholder="选择"
             />
           </n-form-item>
-          <n-form-item label="Tracking Sync Mode">
+          <n-form-item label="Tracking Sync Mode" path="trackingSyncMode">
             <n-select
               v-model:value="formData.trackingSyncMode"
               :options="trackingSyncModeOptions"
@@ -93,14 +99,31 @@
               placeholder="选择"
             />
           </n-form-item>
-          <n-form-item label="Connector Key">
-            <n-input v-model:value="formData.connectorKey" placeholder="e.g. taobao_v2" />
+          <n-form-item label="Connector Key" path="connectorKey">
+            <n-input
+              v-model:value="formData.connectorKey"
+              placeholder="shopee_sg_v2 / bilibili_api_prod"
+            />
           </n-form-item>
-          <n-form-item label="Supported Locales">
-            <n-input v-model:value="formData.supportedLocales" placeholder="e.g. zh-CN,en" />
+          <n-alert
+            v-if="connectorKeyRequired"
+            type="warning"
+            style="margin-bottom: 12px"
+          >
+            当前同步模式 ({{ formData.trackingSyncMode }}) 需要配置 Connector Key 以建立外部系统连接
+          </n-alert>
+          <n-alert
+            v-if="formData.trackingSyncMode === 'manual_confirmation'"
+            type="info"
+            style="margin-bottom: 12px"
+          >
+            手动确认模式下，建议开启下方「Manual Closure」开关以允许人工关单
+          </n-alert>
+          <n-form-item label="Supported Locales" path="supportedLocales">
+            <n-input v-model:value="formData.supportedLocales" placeholder="zh-CN,en,ja" />
           </n-form-item>
-          <n-form-item label="Default Locale">
-            <n-input v-model:value="formData.defaultLocale" placeholder="e.g. zh-CN" />
+          <n-form-item label="Default Locale" path="defaultLocale">
+            <n-input v-model:value="formData.defaultLocale" placeholder="zh-CN" />
           </n-form-item>
 
           <n-divider />
@@ -128,7 +151,7 @@
             <n-input
               v-model:value="formData.extraData"
               type="textarea"
-              placeholder="{}"
+              placeholder='{"webhook_url": "https://...", "timeout_ms": 5000}'
               :rows="3"
             />
           </n-form-item>
@@ -148,7 +171,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, h } from "vue";
+import { ref, reactive, computed, watch, onMounted, h } from "vue";
 import {
   NButton,
   NDataTable,
@@ -164,7 +187,7 @@ import {
   NDivider,
   useDialog,
 } from "naive-ui";
-import type { DataTableColumns } from "naive-ui";
+import type { DataTableColumns, FormInst, FormRules } from "naive-ui";
 import {
   listProfiles,
   createProfile,
@@ -235,6 +258,31 @@ const drawerVisible = ref(false);
 const editingId = ref<number | null>(null);
 const submitting = ref(false);
 const dialog = useDialog();
+const formRef = ref<FormInst | null>(null);
+
+// ── Computed: dynamic validation ──
+
+const connectorKeyRequired = computed(() =>
+  formData.trackingSyncMode === "api_push" ||
+  formData.trackingSyncMode === "document_export"
+);
+
+const formRules = computed<FormRules>(() => ({
+  profileKey: [
+    { required: true, message: "Profile Key 不能为空", trigger: "blur" },
+  ],
+  connectorKey: connectorKeyRequired.value
+    ? [{ required: true, message: "当前同步模式需要填写 Connector Key", trigger: "blur" }]
+    : [],
+}));
+
+// Clear stale validation state when trackingSyncMode changes
+watch(
+  () => formData.trackingSyncMode,
+  () => {
+    formRef.value?.restoreValidation();
+  }
+);
 
 // ── Form ──
 
@@ -346,8 +394,9 @@ function openEditDrawer(row: dto.IntegrationProfileDTO) {
 }
 
 async function submitForm() {
-  if (!formData.profileKey) {
-    error.value = "Profile Key 不能为空";
+  try {
+    await formRef.value?.validate();
+  } catch {
     return;
   }
   submitting.value = true;

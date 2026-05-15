@@ -39,9 +39,12 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 		}
 	}
 
-	// Derive effective Kind/SourceChannel/SourceSurface: when an integration
-	// profile is selected the backend is the authority — profile values override
-	// whatever the frontend sent.
+	// Silent override — backend is the final arbiter for profile-driven fields.
+	// When an integration profile is selected, DemandKind / SourceChannel /
+	// SourceSurface are dictated by the profile configuration; any values the
+	// frontend submitted for these fields are intentionally discarded. This
+	// ensures data consistency regardless of frontend state or user edits.
+	// Frontend validation is purely UX guidance and does NOT constitute authority.
 	effectiveKind := input.Kind
 	effectiveSourceChannel := input.SourceChannel
 	effectiveSourceSurface := input.SourceSurface
