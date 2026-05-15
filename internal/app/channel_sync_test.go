@@ -139,6 +139,18 @@ func (m *mockChannelSyncRepo) ListItemsByJob(jobID uint) ([]domain.ChannelSyncIt
 	return out, nil
 }
 
+func (m *mockChannelSyncRepo) CountJobsByProfileID(profileID uint) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var count int64
+	for _, j := range m.jobs {
+		if j.IntegrationProfileID == profileID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // ── mock shipment repo ──
 
 type mockShipmentRepoForSync struct {

@@ -16,8 +16,10 @@ func NewProfileController() *ProfileController {
 	gdb := database.GetDB()
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	demandRepo := infra.NewDemandRepository(gdb)
+	channelSyncRepo := infra.NewChannelSyncRepository(gdb)
+	templateBindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
 	return &ProfileController{
-		uc: app.NewProfileManagementUseCase(profileRepo, demandRepo),
+		uc: app.NewProfileManagementUseCase(profileRepo, demandRepo, channelSyncRepo, templateBindingRepo),
 	}
 }
 

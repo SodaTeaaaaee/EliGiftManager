@@ -91,11 +91,20 @@ func (uc *productUseCase) UpdateProductMaster(input dto.UpdateProductMasterInput
 		return nil, err
 	}
 
+	// Default to "other" if empty; validate otherwise
+	productKind := input.ProductKind
+	if productKind == "" {
+		productKind = "other"
+	}
+	if !validProductKinds[productKind] {
+		return nil, fmt.Errorf("invalid product_kind: %q", productKind)
+	}
+
 	master.SupplierPlatform = input.SupplierPlatform
 	master.FactorySKU = input.FactorySKU
 	master.SupplierProductRef = input.SupplierProductRef
 	master.Name = input.Name
-	master.ProductKind = domain.ProductKind(input.ProductKind)
+	master.ProductKind = domain.ProductKind(productKind)
 	master.Archived = input.Archived
 
 	if err := uc.masterRepo.Update(master); err != nil {

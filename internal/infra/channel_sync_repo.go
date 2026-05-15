@@ -150,3 +150,11 @@ func (r *channelSyncRepository) ListItemsByJob(jobID uint) ([]domain.ChannelSync
 	}
 	return result, nil
 }
+
+func (r *channelSyncRepository) CountJobsByProfileID(profileID uint) (int64, error) {
+	var count int64
+	if err := r.db.Model(&persistence.ChannelSyncJob{}).Where("integration_profile_id = ?", profileID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}

@@ -10,12 +10,24 @@ import (
 // ---- ProfileManagementUseCase ----
 
 type profileManagementUseCase struct {
-	repo       domain.IntegrationProfileRepository
-	demandRepo domain.DemandDocumentRepository
+	repo                domain.IntegrationProfileRepository
+	demandRepo          domain.DemandDocumentRepository
+	channelSyncRepo     domain.ChannelSyncRepository
+	templateBindingRepo domain.ProfileTemplateBindingRepository
 }
 
-func NewProfileManagementUseCase(repo domain.IntegrationProfileRepository, demandRepo domain.DemandDocumentRepository) ProfileManagementUseCase {
-	return &profileManagementUseCase{repo: repo, demandRepo: demandRepo}
+func NewProfileManagementUseCase(
+	repo domain.IntegrationProfileRepository,
+	demandRepo domain.DemandDocumentRepository,
+	channelSyncRepo domain.ChannelSyncRepository,
+	templateBindingRepo domain.ProfileTemplateBindingRepository,
+) ProfileManagementUseCase {
+	return &profileManagementUseCase{
+		repo:                repo,
+		demandRepo:          demandRepo,
+		channelSyncRepo:     channelSyncRepo,
+		templateBindingRepo: templateBindingRepo,
+	}
 }
 
 // validateProfileEnums checks that all non-empty strategy enum fields contain valid values.
@@ -85,6 +97,12 @@ func validateProfileEnums(input dto.CreateProfileInput) error {
 	if input.EntitlementAuthorityMode != "" && !validEntitlementAuthorityMode[input.EntitlementAuthorityMode] {
 		return fmt.Errorf("invalid entitlement_authority_mode: %q", input.EntitlementAuthorityMode)
 	}
+
+	// Cross-field validation: manual_confirmation requires manual closure to be allowed
+	if input.TrackingSyncMode == "manual_confirmation" && !input.AllowsManualClosure {
+		return fmt.Errorf("tracking_sync_mode=manual_confirmation requires allows_manual_closure=true")
+	}
+
 	return nil
 }
 
@@ -144,6 +162,7 @@ func (uc *profileManagementUseCase) UpdateProfile(input dto.UpdateProfileInput) 
 		ReferenceStrategy:         input.ReferenceStrategy,
 		TrackingSyncMode:          input.TrackingSyncMode,
 		ClosurePolicy:             input.ClosurePolicy,
+		AllowsManualClosure:       input.AllowsManualClosure,
 	}
 	if err := validateProfileEnums(enumInput); err != nil {
 		return nil, err
@@ -186,6 +205,23 @@ func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
 	if count > 0 {
 		return fmt.Errorf("cannot delete profile: %d demand documents still reference it", count)
 	}
+
+	syncCount, err := uc.channelSyncRepo.CountJobsByProfileID(id)
+	if err != nil {
+		return fmt.Errorf("failed to check channel sync references: %w", err)
+	}
+	if syncCount > 0 {
+		return fmt.Errorf("cannot delete profile: referenced by channel sync jobs")
+	}
+
+	bindingCount, err := uc.templateBindingRepo.CountByProfileID(id)
+	if err != nil {
+		return fmt.Errorf("failed to check template binding references: %w", err)
+	}
+	if bindingCount > 0 {
+		return fmt.Errorf("cannot delete profile: referenced by template bindings")
+	}
+
 	return uc.repo.Delete(id)
 }
 

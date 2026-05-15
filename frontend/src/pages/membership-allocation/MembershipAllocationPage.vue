@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from 'vue'
 import { useRoute } from 'vue-router'
-import { NButton, NPopconfirm, NTag, useMessage } from 'naive-ui'
+import { NButton, NPopconfirm, NTag, NModal, NDataTable, NSpace, useMessage } from 'naive-ui'
 import type { DataTableColumns } from 'naive-ui'
 import {
   listAllocationPolicyRules,
@@ -11,6 +11,8 @@ import {
   reconcileWave,
   generateParticipants,
   listProductsByWave,
+  listProductMasters,
+  snapshotProductsForWave,
 } from '@/shared/lib/wails/app'
 import type {
   AllocationPolicyRule,
@@ -41,6 +43,51 @@ async function loadProducts() {
     // fallback — products not yet snapshotted
   }
 }
+
+// ── Catalog modal (add from product master) ──
+
+const catalogModalVisible = ref(false)
+const catalogMasters = ref<any[]>([])
+const catalogLoading = ref(false)
+const catalogCheckedKeys = ref<Array<string | number>>([])
+const catalogSnapshotting = ref(false)
+
+async function openCatalogModal() {
+  catalogCheckedKeys.value = []
+  catalogModalVisible.value = true
+  catalogLoading.value = true
+  try {
+    catalogMasters.value = await listProductMasters()
+  } catch (e: any) {
+    message.error(`加载商品目录失败: ${e?.message ?? e}`)
+  } finally {
+    catalogLoading.value = false
+  }
+}
+
+async function doAddFromCatalog() {
+  if (catalogCheckedKeys.value.length === 0) return
+  catalogSnapshotting.value = true
+  try {
+    const masterIds = catalogCheckedKeys.value.map((k) => Number(k))
+    await snapshotProductsForWave({ waveId: waveId.value, masterIds })
+    message.success(`已添加 ${masterIds.length} 个商品到波次`)
+    catalogModalVisible.value = false
+    await loadProducts()
+  } catch (e: any) {
+    message.error(`添加失败: ${e?.message ?? e}`)
+  } finally {
+    catalogSnapshotting.value = false
+  }
+}
+
+const catalogColumns: DataTableColumns<any> = [
+  { type: 'selection' as const },
+  { title: 'ID', key: 'id', width: 60 },
+  { title: '名称', key: 'name' },
+  { title: '工厂 SKU', key: 'factorySku', width: 140 },
+  { title: '类型', key: 'productKind', width: 100 },
+]
 
 // ── List state ──
 
@@ -316,6 +363,7 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
         <h2 class="text-lg font-medium">会员分配规则</h2>
         <n-space>
           <n-button @click="openCreateDrawer">添加规则</n-button>
+          <n-button @click="openCatalogModal">从商品目录添加</n-button>
           <n-button
             type="primary"
             :loading="reconciling"
@@ -479,6 +527,32 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
           </template>
         </n-drawer-content>
       </n-drawer>
+
+      <!-- Catalog modal: add products from master catalog -->
+      <n-modal v-model:show="catalogModalVisible" preset="card" title="从商品目录添加到波次" style="width: 640px">
+        <n-data-table
+          :columns="catalogColumns"
+          :data="catalogMasters"
+          :loading="catalogLoading"
+          :row-key="(row: any) => row.id"
+          v-model:checked-row-keys="catalogCheckedKeys"
+          size="small"
+          :max-height="400"
+        />
+        <template #footer>
+          <n-space justify="end" style="margin-top: 12px">
+            <n-button @click="catalogModalVisible = false">取消</n-button>
+            <n-button
+              type="primary"
+              :loading="catalogSnapshotting"
+              :disabled="catalogCheckedKeys.length === 0"
+              @click="doAddFromCatalog"
+            >
+              添加选中 ({{ catalogCheckedKeys.length }})
+            </n-button>
+          </n-space>
+        </template>
+      </n-modal>
     </n-space>
   </div>
 </template>

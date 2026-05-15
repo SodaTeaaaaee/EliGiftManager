@@ -291,6 +291,7 @@ async function importDemand() {
       kind: form.kind,
       captureMode: form.captureMode,
       sourceChannel: form.sourceChannel || 'manual',
+      sourceSurface: form.sourceSurface || undefined,
       sourceDocumentNo: form.sourceDocumentNo || `IMPORT-${Date.now()}`,
       sourceCustomerRef: form.sourceCustomerRef,
       customerProfileId: form.customerProfileId || undefined,

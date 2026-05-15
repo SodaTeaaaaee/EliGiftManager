@@ -142,6 +142,18 @@ func (m *mockProfileTemplateBindingRepo) Delete(id uint) error {
 	return nil
 }
 
+func (m *mockProfileTemplateBindingRepo) CountByProfileID(profileID uint) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var count int64
+	for _, b := range m.records {
+		if b.IntegrationProfileID == profileID {
+			count++
+		}
+	}
+	return count, nil
+}
+
 // ── mock IntegrationProfileRepository (template tests) ──
 
 type mockIntegrationProfileRepoForTemplate struct {

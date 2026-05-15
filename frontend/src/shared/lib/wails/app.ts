@@ -108,6 +108,7 @@ export async function importDemandDocument(input: {
   kind: string;
   captureMode: string;
   sourceChannel: string;
+  sourceSurface?: string;
   sourceDocumentNo: string;
   sourceCustomerRef?: string;
   customerProfileId?: number;

@@ -214,7 +214,7 @@ func TestReconcileWave_EmptyRules_ReturnsZeroCreated(t *testing.T) {
 		{ID: 2, WaveID: 1, CustomerProfileID: 101, IdentityPlatform: "bilibili", GiftLevel: "L2"},
 	}
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil)
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	result, err := uc.ReconcileWave(1)
 	if err != nil {
@@ -261,7 +261,7 @@ func TestReconcileWave_SingleRule_MatchesAll(t *testing.T) {
 		t.Fatalf("setup rule Create failed: %v", err)
 	}
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil)
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	result, err := uc.ReconcileWave(waveID)
 	if err != nil {
@@ -319,7 +319,7 @@ func TestReconcileWave_Idempotent(t *testing.T) {
 		t.Fatalf("setup rule Create failed: %v", err)
 	}
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil)
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	// First reconcile
 	result1, err := uc.ReconcileWave(waveID)
@@ -373,7 +373,7 @@ func TestReconcileWave_InactiveRulesSkipped(t *testing.T) {
 		t.Fatalf("setup rule Create failed: %v", err)
 	}
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil)
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	result, err := uc.ReconcileWave(waveID)
 	if err != nil {
@@ -393,7 +393,7 @@ func TestCreateRule_And_ListRulesByWave(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	adjRepo := newPolicyAdjRepo()
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil)
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	input := dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
@@ -441,7 +441,7 @@ func TestUpdateRule(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	adjRepo := newPolicyAdjRepo()
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil)
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	// Create a rule first
 	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
@@ -483,7 +483,7 @@ func TestDeleteRule(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	adjRepo := newPolicyAdjRepo()
 
-	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil)
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,

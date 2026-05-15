@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -17,6 +18,7 @@ type allocationPolicyUseCase struct {
 	adjustmentRepo domain.FulfillmentAdjustmentRepository
 	demandRepo     domain.DemandDocumentRepository
 	assignmentRepo domain.WaveDemandAssignmentRepository
+	productRepo    domain.ProductRepository
 }
 
 func NewAllocationPolicyUseCase(
@@ -26,6 +28,7 @@ func NewAllocationPolicyUseCase(
 	adjustmentRepo domain.FulfillmentAdjustmentRepository,
 	demandRepo domain.DemandDocumentRepository,
 	assignmentRepo domain.WaveDemandAssignmentRepository,
+	productRepo domain.ProductRepository,
 ) AllocationPolicyUseCase {
 	return &allocationPolicyUseCase{
 		ruleRepo:       ruleRepo,
@@ -34,6 +37,7 @@ func NewAllocationPolicyUseCase(
 		adjustmentRepo: adjustmentRepo,
 		demandRepo:     demandRepo,
 		assignmentRepo: assignmentRepo,
+		productRepo:    productRepo,
 	}
 }
 
@@ -221,6 +225,12 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 }
 
 func (uc *allocationPolicyUseCase) CreateRule(input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
+	if input.ProductID != 0 && uc.productRepo != nil {
+		if _, err := uc.productRepo.FindByID(input.ProductID); err != nil {
+			return nil, fmt.Errorf("product %d does not exist in this wave", input.ProductID)
+		}
+	}
+
 	now := time.Now().Format(time.RFC3339)
 	rule := &domain.AllocationPolicyRule{
 		WaveID:               input.WaveID,
@@ -245,6 +255,12 @@ func (uc *allocationPolicyUseCase) UpdateRule(input dto.UpdateAllocationPolicyRu
 	rule, err := uc.ruleRepo.FindByID(input.ID)
 	if err != nil {
 		return nil, err
+	}
+
+	if input.ProductID != nil && *input.ProductID != 0 && uc.productRepo != nil {
+		if _, err := uc.productRepo.FindByID(*input.ProductID); err != nil {
+			return nil, fmt.Errorf("product %d does not exist in this wave", *input.ProductID)
+		}
 	}
 
 	if input.ProductID != nil {

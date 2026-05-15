@@ -104,6 +104,8 @@ type ChannelSyncRepository interface {
 
 	// AtomicCreateChannelSync creates a job, its items, and optional basis pin atomically.
 	AtomicCreateChannelSync(job *ChannelSyncJob, items []*ChannelSyncItem, pin *BasisPinParam) error
+
+	CountJobsByProfileID(profileID uint) (int64, error)
 }
 
 // ChannelClosureDecisionRepository defines persistence operations for channel closure decision records.
@@ -146,6 +148,7 @@ type ProfileTemplateBindingRepository interface {
 	ListByProfile(profileID uint) ([]IntegrationProfileTemplateBinding, error)
 	FindDefaultByProfileAndType(profileID uint, docType string) (*IntegrationProfileTemplateBinding, error)
 	Delete(id uint) error
+	CountByProfileID(profileID uint) (int64, error)
 }
 
 // HistoryScopeRepository defines persistence operations for HistoryScope.

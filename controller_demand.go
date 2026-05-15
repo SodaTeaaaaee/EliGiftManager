@@ -38,16 +38,35 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 			return dto.DemandDocumentDTO{}, fmt.Errorf("customer profile %d does not exist", *input.CustomerProfileID)
 		}
 	}
+
+	// Derive effective Kind/SourceChannel/SourceSurface: when an integration
+	// profile is selected the backend is the authority — profile values override
+	// whatever the frontend sent.
+	effectiveKind := input.Kind
+	effectiveSourceChannel := input.SourceChannel
+	effectiveSourceSurface := input.SourceSurface
+
 	if input.IntegrationProfileID != nil {
-		if _, err := c.integrationProfile.FindByID(*input.IntegrationProfileID); err != nil {
+		profile, err := c.integrationProfile.FindByID(*input.IntegrationProfileID)
+		if err != nil {
 			return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d does not exist", *input.IntegrationProfileID)
 		}
+		if profile.DemandKind != "" {
+			effectiveKind = profile.DemandKind
+		}
+		if profile.SourceChannel != "" {
+			effectiveSourceChannel = profile.SourceChannel
+		}
+		if profile.SourceSurface != "" {
+			effectiveSourceSurface = profile.SourceSurface
+		}
 	}
+
 	doc := domain.DemandDocument{
-		Kind:                 input.Kind,
+		Kind:                 effectiveKind,
 		CaptureMode:          input.CaptureMode,
-		SourceChannel:        input.SourceChannel,
-		SourceSurface:        input.SourceSurface,
+		SourceChannel:        effectiveSourceChannel,
+		SourceSurface:        effectiveSourceSurface,
 		SourceDocumentNo:     input.SourceDocumentNo,
 		SourceCustomerRef:    input.SourceCustomerRef,
 		CustomerProfileID:    input.CustomerProfileID,

@@ -54,3 +54,11 @@ func (r *profileTemplateBindingRepository) FindDefaultByProfileAndType(profileID
 func (r *profileTemplateBindingRepository) Delete(id uint) error {
 	return r.db.Delete(&persistence.IntegrationProfileTemplateBinding{}, id).Error
 }
+
+func (r *profileTemplateBindingRepository) CountByProfileID(profileID uint) (int64, error) {
+	var count int64
+	if err := r.db.Model(&persistence.IntegrationProfileTemplateBinding{}).Where("integration_profile_id = ?", profileID).Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
