@@ -143,6 +143,7 @@ function dispositionSummary(lines: dto.DemandLineDTO[]) {
 
 // ── Columns ──
 const docColumns: DataTableColumns<dto.DemandDocumentDTO> = [
+  { type: "expand" },
   { title: "ID", key: "id", width: 60 },
   {
     title: "Kind",

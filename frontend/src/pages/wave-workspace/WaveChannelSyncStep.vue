@@ -81,6 +81,7 @@ const profileOptions = computed(() =>
 
 // ── Job table columns ──
 const jobColumns: DataTableColumns<dto.ChannelSyncJobDTO> = [
+  { type: "expand" },
   { title: "ID", key: "id", width: 60 },
   { title: "Profile ID", key: "integrationProfileId", width: 100 },
   { title: "方向", key: "direction", width: 100 },
@@ -182,12 +183,12 @@ async function handlePlan() {
     })
     planResult.value = result
 
-    // Initialize manual forms if manual_closure
-    if (result.decision === "manual_closure" && result.items) {
+    // Initialize manual forms if manual_closure or unsupported (both need closure decisions)
+    if ((result.decision === "manual_closure" || result.decision === "unsupported") && result.items) {
       const forms: Record<number, ManualFormData> = {}
       for (const item of result.items) {
         forms[item.fulfillmentLineId] = {
-          decisionKind: "",
+          decisionKind: result.decision === "unsupported" ? "mark_sync_unsupported" : "",
           reasonCode: "",
           note: "",
           evidenceRef: "",
@@ -240,7 +241,7 @@ async function handleRetry(jobId: number) {
 // ── Submit manual decisions ──
 async function handleSubmitDecisions() {
   if (!selectedProfileId.value || !waveId.value) return
-  if (!planResult.value || planResult.value.decision !== "manual_closure") return
+  if (!planResult.value || (planResult.value.decision !== "manual_closure" && planResult.value.decision !== "unsupported")) return
 
   const entries = Object.entries(manualForms.value)
     .filter(([, form]) => form.decisionKind)
@@ -368,10 +369,44 @@ onMounted(() => {
         </n-button>
       </n-card>
 
-      <!-- unsupported -->
-      <n-alert v-else-if="planResult.decision === 'unsupported'" type="warning" class="mb-4" title="不支持">
-        当前集成配置不支持自动同步，请联系管理员确认配置。
-      </n-alert>
+      <!-- unsupported — still allow manual closure decisions -->
+      <n-card v-else-if="planResult.decision === 'unsupported'" title="不支持自动同步" size="small" class="mb-4">
+        <n-alert type="warning" class="mb-3" title="当前集成配置不支持自动同步">
+          以下履约行仍可手动记录关闭决策，以便统计与闭环。
+        </n-alert>
+        <div
+          v-for="item in planResult.items"
+          :key="item.fulfillmentLineId"
+          class="mb-4 p-3 border border-gray-200 rounded"
+        >
+          <p class="mb-2 font-medium">履约行 #{{ item.fulfillmentLineId }}</p>
+          <n-space vertical>
+            <n-select
+              v-model:value="manualForms[item.fulfillmentLineId].decisionKind"
+              :options="decisionKindOptions"
+              placeholder="选择决策类型"
+              style="width: 280px"
+            />
+            <n-input
+              v-model:value="manualForms[item.fulfillmentLineId].reasonCode"
+              placeholder="原因代码"
+            />
+            <n-input
+              v-model:value="manualForms[item.fulfillmentLineId].note"
+              placeholder="备注"
+              type="textarea"
+              :rows="2"
+            />
+          </n-space>
+        </div>
+        <n-button
+          type="primary"
+          :loading="submitLoading"
+          @click="handleSubmitDecisions"
+        >
+          提交决策
+        </n-button>
+      </n-card>
     </template>
 
     <!-- Section 3: Existing jobs list -->

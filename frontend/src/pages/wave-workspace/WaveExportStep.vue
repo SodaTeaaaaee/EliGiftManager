@@ -29,7 +29,8 @@ const error = ref("")
 const order = ref<dto.SupplierOrderDTO | null>(null)
 const lines = ref<dto.SupplierOrderLineDTO[]>([])
 
-const hasDraft = computed(() => order.value && order.value.id > 0)
+const hasOrder = computed(() => order.value && order.value.id > 0)
+const isDraft = computed(() => hasOrder.value && order.value!.status === "draft")
 
 const columns: DataTableColumns<dto.SupplierOrderLineDTO> = [
   { title: "行号", key: "supplierLineNo", width: 80 },
@@ -82,12 +83,20 @@ onMounted(() => {
 <template>
   <div class="wave-export-step p-4">
     <n-alert
-      v-if="hasDraft"
+      v-if="isDraft"
       type="warning"
       class="mb-4"
       title="草稿已存在"
     >
-      当前波次已有导出草稿，重新导出将替代当前草稿
+      当前波次已有导出草稿，重新导出将替代当前草稿。
+    </n-alert>
+    <n-alert
+      v-else-if="hasOrder && !isDraft"
+      type="info"
+      class="mb-4"
+      title="已有导出记录"
+    >
+      当前波次存在状态为「{{ order!.status }}」的供应商订单，重新导出将创建新的草稿订单。
     </n-alert>
 
     <n-alert v-if="error" type="error" class="mb-4" title="错误">
@@ -101,12 +110,12 @@ onMounted(() => {
         :disabled="loading"
         @click="handleExport"
       >
-        {{ hasDraft ? "重新导出（覆盖草稿）" : "导出供应商订单" }}
+        {{ isDraft ? "重新导出（覆盖草稿）" : hasOrder ? "重新导出" : "导出供应商订单" }}
       </n-button>
     </div>
 
     <n-spin :show="loading">
-      <template v-if="hasDraft && order">
+      <template v-if="hasOrder && order">
         <n-descriptions bordered :column="2" class="mb-4" label-placement="left">
           <n-descriptions-item label="ID">{{ order.id }}</n-descriptions-item>
           <n-descriptions-item label="供应商平台">{{ order.supplierPlatform }}</n-descriptions-item>

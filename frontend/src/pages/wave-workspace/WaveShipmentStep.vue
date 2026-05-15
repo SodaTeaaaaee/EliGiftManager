@@ -73,6 +73,7 @@ const statusColorMap: Record<string, "default" | "info" | "success" | "error" | 
 
 // ── Shipment list columns ──
 const shipmentColumns: DataTableColumns<dto.ShipmentDTO> = [
+  { type: "expand" },
   { title: "ID", key: "id", width: 60 },
   { title: "发货单号", key: "shipmentNo", ellipsis: { tooltip: true } },
   { title: "外部单号", key: "externalShipmentNo", ellipsis: { tooltip: true } },
@@ -119,6 +120,7 @@ const lineSelectionColumns: DataTableColumns<dto.SupplierOrderLineDTO> = [
       return h(NInputNumber, {
         value: lineQuantities.value[row.id] ?? row.submittedQuantity,
         min: 1,
+        max: row.submittedQuantity,
         size: "small",
         style: "width: 100px",
         onUpdateValue: (val: number | null) => {
