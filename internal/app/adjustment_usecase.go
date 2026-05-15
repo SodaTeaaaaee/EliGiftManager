@@ -34,8 +34,10 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 
 	// Validate adjustment kind — must match replay.go's recognised vocabulary.
 	switch input.AdjustmentKind {
-	case "add", "reduce", "compensation", "replace", "remove":
+	case "add", "reduce", "compensation", "remove":
 		// valid
+	case "replace":
+		return nil, fmt.Errorf("adjustment kind %q is not yet supported: from_product_id/to_product_id model fields required", input.AdjustmentKind)
 	default:
 		return nil, fmt.Errorf("invalid adjustment kind: %q", input.AdjustmentKind)
 	}

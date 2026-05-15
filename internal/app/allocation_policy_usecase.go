@@ -15,6 +15,8 @@ type allocationPolicyUseCase struct {
 	fulfillRepo    domain.FulfillmentLineRepository
 	waveRepo       domain.WaveRepository
 	adjustmentRepo domain.FulfillmentAdjustmentRepository
+	demandRepo     domain.DemandDocumentRepository
+	assignmentRepo domain.WaveDemandAssignmentRepository
 }
 
 func NewAllocationPolicyUseCase(
@@ -22,12 +24,16 @@ func NewAllocationPolicyUseCase(
 	fulfillRepo domain.FulfillmentLineRepository,
 	waveRepo domain.WaveRepository,
 	adjustmentRepo domain.FulfillmentAdjustmentRepository,
+	demandRepo domain.DemandDocumentRepository,
+	assignmentRepo domain.WaveDemandAssignmentRepository,
 ) AllocationPolicyUseCase {
 	return &allocationPolicyUseCase{
 		ruleRepo:       ruleRepo,
 		fulfillRepo:    fulfillRepo,
 		waveRepo:       waveRepo,
 		adjustmentRepo: adjustmentRepo,
+		demandRepo:     demandRepo,
+		assignmentRepo: assignmentRepo,
 	}
 }
 
@@ -61,9 +67,40 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	}
 
 	// Load all participants for this wave.
-	participants, err := uc.waveRepo.ListParticipantsByWave(waveID)
+	allParticipants, err := uc.waveRepo.ListParticipantsByWave(waveID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Filter to eligible participants: only those whose backing DemandLines
+	// include at least one accepted + ready line enter fulfillment generation.
+	// (docs/04-workflows-and-state/03:122-127)
+	// When demandRepo/assignmentRepo are nil (e.g. in unit tests), all participants are eligible.
+	var participants []domain.WaveParticipantSnapshot
+	if uc.assignmentRepo != nil && uc.demandRepo != nil {
+		eligibleProfileIDs := make(map[uint]bool)
+		docs, _ := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+		for _, doc := range docs {
+			if doc.CustomerProfileID == nil {
+				continue
+			}
+			lines, _ := uc.demandRepo.ListLinesByDocument(doc.ID)
+			for _, line := range lines {
+				if line.RoutingDisposition == "accepted" &&
+					(line.RecipientInputState == "ready" || line.RecipientInputState == "not_required") {
+					eligibleProfileIDs[*doc.CustomerProfileID] = true
+					break
+				}
+			}
+		}
+		participants = make([]domain.WaveParticipantSnapshot, 0, len(allParticipants))
+		for _, p := range allParticipants {
+			if eligibleProfileIDs[p.CustomerProfileID] {
+				participants = append(participants, p)
+			}
+		}
+	} else {
+		participants = allParticipants
 	}
 
 	// Load adjustments for replay (sorted by created_at ASC via repo).

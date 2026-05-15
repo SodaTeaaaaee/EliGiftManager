@@ -18,9 +18,11 @@ func NewAllocationPolicyController() *AllocationPolicyController {
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
 	waveRepo := infra.NewWaveRepository(gdb)
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
+	demandRepo := infra.NewDemandRepository(gdb)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
 
 	return &AllocationPolicyController{
-		uc: app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo),
+		uc: app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo),
 	}
 }
 
