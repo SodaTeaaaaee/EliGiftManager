@@ -666,4 +666,68 @@
 因此现在真正还可能阻塞行动前准备的，只剩下：
 
 - 某些具体 SQLite pragma 偏好的最终清单
-- 哪些现有工程文件经检查后可判定为“绝对中性”
+- 哪些现有工程文件经检查后可判定为”绝对中性”
+
+### 35. 单写者假设与未来多端同步方向
+
+已确认：
+
+- 当前阶段采用单写者假设，同一时刻只有一个应用实例对同一数据库执行写入
+- 不设计分布式冲突解决
+- 树状历史的设计天然为未来多端同步保留了扩展空间（各端各自产生本地分支，同步时做 merge/rebase）
+- 未来同步层是独立模块，不侵入核心历史结构
+
+详见 [07-non-functional-foundations/02-concurrency-and-performance.md](../07-non-functional-foundations/02-concurrency-and-performance.md)
+
+### 36. 导入部分成功时支持两种模式
+
+已确认：
+
+- 导入数据存在部分行格式错误时，系统弹窗提示用户选择：
+  - 整体拒绝（全部回滚，报告错误行）
+  - 跳过错误行（成功行正常落库，报告被跳过的行）
+- 两种模式都必须支持
+
+详见 [06-rollout-and-governance/07-error-handling-and-recovery.md](./07-error-handling-and-recovery.md)
+
+### 37. 身份归并策略
+
+已确认：
+
+- 手动归并始终可用
+- 自动归并默认关闭，需用户在设置界面主动开启，触发条件可选
+- 归并只影响未来波次，不回溯修改已有 `WaveParticipantSnapshot`
+- 归并操作本身作为 `HistoryNode`，可撤销
+
+详见 [03-data-model/07-identity-merge-strategy.md](../03-data-model/07-identity-merge-strategy.md)
+
+### 38. Adjustment 重放默认整体暂停，可切换为标记并继续
+
+已确认：
+
+- 重放顺序：跨层级按步骤顺序，同层级内按 `created_at` 升序
+- 默认模式：遇到失败时整体暂停等待人工处理
+- 可选模式：用户可在设置界面切换为”失败的标记为待复核，其余继续”
+- 重放本身不产生新的 `HistoryNode`
+
+详见 [02-allocation-model/04-adjustment-replay-algorithm.md](../02-allocation-model/04-adjustment-replay-algorithm.md)
+
+### 39. Profile 变更对活跃波次采用绑定版本策略
+
+已确认：
+
+- 活跃波次继续使用创建时绑定的 profile 行为，直到用户显式”刷新 profile”
+- 首版不引入显式版本号
+- 已关闭波次不受 profile 变更影响
+
+详见 [05-profile-system/02-profile-template-service-layering.md](../05-profile-system/02-profile-template-service-layering.md) § 9.5.2
+
+### 40. 外部事实不可通过 undo 撤销，但可通过正向操作替代
+
+已确认：
+
+- undo/redo 不能回退外部事实状态（防止软件以为自己撤销了外部事实）
+- 但用户可以通过显式正向操作（重新导出、重新导入、标记需重做）创建新的执行对象来替代旧的
+- 区分：”假装没发生过”不允许；”承认发生过，创建新的替代”允许
+
+详见 [06-rollout-and-governance/08-core-invariants.md](./08-core-invariants.md) § 2.1

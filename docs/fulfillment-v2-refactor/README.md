@@ -24,17 +24,17 @@
 - `01-boundaries-and-language/`
   - 定义业务边界、统一名词、平台维度、`IntegrationProfile` / profile 系统定位
 - `02-allocation-model/`
-  - 定义会员与零售在分配语义上的差异、混合波次的统一方式、`WaveAllocationStep` 的演化方向
+  - 定义会员与零售在分配语义上的差异、混合波次的统一方式、`WaveAllocationStep` 的演化方向，并补充 adjustment 重放算法
 - `03-data-model/`
-  - 给出 V2 目标数据结构、分层边界、当前模型到目标模型的映射，并补充工作区历史与 basis 模型
+  - 给出 V2 目标数据结构、分层边界、当前模型到目标模型的映射，并补充工作区历史与 basis 模型、身份归并策略
 - `04-workflows-and-state/`
   - 定义长生命周期工作流、行级状态、波次聚合状态与进度展示，并补充会员权益型需求的判定、输入采集、路由模型和树状撤销/重做交互边界
 - `05-profile-system/`
-  - 说明为什么模板系统要升级为 profile 系统，以及 profile / 模板 / service 的分工
+  - 说明为什么模板系统要升级为 profile 系统，以及 profile / 模板 / service 的分工与版本演进策略
 - `07-non-functional-foundations/`
-  - 说明大数据查询、轻量 DTO、远程排序分页 / 滚动，以及中英双语 i18n 的基础策略
+  - 说明大数据查询、轻量 DTO、远程排序分页 / 滚动、中英双语 i18n 的基础策略，以及并发假设与性能约束
 - `06-rollout-and-governance/`
-  - 包含实施原则、阶段计划、greenfield 重建策略、测试验收、风险与待决策问题
+  - 包含实施原则、阶段计划、greenfield 重建策略、测试验收、风险与待决策问题、错误处理与恢复策略、核心不变量
 - `legacy/`
   - 保留拆分前的完整长稿，便于全文检索和历史对照
 

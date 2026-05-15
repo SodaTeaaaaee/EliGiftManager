@@ -111,3 +111,31 @@ V2 推荐明确三层结构：
 - Profile 配置的修改，不应自动伪装成已经回滚了历史波次的外部执行结果
 - 已存在的 `SupplierOrder / Shipment / ChannelSyncJob` 仍然依赖它们各自创建时的 basis
 - Profile 变更更适合影响未来导入导出解释，或在用户显式重算当前工作区时生效
+
+### 9.5.2 Profile 版本演进策略
+
+当 `IntegrationProfile` 的 strategy/capability 需要变更时：
+
+1. **已关闭波次不受影响**
+
+- 已关闭的波次保留创建时的 profile 语义快照
+- 通过 `DemandDocument.integration_profile_id` + 当时的 `raw_payload` 保留解释依据
+- Profile 变更不回溯影响已关闭波次的任何数据
+
+2. **活跃波次使用绑定版本**
+
+- 活跃波次继续使用创建时绑定的 profile 行为
+- 直到用户显式触发"刷新 profile"操作
+- 刷新操作本身作为一个 `HistoryNode`，可撤销
+
+3. **首版不引入显式版本号**
+
+- 不引入 `profile_version` 或 `profile_snapshot_at` 字段
+- 通过 `DemandDocument` 上已有的 `integration_profile_id` + `raw_payload` 保留当时的解释依据
+- 如果未来 profile 变更频繁且需要精确追溯，再考虑引入显式版本号
+
+理由：
+
+- 过早引入显式版本号会增加用户的认知负担
+- 当前阶段 profile 变更频率低，不需要精确版本追溯
+- `raw_payload` 已经足够保留当时的解释上下文
