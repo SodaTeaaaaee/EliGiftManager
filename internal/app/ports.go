@@ -15,6 +15,7 @@ type WaveUseCase interface {
 	CreateWave(wave *domain.Wave) error
 	ListWaves() ([]domain.Wave, error)
 	GetWave(id uint) (*domain.Wave, error)
+	GenerateParticipants(waveID uint) (int, error)
 }
 
 // AllocationUseCase handles applying allocation policy rules to a wave.

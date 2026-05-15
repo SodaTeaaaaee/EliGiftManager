@@ -49,11 +49,13 @@ func (uc *demandIntakeUseCase) ImportDemand(doc *domain.DemandDocument, lines []
 // ---- Wave ----
 
 type waveUseCase struct {
-	waveRepo domain.WaveRepository
+	waveRepo       domain.WaveRepository
+	demandRepo     domain.DemandDocumentRepository
+	assignmentRepo domain.WaveDemandAssignmentRepository
 }
 
-func NewWaveUseCase(waveRepo domain.WaveRepository) WaveUseCase {
-	return &waveUseCase{waveRepo: waveRepo}
+func NewWaveUseCase(waveRepo domain.WaveRepository, demandRepo domain.DemandDocumentRepository, assignmentRepo domain.WaveDemandAssignmentRepository) WaveUseCase {
+	return &waveUseCase{waveRepo: waveRepo, demandRepo: demandRepo, assignmentRepo: assignmentRepo}
 }
 
 func (uc *waveUseCase) CreateWave(wave *domain.Wave) error {
@@ -92,6 +94,87 @@ func (uc *waveUseCase) ListWaves() ([]domain.Wave, error) {
 
 func (uc *waveUseCase) GetWave(id uint) (*domain.Wave, error) {
 	return uc.waveRepo.FindByID(id)
+}
+
+func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
+	// Get demand documents assigned to this wave
+	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+	if err != nil {
+		return 0, err
+	}
+
+	// Get existing participants for idempotency check
+	existingSnaps, err := uc.waveRepo.ListParticipantsByWave(waveID)
+	if err != nil {
+		return 0, err
+	}
+	existingProfiles := make(map[uint]bool, len(existingSnaps))
+	for _, snap := range existingSnaps {
+		existingProfiles[snap.CustomerProfileID] = true
+	}
+
+	// Track profiles we generate in this run (dedup within batch)
+	generatedProfiles := make(map[uint]bool)
+	count := 0
+
+	for docIdx := range docs {
+		doc := &docs[docIdx]
+
+		// Skip documents without a CustomerProfileID
+		if doc.CustomerProfileID == nil {
+			continue
+		}
+		profileID := *doc.CustomerProfileID
+
+		// Skip if already exists or already generated in this batch
+		if existingProfiles[profileID] || generatedProfiles[profileID] {
+			continue
+		}
+
+		// Get demand lines for this document
+		lines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
+		if err != nil {
+			return count, err
+		}
+
+		// Find first accepted line to extract GiftLevelSnapshot
+		var giftLevel string
+		hasAccepted := false
+		for lineIdx := range lines {
+			if lines[lineIdx].RoutingDisposition == "accepted" {
+				giftLevel = lines[lineIdx].GiftLevelSnapshot
+				hasAccepted = true
+				break
+			}
+		}
+
+		// Only generate snapshot if there's at least one accepted line
+		if !hasAccepted {
+			continue
+		}
+
+		snap := domain.WaveParticipantSnapshot{
+			WaveID:             waveID,
+			CustomerProfileID:  profileID,
+			SnapshotType:       "member",
+			IdentityPlatform:   doc.SourceChannel,
+			IdentityValue:      doc.SourceCustomerRef,
+			DisplayName:        "",
+			GiftLevel:          giftLevel,
+			SourceDocumentRefs: fmt.Sprintf("%d", doc.ID),
+			SourceProfileRefs:  "",
+			CreatedAt:          time.Now().Format(time.RFC3339),
+		}
+
+		if err := uc.waveRepo.AddParticipant(&snap); err != nil {
+			return count, err
+		}
+
+		generatedProfiles[profileID] = true
+		count++
+	}
+
+	return count, nil
 }
 
 // ---- Allocation ----

@@ -501,7 +501,7 @@ func TestCreateWaveGeneratesWaveNo(t *testing.T) {
 	t.Parallel()
 
 	repo := newMockWaveRepo()
-	uc := NewWaveUseCase(repo)
+	uc := NewWaveUseCase(repo, nil, nil)
 
 	wave := &domain.Wave{Name: "测试波次"}
 	err := uc.CreateWave(wave)
@@ -678,7 +678,7 @@ func TestFullVerticalSlice(t *testing.T) {
 	}
 
 	// Step 2: Create Wave
-	waveUC := NewWaveUseCase(waveRepo)
+	waveUC := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
 	wave := &domain.Wave{Name: "纵切面测试波次"}
 	if err := waveUC.CreateWave(wave); err != nil {
 		t.Fatalf("Step 2 CreateWave failed: %v", err)

@@ -41,7 +41,7 @@ func NewWaveController() *WaveController {
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 
 	return &WaveController{
-		waveUC:         app.NewWaveUseCase(waveRepo),
+		waveUC:         app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
 		allocationUC:   app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo),
 		fulfillRepo:    fulfillRepo,
 		supplierRepo:   supplierRepo,
@@ -178,6 +178,11 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		UpdatedAt:        now,
 	}
 	return c.assignmentRepo.Create(assignment)
+}
+
+// GenerateParticipants generates WaveParticipantSnapshots from accepted demand lines.
+func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
+	return c.waveUC.GenerateParticipants(waveID)
 }
 
 // ApplyAllocationRules applies allocation policy rules to the given wave
