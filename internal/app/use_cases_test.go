@@ -275,6 +275,8 @@ func (m *mockFulfillRepo) DeleteByWave(waveID uint) error {
 	return nil
 }
 
+func (m *mockFulfillRepo) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
+
 // ── mock rule repo ──
 
 type mockRuleRepo struct{}
@@ -613,11 +615,10 @@ func TestCreateWaveGeneratesWaveNo(t *testing.T) {
 	}
 }
 
-func TestApplyRulesDemandDriven(t *testing.T) {
+func TestMapDemandToFulfillmentDemandDriven(t *testing.T) {
 	t.Parallel()
 
 	demandRepo := newMockDemandRepo()
-	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
 	waveRepo := newMockWaveRepo()
@@ -637,9 +638,9 @@ func TestApplyRulesDemandDriven(t *testing.T) {
 		CustomerProfileID: &profileID,
 	}
 	lines := []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 10, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 10, LineType: "sku_order"},
 		{RoutingDisposition: "deferred", RequestedQuantity: 5, LineType: "sku_order"},
-		{RoutingDisposition: "accepted", RequestedQuantity: 3, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 3, LineType: "sku_order"},
 	}
 	if err := demandUC.ImportDemand(doc, lines); err != nil {
 		t.Fatalf("setup ImportDemand failed: %v", err)
@@ -653,20 +654,20 @@ func TestApplyRulesDemandDriven(t *testing.T) {
 		t.Fatalf("setup assignment Create failed: %v", err)
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
-	allocLines, err := allocUC.ApplyRules(1)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmResult, err := dmUC.MapDemandToFulfillment(1)
 	if err != nil {
-		t.Fatalf("ApplyRules failed: %v", err)
+		t.Fatalf("MapDemandToFulfillment failed: %v", err)
 	}
 
 	// Only accepted lines (2 out of 3) should produce fulfillment lines
-	if len(allocLines) != 2 {
-		t.Fatalf("expected 2 fulfillment lines (only accepted lines), got %d", len(allocLines))
+	if len(dmResult.CreatedLines) != 2 {
+		t.Fatalf("expected 2 fulfillment lines (only accepted lines), got %d", len(dmResult.CreatedLines))
 	}
 
-	for i, fl := range allocLines {
-		if fl.AllocationState != "allocated" {
-			t.Errorf("fulfillment line %d: expected state 'allocated', got %q", i, fl.AllocationState)
+	for i, fl := range dmResult.CreatedLines {
+		if fl.AllocationState != "ready" {
+			t.Errorf("fulfillment line %d: expected state 'ready', got %q", i, fl.AllocationState)
 		}
 		if fl.WaveID != 1 {
 			t.Errorf("fulfillment line %d: expected WaveID=1, got %d", i, fl.WaveID)
@@ -681,18 +682,17 @@ func TestApplyRulesDemandDriven(t *testing.T) {
 
 	// Verify quantities match accepted lines
 	expectedQuantities := []int{10, 3}
-	for i, fl := range allocLines {
+	for i, fl := range dmResult.CreatedLines {
 		if fl.Quantity != expectedQuantities[i] {
 			t.Errorf("fulfillment line %d: expected quantity %d, got %d", i, expectedQuantities[i], fl.Quantity)
 		}
 	}
 }
 
-func TestApplyRulesFailsOnPartialSnapshotMissing(t *testing.T) {
+func TestMapDemandToFulfillmentFailsOnPartialSnapshotMissing(t *testing.T) {
 	t.Parallel()
 
 	demandRepo := newMockDemandRepo()
-	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
 	waveRepo := newMockWaveRepo()
@@ -716,12 +716,12 @@ func TestApplyRulesFailsOnPartialSnapshotMissing(t *testing.T) {
 		CustomerProfileID: &profileB,
 	}
 	if err := demandUC.ImportDemand(docA, []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := demandUC.ImportDemand(docB, []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -733,10 +733,10 @@ func TestApplyRulesFailsOnPartialSnapshotMissing(t *testing.T) {
 		}
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
-	_, err := allocUC.ApplyRules(1)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	_, err := dmUC.MapDemandToFulfillment(1)
 	if err == nil {
-		t.Fatal("expected ApplyRules to fail when some retail docs lack participant snapshot, but got nil")
+		t.Fatal("expected MapDemandToFulfillment to fail when some retail docs lack participant snapshot, but got nil")
 	}
 	if !strings.Contains(err.Error(), "200") {
 		t.Errorf("error should mention missing profile ID 200, got: %v", err)
@@ -745,15 +745,14 @@ func TestApplyRulesFailsOnPartialSnapshotMissing(t *testing.T) {
 	// Verify no fulfillment lines were created (fail-fast before delete+create)
 	allLines, _ := fulfillRepo.ListByWave(1)
 	if len(allLines) != 0 {
-		t.Errorf("expected 0 fulfillment lines after failed ApplyRules, got %d", len(allLines))
+		t.Errorf("expected 0 fulfillment lines after failed MapDemandToFulfillment, got %d", len(allLines))
 	}
 }
 
-func TestApplyRulesFailsOnMissingCustomerProfileID(t *testing.T) {
+func TestMapDemandToFulfillmentFailsOnMissingCustomerProfileID(t *testing.T) {
 	t.Parallel()
 
 	demandRepo := newMockDemandRepo()
-	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
 	waveRepo := newMockWaveRepo()
@@ -764,7 +763,7 @@ func TestApplyRulesFailsOnMissingCustomerProfileID(t *testing.T) {
 		SourceChannel: "test", SourceDocumentNo: "NO-PROFILE",
 	}
 	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -774,10 +773,10 @@ func TestApplyRulesFailsOnMissingCustomerProfileID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
-	_, err := allocUC.ApplyRules(1)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	_, err := dmUC.MapDemandToFulfillment(1)
 	if err == nil {
-		t.Fatal("expected ApplyRules to fail when retail doc has no CustomerProfileID, but got nil")
+		t.Fatal("expected MapDemandToFulfillment to fail when retail doc has no CustomerProfileID, but got nil")
 	}
 	if !strings.Contains(err.Error(), "CustomerProfileID") {
 		t.Errorf("error should mention CustomerProfileID, got: %v", err)
@@ -796,7 +795,7 @@ func TestExportSupplierOrder(t *testing.T) {
 		err := fulfillRepo.Create(&domain.FulfillmentLine{
 			WaveID:          waveID,
 			Quantity:        10 + i,
-			AllocationState: "allocated",
+			AllocationState: "ready",
 		})
 		if err != nil {
 			t.Fatalf("setup fulfill Create failed: %v", err)
@@ -842,7 +841,6 @@ func TestFullVerticalSlice(t *testing.T) {
 
 	demandRepo := newMockDemandRepo()
 	waveRepo := newMockWaveRepo()
-	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	supplierRepo := newMockSupplierRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
@@ -859,8 +857,8 @@ func TestFullVerticalSlice(t *testing.T) {
 		CustomerProfileID: &profileID,
 	}
 	demandLines := []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 7, LineType: "sku_order", ExternalTitle: "Widget A"},
-		{RoutingDisposition: "accepted", RequestedQuantity: 2, LineType: "sku_order", ExternalTitle: "Widget B"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 7, LineType: "sku_order", ExternalTitle: "Widget A"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 2, LineType: "sku_order", ExternalTitle: "Widget B"},
 	}
 	if err := demandUC.ImportDemand(doc, demandLines); err != nil {
 		t.Fatalf("Step 1 ImportDemand failed: %v", err)
@@ -890,13 +888,13 @@ func TestFullVerticalSlice(t *testing.T) {
 	})
 
 	// Step 3: Apply Allocation Rules
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
-	allocLines, err := allocUC.ApplyRules(wave.ID)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmResult, err := dmUC.MapDemandToFulfillment(wave.ID)
 	if err != nil {
-		t.Fatalf("Step 3 ApplyRules failed: %v", err)
+		t.Fatalf("Step 3 MapDemandToFulfillment failed: %v", err)
 	}
-	if len(allocLines) != 2 {
-		t.Fatalf("Step 3: expected 2 fulfillment lines, got %d", len(allocLines))
+	if len(dmResult.CreatedLines) != 2 {
+		t.Fatalf("Step 3: expected 2 fulfillment lines, got %d", len(dmResult.CreatedLines))
 	}
 
 	// Step 4: Export Supplier Order
@@ -933,7 +931,7 @@ func TestAssignDemandToWaveRejectsDuplicateAssignment(t *testing.T) {
 		SourceDocumentNo: "DUP-001",
 	}
 	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
@@ -965,11 +963,10 @@ func TestAssignDemandToWaveRejectsDuplicateAssignment(t *testing.T) {
 	}
 }
 
-func TestApplyRulesIsIdempotentForSameWave(t *testing.T) {
+func TestMapDemandToFulfillmentIsIdempotentForSameWave(t *testing.T) {
 	t.Parallel()
 
 	demandRepo := newMockDemandRepo()
-	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
 	waveRepo := newMockWaveRepo()
@@ -989,7 +986,7 @@ func TestApplyRulesIsIdempotentForSameWave(t *testing.T) {
 		CustomerProfileID: &profileID,
 	}
 	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 5, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 5, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatalf("setup ImportDemand failed: %v", err)
 	}
@@ -1000,21 +997,21 @@ func TestApplyRulesIsIdempotentForSameWave(t *testing.T) {
 		t.Fatalf("setup assignment failed: %v", err)
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
 
 	// Run allocation first time
-	lines1, err := allocUC.ApplyRules(1)
+	lines1, err := dmUC.MapDemandToFulfillment(1)
 	if err != nil {
-		t.Fatalf("first ApplyRules failed: %v", err)
+		t.Fatalf("first MapDemandToFulfillment failed: %v", err)
 	}
-	count1 := len(lines1)
+	count1 := len(lines1.CreatedLines)
 
 	// Run allocation second time — should be idempotent (rebuild, not append)
-	lines2, err := allocUC.ApplyRules(1)
+	lines2, err := dmUC.MapDemandToFulfillment(1)
 	if err != nil {
-		t.Fatalf("second ApplyRules failed: %v", err)
+		t.Fatalf("second MapDemandToFulfillment failed: %v", err)
 	}
-	count2 := len(lines2)
+	count2 := len(lines2.CreatedLines)
 
 	if count1 != count2 {
 		t.Errorf("idempotent violation: first run=%d lines, second run=%d lines", count1, count2)
@@ -1036,7 +1033,7 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		if err := fulfillRepo.Create(&domain.FulfillmentLine{
 			WaveID:          waveID,
 			Quantity:        10 + i,
-			AllocationState: "allocated",
+			AllocationState: "ready",
 			GeneratedBy:     "allocation_demand_driven",
 		}); err != nil {
 			t.Fatalf("setup fulfill Create failed: %v", err)
@@ -1094,7 +1091,6 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 	t.Parallel()
 
 	demandRepo := newMockDemandRepo()
-	ruleRepo := newMockRuleRepo()
 	fulfillRepo := newMockFulfillRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
 	waveRepo := newMockWaveRepo()
@@ -1114,7 +1110,7 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 		CustomerProfileID: &profileID,
 	}
 	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
-		{RoutingDisposition: "accepted", RequestedQuantity: 1, LineType: "sku_order"},
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
@@ -1125,15 +1121,15 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 		t.Fatalf("setup assignment failed: %v", err)
 	}
 
-	allocUC := NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
 
 	// Apply rules — should succeed and return correct count
-	lines, err := allocUC.ApplyRules(1)
+	lines, err := dmUC.MapDemandToFulfillment(1)
 	if err != nil {
-		t.Fatalf("ApplyRules failed: %v", err)
+		t.Fatalf("MapDemandToFulfillment failed: %v", err)
 	}
-	if len(lines) != 1 {
-		t.Errorf("expected 1 fulfillment line, got %d", len(lines))
+	if len(lines.CreatedLines) != 1 {
+		t.Errorf("expected 1 fulfillment line, got %d", len(lines.CreatedLines))
 	}
 
 	// Verify that when assignment repo is queried, it returns valid results
@@ -1143,5 +1139,158 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 	}
 	if len(docs) != 1 {
 		t.Errorf("expected 1 demand document for wave 1, got %d", len(docs))
+	}
+}
+
+// ── Eligibility Tests ──
+
+func TestIsEligibleForFulfillmentAcceptsReady(t *testing.T) {
+	t.Parallel()
+	dl := &domain.DemandLine{
+		RoutingDisposition:  "accepted",
+		RecipientInputState: "ready",
+	}
+	if !isEligibleForFulfillment(dl) {
+		t.Error("expected accepted+ready to be eligible")
+	}
+}
+
+func TestIsEligibleForFulfillmentAcceptsNotRequired(t *testing.T) {
+	t.Parallel()
+	dl := &domain.DemandLine{
+		RoutingDisposition:  "accepted",
+		RecipientInputState: "not_required",
+	}
+	if !isEligibleForFulfillment(dl) {
+		t.Error("expected accepted+not_required to be eligible")
+	}
+}
+
+func TestIsEligibleForFulfillmentRejectsWaitingForInput(t *testing.T) {
+	t.Parallel()
+	dl := &domain.DemandLine{
+		RoutingDisposition:  "accepted",
+		RecipientInputState: "waiting_for_input",
+	}
+	if isEligibleForFulfillment(dl) {
+		t.Error("expected accepted+waiting_for_input to be INELIGIBLE")
+	}
+}
+
+func TestIsEligibleForFulfillmentRejectsDeferred(t *testing.T) {
+	t.Parallel()
+	dl := &domain.DemandLine{
+		RoutingDisposition:  "deferred",
+		RecipientInputState: "ready",
+	}
+	if isEligibleForFulfillment(dl) {
+		t.Error("expected deferred+ready to be INELIGIBLE (routing disposition not accepted)")
+	}
+}
+
+// ── Mapping Blocking Tests ──
+
+func TestMapDemandToFulfillmentBlocksUnmappedProduct(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	fulfillRepo := newMockFulfillRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	profileID := uint(300)
+	productMasterID := uint(999) // No wave-scoped product for this master
+
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 10, WaveID: 1, CustomerProfileID: profileID, SnapshotType: "buyer"},
+	})
+
+	demandUC := NewDemandIntakeUseCase(demandRepo)
+	doc := &domain.DemandDocument{
+		Kind: "retail_order", CaptureMode: "manual_entry",
+		SourceChannel: "test", SourceDocumentNo: "BLOCKED-1",
+		CustomerProfileID: &profileID,
+	}
+	lines := []*domain.DemandLine{{
+		RoutingDisposition:  "accepted",
+		RecipientInputState: "ready",
+		RequestedQuantity:   1,
+		LineType:            "sku_order",
+		ProductMasterID:     &productMasterID,
+	}}
+	if err := demandUC.ImportDemand(doc, lines); err != nil {
+		t.Fatal(err)
+	}
+	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+		WaveID: 1, DemandDocumentID: doc.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// productRepo is nil — no wave-scoped products → mapping fails
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	result, err := dmUC.MapDemandToFulfillment(1)
+	if err != nil {
+		t.Fatalf("MapDemandToFulfillment failed: %v", err)
+	}
+
+	if len(result.CreatedLines) != 0 {
+		t.Errorf("expected 0 created lines (product unmapped), got %d", len(result.CreatedLines))
+	}
+	if len(result.BlockedLines) != 1 {
+		t.Errorf("expected 1 blocked line, got %d", len(result.BlockedLines))
+	}
+	if len(result.BlockedLines) > 0 && result.BlockedLines[0].Reason != "wave_product_missing" {
+		t.Errorf("expected reason 'wave_product_missing', got %q", result.BlockedLines[0].Reason)
+	}
+}
+
+func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	fulfillRepo := newMockFulfillRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	profileID := uint(400)
+
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 20, WaveID: 1, CustomerProfileID: profileID, SnapshotType: "buyer"},
+	})
+
+	demandUC := NewDemandIntakeUseCase(demandRepo)
+	doc := &domain.DemandDocument{
+		Kind: "retail_order", CaptureMode: "manual_entry",
+		SourceChannel: "test", SourceDocumentNo: "NO-PRODUCT-REF",
+		CustomerProfileID: &profileID,
+	}
+	// No ProductMasterID set — this is allowed (some retail lines don't need product mapping)
+	lines := []*domain.DemandLine{{
+		RoutingDisposition:  "accepted",
+		RecipientInputState: "ready",
+		RequestedQuantity:   2,
+		LineType:            "sku_order",
+	}}
+	if err := demandUC.ImportDemand(doc, lines); err != nil {
+		t.Fatal(err)
+	}
+	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+		WaveID: 1, DemandDocumentID: doc.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	result, err := dmUC.MapDemandToFulfillment(1)
+	if err != nil {
+		t.Fatalf("MapDemandToFulfillment failed: %v", err)
+	}
+
+	if len(result.CreatedLines) != 1 {
+		t.Errorf("expected 1 created line, got %d", len(result.CreatedLines))
+	}
+	if len(result.BlockedLines) != 0 {
+		t.Errorf("expected 0 blocked lines, got %d", len(result.BlockedLines))
 	}
 }

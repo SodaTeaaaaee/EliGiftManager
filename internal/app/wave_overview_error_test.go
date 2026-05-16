@@ -188,8 +188,8 @@ func TestProjectWaveOverviewPreservesBaseFields(t *testing.T) {
 	if result.TrackedFulfillmentCount != 5 {
 		t.Errorf("TrackedFulfillmentCount = %d, want 5", result.TrackedFulfillmentCount)
 	}
-	// No active jobs → stage preserved
-	if result.ProjectedLifecycleStage != "closed" {
+	// No sync jobs → stage derived from observable facts (shipments exist → execution)
+	if result.ProjectedLifecycleStage != "execution" {
 		t.Errorf("ProjectedLifecycleStage = %q, want closed", result.ProjectedLifecycleStage)
 	}
 }

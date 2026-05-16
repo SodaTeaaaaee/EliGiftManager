@@ -96,7 +96,7 @@ func TestProjectWaveOverviewNoJobsNoDecisions(t *testing.T) {
 	t.Parallel()
 	p := newProjTestSetup()
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -107,9 +107,9 @@ func TestProjectWaveOverviewNoJobsNoDecisions(t *testing.T) {
 	if result.ManualClosureDecisionCount != 0 {
 		t.Errorf("ManualClosureDecisionCount = %d, want 0", result.ManualClosureDecisionCount)
 	}
-	// No active jobs, no decisions — projected stage unchanged
-	if result.ProjectedLifecycleStage != "fulfilling" {
-		t.Errorf("ProjectedLifecycleStage = %q, want %q", result.ProjectedLifecycleStage, "fulfilling")
+	// No sync jobs — projected stage derived from observable facts alone
+	if result.ProjectedLifecycleStage != "execution" {
+		t.Errorf("ProjectedLifecycleStage = %q, want %q", result.ProjectedLifecycleStage, "execution")
 	}
 	// Base fields must be preserved
 	if result.DemandCount != 5 {
@@ -123,7 +123,7 @@ func TestProjectWaveOverviewActivePendingJobsSetSyncingBack(t *testing.T) {
 	p.addJob(1, "pending")
 	p.addJob(1, "success")
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestProjectWaveOverviewDecisionsWithoutManualCompletedSetsAwaitingManualClo
 	p.addItem(failedJobID, 101, "failed")
 	// No decisions yet — user hasn't acted on the failures
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -179,7 +179,7 @@ func TestProjectWaveOverviewPartialDecisionsCoverageStillAwaiting(t *testing.T) 
 	// Only 1 of 2 failed items has a decision — still awaiting
 	p.addDecision(1, 100, "mark_sync_unsupported")
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestProjectWaveOverviewPartialDecisionsCoverageStillAwaiting(t *testing.T) 
 	}
 }
 
-func TestProjectWaveOverviewAllFailedItemsCoveredPreservesBaseStage(t *testing.T) {
+func TestProjectWaveOverviewAllFailedItemsCoveredWithJobsSetsClosed(t *testing.T) {
 	t.Parallel()
 	p := newProjTestSetup()
 	// Failed job with 2 failed items, both covered by decisions
@@ -203,7 +203,7 @@ func TestProjectWaveOverviewAllFailedItemsCoveredPreservesBaseStage(t *testing.T
 	p.addDecision(1, 100, "mark_sync_unsupported")
 	p.addDecision(1, 101, "mark_sync_completed_manually")
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "closed"))
+	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestProjectWaveOverviewAllFailedItemsCoveredPreservesBaseStage(t *testing.T
 	if result.ManualUnsupportedCount != 1 {
 		t.Errorf("ManualUnsupportedCount = %d, want 1", result.ManualUnsupportedCount)
 	}
-	// All failed items covered → NOT awaiting → stage preserved
+	// All failed items covered + sync jobs exist → closed
 	if result.ProjectedLifecycleStage != "closed" {
 		t.Errorf("ProjectedLifecycleStage = %q, want closed", result.ProjectedLifecycleStage)
 	}

@@ -469,6 +469,8 @@ func (m *mockFulfillRepoForShipment) ReplaceByWaveAndGeneratedBy(_ uint, _ strin
 func (m *mockFulfillRepoForShipment) DeleteByWave(waveID uint) error {
 	panic("not implemented")
 }
+func (m *mockFulfillRepoForShipment) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
+
 
 // ── validation tests ──
 
