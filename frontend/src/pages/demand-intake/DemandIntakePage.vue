@@ -78,30 +78,86 @@
                 删除
               </n-button>
             </template>
-            <n-space>
-              <n-select
-                v-model:value="line.lineType"
-                :options="lineTypeOptions"
-                placeholder="Line Type"
-                style="width: 180px"
-              />
-              <n-select
-                v-model:value="line.routingDisposition"
-                :options="routingDispositionOptions"
-                placeholder="Routing Disposition"
-                style="width: 180px"
-              />
-              <n-input
-                v-model:value="line.externalTitle"
-                placeholder="External Title"
-                style="width: 180px"
-              />
-              <n-input-number
-                v-model:value="line.requestedQuantity"
-                placeholder="Qty"
-                :min="1"
-                style="width: 100px"
-              />
+            <n-space vertical :size="8">
+              <n-space>
+                <n-select
+                  v-model:value="line.lineType"
+                  :options="lineTypeOptions"
+                  placeholder="Line Type"
+                  style="width: 180px"
+                />
+                <n-select
+                  v-model:value="line.routingDisposition"
+                  :options="routingDispositionOptions"
+                  placeholder="Routing Disposition"
+                  style="width: 180px"
+                />
+                <n-select
+                  v-model:value="line.recipientInputState"
+                  :options="recipientInputStateOptions"
+                  placeholder="输入状态"
+                  style="width: 180px"
+                />
+                <n-select
+                  v-model:value="line.obligationTriggerKind"
+                  :options="obligationTriggerKindOptions"
+                  placeholder="触发类型"
+                  style="width: 200px"
+                />
+                <n-select
+                  v-model:value="line.entitlementAuthority"
+                  :options="entitlementAuthorityOptions"
+                  placeholder="权益判定"
+                  style="width: 180px"
+                />
+              </n-space>
+              <n-space>
+                <n-input
+                  v-model:value="line.externalTitle"
+                  placeholder="External Title"
+                  style="width: 180px"
+                />
+                <n-input-number
+                  v-model:value="line.requestedQuantity"
+                  placeholder="Qty"
+                  :min="1"
+                  style="width: 100px"
+                />
+                <n-input-number
+                  v-model:value="line.productMasterId"
+                  placeholder="商品主档ID"
+                  :min="1"
+                  clearable
+                  style="width: 140px"
+                />
+                <n-input
+                  v-model:value="line.entitlementCode"
+                  placeholder="权益编码"
+                  style="width: 140px"
+                />
+                <n-input
+                  v-model:value="line.giftLevelSnapshot"
+                  placeholder="等级快照"
+                  style="width: 140px"
+                />
+              </n-space>
+              <n-space>
+                <n-input
+                  v-model:value="line.routingReasonCode"
+                  placeholder="路由原因码"
+                  style="width: 160px"
+                />
+                <n-input
+                  v-model:value="line.eligibilityContextRef"
+                  placeholder="资格上下文引用"
+                  style="width: 200px"
+                />
+                <n-input
+                  v-model:value="line.recipientInputPayload"
+                  placeholder="输入附件(JSON)"
+                  style="width: 200px"
+                />
+              </n-space>
             </n-space>
           </n-card>
 
@@ -207,13 +263,44 @@ const routingDispositionOptions = [
   { label: 'Excluded Revoked', value: 'excluded_revoked' },
 ]
 
+const recipientInputStateOptions = [
+  { label: 'Not Required', value: 'not_required' },
+  { label: 'Waiting', value: 'waiting_for_input' },
+  { label: 'Partial', value: 'partially_collected' },
+  { label: 'Ready', value: 'ready' },
+  { label: 'Waived', value: 'waived' },
+  { label: 'Expired', value: 'expired' },
+]
+
+const obligationTriggerKindOptions = [
+  { label: 'Periodic Membership', value: 'periodic_membership' },
+  { label: 'Loyalty Membership', value: 'loyalty_membership' },
+  { label: 'Supporter Purchase', value: 'supporter_only_purchase' },
+  { label: 'Member Discount', value: 'member_only_discount_purchase' },
+  { label: 'Campaign Reward', value: 'campaign_reward' },
+  { label: 'Manual Compensation', value: 'manual_compensation' },
+]
+
+const entitlementAuthorityOptions = [
+  { label: 'Local Policy', value: 'local_policy' },
+  { label: 'Upstream Platform', value: 'upstream_platform' },
+  { label: 'Manual Grant', value: 'manual_grant' },
+]
+
 // ── Form state ──
 
 interface LineForm {
   lineType: string
   obligationTriggerKind: string
   entitlementAuthority: string
+  recipientInputState: string
   routingDisposition: string
+  routingReasonCode: string
+  eligibilityContextRef: string
+  entitlementCode: string
+  giftLevelSnapshot: string
+  productMasterId: number | null
+  recipientInputPayload: string
   externalTitle: string
   requestedQuantity: number
 }
@@ -222,7 +309,14 @@ const makeLine = (): LineForm => ({
   lineType: 'entitlement_rule',
   obligationTriggerKind: 'periodic_membership',
   entitlementAuthority: 'local_policy',
+  recipientInputState: 'not_required',
   routingDisposition: 'accepted',
+  routingReasonCode: '',
+  eligibilityContextRef: '',
+  entitlementCode: '',
+  giftLevelSnapshot: '',
+  productMasterId: null,
+  recipientInputPayload: '',
   externalTitle: '',
   requestedQuantity: 1,
 })

@@ -13,7 +13,7 @@ import {
   ListWaves,
   GetWave,
   GetWaveOverview,
-  ApplyAllocationRules,
+  MapDemandLines,
   AssignDemandToWave,
   GenerateParticipants,
   ListAssignedDemandsByWave,
@@ -118,7 +118,14 @@ export async function importDemandDocument(input: {
     lineType: string;
     obligationTriggerKind: string;
     entitlementAuthority: string;
+    recipientInputState?: string;
     routingDisposition: string;
+    routingReasonCode?: string;
+    eligibilityContextRef?: string;
+    entitlementCode?: string;
+    giftLevelSnapshot?: string;
+    productMasterId?: number;
+    recipientInputPayload?: string;
     externalTitle: string;
     requestedQuantity: number;
   }>;
@@ -145,11 +152,11 @@ export async function createWave(name: string): Promise<dto.WaveDTO> {
   return CreateWave(new dto.CreateWaveInput({ name }));
 }
 
-export async function applyAllocationRules(
+export async function mapDemandLines(
   waveId: number,
-): Promise<dto.FulfillmentLineDTO[]> {
+): Promise<dto.DemandMappingResult> {
   assertWailsRuntime();
-  return ApplyAllocationRules(waveId);
+  return MapDemandLines(waveId);
 }
 
 export async function getWaveOverview(

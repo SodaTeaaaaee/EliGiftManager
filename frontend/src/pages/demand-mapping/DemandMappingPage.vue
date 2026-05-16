@@ -18,7 +18,7 @@ import {
   listDemandLines,
   assignDemandToWave,
   generateParticipants,
-  applyAllocationRules,
+  mapDemandLines,
 } from "@/shared/lib/wails/app"
 import { dto } from "@/../wailsjs/go/models"
 
@@ -112,13 +112,18 @@ async function handleGenerate() {
   }
 }
 
-async function handleApplyRules() {
+async function handleMapDemand() {
   applyingRules.value = true
   try {
-    const lines = await applyAllocationRules(waveId.value)
-    message.success(`已生成 ${lines.length} 条履约行`)
+    const result = await mapDemandLines(waveId.value)
+    if (result.blockedLines && result.blockedLines.length > 0) {
+      const blockedTitles = result.blockedLines.map((b: any) => b.demandLineTitle || `#${b.demandLineId}`).join(', ')
+      message.warning(`已映射 ${result.createdLines?.length ?? 0} 条履约行，${result.blockedLines.length} 条阻塞: ${blockedTitles}`)
+    } else {
+      message.success(`已映射 ${result.createdLines?.length ?? 0} 条履约行`)
+    }
   } catch (e: any) {
-    message.error(`生成履约行失败: ${e?.message || e}`)
+    message.error(`需求映射失败: ${e?.message || e}`)
   } finally {
     applyingRules.value = false
   }
@@ -267,7 +272,7 @@ onMounted(() => loadBoth())
             </template>
             此操作会批量生成数据，确认执行？
           </NPopconfirm>
-          <NPopconfirm @positive-click="handleApplyRules">
+          <NPopconfirm @positive-click="handleMapDemand">
             <template #trigger>
               <NButton
                 type="primary"
@@ -275,10 +280,10 @@ onMounted(() => loadBoth())
                 :loading="applyingRules"
                 :disabled="assignedDocs.length === 0 || !participantsGenerated"
               >
-                生成履约行
+                映射需求
               </NButton>
             </template>
-            此操作会批量生成数据，确认执行？
+            此操作会将零售订单需求映射为履约行，确认执行？
           </NPopconfirm>
         </NSpace>
       </template>

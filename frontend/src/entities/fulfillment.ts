@@ -1,32 +1,32 @@
 /** The allocation state of a fulfillment line. */
 export type AllocationState =
-  | "unallocated"
-  | "allocated"
-  | "adjusted"
-  | "final";
+  | "draft"
+  | "ready";
 
 /** The address resolution state for this fulfillment line. */
 export type AddressState =
-  | "pending"
-  | "resolved"
-  | "overridden"
   | "missing"
-  | "waived";
+  | "ready"
+  | "invalid";
 
 /** Supplier-side execution state. */
 export type SupplierState =
-  | "pending"
-  | "queued"
+  | "not_submitted"
   | "submitted"
   | "accepted"
-  | "rejected"
-  | "shipped";
+  | "producing"
+  | "partially_shipped"
+  | "shipped"
+  | "canceled";
 
-/** Channel sync state (placeholder for future channel integration). */
+/** Channel sync state. */
 export type ChannelSyncState =
   | "not_required"
+  | "unsupported"
   | "pending"
   | "synced"
+  | "manual_confirmed"
+  | "skipped"
   | "failed";
 
 /** Why this fulfillment line exists. */

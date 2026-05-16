@@ -1,13 +1,14 @@
 /** Classification of wave composition. */
 export type WaveType = "membership" | "retail" | "mixed";
 
-/** Lifecycle phase of a wave (replaces legacy numeric status). */
+/** Lifecycle phase of a wave. */
 export type LifecycleStage =
-  | "pending"
   | "intake"
   | "allocation"
   | "review"
-  | "export"
+  | "execution"
+  | "syncing_back"
+  | "awaiting_manual_closure"
   | "closed";
 
 /**
