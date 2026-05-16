@@ -16,14 +16,11 @@ import (
 type WaveController struct {
 	waveUC              app.WaveUseCase
 	demandMappingUC     app.DemandMappingUseCase
-	fulfillRepo         domain.FulfillmentLineRepository
-	supplierRepo        domain.SupplierOrderRepository
+	overviewQueryUC     app.WaveOverviewQueryUseCase
 	assignmentRepo      domain.WaveDemandAssignmentRepository
 	demandRepo          domain.DemandDocumentRepository
-	shipmentRepo        domain.ShipmentRepository
 	gdb                 *gorm.DB
 	nodeRepo            domain.HistoryNodeRepository
-	overviewProjUC      app.WaveOverviewProjectionUseCase
 	undoRedoUC          app.UndoRedoUseCase
 	historyRecordingSvc *app.HistoryRecordingService
 	projHashSvc         *app.ProjectionHashService
@@ -50,17 +47,17 @@ func NewWaveController() *WaveController {
 
 	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+	overviewProjUC := app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC)
+	productRepo := infra.NewProductRepository(gormDB)
+	profileRepo := infra.NewIntegrationProfileRepository(gormDB)
 
 	return &WaveController{
 		waveUC:              app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
 		demandMappingUC:     app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil),
-		fulfillRepo:         fulfillRepo,
-		supplierRepo:        supplierRepo,
+		overviewQueryUC:     app.NewWaveOverviewQueryUseCase(waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo, productRepo, profileRepo, overviewProjUC),
 		assignmentRepo:      assignmentRepo,
 		demandRepo:          demandRepo,
-		shipmentRepo:        shipmentRepo,
 		nodeRepo:            historyNodeRepo,
-		overviewProjUC:      app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC),
 		gdb:                gormDB,
 		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gormDB, snapshotSvc)),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
@@ -104,121 +101,14 @@ func (c *WaveController) GetWave(id uint) (dto.WaveDTO, error) {
 
 // GetWaveOverview returns aggregated wave overview data.
 func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, error) {
-	w, err := c.waveUC.GetWave(waveID)
-	if err != nil {
-		return dto.WaveOverviewDTO{}, err
-	}
-
-	fulfillLines, err := c.fulfillRepo.ListByWave(waveID)
-	if err != nil {
-		return dto.WaveOverviewDTO{}, err
-	}
-
-	supplierOrders, err := c.supplierRepo.ListByWave(waveID)
-	if err != nil {
-		return dto.WaveOverviewDTO{}, err
-	}
-
-	// Build wave-scoped product lookup for mapping-blocked detection
-	productRepo := infra.NewProductRepository(c.gdb)
-	waveProducts, _ := productRepo.ListByWave(waveID)
-	productMasterToWaveProduct := make(map[uint]uint, len(waveProducts))
-	for _, wp := range waveProducts {
-		if wp.ProductMasterID != nil {
-			productMasterToWaveProduct[*wp.ProductMasterID] = wp.ID
-		}
-	}
-
-	// Count demand lines for this wave via assignments, bucketed by routing/input state
-	docs, err := c.assignmentRepo.ListDemandDocumentsByWave(waveID)
-	if err != nil {
-		return dto.WaveOverviewDTO{}, err
-	}
-
-	var (
-		demandCount              int
-		acceptedReadyOrNotReq    int
-		acceptedWaitingForInput  int
-		deferredCount            int
-		excludedManualCount      int
-		excludedDuplicateCount   int
-		excludedRevokedCount     int
-		mappingBlockedCount      int
-	)
-	for _, doc := range docs {
-		lines, err := c.demandRepo.ListLinesByDocument(doc.ID)
-		if err != nil {
-			return dto.WaveOverviewDTO{}, err
-		}
-		for _, line := range lines {
-			switch line.RoutingDisposition {
-			case "accepted":
-				demandCount++
-				if line.RecipientInputState == "ready" || line.RecipientInputState == "not_required" {
-					acceptedReadyOrNotReq++
-					if doc.Kind == "retail_order" && line.ProductMasterID != nil {
-						if _, ok := productMasterToWaveProduct[*line.ProductMasterID]; !ok {
-							mappingBlockedCount++
-						}
-					}
-				} else if line.RecipientInputState == "waiting_for_input" || line.RecipientInputState == "partially_collected" {
-					acceptedWaitingForInput++
-				}
-			case "deferred":
-				deferredCount++
-			case "excluded_manual":
-				excludedManualCount++
-			case "excluded_duplicate":
-				excludedDuplicateCount++
-			case "excluded_revoked":
-				excludedRevokedCount++
-			}
-		}
-	}
-
-	// Collect shipment stats
-	shipments, err := c.shipmentRepo.ListByWave(waveID)
-	if err != nil {
-		return dto.WaveOverviewDTO{}, err
-	}
-	shipmentCount := len(shipments)
-
-	trackedFulfillmentCount := 0
-	trackedSet := make(map[uint]bool)
-	for _, s := range shipments {
-		if s.TrackingNo == "" {
-			continue
-		}
-		lines, err := c.shipmentRepo.ListLinesByShipment(s.ID)
-		if err != nil {
-			return dto.WaveOverviewDTO{}, err
-		}
-		for _, l := range lines {
-			if !trackedSet[l.FulfillmentLineID] {
-				trackedSet[l.FulfillmentLineID] = true
-				trackedFulfillmentCount++
-			}
-		}
-	}
-
-	base := dto.WaveOverviewDTO{
-		Wave:                     domainToWaveDTO(w),
-		DemandCount:              demandCount,
-		FulfillmentCount:         len(fulfillLines),
-		SupplierOrderCount:       len(supplierOrders),
-		ShipmentCount:            shipmentCount,
-		TrackedFulfillmentCount:  trackedFulfillmentCount,
-		AcceptedReadyOrNotRequired: acceptedReadyOrNotReq,
-		AcceptedWaitingForInput:    acceptedWaitingForInput,
-		DeferredCount:              deferredCount,
-		ExcludedManualCount:       excludedManualCount,
-		ExcludedDuplicateCount:    excludedDuplicateCount,
-		ExcludedRevokedCount:      excludedRevokedCount,
-		MappingBlockedCount:       mappingBlockedCount,
-	}
-	return c.overviewProjUC.ProjectWaveOverview(base)
+	return c.overviewQueryUC.GetWaveOverview(waveID)
 }
 
+// ListWaveDashboardRows returns batch-projected dashboard rows with authoritative
+// projected lifecycle stages. This is the only dashboard data source.
+func (c *WaveController) ListWaveDashboardRows() ([]dto.WaveDashboardRowDTO, error) {
+	return c.overviewQueryUC.ListDashboardRows()
+}
 
 // AssignDemandToWave assigns a demand document to a wave.
 func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) error {

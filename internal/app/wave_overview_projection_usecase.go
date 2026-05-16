@@ -81,8 +81,11 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 		projectedStage = "syncing_back"
 	} else if hasUncoveredFailures {
 		projectedStage = "awaiting_manual_closure"
-	} else if len(jobs) > 0 {
-		// No active jobs, no uncovered failures, sync jobs exist → closed.
+	} else if hasUncoveredManualClosureCandidates(base, len(decisions)) {
+		projectedStage = "awaiting_manual_closure"
+	} else if len(jobs) > 0 || base.ManualClosureCandidateCount > 0 || base.AutoClosureCandidateCount > 0 {
+		// We have reached the closure stage and there are no active jobs and no
+		// uncovered failures/candidates left → closed.
 		projectedStage = "closed"
 	}
 
@@ -146,6 +149,13 @@ func (uc *waveOverviewProjectionUseCase) hasUncoveredFailedItems(
 		}
 	}
 	return false, nil
+}
+
+func hasUncoveredManualClosureCandidates(base dto.WaveOverviewDTO, decisionCount int) bool {
+	if base.ManualClosureCandidateCount == 0 {
+		return false
+	}
+	return decisionCount < base.ManualClosureCandidateCount
 }
 
 // deriveStage computes the authoritative lifecycle stage from observable state.

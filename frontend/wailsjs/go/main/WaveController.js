@@ -30,6 +30,10 @@ export function ListRecentHistory(arg1, arg2) {
   return window['go']['main']['WaveController']['ListRecentHistory'](arg1, arg2);
 }
 
+export function ListWaveDashboardRows() {
+  return window['go']['main']['WaveController']['ListWaveDashboardRows']();
+}
+
 export function ListWaves() {
   return window['go']['main']['WaveController']['ListWaves']();
 }

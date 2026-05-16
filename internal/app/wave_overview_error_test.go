@@ -38,7 +38,7 @@ func TestProjectWaveOverviewChannelSyncRepoErrorPropagates(t *testing.T) {
 	closureRepo := newMockClosureDecisionRepo()
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{})
 
-	_, err := uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	_, err := uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err == nil {
 		t.Fatal("expected error when channel sync repo fails, got nil")
 	}
@@ -52,7 +52,7 @@ func TestProjectWaveOverviewClosureRepoErrorPropagates(t *testing.T) {
 	closureRepo := &errorClosureDecisionRepo{newMockClosureDecisionRepo()}
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{})
 
-	_, err := uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	_, err := uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err == nil {
 		t.Fatal("expected error when closure decision repo fails, got nil")
 	}
@@ -66,7 +66,7 @@ func TestProjectWaveOverviewNoHistoryScopeReturnsEmptyDriftSignals(t *testing.T)
 
 	p := newProjTestSetup() // uses noopHistoryHeadUC and noopDriftUC
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("expected no error when no history scope exists, got: %v", err)
 	}
@@ -92,7 +92,7 @@ func TestProjectWaveOverviewHistoryHeadErrorPropagates(t *testing.T) {
 	errHeadUC := &errorHistoryHeadUC{}
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, errHeadUC)
 
-	_, err := uc.ProjectWaveOverview(baseOverview(1, "fulfilling"))
+	_, err := uc.ProjectWaveOverview(baseOverview(1, "execution"))
 	if err == nil {
 		t.Fatal("expected error when history head query fails, got nil")
 	}

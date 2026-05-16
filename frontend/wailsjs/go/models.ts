@@ -1582,6 +1582,26 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class WaveDashboardRowDTO {
+	    id: number;
+	    waveNo: string;
+	    name: string;
+	    createdAt: string;
+	    projectedLifecycleStage: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveDashboardRowDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveNo = source["waveNo"];
+	        this.name = source["name"];
+	        this.createdAt = source["createdAt"];
+	        this.projectedLifecycleStage = source["projectedLifecycleStage"];
+	    }
+	}
 	export class WaveOverviewDTO {
 	    wave: WaveDTO;
 	    demandCount: number;
@@ -1606,6 +1626,8 @@ export namespace dto {
 	    manualUnsupportedCount: number;
 	    manualSkippedCount: number;
 	    manualCompletedCount: number;
+	    autoClosureCandidateCount: number;
+	    manualClosureCandidateCount: number;
 	    projectedLifecycleStage: string;
 	    basisDriftSignals: BasisDriftSignalDTO[];
 	    hasDriftedBasis: boolean;
@@ -1640,6 +1662,8 @@ export namespace dto {
 	        this.manualUnsupportedCount = source["manualUnsupportedCount"];
 	        this.manualSkippedCount = source["manualSkippedCount"];
 	        this.manualCompletedCount = source["manualCompletedCount"];
+	        this.autoClosureCandidateCount = source["autoClosureCandidateCount"];
+	        this.manualClosureCandidateCount = source["manualClosureCandidateCount"];
 	        this.projectedLifecycleStage = source["projectedLifecycleStage"];
 	        this.basisDriftSignals = this.convertValues(source["basisDriftSignals"], BasisDriftSignalDTO);
 	        this.hasDriftedBasis = source["hasDriftedBasis"];

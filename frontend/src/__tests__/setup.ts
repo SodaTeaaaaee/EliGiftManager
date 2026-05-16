@@ -31,6 +31,7 @@ vi.mock("@/shared/lib/wails/app.ts", () => ({
   getDemandDocument: vi.fn(async () => ({})),
   importDemandDocument: vi.fn(async () => ({})),
   listWaves: vi.fn(async () => []),
+  listWaveDashboardRows: vi.fn(async () => []),
   getWave: vi.fn(async () => ({ id: 1, name: "Test Wave" })),
   createWave: vi.fn(async () => ({ id: 1, name: "Test Wave" })),
   mapDemandLines: vi.fn(async () => ({

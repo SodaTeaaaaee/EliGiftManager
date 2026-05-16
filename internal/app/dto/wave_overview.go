@@ -27,6 +27,8 @@ type WaveOverviewDTO struct {
 	ManualUnsupportedCount         int    `json:"manualUnsupportedCount"`
 	ManualSkippedCount             int    `json:"manualSkippedCount"`
 	ManualCompletedCount           int    `json:"manualCompletedCount"`
+	AutoClosureCandidateCount      int    `json:"autoClosureCandidateCount"`
+	ManualClosureCandidateCount    int    `json:"manualClosureCandidateCount"`
 	ProjectedLifecycleStage        string `json:"projectedLifecycleStage"`
 
 	BasisDriftSignals      []BasisDriftSignalDTO `json:"basisDriftSignals"`

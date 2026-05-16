@@ -121,6 +121,17 @@ describe("Route smoke tests — mount without crash", () => {
 });
 
 describe("Route resilience — bridge rejection does not crash", () => {
+  it("Dashboard handles bridge rejection gracefully", async () => {
+    const bridge = await import("@/shared/lib/wails/app.ts");
+    vi.mocked(bridge.listWaveDashboardRows).mockRejectedValueOnce(
+      new Error("Wails backend not connected")
+    );
+
+    const { wrapper } = await mountAtRoute("/dashboard");
+    expect(wrapper.html()).toBeTruthy();
+    wrapper.unmount();
+  });
+
   it("WaveOverview handles bridge rejection gracefully", async () => {
     const bridge = await import("@/shared/lib/wails/app.ts");
     vi.mocked(bridge.getWaveOverview).mockRejectedValueOnce(

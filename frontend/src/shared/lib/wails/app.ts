@@ -11,6 +11,7 @@ import {
 import {
   CreateWave,
   ListWaves,
+  ListWaveDashboardRows,
   GetWave,
   GetWaveOverview,
   MapDemandLines,
@@ -140,6 +141,11 @@ export async function importDemandDocument(input: {
 export async function listWaves(): Promise<dto.WaveDTO[]> {
   if (!isWailsRuntimeAvailable()) return [];
   return ListWaves();
+}
+
+export async function listWaveDashboardRows(): Promise<dto.WaveDashboardRowDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListWaveDashboardRows();
 }
 
 export async function getWave(id: number): Promise<dto.WaveDTO> {

@@ -12,19 +12,16 @@ import {
   NGrid,
   NGridItem,
   NEmpty,
-  NSpin,
   type DataTableColumns,
 } from 'naive-ui'
-import { listWaves, createWave, getWaveOverview } from '@/shared/lib/wails/app'
+import { createWave, listWaveDashboardRows } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
 
 const router = useRouter()
-const waves = ref<dto.WaveDTO[]>([])
+const rows = ref<dto.WaveDashboardRowDTO[]>([])
 const loading = ref(false)
 const error = ref('')
 const creating = ref(false)
-// Per-wave projected stages — null while loading, undefined if fetch failed
-const projectedStages = ref<Record<number, string | undefined>>({})
 
 const stageTagType: Record<string, 'default' | 'info' | 'success' | 'warning' | 'error'> = {
   intake: 'info',
@@ -50,26 +47,26 @@ interface DashboardRow {
   id: number
   waveNo: string
   name: string
-  stage: string
+  projectedLifecycleStage: string
   createdAt: string
 }
 
 const dashboardRows = computed<DashboardRow[]>(() =>
-  waves.value.map((w) => ({
-    id: w.id,
-    waveNo: w.waveNo,
-    name: w.name,
-    stage: projectedStages.value[w.id] ?? w.lifecycleStage ?? 'intake',
-    createdAt: w.createdAt,
+  rows.value.map((r) => ({
+    id: r.id,
+    waveNo: r.waveNo,
+    name: r.name,
+    projectedLifecycleStage: r.projectedLifecycleStage || 'intake',
+    createdAt: r.createdAt,
   })),
 )
 
 const activeCount = computed(() =>
-  dashboardRows.value.filter((r) => r.stage !== 'closed').length,
+  dashboardRows.value.filter((r) => r.projectedLifecycleStage !== 'closed').length,
 )
 
 const closedCount = computed(() =>
-  dashboardRows.value.filter((r) => r.stage === 'closed').length,
+  dashboardRows.value.filter((r) => r.projectedLifecycleStage === 'closed').length,
 )
 
 const columns: DataTableColumns<DashboardRow> = [
@@ -78,10 +75,10 @@ const columns: DataTableColumns<DashboardRow> = [
   { title: '名称', key: 'name', ellipsis: { tooltip: true } },
   {
     title: '阶段',
-    key: 'stage',
+    key: 'projectedLifecycleStage',
     width: 120,
     render(row) {
-      const stage = row.stage || 'intake'
+      const stage = row.projectedLifecycleStage || 'intake'
       return h(NTag, {
         type: stageTagType[stage] || 'default',
         size: 'small',
@@ -120,23 +117,7 @@ async function loadWaves() {
   loading.value = true
   error.value = ''
   try {
-    waves.value = await listWaves()
-    // Fetch projected stage per wave for accurate dashboard display.
-    // This is a temporary bridge until a bulk ListWaveOverviews endpoint
-    // is added — individual GetWaveOverview calls are acceptable for the
-    // current wave counts (< 50).
-    const stages: Record<number, string | undefined> = {}
-    await Promise.all(
-      waves.value.map(async (w) => {
-        try {
-          const overview = await getWaveOverview(w.id)
-          stages[w.id] = overview.projectedLifecycleStage || 'intake'
-        } catch {
-          stages[w.id] = undefined // fall back to lifecycleStage in the computed
-        }
-      }),
-    )
-    projectedStages.value = stages
+    rows.value = await listWaveDashboardRows()
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -161,7 +142,7 @@ onMounted(loadWaves)
     <n-grid :cols="3" :x-gap="16" class="mb-4">
       <n-grid-item>
         <n-card size="small">
-          <n-statistic label="波次总数" :value="waves.length" />
+          <n-statistic label="波次总数" :value="rows.length" />
         </n-card>
       </n-grid-item>
       <n-grid-item>
@@ -177,7 +158,7 @@ onMounted(loadWaves)
     </n-grid>
 
     <n-card title="波次列表">
-      <n-empty v-if="!loading && waves.length === 0" description="暂无波次，点击右上角创建" />
+      <n-empty v-if="!loading && rows.length === 0" description="暂无波次，点击右上角创建" />
       <n-data-table
         v-else
         :columns="columns"

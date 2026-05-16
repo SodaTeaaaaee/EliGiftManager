@@ -16,6 +16,8 @@ export function ListAssignedDemandsByWave(arg1:number):Promise<Array<dto.DemandD
 
 export function ListRecentHistory(arg1:number,arg2:number):Promise<Array<dto.HistoryNodeDTO>>;
 
+export function ListWaveDashboardRows():Promise<Array<dto.WaveDashboardRowDTO>>;
+
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
 
 export function MapDemandLines(arg1:number):Promise<dto.DemandMappingResult>;

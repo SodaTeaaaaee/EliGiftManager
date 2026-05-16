@@ -90,6 +90,13 @@ func baseOverview(waveID uint, stage string) dto.WaveOverviewDTO {
 	}
 }
 
+func baseOverviewWithCandidates(waveID uint, stage string, autoCandidates int, manualCandidates int) dto.WaveOverviewDTO {
+	base := baseOverview(waveID, stage)
+	base.AutoClosureCandidateCount = autoCandidates
+	base.ManualClosureCandidateCount = manualCandidates
+	return base
+}
+
 // ── tests ──
 
 func TestProjectWaveOverviewNoJobsNoDecisions(t *testing.T) {
@@ -215,6 +222,42 @@ func TestProjectWaveOverviewAllFailedItemsCoveredWithJobsSetsClosed(t *testing.T
 		t.Errorf("ManualUnsupportedCount = %d, want 1", result.ManualUnsupportedCount)
 	}
 	// All failed items covered + sync jobs exist → closed
+	if result.ProjectedLifecycleStage != "closed" {
+		t.Errorf("ProjectedLifecycleStage = %q, want closed", result.ProjectedLifecycleStage)
+	}
+}
+
+func TestProjectWaveOverviewManualClosureCandidatesWithoutJobsAwaitingManualClosure(t *testing.T) {
+	t.Parallel()
+	p := newProjTestSetup()
+
+	result, err := p.uc.ProjectWaveOverview(baseOverviewWithCandidates(1, "execution", 0, 2))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.ManualClosureDecisionCount != 0 {
+		t.Errorf("ManualClosureDecisionCount = %d, want 0", result.ManualClosureDecisionCount)
+	}
+	if result.ProjectedLifecycleStage != "awaiting_manual_closure" {
+		t.Errorf("ProjectedLifecycleStage = %q, want awaiting_manual_closure", result.ProjectedLifecycleStage)
+	}
+}
+
+func TestProjectWaveOverviewManualClosureCandidatesCoveredWithoutJobsSetsClosed(t *testing.T) {
+	t.Parallel()
+	p := newProjTestSetup()
+	p.addDecision(1, 100, "mark_sync_completed_manually")
+	p.addDecision(1, 101, "mark_sync_skipped")
+
+	result, err := p.uc.ProjectWaveOverview(baseOverviewWithCandidates(1, "execution", 0, 2))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result.ManualClosureDecisionCount != 2 {
+		t.Errorf("ManualClosureDecisionCount = %d, want 2", result.ManualClosureDecisionCount)
+	}
 	if result.ProjectedLifecycleStage != "closed" {
 		t.Errorf("ProjectedLifecycleStage = %q, want closed", result.ProjectedLifecycleStage)
 	}

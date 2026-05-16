@@ -55,6 +55,12 @@ const nextStepGuidance = computed(() => {
   if ((o.mappingBlockedCount ?? 0) > 0) {
     return `有 ${o.mappingBlockedCount} 条需求因商品映射缺失被阻塞。请返回「需求映射」补充波次商品引用。`
   }
+  if (o.projectedLifecycleStage === 'awaiting_manual_closure') {
+    return '当前波次已进入待人工闭环阶段。请前往「回填」完成手动闭环决策。'
+  }
+  if (o.projectedLifecycleStage === 'syncing_back') {
+    return '当前波次正在等待回填结果。请前往「回填」查看任务状态或处理失败项。'
+  }
   if (o.acceptedReadyOrNotRequired === 0 && o.deferredCount === 0) return '下一步：前往「需求映射」接手需求文档'
   if (o.fulfillmentCount === 0) return '下一步：前往「分配规则」或「需求映射」生成履约行'
   if (o.supplierOrderCount === 0) return '下一步：前往「导出」生成供应商订单'

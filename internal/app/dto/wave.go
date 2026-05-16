@@ -16,3 +16,11 @@ type WaveDTO struct {
 type CreateWaveInput struct {
 	Name string `json:"name"`
 }
+
+type WaveDashboardRowDTO struct {
+	ID                     uint   `json:"id"`
+	WaveNo                 string `json:"waveNo"`
+	Name                   string `json:"name"`
+	CreatedAt              string `json:"createdAt"`
+	ProjectedLifecycleStage string `json:"projectedLifecycleStage"`
+}

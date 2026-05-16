@@ -18,6 +18,12 @@ type WaveUseCase interface {
 	GenerateParticipants(waveID uint) (int, error)
 }
 
+type WaveOverviewQueryUseCase interface {
+	BuildBaseOverview(waveID uint) (dto.WaveOverviewDTO, error)
+	GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, error)
+	ListDashboardRows() ([]dto.WaveDashboardRowDTO, error)
+}
+
 // DemandMappingUseCase handles demand-driven mapping: converts accepted, input-ready
 // DemandLines into FulfillmentLines for retail_order demand documents.
 // Demand lines that require product mapping but cannot be resolved are reported as
