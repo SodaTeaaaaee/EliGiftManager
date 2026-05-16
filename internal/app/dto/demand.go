@@ -59,7 +59,28 @@ type CreateDemandLineInput struct {
 	LineType              string `json:"lineType"`
 	ObligationTriggerKind string `json:"obligationTriggerKind"`
 	EntitlementAuthority  string `json:"entitlementAuthority"`
+	RecipientInputState   string `json:"recipientInputState"`
 	RoutingDisposition    string `json:"routingDisposition"`
+	RoutingReasonCode     string `json:"routingReasonCode"`
+	EligibilityContextRef  string `json:"eligibilityContextRef"`
+	EntitlementCode       string `json:"entitlementCode"`
+	GiftLevelSnapshot     string `json:"giftLevelSnapshot"`
+	ProductMasterID       *uint  `json:"productMasterId"`
+	RecipientInputPayload string `json:"recipientInputPayload"`
 	ExternalTitle         string `json:"externalTitle"`
 	RequestedQuantity     int    `json:"requestedQuantity"`
+}
+
+// DemandMappingBlockedLine records a demand line that could not be mapped
+// to a fulfillment line because of a missing or unresolvable product reference.
+type DemandMappingBlockedLine struct {
+	DemandLineID  uint   `json:"demandLineId"`
+	DemandLineTitle string `json:"demandLineTitle"`
+	Reason        string `json:"reason"`
+}
+
+// DemandMappingResult contains the outcome of a demand-driven mapping run.
+type DemandMappingResult struct {
+	CreatedLines []FulfillmentLineDTO        `json:"createdLines"`
+	BlockedLines []DemandMappingBlockedLine  `json:"blockedLines"`
 }

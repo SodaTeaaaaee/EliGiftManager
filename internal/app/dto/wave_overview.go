@@ -8,6 +8,15 @@ type WaveOverviewDTO struct {
 	ShipmentCount           int     `json:"shipmentCount"`
 	TrackedFulfillmentCount int     `json:"trackedFulfillmentCount"`
 
+	// Demand-line intake buckets — answers "what should the user do next?"
+	AcceptedReadyOrNotRequired int `json:"acceptedReadyOrNotRequired"`
+	AcceptedWaitingForInput    int `json:"acceptedWaitingForInput"`
+	DeferredCount              int `json:"deferredCount"`
+	ExcludedManualCount        int `json:"excludedManualCount"`
+	ExcludedDuplicateCount     int `json:"excludedDuplicateCount"`
+	ExcludedRevokedCount       int `json:"excludedRevokedCount"`
+	MappingBlockedCount        int `json:"mappingBlockedCount"`
+
 	ChannelSyncJobCount            int    `json:"channelSyncJobCount"`
 	ChannelSyncPendingCount        int    `json:"channelSyncPendingCount"`
 	ChannelSyncRunningCount        int    `json:"channelSyncRunningCount"`

@@ -51,6 +51,30 @@ func (r *fulfillmentRepository) DeleteByWave(waveID uint) error {
 	return r.db.Unscoped().Where("wave_id = ?", waveID).Delete(&persistence.FulfillmentLine{}).Error
 }
 
+func (r *fulfillmentRepository) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		for _, u := range updates {
+			cols := make(map[string]interface{})
+			if u.SupplierState != "" {
+				cols["supplier_state"] = u.SupplierState
+			}
+			if u.ChannelSyncState != "" {
+				cols["channel_sync_state"] = u.ChannelSyncState
+			}
+			if len(cols) == 0 {
+				continue
+			}
+			if err := tx.Model(&persistence.FulfillmentLine{}).Where("id = ?", u.ID).Updates(cols).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *fulfillmentRepository) ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []domain.FulfillmentLine) error {
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("wave_id = ? AND generated_by = ?", waveID, generatedBy).Delete(&persistence.FulfillmentLine{}).Error; err != nil {

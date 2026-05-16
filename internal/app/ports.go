@@ -18,9 +18,12 @@ type WaveUseCase interface {
 	GenerateParticipants(waveID uint) (int, error)
 }
 
-// AllocationUseCase handles applying allocation policy rules to a wave.
-type AllocationUseCase interface {
-	ApplyRules(waveID uint) ([]domain.FulfillmentLine, error)
+// DemandMappingUseCase handles demand-driven mapping: converts accepted, input-ready
+// DemandLines into FulfillmentLines for retail_order demand documents.
+// Demand lines that require product mapping but cannot be resolved are reported as
+// blocked rather than silently entering the execution layer without a ProductID.
+type DemandMappingUseCase interface {
+	MapDemandToFulfillment(waveID uint) (*dto.DemandMappingResult, error)
 }
 
 // ExportUseCase handles exporting supplier orders from a wave.

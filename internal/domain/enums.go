@@ -151,17 +151,73 @@ const (
 	ShipmentStatusReturned  ShipmentStatus = "returned"
 )
 
+// FulfillmentLine: AllocationState
+type AllocationState string
+
+const (
+	AllocationStateDraft AllocationState = "draft"
+	AllocationStateReady AllocationState = "ready"
+)
+
+// FulfillmentLine: AddressState
+type AddressState string
+
+const (
+	AddressStateMissing AddressState = "missing"
+	AddressStateReady   AddressState = "ready"
+	AddressStateInvalid AddressState = "invalid"
+)
+
+// FulfillmentLine: SupplierState
+type SupplierState string
+
+const (
+	SupplierStateNotSubmitted     SupplierState = "not_submitted"
+	SupplierStateSubmitted        SupplierState = "submitted"
+	SupplierStateAccepted         SupplierState = "accepted"
+	SupplierStateProducing        SupplierState = "producing"
+	SupplierStatePartiallyShipped SupplierState = "partially_shipped"
+	SupplierStateShipped          SupplierState = "shipped"
+	SupplierStateCanceled         SupplierState = "canceled"
+)
+
+// FulfillmentLine: ChannelSyncState
+type ChannelSyncState string
+
+const (
+	ChannelSyncStateNotRequired     ChannelSyncState = "not_required"
+	ChannelSyncStateUnsupported     ChannelSyncState = "unsupported"
+	ChannelSyncStatePending         ChannelSyncState = "pending"
+	ChannelSyncStateSynced          ChannelSyncState = "synced"
+	ChannelSyncStateManualConfirmed ChannelSyncState = "manual_confirmed"
+	ChannelSyncStateSkipped         ChannelSyncState = "skipped"
+	ChannelSyncStateFailed          ChannelSyncState = "failed"
+)
+
+// Wave: LifecycleStage
+type LifecycleStage string
+
+const (
+	LifecycleStageIntake          LifecycleStage = "intake"
+	LifecycleStageAllocation      LifecycleStage = "allocation"
+	LifecycleStageReview          LifecycleStage = "review"
+	LifecycleStageExecution       LifecycleStage = "execution"
+	LifecycleStageSyncingBack     LifecycleStage = "syncing_back"
+	LifecycleStageAwaitingClosure LifecycleStage = "awaiting_manual_closure"
+	LifecycleStageClosed          LifecycleStage = "closed"
+)
+
 // History command kinds — user-intent operations only
 const (
 	CmdSystemBaseline       = "_system_baseline"
-	CmdAssignDemand          = "assign_demand"
-	CmdGenerateParticipants  = "generate_participants"
-	CmdApplyAllocationRules  = "apply_allocation_rules"
-	CmdReconcileWave         = "reconcile_wave"
-	CmdCreateRule            = "create_rule"
-	CmdUpdateRule            = "update_rule"
-	CmdDeleteRule            = "delete_rule"
-	CmdRecordAdjustment      = "record_adjustment"
+	CmdAssignDemand         = "assign_demand"
+	CmdGenerateParticipants = "generate_participants"
+	CmdMapDemandLines       = "map_demand_lines"
+	CmdReconcileWave        = "reconcile_wave"
+	CmdCreateRule           = "create_rule"
+	CmdUpdateRule           = "update_rule"
+	CmdDeleteRule           = "delete_rule"
+	CmdRecordAdjustment     = "record_adjustment"
 )
 
 // ProductMaster: ProductKind

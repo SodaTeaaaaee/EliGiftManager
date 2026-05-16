@@ -36,6 +36,12 @@ type WaveRepository interface {
 }
 
 // FulfillmentLineRepository defines persistence operations for FulfillmentLine.
+type FulfillmentLineStateUpdate struct {
+	ID               uint
+	SupplierState    string
+	ChannelSyncState string
+}
+
 type FulfillmentLineRepository interface {
 	Create(line *FulfillmentLine) error
 	FindByID(id uint) (*FulfillmentLine, error)
@@ -43,6 +49,7 @@ type FulfillmentLineRepository interface {
 	DeleteByWave(waveID uint) error
 	DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error
 	ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []FulfillmentLine) error
+	BulkUpdateStates(updates []FulfillmentLineStateUpdate) error
 }
 
 // SupplierOrderRepository defines persistence operations for SupplierOrder and SupplierOrderLine.
