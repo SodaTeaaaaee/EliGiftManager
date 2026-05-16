@@ -67,18 +67,23 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 		}
 	}
 
+	// Derive projected lifecycle stage from observable state.
+	// This is the single authoritative stage aggregation point.
+	projectedStage := deriveStage(base)
+
+	hasUncoveredFailures, err := uc.hasUncoveredFailedItems(jobs, decisions)
+	if err != nil {
+		return dto.WaveOverviewDTO{}, err
+	}
+
 	activeCount := pendingCount + runningCount + partialSuccessCount
-	projectedStage := base.Wave.LifecycleStage
 	if activeCount > 0 {
 		projectedStage = "syncing_back"
-	} else if failedCount > 0 {
-		hasUncoveredFailures, err := uc.hasUncoveredFailedItems(jobs, decisions)
-		if err != nil {
-			return dto.WaveOverviewDTO{}, err
-		}
-		if hasUncoveredFailures {
-			projectedStage = "awaiting_manual_closure"
-		}
+	} else if hasUncoveredFailures {
+		projectedStage = "awaiting_manual_closure"
+	} else if len(jobs) > 0 {
+		// No active jobs, no uncovered failures, sync jobs exist → closed.
+		projectedStage = "closed"
 	}
 
 	base.ChannelSyncJobCount = len(jobs)
@@ -141,4 +146,26 @@ func (uc *waveOverviewProjectionUseCase) hasUncoveredFailedItems(
 		}
 	}
 	return false, nil
+}
+
+// deriveStage computes the authoritative lifecycle stage from observable state.
+// This is the single source of truth for the projected stage — frontend pages
+// must not independently derive stage labels.
+func deriveStage(base dto.WaveOverviewDTO) string {
+	if base.DemandCount == 0 {
+		return "intake"
+	}
+	if base.FulfillmentCount == 0 {
+		return "allocation"
+	}
+	if base.SupplierOrderCount == 0 {
+		return "review"
+	}
+	if base.ShipmentCount == 0 {
+		return "execution"
+	}
+	// Sync-level stages (syncing_back, awaiting_manual_closure, closed) are
+	// overlaid later by ProjectWaveOverview based on channel sync state.
+	// Fall back to execution: shipments exist, so the wave is in or past execution.
+	return "execution"
 }

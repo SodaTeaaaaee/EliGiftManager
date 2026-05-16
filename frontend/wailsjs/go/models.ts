@@ -339,7 +339,14 @@ export namespace dto {
 	    lineType: string;
 	    obligationTriggerKind: string;
 	    entitlementAuthority: string;
+	    recipientInputState: string;
 	    routingDisposition: string;
+	    routingReasonCode: string;
+	    eligibilityContextRef: string;
+	    entitlementCode: string;
+	    giftLevelSnapshot: string;
+	    productMasterId?: number;
+	    recipientInputPayload: string;
 	    externalTitle: string;
 	    requestedQuantity: number;
 	
@@ -352,7 +359,14 @@ export namespace dto {
 	        this.lineType = source["lineType"];
 	        this.obligationTriggerKind = source["obligationTriggerKind"];
 	        this.entitlementAuthority = source["entitlementAuthority"];
+	        this.recipientInputState = source["recipientInputState"];
 	        this.routingDisposition = source["routingDisposition"];
+	        this.routingReasonCode = source["routingReasonCode"];
+	        this.eligibilityContextRef = source["eligibilityContextRef"];
+	        this.entitlementCode = source["entitlementCode"];
+	        this.giftLevelSnapshot = source["giftLevelSnapshot"];
+	        this.productMasterId = source["productMasterId"];
+	        this.recipientInputPayload = source["recipientInputPayload"];
 	        this.externalTitle = source["externalTitle"];
 	        this.requestedQuantity = source["requestedQuantity"];
 	    }
@@ -669,6 +683,100 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class DemandMappingBlockedLine {
+	    demandLineId: number;
+	    demandLineTitle: string;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandMappingBlockedLine(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.demandLineId = source["demandLineId"];
+	        this.demandLineTitle = source["demandLineTitle"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class FulfillmentLineDTO {
+	    id: number;
+	    waveId: number;
+	    customerProfileId?: number;
+	    waveParticipantSnapshotId?: number;
+	    productId?: number;
+	    demandDocumentId?: number;
+	    demandLineId?: number;
+	    customerAddressId?: number;
+	    quantity: number;
+	    allocationState: string;
+	    addressState: string;
+	    supplierState: string;
+	    channelSyncState: string;
+	    lineReason: string;
+	    generatedBy: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FulfillmentLineDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveId = source["waveId"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
+	        this.productId = source["productId"];
+	        this.demandDocumentId = source["demandDocumentId"];
+	        this.demandLineId = source["demandLineId"];
+	        this.customerAddressId = source["customerAddressId"];
+	        this.quantity = source["quantity"];
+	        this.allocationState = source["allocationState"];
+	        this.addressState = source["addressState"];
+	        this.supplierState = source["supplierState"];
+	        this.channelSyncState = source["channelSyncState"];
+	        this.lineReason = source["lineReason"];
+	        this.generatedBy = source["generatedBy"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class DemandMappingResult {
+	    createdLines: FulfillmentLineDTO[];
+	    blockedLines: DemandMappingBlockedLine[];
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandMappingResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.createdLines = this.convertValues(source["createdLines"], FulfillmentLineDTO);
+	        this.blockedLines = this.convertValues(source["blockedLines"], DemandMappingBlockedLine);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class DocumentTemplateDTO {
 	    id: number;
 	    templateKey: string;
@@ -775,52 +883,7 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
-	export class FulfillmentLineDTO {
-	    id: number;
-	    waveId: number;
-	    customerProfileId?: number;
-	    waveParticipantSnapshotId?: number;
-	    productId?: number;
-	    demandDocumentId?: number;
-	    demandLineId?: number;
-	    customerAddressId?: number;
-	    quantity: number;
-	    allocationState: string;
-	    addressState: string;
-	    supplierState: string;
-	    channelSyncState: string;
-	    lineReason: string;
-	    generatedBy: string;
-	    extraData: string;
-	    createdAt: string;
-	    updatedAt: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new FulfillmentLineDTO(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.waveId = source["waveId"];
-	        this.customerProfileId = source["customerProfileId"];
-	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
-	        this.productId = source["productId"];
-	        this.demandDocumentId = source["demandDocumentId"];
-	        this.demandLineId = source["demandLineId"];
-	        this.customerAddressId = source["customerAddressId"];
-	        this.quantity = source["quantity"];
-	        this.allocationState = source["allocationState"];
-	        this.addressState = source["addressState"];
-	        this.supplierState = source["supplierState"];
-	        this.channelSyncState = source["channelSyncState"];
-	        this.lineReason = source["lineReason"];
-	        this.generatedBy = source["generatedBy"];
-	        this.extraData = source["extraData"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
-	    }
-	}
 	export class HistoryNodeDTO {
 	    id: number;
 	    commandKind: string;
@@ -1526,6 +1589,13 @@ export namespace dto {
 	    supplierOrderCount: number;
 	    shipmentCount: number;
 	    trackedFulfillmentCount: number;
+	    acceptedReadyOrNotRequired: number;
+	    acceptedWaitingForInput: number;
+	    deferredCount: number;
+	    excludedManualCount: number;
+	    excludedDuplicateCount: number;
+	    excludedRevokedCount: number;
+	    mappingBlockedCount: number;
 	    channelSyncJobCount: number;
 	    channelSyncPendingCount: number;
 	    channelSyncRunningCount: number;
@@ -1553,6 +1623,13 @@ export namespace dto {
 	        this.supplierOrderCount = source["supplierOrderCount"];
 	        this.shipmentCount = source["shipmentCount"];
 	        this.trackedFulfillmentCount = source["trackedFulfillmentCount"];
+	        this.acceptedReadyOrNotRequired = source["acceptedReadyOrNotRequired"];
+	        this.acceptedWaitingForInput = source["acceptedWaitingForInput"];
+	        this.deferredCount = source["deferredCount"];
+	        this.excludedManualCount = source["excludedManualCount"];
+	        this.excludedDuplicateCount = source["excludedDuplicateCount"];
+	        this.excludedRevokedCount = source["excludedRevokedCount"];
+	        this.mappingBlockedCount = source["mappingBlockedCount"];
 	        this.channelSyncJobCount = source["channelSyncJobCount"];
 	        this.channelSyncPendingCount = source["channelSyncPendingCount"];
 	        this.channelSyncRunningCount = source["channelSyncRunningCount"];

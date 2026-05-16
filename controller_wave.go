@@ -15,7 +15,7 @@ import (
 // WaveController exposes wave-management Wails bindings.
 type WaveController struct {
 	waveUC              app.WaveUseCase
-	allocationUC        app.AllocationUseCase
+	demandMappingUC     app.DemandMappingUseCase
 	fulfillRepo         domain.FulfillmentLineRepository
 	supplierRepo        domain.SupplierOrderRepository
 	assignmentRepo      domain.WaveDemandAssignmentRepository
@@ -53,7 +53,7 @@ func NewWaveController() *WaveController {
 
 	return &WaveController{
 		waveUC:              app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
-		allocationUC:        app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo),
+		demandMappingUC:     app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil),
 		fulfillRepo:         fulfillRepo,
 		supplierRepo:        supplierRepo,
 		assignmentRepo:      assignmentRepo,
@@ -119,21 +119,59 @@ func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, erro
 		return dto.WaveOverviewDTO{}, err
 	}
 
-	// Count accepted demand lines for this wave via assignments
+	// Build wave-scoped product lookup for mapping-blocked detection
+	productRepo := infra.NewProductRepository(c.gdb)
+	waveProducts, _ := productRepo.ListByWave(waveID)
+	productMasterToWaveProduct := make(map[uint]uint, len(waveProducts))
+	for _, wp := range waveProducts {
+		if wp.ProductMasterID != nil {
+			productMasterToWaveProduct[*wp.ProductMasterID] = wp.ID
+		}
+	}
+
+	// Count demand lines for this wave via assignments, bucketed by routing/input state
 	docs, err := c.assignmentRepo.ListDemandDocumentsByWave(waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
 
-	demandCount := 0
+	var (
+		demandCount              int
+		acceptedReadyOrNotReq    int
+		acceptedWaitingForInput  int
+		deferredCount            int
+		excludedManualCount      int
+		excludedDuplicateCount   int
+		excludedRevokedCount     int
+		mappingBlockedCount      int
+	)
 	for _, doc := range docs {
 		lines, err := c.demandRepo.ListLinesByDocument(doc.ID)
 		if err != nil {
 			return dto.WaveOverviewDTO{}, err
 		}
 		for _, line := range lines {
-			if line.RoutingDisposition == "accepted" {
+			switch line.RoutingDisposition {
+			case "accepted":
 				demandCount++
+				if line.RecipientInputState == "ready" || line.RecipientInputState == "not_required" {
+					acceptedReadyOrNotReq++
+					if doc.Kind == "retail_order" && line.ProductMasterID != nil {
+						if _, ok := productMasterToWaveProduct[*line.ProductMasterID]; !ok {
+							mappingBlockedCount++
+						}
+					}
+				} else if line.RecipientInputState == "waiting_for_input" || line.RecipientInputState == "partially_collected" {
+					acceptedWaitingForInput++
+				}
+			case "deferred":
+				deferredCount++
+			case "excluded_manual":
+				excludedManualCount++
+			case "excluded_duplicate":
+				excludedDuplicateCount++
+			case "excluded_revoked":
+				excludedRevokedCount++
 			}
 		}
 	}
@@ -164,15 +202,23 @@ func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, erro
 	}
 
 	base := dto.WaveOverviewDTO{
-		Wave:                    domainToWaveDTO(w),
-		DemandCount:             demandCount,
-		FulfillmentCount:        len(fulfillLines),
-		SupplierOrderCount:      len(supplierOrders),
-		ShipmentCount:           shipmentCount,
-		TrackedFulfillmentCount: trackedFulfillmentCount,
+		Wave:                     domainToWaveDTO(w),
+		DemandCount:              demandCount,
+		FulfillmentCount:         len(fulfillLines),
+		SupplierOrderCount:       len(supplierOrders),
+		ShipmentCount:            shipmentCount,
+		TrackedFulfillmentCount:  trackedFulfillmentCount,
+		AcceptedReadyOrNotRequired: acceptedReadyOrNotReq,
+		AcceptedWaitingForInput:    acceptedWaitingForInput,
+		DeferredCount:              deferredCount,
+		ExcludedManualCount:       excludedManualCount,
+		ExcludedDuplicateCount:    excludedDuplicateCount,
+		ExcludedRevokedCount:      excludedRevokedCount,
+		MappingBlockedCount:       mappingBlockedCount,
 	}
 	return c.overviewProjUC.ProjectWaveOverview(base)
 }
+
 
 // AssignDemandToWave assigns a demand document to a wave.
 func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) error {
@@ -287,47 +333,53 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 	return count, nil
 }
 
-// ApplyAllocationRules applies allocation policy rules to the given wave
-// and returns the generated FulfillmentLines.
-func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLineDTO, error) {
+// MapDemandLines converts eligible demand-driven DemandLines into FulfillmentLines
+// for retail_order demand documents assigned to the given wave.
+// Returns a DemandMappingResult that includes both successfully mapped lines
+// and any lines blocked by missing product references.
+func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, error) {
 	gormDB := c.gdb
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
 	if err != nil {
 		return nil, err
 	}
 
-	var lines []domain.FulfillmentLine
+	var mappingResult *dto.DemandMappingResult
 	err = gormDB.Transaction(func(tx *gorm.DB) error {
 		waveRepo := infra.NewWaveRepository(tx)
 		demandRepo := infra.NewDemandRepository(tx)
-		ruleRepo := infra.NewRuleRepository(tx)
 		fulfillRepo := infra.NewFulfillmentRepository(tx)
 		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
 		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
 		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
 		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
 		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
 
-		allocationUC := app.NewAllocationUseCase(demandRepo, ruleRepo, fulfillRepo, assignmentRepo, waveRepo)
+		dmUC := app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, productRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
 
-		generatedLines, applyErr := allocationUC.ApplyRules(waveID)
+		result, applyErr := dmUC.MapDemandToFulfillment(waveID)
 		if applyErr != nil {
 			return applyErr
 		}
-		lines = generatedLines
+		mappingResult = result
 
 		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(waveID)
 		if snapErr != nil {
 			return snapErr
 		}
 
+		totalLines := len(result.CreatedLines) + len(result.BlockedLines)
+		summary := fmt.Sprintf("map demand lines for wave %d (%d created, %d blocked)", waveID, len(result.CreatedLines), len(result.BlockedLines))
+		_ = totalLines
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                 waveID,
-			CommandKind:            domain.CmdApplyAllocationRules,
-			CommandSummary:         fmt.Sprintf("apply allocation rules for wave %d (%d lines)", waveID, len(lines)),
+			CommandKind:            domain.CmdMapDemandLines,
+			CommandSummary:         summary,
 			PatchPayload:           fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
 			InversePatchPayload:    fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
 			CheckpointHint:         true,
@@ -340,11 +392,7 @@ func (c *WaveController) ApplyAllocationRules(waveID uint) ([]dto.FulfillmentLin
 		return nil, err
 	}
 
-	result := make([]dto.FulfillmentLineDTO, len(lines))
-	for i := range lines {
-		result[i] = domainToFulfillmentLineDTO(&lines[i])
-	}
-	return result, nil
+	return mappingResult, nil
 }
 
 // domainToWaveDTO converts a domain Wave to a DTO.
