@@ -77,7 +77,7 @@ func (pe *PatchExecutor) execute(op patchOp) error {
 	case "restore_checkpoint":
 		return pe.restoreCheckpoint(op)
 	case "generate_participants", "clear_participants",
-		"apply_allocation_rules", "clear_allocation_lines":
+		"map_demand_lines", "clear_allocation_lines":
 		return ErrOperationNotUndoable
 	default:
 		return fmt.Errorf("patch: unknown op %q", op.Op)

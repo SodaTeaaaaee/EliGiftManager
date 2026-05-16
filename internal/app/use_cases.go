@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
@@ -190,22 +191,30 @@ func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
 	return count, nil
 }
 
-// ---- Allocation ----
+// ---- DemandMapping ----
 
-type allocationUseCase struct {
+type demandMappingUseCase struct {
 	demandRepo     domain.DemandDocumentRepository
-	ruleRepo       domain.AllocationPolicyRuleRepository
 	fulfillRepo    domain.FulfillmentLineRepository
 	assignmentRepo domain.WaveDemandAssignmentRepository
 	waveRepo       domain.WaveRepository
+	productRepo    domain.ProductRepository
 }
 
-func NewAllocationUseCase(demandRepo domain.DemandDocumentRepository, ruleRepo domain.AllocationPolicyRuleRepository, fulfillRepo domain.FulfillmentLineRepository, assignmentRepo domain.WaveDemandAssignmentRepository, waveRepo domain.WaveRepository) AllocationUseCase {
-	return &allocationUseCase{demandRepo: demandRepo, ruleRepo: ruleRepo, fulfillRepo: fulfillRepo, assignmentRepo: assignmentRepo, waveRepo: waveRepo}
+func NewDemandMappingUseCase(demandRepo domain.DemandDocumentRepository, fulfillRepo domain.FulfillmentLineRepository, assignmentRepo domain.WaveDemandAssignmentRepository, waveRepo domain.WaveRepository, productRepo domain.ProductRepository) DemandMappingUseCase {
+	return &demandMappingUseCase{demandRepo: demandRepo, fulfillRepo: fulfillRepo, assignmentRepo: assignmentRepo, waveRepo: waveRepo, productRepo: productRepo}
 }
 
-func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, error) {
-	// Use assigned demands only (wave-demand linkage)
+// isEligibleForFulfillment checks the unified execution-eligibility rule:
+// routing_disposition = accepted AND recipient_input_state in (ready, not_required).
+func isEligibleForFulfillment(dl *domain.DemandLine) bool {
+	if dl.RoutingDisposition != "accepted" {
+		return false
+	}
+	return dl.RecipientInputState == "ready" || dl.RecipientInputState == "not_required"
+}
+
+func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.DemandMappingResult, error) {
 	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
 	if err != nil {
 		return nil, err
@@ -224,8 +233,21 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 		}
 	}
 
-	// Pre-check: every retail_order with accepted lines must be associable to a snapshot.
-	// Fail fast before deleting existing lines to avoid leaving the wave in a broken state.
+	// Build FK → wave-scoped ProductID lookup for demand-line product mapping
+	productMasterToWaveProduct := make(map[uint]uint)
+	if uc.productRepo != nil {
+		waveProducts, err := uc.productRepo.ListByWave(waveID)
+		if err != nil {
+			return nil, err
+		}
+		for _, wp := range waveProducts {
+			if wp.ProductMasterID != nil {
+				productMasterToWaveProduct[*wp.ProductMasterID] = wp.ID
+			}
+		}
+	}
+
+	// Pre-check: every retail_order with eligible lines must be associable to a snapshot.
 	var missingProfileDocs []uint
 	var missingSnapshotProfiles []uint
 	for docIdx := range docs {
@@ -233,11 +255,11 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 		if doc.Kind != "retail_order" {
 			continue
 		}
-		hasAccepted, err := uc.docHasAcceptedLines(doc.ID)
+		hasEligible, err := uc.docHasEligibleLines(doc.ID)
 		if err != nil {
 			return nil, err
 		}
-		if !hasAccepted {
+		if !hasEligible {
 			continue
 		}
 		if doc.CustomerProfileID == nil {
@@ -251,7 +273,7 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 		}
 	}
 	if len(missingProfileDocs) > 0 {
-		return nil, fmt.Errorf("retail demand documents %v have accepted lines but no CustomerProfileID; cannot generate fulfillment lines", missingProfileDocs)
+		return nil, fmt.Errorf("retail demand documents %v have eligible lines but no CustomerProfileID; cannot generate fulfillment lines", missingProfileDocs)
 	}
 	if len(missingSnapshotProfiles) > 0 {
 		return nil, fmt.Errorf("no participant snapshots found for customer profiles %v; run GenerateParticipants first", missingSnapshotProfiles)
@@ -263,7 +285,8 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 	}
 
 	now := time.Now().Format(time.RFC3339)
-	var lines []domain.FulfillmentLine
+	var createdLines []domain.FulfillmentLine
+	var blockedLines []dto.DemandMappingBlockedLine
 
 	for docIdx := range docs {
 		doc := &docs[docIdx]
@@ -279,8 +302,26 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 		}
 		for lineIdx := range demandLines {
 			dl := &demandLines[lineIdx]
-			if dl.RoutingDisposition != "accepted" {
+			if !isEligibleForFulfillment(dl) {
 				continue
+			}
+
+			// Resolve ProductID via ProductMasterID → wave-scoped Product lookup.
+			// Lines that require a product reference but cannot resolve it are
+			// blocked — they are NOT silently admitted with ProductID=nil.
+			var productID *uint
+			if dl.ProductMasterID != nil {
+				if waveProductID, ok := productMasterToWaveProduct[*dl.ProductMasterID]; ok {
+					pid := waveProductID
+					productID = &pid
+				} else {
+					blockedLines = append(blockedLines, dto.DemandMappingBlockedLine{
+						DemandLineID:    dl.ID,
+						DemandLineTitle: dl.ExternalTitle,
+						Reason:          "wave_product_missing",
+					})
+					continue
+				}
 			}
 
 			docID := doc.ID
@@ -291,8 +332,12 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 				DemandLineID:              &lineID,
 				CustomerProfileID:         doc.CustomerProfileID,
 				WaveParticipantSnapshotID: &snapID,
+				ProductID:                 productID,
 				Quantity:                  dl.RequestedQuantity,
-				AllocationState:           "allocated",
+				AllocationState:           "ready",
+				AddressState:              "missing",
+				SupplierState:             "not_submitted",
+				ChannelSyncState:          "not_required",
 				LineReason:                "retail_order",
 				GeneratedBy:               "allocation_demand_driven",
 				CreatedAt:                 now,
@@ -302,20 +347,54 @@ func (uc *allocationUseCase) ApplyRules(waveID uint) ([]domain.FulfillmentLine, 
 			if err := uc.fulfillRepo.Create(&fl); err != nil {
 				return nil, err
 			}
-			lines = append(lines, fl)
+			createdLines = append(createdLines, fl)
 		}
 	}
 
-	return lines, nil
+	lineDTOs := make([]dto.FulfillmentLineDTO, len(createdLines))
+	for i := range createdLines {
+		lineDTOs[i] = domainToFulfillmentLineDTO(&createdLines[i])
+	}
+	return &dto.DemandMappingResult{
+		CreatedLines: lineDTOs,
+		BlockedLines: blockedLines,
+	}, nil
 }
 
-func (uc *allocationUseCase) docHasAcceptedLines(docID uint) (bool, error) {
+// domainToFulfillmentLineDTO mirrors the controller-level converter.
+func domainToFulfillmentLineDTO(fl *domain.FulfillmentLine) dto.FulfillmentLineDTO {
+	if fl == nil {
+		return dto.FulfillmentLineDTO{}
+	}
+	return dto.FulfillmentLineDTO{
+		ID:                        fl.ID,
+		WaveID:                    fl.WaveID,
+		CustomerProfileID:         fl.CustomerProfileID,
+		WaveParticipantSnapshotID: fl.WaveParticipantSnapshotID,
+		ProductID:                 fl.ProductID,
+		DemandDocumentID:          fl.DemandDocumentID,
+		DemandLineID:              fl.DemandLineID,
+		CustomerAddressID:         fl.CustomerAddressID,
+		Quantity:                  fl.Quantity,
+		AllocationState:           fl.AllocationState,
+		AddressState:              fl.AddressState,
+		SupplierState:             fl.SupplierState,
+		ChannelSyncState:          fl.ChannelSyncState,
+		LineReason:                fl.LineReason,
+		GeneratedBy:               fl.GeneratedBy,
+		ExtraData:                 fl.ExtraData,
+		CreatedAt:                 fl.CreatedAt,
+		UpdatedAt:                 fl.UpdatedAt,
+	}
+}
+
+func (uc *demandMappingUseCase) docHasEligibleLines(docID uint) (bool, error) {
 	demandLines, err := uc.demandRepo.ListLinesByDocument(docID)
 	if err != nil {
 		return false, err
 	}
 	for i := range demandLines {
-		if demandLines[i].RoutingDisposition == "accepted" {
+		if isEligibleForFulfillment(&demandLines[i]) {
 			return true, nil
 		}
 	}
@@ -396,5 +475,48 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder
 		return nil, err
 	}
 
+	// Project supplier_state from the newly created supplier order onto each
+	// referenced FulfillmentLine. This is a fact-driven write-path projection.
+	uc.projectSupplierStateFromOrder(order, lines)
+
 	return order, nil
+}
+
+// projectSupplierStateFromOrder maps a SupplierOrder.Status to the corresponding
+// SupplierState and bulk-updates the referenced FulfillmentLines.
+func (uc *exportUseCase) projectSupplierStateFromOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine) {
+	projected := supplierOrderStatusToState(order.Status)
+	if projected == "" {
+		return
+	}
+	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(lines))
+	for _, l := range lines {
+		updates = append(updates, domain.FulfillmentLineStateUpdate{
+			ID:            l.FulfillmentLineID,
+			SupplierState: projected,
+		})
+	}
+	if len(updates) > 0 {
+		_ = uc.fulfillRepo.BulkUpdateStates(updates)
+	}
+}
+
+// supplierOrderStatusToState maps SupplierOrder.Status → FulfillmentLine.SupplierState.
+func supplierOrderStatusToState(status string) string {
+	switch status {
+	case "draft":
+		return "not_submitted"
+	case "submitted":
+		return "submitted"
+	case "accepted":
+		return "accepted"
+	case "partially_shipped":
+		return "partially_shipped"
+	case "shipped":
+		return "shipped"
+	case "canceled":
+		return "canceled"
+	default:
+		return ""
+	}
 }

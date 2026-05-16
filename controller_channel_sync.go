@@ -22,6 +22,7 @@ type ChannelSyncController struct {
 	recordDecisionUC app.RecordClosureDecisionUseCase
 	retrySyncUC      app.RetrySyncUseCase
 	profileRepo      domain.IntegrationProfileRepository
+	fulfillRepo      domain.FulfillmentLineRepository
 }
 
 func NewChannelSyncController() *ChannelSyncController {
@@ -50,6 +51,7 @@ func NewChannelSyncController() *ChannelSyncController {
 		recordDecisionUC: app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo),
 		retrySyncUC:      app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, executorProvider),
 		profileRepo:      profileRepo,
+		fulfillRepo:      fulfillRepo,
 	}
 }
 
@@ -59,12 +61,27 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 	if err != nil {
 		return dto.ChannelSyncJobDTO{}, err
 	}
+	// Project channel_sync_state → pending for all candidate fulfillment lines
+	c.projectChannelSyncPending(items)
 	result := domainToChannelSyncJobDTO(job)
 	result.Items = make([]dto.ChannelSyncItemDTO, len(items))
 	for i, it := range items {
 		result.Items[i] = domainToChannelSyncItemDTO(&it)
 	}
 	return result, nil
+}
+
+func (c *ChannelSyncController) projectChannelSyncPending(items []domain.ChannelSyncItem) {
+	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(items))
+	for _, it := range items {
+		updates = append(updates, domain.FulfillmentLineStateUpdate{
+			ID:               it.FulfillmentLineID,
+			ChannelSyncState: "pending",
+		})
+	}
+	if len(updates) > 0 {
+		_ = c.fulfillRepo.BulkUpdateStates(updates)
+	}
 }
 
 // PlanChannelClosure is the high-level orchestration entry point.
@@ -79,20 +96,83 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 // ExecuteChannelSyncJob executes a pending ChannelSyncJob.
 func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSyncResult, error) {
 	result, err := c.executeSyncUC.ExecuteChannelSyncJob(jobID)
+	// Always project — success or failure, the items have been persisted with their
+	// final statuses by the use case before returning.
+	c.projectChannelSyncStates(jobID)
 	if err != nil {
 		return dto.ExecuteSyncResult{}, err
 	}
 	return *result, nil
 }
 
-// RecordChannelClosureDecision persists manual closure decisions.
+// projectChannelSyncStates updates FulfillmentLine.ChannelSyncState based on
+// the current state of all items in the given job.
+func (c *ChannelSyncController) projectChannelSyncStates(jobID uint) {
+	items, err := c.channelSyncRepo.ListItemsByJob(jobID)
+	if err != nil {
+		return
+	}
+	var updates []domain.FulfillmentLineStateUpdate
+	for _, it := range items {
+		var csState string
+		switch it.Status {
+		case "success":
+			csState = "synced"
+		case "failed":
+			csState = "failed"
+		default:
+			continue
+		}
+		updates = append(updates, domain.FulfillmentLineStateUpdate{
+			ID:               it.FulfillmentLineID,
+			ChannelSyncState: csState,
+		})
+	}
+	if len(updates) > 0 {
+		_ = c.fulfillRepo.BulkUpdateStates(updates)
+	}
+}
+
+// RecordChannelClosureDecision persists manual closure decisions and projects
+// channel sync state onto the affected fulfillment lines.
 func (c *ChannelSyncController) RecordChannelClosureDecision(input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error) {
-	return c.recordDecisionUC.RecordChannelClosureDecision(input)
+	records, err := c.recordDecisionUC.RecordChannelClosureDecision(input)
+	if err != nil {
+		return nil, err
+	}
+	c.projectManualClosureStates(input.Entries)
+	return records, nil
+}
+
+// decisionKindToChannelSyncState maps manual closure decision kinds to FulfillmentLine.ChannelSyncState.
+var decisionKindToChannelSyncState = map[string]string{
+	"mark_sync_unsupported":       "unsupported",
+	"mark_sync_skipped":           "skipped",
+	"mark_sync_completed_manually": "manual_confirmed",
+}
+
+func (c *ChannelSyncController) projectManualClosureStates(entries []dto.RecordClosureDecisionEntry) {
+	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(entries))
+	for _, e := range entries {
+		csState, ok := decisionKindToChannelSyncState[e.DecisionKind]
+		if !ok {
+			continue
+		}
+		updates = append(updates, domain.FulfillmentLineStateUpdate{
+			ID:               e.FulfillmentLineID,
+			ChannelSyncState: csState,
+		})
+	}
+	if len(updates) > 0 {
+		_ = c.fulfillRepo.BulkUpdateStates(updates)
+	}
 }
 
 // RetryChannelSyncJob retries failed items in a ChannelSyncJob.
 func (c *ChannelSyncController) RetryChannelSyncJob(jobID uint) (dto.ExecuteSyncResult, error) {
 	result, err := c.retrySyncUC.RetryChannelSyncJob(jobID)
+	// Always project — success or failure, items have been persisted by the use case.
+	c.projectChannelSyncStates(jobID)
 	if err != nil {
 		return dto.ExecuteSyncResult{}, err
 	}

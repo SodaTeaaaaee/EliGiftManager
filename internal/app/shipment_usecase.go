@@ -124,6 +124,22 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 		return nil, nil, err
 	}
 
+	// Project supplier state → FulfillmentLine (driven by actual shipment status).
+	// Only "shipped" / "in_transit" / "delivered" count as shipped;
+	// pending does NOT upgrade.
+	if shipment.Status == "shipped" || shipment.Status == "in_transit" || shipment.Status == "delivered" {
+		stateUpdates := make([]domain.FulfillmentLineStateUpdate, 0, len(lines))
+		for _, l := range lines {
+			stateUpdates = append(stateUpdates, domain.FulfillmentLineStateUpdate{
+				ID:            l.FulfillmentLineID,
+				SupplierState: "shipped",
+			})
+		}
+		if len(stateUpdates) > 0 {
+			_ = uc.fulfillRepo.BulkUpdateStates(stateUpdates)
+		}
+	}
+
 	// 8. Return domain objects
 	domainLines := make([]domain.ShipmentLine, len(lines))
 	for i, l := range lines {
