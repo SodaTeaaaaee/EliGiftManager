@@ -51,7 +51,7 @@ useUndoRedo({
     message.warning(err)
   },
   onNotReady: () => {
-    message.info('撤销/重做：后端未连接')
+    message.info(t('wave.undoRedoBackendUnavailable'))
   },
 })
 
@@ -106,7 +106,7 @@ const stageTagType = computed(() => {
         >
           {{ t('wave.drifted') }}
         </NTag>
-        <NButton secondary size="small" @click="router.push('/waves')">返回任务列表</NButton>
+        <NButton secondary size="small" @click="router.push('/waves')">{{ t('wave.returnToQueue') }}</NButton>
       </div>
     </div>
     <NAlert v-if="error" type="error" class="mb-4" :title="error" />

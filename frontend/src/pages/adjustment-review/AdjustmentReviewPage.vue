@@ -35,16 +35,25 @@ const adjustmentOptions = computed(() => [
   { label: t("adjustment.remove"), value: "remove" },
 ]);
 
+function reviewText(value: string) {
+  const map: Record<string, string> = {
+    none: t("adjustment.reviewState.none"),
+    recommended: t("adjustment.reviewState.recommended"),
+    required: t("adjustment.reviewState.required"),
+  };
+  return map[value] || value;
+}
+
 const columns = computed<DataTableColumns<dto.WaveFulfillmentRowDTO>>(() => [
-  { title: "ID", key: "fulfillmentLineId", width: 70 },
+  { title: t("adjustment.columns.id"), key: "fulfillmentLineId", width: 70 },
   { title: t("adjustment.participant"), key: "participantDisplay", width: 180 },
-  { title: "Product", key: "productDisplay", width: 200 },
-  { title: "Source", key: "demandSourceSummary", width: 180 },
+  { title: t("adjustment.columns.product"), key: "productDisplay", width: 200 },
+  { title: t("adjustment.columns.source"), key: "demandSourceSummary", width: 180 },
   { title: t("adjustment.quantity"), key: "quantity", width: 80 },
-  { title: "Supplier", key: "supplierState", width: 110 },
-  { title: "Sync", key: "channelSyncState", width: 110 },
+  { title: t("adjustment.columns.supplier"), key: "supplierState", width: 110 },
+  { title: t("adjustment.columns.sync"), key: "channelSyncState", width: 110 },
   {
-    title: "Review",
+    title: t("adjustment.columns.review"),
     key: "reviewRequirement",
     width: 120,
     render(row) {
@@ -54,7 +63,7 @@ const columns = computed<DataTableColumns<dto.WaveFulfillmentRowDTO>>(() => [
           : row.reviewRequirement === "recommended"
             ? "warning"
             : "default";
-      return h(NTag, { type, size: "small", round: true }, { default: () => row.reviewRequirement });
+      return h(NTag, { type, size: "small", round: true }, { default: () => reviewText(row.reviewRequirement) });
     },
   },
 ]);
@@ -116,10 +125,10 @@ onMounted(loadRows);
       <p class="app-copy mt-3">{{ t("adjustment.subtitle") }}</p>
     </div>
 
-    <NCard class="mb-4" title="Editing Intent">
+    <NCard class="mb-4" :title="t('adjustment.editingIntent')">
       <NSpace vertical :size="10">
-        <div>Use this step only for wave-local final fulfillment exceptions.</div>
-        <div>Go back to Membership Allocation or Demand Mapping if you need to change default generation logic.</div>
+        <div>1. {{ t("adjustment.editingIntentStep1") }}</div>
+        <div>2. {{ t("adjustment.editingIntentStep2") }}</div>
       </NSpace>
     </NCard>
 
@@ -169,10 +178,10 @@ onMounted(loadRows);
               <NFormItem :label="t('adjustment.note')">
                 <NInput v-model:value="form.note" type="textarea" :rows="3" />
               </NFormItem>
-              <NFormItem label="Evidence Ref">
+              <NFormItem :label="t('adjustment.form.evidenceRef')">
                 <NInput v-model:value="form.evidenceRef" />
               </NFormItem>
-              <NFormItem label="Operator ID">
+              <NFormItem :label="t('adjustment.form.operatorId')">
                 <NInput v-model:value="form.operatorId" />
               </NFormItem>
             </NForm>

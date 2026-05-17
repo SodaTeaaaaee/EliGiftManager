@@ -48,16 +48,16 @@ const form = reactive<{
 });
 
 const selectorTypeOptions = [
-  { label: "Wave All", value: "wave_all" },
-  { label: "Platform All", value: "platform_all" },
-  { label: "Identity Level", value: "identity_level" },
-  { label: "Explicit Override", value: "explicit_override" },
+  { label: t("allocation.selectorTypeOptions.wave_all"), value: "wave_all" },
+  { label: t("allocation.selectorTypeOptions.platform_all"), value: "platform_all" },
+  { label: t("allocation.selectorTypeOptions.identity_level"), value: "identity_level" },
+  { label: t("allocation.selectorTypeOptions.explicit_override"), value: "explicit_override" },
 ];
 
 const ruleKindOptions = [
-  { label: "Standard", value: "standard" },
-  { label: "Supplement", value: "supplement" },
-  { label: "Replacement", value: "replacement" },
+  { label: t("allocation.ruleKindOptions.standard"), value: "standard" },
+  { label: t("allocation.ruleKindOptions.supplement"), value: "supplement" },
+  { label: t("allocation.ruleKindOptions.replacement"), value: "replacement" },
 ];
 
 const participantOptions = computed(() =>
@@ -67,37 +67,56 @@ const participantOptions = computed(() =>
   })),
 );
 
+function selectorTypeText(value: string) {
+  const map: Record<string, string> = {
+    wave_all: t("allocation.selectorTypeOptions.wave_all"),
+    platform_all: t("allocation.selectorTypeOptions.platform_all"),
+    identity_level: t("allocation.selectorTypeOptions.identity_level"),
+    explicit_override: t("allocation.selectorTypeOptions.explicit_override"),
+  };
+  return map[value] || value;
+}
+
+function ruleKindText(value: string) {
+  const map: Record<string, string> = {
+    standard: t("allocation.ruleKindOptions.standard"),
+    supplement: t("allocation.ruleKindOptions.supplement"),
+    replacement: t("allocation.ruleKindOptions.replacement"),
+  };
+  return map[value] || value;
+}
+
 const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
-  { title: "ID", key: "id", width: 60 },
-  { title: "Product", key: "product_id", width: 100 },
-  { title: "Selector", key: "selector_payload", width: 180, render: (row) => row.selector_payload.type },
-  { title: "Target Ref", key: "product_target_ref" },
-  { title: "Qty", key: "contribution_quantity", width: 80 },
-  { title: "Priority", key: "priority", width: 80 },
+  { title: t("allocation.columns.id"), key: "id", width: 60 },
+  { title: t("allocation.columns.product"), key: "product_id", width: 100 },
+  { title: t("allocation.columns.selector"), key: "selector_payload", width: 180, render: (row) => selectorTypeText(row.selector_payload.type) },
+  { title: t("allocation.columns.targetRef"), key: "product_target_ref" },
+  { title: t("allocation.columns.qty"), key: "contribution_quantity", width: 80 },
+  { title: t("allocation.columns.priority"), key: "priority", width: 80 },
   {
-    title: "Status",
+    title: t("allocation.columns.status"),
     key: "active",
     width: 90,
     render: (row) =>
       h(
         NTag,
         { type: row.active ? "success" : "default", size: "small", round: true },
-        { default: () => (row.active ? "active" : "inactive") },
+        { default: () => (row.active ? t("allocation.statusOptions.active") : t("allocation.statusOptions.inactive")) },
       ),
   },
   {
-    title: "Actions",
+    title: t("allocation.columns.actions"),
     key: "actions",
     width: 150,
     render(row) {
       return h(NSpace, { size: "small" }, () => [
-        h(NButton, { size: "small", onClick: () => openEditDrawer(row) }, { default: () => "Edit" }),
+        h(NButton, { size: "small", onClick: () => openEditDrawer(row) }, { default: () => t("allocation.editRule") }),
         h(
           NPopconfirm,
           { onPositiveClick: () => handleDelete(row) },
           {
-            trigger: () => h(NButton, { size: "small", type: "error" }, { default: () => "Delete" }),
-            default: () => "Delete this rule?",
+            trigger: () => h(NButton, { size: "small", type: "error" }, { default: () => t("common.error") }),
+            default: () => `${t("allocation.editRule")}?`,
           },
         ),
       ]);
@@ -154,7 +173,7 @@ async function loadData() {
 
 async function handleSave() {
   if (!form.product_id) {
-    message.warning("Select a product");
+    message.warning(t("allocation.selectProductWarning"));
     return;
   }
   saving.value = true;
@@ -234,19 +253,19 @@ onMounted(loadData);
     </div>
 
     <NAlert v-if="reconcileResult && reconcileResult.failures.length > 0" type="warning" class="mb-4">
-      {{ reconcileResult.failures.length }} replay failures
+      {{ t("allocation.replayFailures") }}: {{ reconcileResult.failures.length }}
     </NAlert>
 
-    <NCard class="mb-4" title="Wave Participant Context">
+    <NCard class="mb-4" :title="t('allocation.participantContext')">
       <NEmpty v-if="participants.length === 0" :description="t('common.empty')" />
       <NDataTable
         v-else
         :columns="[
-          { title: 'Participant', key: 'displayName' },
-          { title: 'Platform', key: 'identityPlatform', width: 120 },
-          { title: 'Type', key: 'snapshotType', width: 120 },
-          { title: 'Gift Level', key: 'giftLevel', width: 120 },
-          { title: 'Ready Lines', key: 'readyFulfillmentCount', width: 100 },
+          { title: t('allocation.participantColumns.participant'), key: 'displayName' },
+          { title: t('allocation.participantColumns.platform'), key: 'identityPlatform', width: 120 },
+          { title: t('allocation.participantColumns.type'), key: 'snapshotType', width: 120 },
+          { title: t('allocation.participantColumns.giftLevel'), key: 'giftLevel', width: 120 },
+          { title: t('allocation.participantColumns.readyLines'), key: 'readyFulfillmentCount', width: 100 },
         ]"
         :data="participants"
         :pagination="false"
@@ -257,7 +276,7 @@ onMounted(loadData);
     <NCard :title="t('allocation.rules')">
       <template #header-extra>
         <NSpace>
-          <NButton @click="openCreateDrawer">Add Rule</NButton>
+          <NButton @click="openCreateDrawer">{{ t("allocation.addRule") }}</NButton>
           <NButton @click="openCatalogModal">{{ t("allocation.catalog") }}</NButton>
           <NButton type="primary" :loading="reconciling" @click="handleReconcile">
             {{ t("allocation.execute") }}
@@ -287,28 +306,28 @@ onMounted(loadData);
     <NDrawer v-model:show="drawerVisible" :width="520" placement="right">
       <NDrawerContent :title="editingRule ? 'Edit Rule' : 'Create Rule'" closable>
         <NSpace vertical :size="16">
-          <NFormItem label="Product">
+          <NFormItem :label="t('allocation.product')">
             <NSelect v-model:value="form.product_id" :options="productOptions" filterable />
           </NFormItem>
-          <NFormItem label="Selector Type">
+          <NFormItem :label="t('allocation.selectorType')">
             <NSelect
               :value="form.selector_payload.type"
               :options="selectorTypeOptions"
               @update:value="(value) => form.selector_payload = { type: value as SelectorPayload['type'] }"
             />
           </NFormItem>
-          <NFormItem v-if="form.selector_payload.type === 'platform_all'" label="Platform">
+          <NFormItem v-if="form.selector_payload.type === 'platform_all'" :label="t('allocation.allocationPlatform')">
             <NInput v-model:value="form.selector_payload.platform" />
           </NFormItem>
           <template v-if="form.selector_payload.type === 'identity_level'">
-            <NFormItem label="Platform">
+            <NFormItem :label="t('allocation.allocationPlatform')">
               <NInput v-model:value="form.selector_payload.platform" />
             </NFormItem>
-            <NFormItem label="Level">
+            <NFormItem :label="t('allocation.allocationLevel')">
               <NInput v-model:value="form.selector_payload.level" />
             </NFormItem>
           </template>
-          <NFormItem v-if="form.selector_payload.type === 'explicit_override'" label="Participants">
+          <NFormItem v-if="form.selector_payload.type === 'explicit_override'" :label="t('allocation.participants')">
             <NSelect
               multiple
               :value="form.selector_payload.participant_ids || []"
@@ -316,19 +335,19 @@ onMounted(loadData);
               @update:value="(value) => form.selector_payload.participant_ids = value as number[]"
             />
           </NFormItem>
-          <NFormItem label="Target Ref">
+          <NFormItem :label="t('allocation.targetRef')">
             <NInput v-model:value="form.product_target_ref" />
           </NFormItem>
-          <NFormItem label="Quantity">
+          <NFormItem :label="t('allocation.quantity')">
             <NInputNumber v-model:value="form.contribution_quantity" class="w-full" />
           </NFormItem>
-          <NFormItem label="Rule Kind">
+          <NFormItem :label="t('allocation.ruleKind')">
             <NSelect v-model:value="form.rule_kind" :options="ruleKindOptions" />
           </NFormItem>
-          <NFormItem label="Priority">
+          <NFormItem :label="t('allocation.priority')">
             <NInputNumber v-model:value="form.priority" :min="0" class="w-full" />
           </NFormItem>
-          <NFormItem label="Active">
+          <NFormItem :label="t('allocation.active')">
             <NSwitch v-model:value="form.active" />
           </NFormItem>
           <NButton type="primary" :loading="saving" @click="handleSave">
@@ -338,13 +357,13 @@ onMounted(loadData);
       </NDrawerContent>
     </NDrawer>
 
-    <NModal v-model:show="catalogModalVisible" preset="card" title="Snapshot Products" style="width: 680px">
+    <NModal v-model:show="catalogModalVisible" preset="card" :title="t('allocation.snapshotProducts')" style="width: 680px">
       <NDataTable
         :columns="[
           { type: 'selection' as const },
-          { title: 'ID', key: 'id', width: 60 },
-          { title: 'Name', key: 'name' },
-          { title: 'Factory SKU', key: 'factorySku', width: 140 },
+          { title: t('allocation.catalogColumns.id'), key: 'id', width: 60 },
+          { title: t('allocation.catalogColumns.name'), key: 'name' },
+          { title: t('allocation.catalogColumns.factorySku'), key: 'factorySku', width: 140 },
         ]"
         :data="catalogMasters"
         :row-key="(row: any) => row.id"

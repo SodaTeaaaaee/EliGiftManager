@@ -1,10 +1,10 @@
 package dto
 
 type WaveStepStateDTO struct {
-	StepKey       string `json:"stepKey"`
-	Status        string `json:"status"`
-	PrimaryCount  int    `json:"primaryCount"`
-	SecondaryCount int   `json:"secondaryCount"`
+	StepKey        string `json:"stepKey"`
+	Status         string `json:"status"`
+	PrimaryCount   int    `json:"primaryCount"`
+	SecondaryCount int    `json:"secondaryCount"`
 }
 
 type WaveWorkspaceGuidanceDTO struct {
@@ -22,39 +22,41 @@ type WaveWorkspaceBasisSummaryDTO struct {
 }
 
 type WaveWorkspaceSnapshotDTO struct {
-	Wave                    WaveDTO                       `json:"wave"`
-	ProjectedLifecycleStage string                        `json:"projectedLifecycleStage"`
-	Overview                WaveOverviewDTO               `json:"overview"`
-	StepStates              []WaveStepStateDTO            `json:"stepStates"`
-	Guidance                []WaveWorkspaceGuidanceDTO    `json:"guidance"`
-	BasisSummary            WaveWorkspaceBasisSummaryDTO  `json:"basisSummary"`
-	RecentHistory           []HistoryNodeDTO              `json:"recentHistory"`
+	Wave                      WaveDTO                      `json:"wave"`
+	ProjectedLifecycleStage   string                       `json:"projectedLifecycleStage"`
+	Overview                  WaveOverviewDTO              `json:"overview"`
+	StepStates                []WaveStepStateDTO           `json:"stepStates"`
+	Guidance                  []WaveWorkspaceGuidanceDTO   `json:"guidance"`
+	BasisSummary              WaveWorkspaceBasisSummaryDTO `json:"basisSummary"`
+	HistoryHeadNodeID         uint                         `json:"historyHeadNodeId"`
+	HistoryHeadProjectionHash string                       `json:"historyHeadProjectionHash"`
+	RecentHistory             []HistoryNodeDTO             `json:"recentHistory"`
 }
 
 type WaveFulfillmentRowDTO struct {
-	FulfillmentLineID      uint   `json:"fulfillmentLineId"`
-	WaveID                 uint   `json:"waveId"`
-	WaveParticipantSnapshotID *uint `json:"waveParticipantSnapshotId"`
-	CustomerProfileID      *uint  `json:"customerProfileId"`
-	ParticipantType        string `json:"participantType"`
-	ParticipantDisplay     string `json:"participantDisplay"`
-	ParticipantBadge       string `json:"participantBadge"`
-	ProductID              *uint  `json:"productId"`
-	ProductDisplay         string `json:"productDisplay"`
-	DemandDocumentID       *uint  `json:"demandDocumentId"`
-	DemandLineID           *uint  `json:"demandLineId"`
-	DemandKind             string `json:"demandKind"`
-	DemandSourceSummary    string `json:"demandSourceSummary"`
-	Quantity               int    `json:"quantity"`
-	AllocationState        string `json:"allocationState"`
-	AddressState           string `json:"addressState"`
-	SupplierState          string `json:"supplierState"`
-	ChannelSyncState       string `json:"channelSyncState"`
-	LineReason             string `json:"lineReason"`
-	GeneratedBy            string `json:"generatedBy"`
-	BasisDriftStatus       string `json:"basisDriftStatus"`
-	ReviewRequirement      string `json:"reviewRequirement"`
-	ReviewReasonSummary    string `json:"reviewReasonSummary"`
+	FulfillmentLineID         uint   `json:"fulfillmentLineId"`
+	WaveID                    uint   `json:"waveId"`
+	WaveParticipantSnapshotID *uint  `json:"waveParticipantSnapshotId"`
+	CustomerProfileID         *uint  `json:"customerProfileId"`
+	ParticipantType           string `json:"participantType"`
+	ParticipantDisplay        string `json:"participantDisplay"`
+	ParticipantBadge          string `json:"participantBadge"`
+	ProductID                 *uint  `json:"productId"`
+	ProductDisplay            string `json:"productDisplay"`
+	DemandDocumentID          *uint  `json:"demandDocumentId"`
+	DemandLineID              *uint  `json:"demandLineId"`
+	DemandKind                string `json:"demandKind"`
+	DemandSourceSummary       string `json:"demandSourceSummary"`
+	Quantity                  int    `json:"quantity"`
+	AllocationState           string `json:"allocationState"`
+	AddressState              string `json:"addressState"`
+	SupplierState             string `json:"supplierState"`
+	ChannelSyncState          string `json:"channelSyncState"`
+	LineReason                string `json:"lineReason"`
+	GeneratedBy               string `json:"generatedBy"`
+	BasisDriftStatus          string `json:"basisDriftStatus"`
+	ReviewRequirement         string `json:"reviewRequirement"`
+	ReviewReasonSummary       string `json:"reviewReasonSummary"`
 }
 
 type WaveParticipantRowDTO struct {
@@ -77,23 +79,23 @@ type ListDemandInboxInput struct {
 }
 
 type DemandInboxRowDTO struct {
-	DemandDocumentID         uint   `json:"demandDocumentId"`
-	Kind                     string `json:"kind"`
-	CaptureMode              string `json:"captureMode"`
-	SourceChannel            string `json:"sourceChannel"`
-	SourceSurface            string `json:"sourceSurface"`
-	SourceDocumentNo         string `json:"sourceDocumentNo"`
-	CustomerProfileID        *uint  `json:"customerProfileId"`
-	IntegrationProfileID     *uint  `json:"integrationProfileId"`
-	IntegrationProfileLabel  string `json:"integrationProfileLabel"`
-	Assigned                 bool   `json:"assigned"`
-	AssignedWaveID           *uint  `json:"assignedWaveId"`
-	AssignedWaveLabel        string `json:"assignedWaveLabel"`
-	TotalLineCount           int    `json:"totalLineCount"`
-	AcceptedCount            int    `json:"acceptedCount"`
-	ReadyAcceptedCount       int    `json:"readyAcceptedCount"`
-	WaitingInputCount        int    `json:"waitingInputCount"`
-	DeferredCount            int    `json:"deferredCount"`
-	ExcludedCount            int    `json:"excludedCount"`
-	CreatedAt                string `json:"createdAt"`
+	DemandDocumentID        uint   `json:"demandDocumentId"`
+	Kind                    string `json:"kind"`
+	CaptureMode             string `json:"captureMode"`
+	SourceChannel           string `json:"sourceChannel"`
+	SourceSurface           string `json:"sourceSurface"`
+	SourceDocumentNo        string `json:"sourceDocumentNo"`
+	CustomerProfileID       *uint  `json:"customerProfileId"`
+	IntegrationProfileID    *uint  `json:"integrationProfileId"`
+	IntegrationProfileLabel string `json:"integrationProfileLabel"`
+	Assigned                bool   `json:"assigned"`
+	AssignedWaveID          *uint  `json:"assignedWaveId"`
+	AssignedWaveLabel       string `json:"assignedWaveLabel"`
+	TotalLineCount          int    `json:"totalLineCount"`
+	AcceptedCount           int    `json:"acceptedCount"`
+	ReadyAcceptedCount      int    `json:"readyAcceptedCount"`
+	WaitingInputCount       int    `json:"waitingInputCount"`
+	DeferredCount           int    `json:"deferredCount"`
+	ExcludedCount           int    `json:"excludedCount"`
+	CreatedAt               string `json:"createdAt"`
 }

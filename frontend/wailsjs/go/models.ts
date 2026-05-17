@@ -948,8 +948,12 @@ export namespace dto {
 	
 	export class HistoryNodeDTO {
 	    id: number;
+	    parentNodeId: number;
+	    preferredRedoChildId: number;
 	    commandKind: string;
 	    commandSummary: string;
+	    projectionHash: string;
+	    checkpointHint: boolean;
 	    createdAt: string;
 	    createdBy: string;
 	
@@ -960,8 +964,12 @@ export namespace dto {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
+	        this.parentNodeId = source["parentNodeId"];
+	        this.preferredRedoChildId = source["preferredRedoChildId"];
 	        this.commandKind = source["commandKind"];
 	        this.commandSummary = source["commandSummary"];
+	        this.projectionHash = source["projectionHash"];
+	        this.checkpointHint = source["checkpointHint"];
 	        this.createdAt = source["createdAt"];
 	        this.createdBy = source["createdBy"];
 	    }
@@ -1899,6 +1907,8 @@ export namespace dto {
 	    stepStates: WaveStepStateDTO[];
 	    guidance: WaveWorkspaceGuidanceDTO[];
 	    basisSummary: WaveWorkspaceBasisSummaryDTO;
+	    historyHeadNodeId: number;
+	    historyHeadProjectionHash: string;
 	    recentHistory: HistoryNodeDTO[];
 	
 	    static createFrom(source: any = {}) {
@@ -1913,6 +1923,8 @@ export namespace dto {
 	        this.stepStates = this.convertValues(source["stepStates"], WaveStepStateDTO);
 	        this.guidance = this.convertValues(source["guidance"], WaveWorkspaceGuidanceDTO);
 	        this.basisSummary = this.convertValues(source["basisSummary"], WaveWorkspaceBasisSummaryDTO);
+	        this.historyHeadNodeId = source["historyHeadNodeId"];
+	        this.historyHeadProjectionHash = source["historyHeadProjectionHash"];
 	        this.recentHistory = this.convertValues(source["recentHistory"], HistoryNodeDTO);
 	    }
 	

@@ -22,13 +22,25 @@ const error = ref("");
 const hasOrder = computed(() => !!(order.value && order.value.id > 0));
 const isDraft = computed(() => hasOrder.value && order.value?.status === "draft");
 
+function statusText(status: string) {
+  const map: Record<string, string> = {
+    draft: t("execution.statusOptions.draft"),
+    submitted: t("execution.statusOptions.submitted"),
+    accepted: t("execution.statusOptions.accepted"),
+    partially_shipped: t("execution.statusOptions.partiallyShipped"),
+    shipped: t("execution.statusOptions.shipped"),
+    canceled: t("execution.statusOptions.canceled"),
+  };
+  return map[status] || status;
+}
+
 const columns: DataTableColumns<dto.SupplierOrderLineDTO> = [
-  { title: "Line", key: "supplierLineNo", width: 80 },
-  { title: "Supplier SKU", key: "supplierSku", width: 160 },
-  { title: "Submitted", key: "submittedQuantity", width: 100 },
-  { title: "Accepted", key: "acceptedQuantity", width: 100 },
-  { title: "Status", key: "status", width: 100 },
-  { title: "Fulfillment Line", key: "fulfillmentLineId", width: 120 },
+  { title: t("execution.columns.line"), key: "supplierLineNo", width: 80 },
+  { title: t("execution.columns.supplierSku"), key: "supplierSku", width: 160 },
+  { title: t("execution.columns.submitted"), key: "submittedQuantity", width: 100 },
+  { title: t("execution.columns.accepted"), key: "acceptedQuantity", width: 100 },
+  { title: t("execution.status"), key: "status", width: 100 },
+  { title: t("execution.columns.fulfillmentLine"), key: "fulfillmentLineId", width: 120 },
 ];
 
 async function loadOrder() {
@@ -101,19 +113,19 @@ onMounted(loadOrder);
 
     <template v-if="hasOrder && order">
       <NDescriptions bordered :column="2" class="mb-4" label-placement="left">
-        <NDescriptionsItem label="ID">{{ order.id }}</NDescriptionsItem>
-        <NDescriptionsItem label="Status">
+        <NDescriptionsItem :label="t('execution.orderId')">{{ order.id }}</NDescriptionsItem>
+        <NDescriptionsItem :label="t('execution.status')">
           <NTag :type="order.status === 'draft' ? 'warning' : 'success'" size="small" round>
-            {{ order.status }}
+            {{ statusText(order.status) }}
           </NTag>
         </NDescriptionsItem>
-        <NDescriptionsItem label="Supplier Platform">{{ order.supplierPlatform }}</NDescriptionsItem>
+        <NDescriptionsItem :label="t('execution.supplierPlatform')">{{ order.supplierPlatform }}</NDescriptionsItem>
         <NDescriptionsItem :label="t('execution.basis')">{{ order.basisHistoryNodeId || "—" }}</NDescriptionsItem>
-        <NDescriptionsItem label="Batch">{{ order.batchNo || "—" }}</NDescriptionsItem>
-        <NDescriptionsItem label="External Order No">{{ order.externalOrderNo || "—" }}</NDescriptionsItem>
+        <NDescriptionsItem :label="t('execution.batch')">{{ order.batchNo || "—" }}</NDescriptionsItem>
+        <NDescriptionsItem :label="t('execution.externalOrderNo')">{{ order.externalOrderNo || "—" }}</NDescriptionsItem>
       </NDescriptions>
 
-      <NCard title="Supplier Order Lines">
+      <NCard :title="t('execution.lines')">
         <NDataTable
           :columns="columns"
           :data="lines"

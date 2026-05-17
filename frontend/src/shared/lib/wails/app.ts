@@ -552,8 +552,12 @@ export async function listAdjustmentsByWave(
 
 export interface HistoryNodeDTO {
   id: number
+  parentNodeId: number
+  preferredRedoChildId: number
   commandKind: string
   commandSummary: string
+  projectionHash: string
+  checkpointHint: boolean
   createdAt: string
   createdBy: string
 }

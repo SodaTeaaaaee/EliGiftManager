@@ -8,15 +8,17 @@ import (
 )
 
 type waveOverviewQueryUseCase struct {
-	waveRepo       domain.WaveRepository
-	fulfillRepo    domain.FulfillmentLineRepository
-	supplierRepo   domain.SupplierOrderRepository
-	assignmentRepo domain.WaveDemandAssignmentRepository
-	demandRepo     domain.DemandDocumentRepository
-	shipmentRepo   domain.ShipmentRepository
-	productRepo    domain.ProductRepository
-	profileRepo    domain.IntegrationProfileRepository
-	overviewProjUC WaveOverviewProjectionUseCase
+	waveRepo         domain.WaveRepository
+	fulfillRepo      domain.FulfillmentLineRepository
+	supplierRepo     domain.SupplierOrderRepository
+	assignmentRepo   domain.WaveDemandAssignmentRepository
+	demandRepo       domain.DemandDocumentRepository
+	shipmentRepo     domain.ShipmentRepository
+	productRepo      domain.ProductRepository
+	profileRepo      domain.IntegrationProfileRepository
+	historyScopeRepo domain.HistoryScopeRepository
+	historyNodeRepo  domain.HistoryNodeRepository
+	overviewProjUC   WaveOverviewProjectionUseCase
 }
 
 type overviewClosureCandidates struct {
@@ -33,18 +35,22 @@ func NewWaveOverviewQueryUseCase(
 	shipmentRepo domain.ShipmentRepository,
 	productRepo domain.ProductRepository,
 	profileRepo domain.IntegrationProfileRepository,
+	historyScopeRepo domain.HistoryScopeRepository,
+	historyNodeRepo domain.HistoryNodeRepository,
 	overviewProjUC WaveOverviewProjectionUseCase,
 ) WaveOverviewQueryUseCase {
 	return &waveOverviewQueryUseCase{
-		waveRepo:       waveRepo,
-		fulfillRepo:    fulfillRepo,
-		supplierRepo:   supplierRepo,
-		assignmentRepo: assignmentRepo,
-		demandRepo:     demandRepo,
-		shipmentRepo:   shipmentRepo,
-		productRepo:    productRepo,
-		profileRepo:    profileRepo,
-		overviewProjUC: overviewProjUC,
+		waveRepo:         waveRepo,
+		fulfillRepo:      fulfillRepo,
+		supplierRepo:     supplierRepo,
+		assignmentRepo:   assignmentRepo,
+		demandRepo:       demandRepo,
+		shipmentRepo:     shipmentRepo,
+		productRepo:      productRepo,
+		profileRepo:      profileRepo,
+		historyScopeRepo: historyScopeRepo,
+		historyNodeRepo:  historyNodeRepo,
+		overviewProjUC:   overviewProjUC,
 	}
 }
 
@@ -187,7 +193,14 @@ func (uc *waveOverviewQueryUseCase) GetWaveWorkspaceSnapshot(waveID uint) (dto.W
 		return dto.WaveWorkspaceSnapshotDTO{}, err
 	}
 
-	historyRows := []dto.HistoryNodeDTO{}
+	recentHistory, err := uc.ListRecentHistory(waveID, 10)
+	if err != nil {
+		return dto.WaveWorkspaceSnapshotDTO{}, err
+	}
+	historyHeadNodeID, historyHeadProjectionHash, err := uc.resolveHistoryHead(waveID)
+	if err != nil {
+		return dto.WaveWorkspaceSnapshotDTO{}, err
+	}
 	stepStates := buildWorkspaceStepStates(overview, fulfillmentRows)
 	guidance := buildWorkspaceGuidance(overview)
 	basisSummary := dto.WaveWorkspaceBasisSummaryDTO{
@@ -204,14 +217,80 @@ func (uc *waveOverviewQueryUseCase) GetWaveWorkspaceSnapshot(waveID uint) (dto.W
 	}
 
 	return dto.WaveWorkspaceSnapshotDTO{
-		Wave:                    overview.Wave,
-		ProjectedLifecycleStage: overview.ProjectedLifecycleStage,
-		Overview:                overview,
-		StepStates:              stepStates,
-		Guidance:                guidance,
-		BasisSummary:            basisSummary,
-		RecentHistory:           historyRows,
+		Wave:                      overview.Wave,
+		ProjectedLifecycleStage:   overview.ProjectedLifecycleStage,
+		Overview:                  overview,
+		StepStates:                stepStates,
+		Guidance:                  guidance,
+		BasisSummary:              basisSummary,
+		HistoryHeadNodeID:         historyHeadNodeID,
+		HistoryHeadProjectionHash: historyHeadProjectionHash,
+		RecentHistory:             recentHistory,
 	}, nil
+}
+
+func (uc *waveOverviewQueryUseCase) ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	if uc.historyScopeRepo == nil || uc.historyNodeRepo == nil {
+		return []dto.HistoryNodeDTO{}, nil
+	}
+
+	scope, err := uc.historyScopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+	if err != nil {
+		return nil, err
+	}
+	if scope == nil || scope.CurrentHeadNodeID == 0 {
+		return []dto.HistoryNodeDTO{}, nil
+	}
+
+	nodes, err := uc.historyNodeRepo.ListByScopeRecent(scope.ID, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.HistoryNodeDTO, 0, len(nodes))
+	for _, n := range nodes {
+		if n.CommandKind == domain.CmdSystemBaseline {
+			continue
+		}
+		result = append(result, dto.HistoryNodeDTO{
+			ID:                   n.ID,
+			ParentNodeID:         n.ParentNodeID,
+			PreferredRedoChildID: n.PreferredRedoChildID,
+			CommandKind:          n.CommandKind,
+			CommandSummary:       n.CommandSummary,
+			ProjectionHash:       n.ProjectionHash,
+			CheckpointHint:       n.CheckpointHint,
+			CreatedAt:            n.CreatedAt,
+			CreatedBy:            n.CreatedBy,
+		})
+	}
+	return result, nil
+}
+
+func (uc *waveOverviewQueryUseCase) resolveHistoryHead(waveID uint) (uint, string, error) {
+	if uc.historyScopeRepo == nil || uc.historyNodeRepo == nil {
+		return 0, "", nil
+	}
+
+	scope, err := uc.historyScopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+	if err != nil {
+		return 0, "", err
+	}
+	if scope == nil || scope.CurrentHeadNodeID == 0 {
+		return 0, "", nil
+	}
+
+	node, err := uc.historyNodeRepo.FindByID(scope.CurrentHeadNodeID)
+	if err != nil {
+		return 0, "", err
+	}
+	if node == nil {
+		return scope.CurrentHeadNodeID, "", nil
+	}
+	return node.ID, node.ProjectionHash, nil
 }
 
 func (uc *waveOverviewQueryUseCase) ListDashboardRows() ([]dto.WaveDashboardRowDTO, error) {

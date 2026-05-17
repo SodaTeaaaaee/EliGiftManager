@@ -45,6 +45,13 @@ const stepStateMap = computed(() => {
   return map;
 });
 
+const stepStatusTextMap: Record<string, string> = {
+  idle: t("wave.stepStatus.idle"),
+  active: t("wave.stepStatus.active"),
+  available: t("wave.stepStatus.available"),
+  current: t("wave.stepStatus.current"),
+};
+
 function navigateTo(index: number) {
   const step = stepDefs.value[index - 1];
   if (!step || !waveId.value) return;
@@ -53,7 +60,21 @@ function navigateTo(index: number) {
 }
 
 function statusText(key: string) {
-  return stepStateMap.value.get(key)?.status || "idle";
+  const status = stepStateMap.value.get(key)?.status || "idle";
+  return stepStatusTextMap[status] || status;
+}
+
+function stepSummaryTitle(key: string) {
+  const map: Record<string, string> = {
+    wave_overview: t("wave.overview"),
+    membership_allocation: t("wave.allocation"),
+    demand_mapping: t("wave.mapping"),
+    adjustment_review: t("wave.adjustment"),
+    supplier_execution: t("wave.execution"),
+    shipment_intake: t("wave.shipment"),
+    channel_sync: t("wave.sync"),
+  };
+  return map[key] || key;
 }
 </script>
 
@@ -74,7 +95,7 @@ function statusText(key: string) {
         :key="step.key"
         class="wave-step-summary__item"
       >
-        <span>{{ step.title }}</span>
+        <span>{{ stepSummaryTitle(step.key) }}</span>
         <NTag size="small" :bordered="false">
           {{ stepStateMap.get(step.key)?.primaryCount ?? 0 }}
         </NTag>

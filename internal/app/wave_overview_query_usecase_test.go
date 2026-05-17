@@ -65,7 +65,7 @@ func TestBuildBaseOverviewPropagatesProductRepoError(t *testing.T) {
 	}
 	queryUC := NewWaveOverviewQueryUseCase(
 		waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo,
-		failingProductRepo{}, profileRepo, NewWaveOverviewProjectionUseCase(newMockChannelSyncRepo(), newMockClosureDecisionRepo(), noopDriftUC{}, noopHistoryHeadUC{}),
+		failingProductRepo{}, profileRepo, newMockHistoryScopeRepo(), newMockHistoryNodeRepo(), NewWaveOverviewProjectionUseCase(newMockChannelSyncRepo(), newMockClosureDecisionRepo(), noopDriftUC{}, noopHistoryHeadUC{}),
 	)
 
 	wave := &domain.Wave{Name: "overview-error"}
@@ -102,7 +102,7 @@ func TestListDashboardRowsUsesProjectedStage(t *testing.T) {
 
 	queryUC := NewWaveOverviewQueryUseCase(
 		waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo,
-		staticProductRepo{}, profileRepo, NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{}),
+		staticProductRepo{}, profileRepo, newMockHistoryScopeRepo(), newMockHistoryNodeRepo(), NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{}),
 	)
 
 	wave := &domain.Wave{Name: "dashboard-wave"}
@@ -145,6 +145,125 @@ func TestListDashboardRowsUsesProjectedStage(t *testing.T) {
 	}
 	if rows[0].ProjectedLifecycleStage != "review" {
 		t.Fatalf("ProjectedLifecycleStage = %q, want review", rows[0].ProjectedLifecycleStage)
+	}
+}
+
+func TestGetWaveWorkspaceSnapshotIncludesRecentHistoryAndHead(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+	fulfillRepo := newMockFulfillRepo()
+	supplierRepo := newMockSupplierRepo()
+	shipmentRepo := newMockShipmentRepo()
+	profileRepo := newMockProfileRepo()
+	scopeRepo := newMockHistoryScopeRepo()
+	nodeRepo := newMockHistoryNodeRepo()
+	syncRepo := newMockChannelSyncRepo()
+	closureRepo := newMockClosureDecisionRepo()
+
+	queryUC := NewWaveOverviewQueryUseCase(
+		waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo,
+		staticProductRepo{}, profileRepo, scopeRepo, nodeRepo, NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{}),
+	)
+
+	wave := &domain.Wave{Name: "history-wave"}
+	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(wave); err != nil {
+		t.Fatalf("CreateWave: %v", err)
+	}
+
+	scope, err := scopeRepo.FindOrCreate("wave", "1")
+	if err != nil {
+		t.Fatalf("FindOrCreate scope: %v", err)
+	}
+	head := &domain.HistoryNode{
+		HistoryScopeID: scope.ID,
+		CommandKind:    "create_rule",
+		CommandSummary: "create rule",
+		ProjectionHash: "hash-123",
+		CreatedBy:      "tester",
+	}
+	if err := nodeRepo.Create(head); err != nil {
+		t.Fatalf("Create history node: %v", err)
+	}
+	if err := scopeRepo.UpdateHead(scope.ID, head.ID); err != nil {
+		t.Fatalf("UpdateHead: %v", err)
+	}
+
+	snapshot, err := queryUC.GetWaveWorkspaceSnapshot(wave.ID)
+	if err != nil {
+		t.Fatalf("GetWaveWorkspaceSnapshot: %v", err)
+	}
+	if snapshot.HistoryHeadNodeID != head.ID {
+		t.Fatalf("HistoryHeadNodeID = %d, want %d", snapshot.HistoryHeadNodeID, head.ID)
+	}
+	if snapshot.HistoryHeadProjectionHash != "hash-123" {
+		t.Fatalf("HistoryHeadProjectionHash = %q, want %q", snapshot.HistoryHeadProjectionHash, "hash-123")
+	}
+	if len(snapshot.RecentHistory) != 1 {
+		t.Fatalf("RecentHistory len = %d, want 1", len(snapshot.RecentHistory))
+	}
+	if snapshot.RecentHistory[0].ParentNodeID != 0 {
+		t.Fatalf("ParentNodeID = %d, want 0", snapshot.RecentHistory[0].ParentNodeID)
+	}
+}
+
+func TestListRecentHistorySkipsSystemBaseline(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+	fulfillRepo := newMockFulfillRepo()
+	supplierRepo := newMockSupplierRepo()
+	shipmentRepo := newMockShipmentRepo()
+	profileRepo := newMockProfileRepo()
+	scopeRepo := newMockHistoryScopeRepo()
+	nodeRepo := newMockHistoryNodeRepo()
+
+	queryUC := NewWaveOverviewQueryUseCase(
+		waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo,
+		staticProductRepo{}, profileRepo, scopeRepo, nodeRepo, NewWaveOverviewProjectionUseCase(newMockChannelSyncRepo(), newMockClosureDecisionRepo(), noopDriftUC{}, noopHistoryHeadUC{}),
+	)
+
+	scope, err := scopeRepo.FindOrCreate("wave", "1")
+	if err != nil {
+		t.Fatalf("FindOrCreate scope: %v", err)
+	}
+	baseline := &domain.HistoryNode{
+		HistoryScopeID: scope.ID,
+		CommandKind:    domain.CmdSystemBaseline,
+		CommandSummary: "system baseline",
+	}
+	if err := nodeRepo.Create(baseline); err != nil {
+		t.Fatalf("Create baseline: %v", err)
+	}
+	if err := scopeRepo.UpdateHead(scope.ID, baseline.ID); err != nil {
+		t.Fatalf("UpdateHead baseline: %v", err)
+	}
+	node := &domain.HistoryNode{
+		HistoryScopeID: scope.ID,
+		ParentNodeID:   baseline.ID,
+		CommandKind:    "create_rule",
+		CommandSummary: "create rule",
+	}
+	if err := nodeRepo.Create(node); err != nil {
+		t.Fatalf("Create node: %v", err)
+	}
+	if err := scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+		t.Fatalf("UpdateHead node: %v", err)
+	}
+
+	items, err := queryUC.ListRecentHistory(1, 10)
+	if err != nil {
+		t.Fatalf("ListRecentHistory: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("ListRecentHistory len = %d, want 1", len(items))
+	}
+	if items[0].CommandKind != "create_rule" {
+		t.Fatalf("CommandKind = %q, want create_rule", items[0].CommandKind)
 	}
 }
 

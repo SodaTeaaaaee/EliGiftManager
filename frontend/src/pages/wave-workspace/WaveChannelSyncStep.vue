@@ -34,22 +34,22 @@ const profileOptions = computed(() =>
 
 const decisionKindOptions = computed(() => {
   const base = [
-    { label: "mark_sync_unsupported", value: "mark_sync_unsupported" },
-    { label: "mark_sync_skipped", value: "mark_sync_skipped" },
+    { label: t("sync.decisionOptions.mark_sync_unsupported"), value: "mark_sync_unsupported" },
+    { label: t("sync.decisionOptions.mark_sync_skipped"), value: "mark_sync_skipped" },
   ];
   const selected = profiles.value.find((profile) => profile.id === selectedProfileId.value);
   if (selected?.allowsManualClosure) {
-    base.push({ label: "mark_sync_completed_manually", value: "mark_sync_completed_manually" });
+    base.push({ label: t("sync.decisionOptions.mark_sync_completed_manually"), value: "mark_sync_completed_manually" });
   }
   return base;
 });
 
 const columns: DataTableColumns<dto.ChannelSyncJobDTO> = [
   { title: "ID", key: "id", width: 60 },
-  { title: "Profile", key: "integrationProfileId", width: 100 },
-  { title: "Direction", key: "direction", width: 120 },
+  { title: t("sync.columns.profile"), key: "integrationProfileId", width: 100 },
+  { title: t("sync.columns.direction"), key: "direction", width: 120 },
   {
-    title: "Status",
+    title: t("sync.columns.status"),
     key: "status",
     width: 120,
     render(row) {
@@ -57,18 +57,18 @@ const columns: DataTableColumns<dto.ChannelSyncJobDTO> = [
       return h(NTag, { type, size: "small", round: true }, { default: () => row.status });
     },
   },
-  { title: "Error", key: "errorMessage" },
+  { title: t("sync.columns.error"), key: "errorMessage" },
   {
-    title: "Actions",
+    title: t("sync.columns.actions"),
     key: "actions",
     width: 180,
     render(row) {
       return h(NSpace, { size: "small" }, () => [
         row.status === "pending"
-          ? h(NButton, { size: "small", type: "primary", onClick: () => handleExecute(row.id) }, { default: () => "Run" })
+          ? h(NButton, { size: "small", type: "primary", onClick: () => handleExecute(row.id) }, { default: () => t("sync.run") })
           : null,
         row.status === "failed" || row.status === "partial_success"
-          ? h(NButton, { size: "small", type: "warning", onClick: () => handleRetry(row.id) }, { default: () => "Retry" })
+          ? h(NButton, { size: "small", type: "warning", onClick: () => handleRetry(row.id) }, { default: () => t("sync.retry") })
           : null,
       ]);
     },
@@ -198,16 +198,16 @@ onMounted(async () => {
         :key="item.fulfillmentLineId"
         class="mb-4 rounded border border-gray-200 p-3"
       >
-        <div class="mb-2 font-medium">Fulfillment Line #{{ item.fulfillmentLineId }}</div>
+        <div class="mb-2 font-medium">{{ t("sync.fulfillmentLine") }} #{{ item.fulfillmentLineId }}</div>
         <NSpace vertical>
           <NSelect
             v-model:value="manualForms[item.fulfillmentLineId].decisionKind"
             :options="decisionKindOptions"
           />
-          <NInput v-model:value="manualForms[item.fulfillmentLineId].reasonCode" placeholder="Reason Code" />
-          <NInput v-model:value="manualForms[item.fulfillmentLineId].note" type="textarea" :rows="2" placeholder="Note" />
-          <NInput v-model:value="manualForms[item.fulfillmentLineId].evidenceRef" placeholder="Evidence Ref" />
-          <NInput v-model:value="manualForms[item.fulfillmentLineId].operatorId" placeholder="Operator ID" />
+          <NInput v-model:value="manualForms[item.fulfillmentLineId].reasonCode" :placeholder="t('sync.reasonCode')" />
+          <NInput v-model:value="manualForms[item.fulfillmentLineId].note" type="textarea" :rows="2" :placeholder="t('sync.note')" />
+          <NInput v-model:value="manualForms[item.fulfillmentLineId].evidenceRef" :placeholder="t('sync.evidenceRef')" />
+          <NInput v-model:value="manualForms[item.fulfillmentLineId].operatorId" :placeholder="t('sync.operatorId')" />
         </NSpace>
       </div>
       <NButton type="primary" :loading="submitting" @click="handleSubmitDecisions">

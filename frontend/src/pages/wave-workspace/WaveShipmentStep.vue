@@ -34,39 +34,51 @@ const form = ref({
   shippedAt: null as number | null,
 });
 
+function shipmentStatusText(status: string) {
+  const map: Record<string, string> = {
+    pending: t("shipment.statusOptions.pending"),
+    shipped: t("shipment.statusOptions.shipped"),
+    in_transit: t("shipment.statusOptions.inTransit"),
+    delivered: t("shipment.statusOptions.delivered"),
+    exception: t("shipment.statusOptions.exception"),
+    returned: t("shipment.statusOptions.returned"),
+  };
+  return map[status] || status;
+}
+
 const statusOptions = [
-  { label: "pending", value: "pending" },
-  { label: "shipped", value: "shipped" },
-  { label: "in_transit", value: "in_transit" },
-  { label: "delivered", value: "delivered" },
-  { label: "exception", value: "exception" },
-  { label: "returned", value: "returned" },
+  { label: t("shipment.statusOptions.pending"), value: "pending" },
+  { label: t("shipment.statusOptions.shipped"), value: "shipped" },
+  { label: t("shipment.statusOptions.inTransit"), value: "in_transit" },
+  { label: t("shipment.statusOptions.delivered"), value: "delivered" },
+  { label: t("shipment.statusOptions.exception"), value: "exception" },
+  { label: t("shipment.statusOptions.returned"), value: "returned" },
 ];
 
 const shipmentColumns: DataTableColumns<dto.ShipmentDTO> = [
-  { title: "Shipment No", key: "shipmentNo", width: 160 },
-  { title: "Carrier", key: "carrierName", width: 120 },
-  { title: "Tracking", key: "trackingNo", width: 180 },
+  { title: t("shipment.columns.shipmentNo"), key: "shipmentNo", width: 160 },
+  { title: t("shipment.columns.carrier"), key: "carrierName", width: 120 },
+  { title: t("shipment.columns.tracking"), key: "trackingNo", width: 180 },
   {
-    title: "Status",
+    title: t("shipment.columns.status"),
     key: "status",
     width: 100,
     render(row) {
       const type = row.status === "delivered" ? "success" : row.status === "exception" ? "error" : "default";
-      return h(NTag, { type, size: "small", round: true }, { default: () => row.status });
+      return h(NTag, { type, size: "small", round: true }, { default: () => shipmentStatusText(row.status) });
     },
   },
-  { title: "Shipped At", key: "shippedAt", width: 180 },
+  { title: t("shipment.columns.shippedAt"), key: "shippedAt", width: 180 },
 ];
 
 const lineSelectionColumns: DataTableColumns<dto.SupplierOrderLineDTO> = [
   { type: "selection" },
-  { title: "Line", key: "supplierLineNo", width: 80 },
-  { title: "Supplier SKU", key: "supplierSku", width: 160 },
-  { title: "Submitted", key: "submittedQuantity", width: 100 },
-  { title: "Fulfillment Line", key: "fulfillmentLineId", width: 120 },
+  { title: t("shipment.columns.line"), key: "supplierLineNo", width: 80 },
+  { title: t("shipment.columns.supplierSku"), key: "supplierSku", width: 160 },
+  { title: t("shipment.columns.submitted"), key: "submittedQuantity", width: 100 },
+  { title: t("shipment.columns.fulfillmentLine"), key: "fulfillmentLineId", width: 120 },
   {
-    title: "This Shipment",
+    title: t("shipment.columns.thisShipment"),
     key: "qty",
     width: 120,
     render(row) {
@@ -188,28 +200,28 @@ onMounted(async () => {
     <NCard :title="t('shipment.create')">
       <NSpin :show="loadingOrder">
         <NForm label-placement="left" label-width="120">
-          <NFormItem label="Supplier Order ID">
+          <NFormItem :label="t('shipment.supplierOrderId')">
             <NInput :value="supplierOrder ? String(supplierOrder.id) : '—'" readonly />
           </NFormItem>
-          <NFormItem label="Shipment No">
+          <NFormItem :label="t('shipment.shipmentNo')">
             <NInput v-model:value="form.shipmentNo" />
           </NFormItem>
-          <NFormItem label="External Shipment No">
+          <NFormItem :label="t('shipment.externalShipmentNo')">
             <NInput v-model:value="form.externalShipmentNo" />
           </NFormItem>
-          <NFormItem label="Carrier Code">
+          <NFormItem :label="t('shipment.carrierCode')">
             <NInput v-model:value="form.carrierCode" />
           </NFormItem>
-          <NFormItem label="Carrier Name">
+          <NFormItem :label="t('shipment.carrierName')">
             <NInput v-model:value="form.carrierName" />
           </NFormItem>
-          <NFormItem label="Tracking No">
+          <NFormItem :label="t('shipment.trackingNo')">
             <NInput v-model:value="form.trackingNo" />
           </NFormItem>
-          <NFormItem label="Status">
+          <NFormItem :label="t('shipment.status')">
             <NSelect v-model:value="form.status" :options="statusOptions" />
           </NFormItem>
-          <NFormItem label="Shipped At">
+          <NFormItem :label="t('shipment.shippedAt')">
             <NDatePicker v-model:value="form.shippedAt" type="datetime" clearable />
           </NFormItem>
         </NForm>

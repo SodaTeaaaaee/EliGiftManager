@@ -54,11 +54,11 @@ func NewWaveController() *WaveController {
 	return &WaveController{
 		waveUC:              app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
 		demandMappingUC:     app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil),
-		overviewQueryUC:     app.NewWaveOverviewQueryUseCase(waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo, productRepo, profileRepo, overviewProjUC),
+		overviewQueryUC:     app.NewWaveOverviewQueryUseCase(waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo, productRepo, profileRepo, historyScopeRepo, historyNodeRepo, overviewProjUC),
 		assignmentRepo:      assignmentRepo,
 		demandRepo:          demandRepo,
 		nodeRepo:            historyNodeRepo,
-		gdb:                gormDB,
+		gdb:                 gormDB,
 		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gormDB, snapshotSvc)),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
@@ -170,13 +170,13 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		}
 
 		_, err := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 waveID,
-			CommandKind:            domain.CmdAssignDemand,
-			CommandSummary:         fmt.Sprintf("assign demand %d to wave %d", demandDocumentID, waveID),
-			PatchPayload:           fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
-			InversePatchPayload:    fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
+			WaveID:                  waveID,
+			CommandKind:             domain.CmdAssignDemand,
+			CommandSummary:          fmt.Sprintf("assign demand %d to wave %d", demandDocumentID, waveID),
+			PatchPayload:            fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
+			InversePatchPayload:     fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHashSvc.ComputeHash(waveID),
 		})
 		if err != nil {
 			return err
@@ -224,14 +224,14 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 		}
 
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 waveID,
-			CommandKind:            domain.CmdGenerateParticipants,
-			CommandSummary:         fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
-			PatchPayload:           fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
-			InversePatchPayload:    fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
-			CheckpointHint:         true,
+			WaveID:                  waveID,
+			CommandKind:             domain.CmdGenerateParticipants,
+			CommandSummary:          fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
+			PatchPayload:            fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
+			InversePatchPayload:     fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+			CheckpointHint:          true,
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHashSvc.ComputeHash(waveID),
 		})
 		return recordErr
 	})
@@ -286,14 +286,14 @@ func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, 
 		summary := fmt.Sprintf("map demand lines for wave %d (%d created, %d blocked)", waveID, len(result.CreatedLines), len(result.BlockedLines))
 		_ = totalLines
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 waveID,
-			CommandKind:            domain.CmdMapDemandLines,
-			CommandSummary:         summary,
-			PatchPayload:           fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
-			InversePatchPayload:    fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
-			CheckpointHint:         true,
+			WaveID:                  waveID,
+			CommandKind:             domain.CmdMapDemandLines,
+			CommandSummary:          summary,
+			PatchPayload:            fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
+			InversePatchPayload:     fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+			CheckpointHint:          true,
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHashSvc.ComputeHash(waveID),
 		})
 		return recordErr
 	})
@@ -375,39 +375,5 @@ func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
 
 // ListRecentHistory returns the most recent history nodes for a wave.
 func (c *WaveController) ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error) {
-	if limit <= 0 || limit > 50 {
-		limit = 10
-	}
-	scope, err := c.historyRecordingSvc.FindScope(waveID)
-	if err != nil {
-		return nil, err
-	}
-	if scope == nil {
-		return []dto.HistoryNodeDTO{}, nil
-	}
-	nodes, err := c.nodeRepo.ListByScopeRecent(scope.ID, limit)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]dto.HistoryNodeDTO, len(nodes))
-	for i, n := range nodes {
-		if n.CommandKind == domain.CmdSystemBaseline {
-			continue
-		}
-		result[i] = dto.HistoryNodeDTO{
-			ID:             n.ID,
-			CommandKind:    n.CommandKind,
-			CommandSummary: n.CommandSummary,
-			CreatedAt:      n.CreatedAt,
-			CreatedBy:      n.CreatedBy,
-		}
-	}
-	filtered := make([]dto.HistoryNodeDTO, 0, len(result))
-	for _, item := range result {
-		if item.CommandKind == "" {
-			continue
-		}
-		filtered = append(filtered, item)
-	}
-	return filtered, nil
+	return c.overviewQueryUC.ListRecentHistory(waveID, limit)
 }

@@ -11,6 +11,60 @@ const { t } = useI18n();
 
 const overview = computed(() => snapshot.value?.overview);
 const guidance = computed(() => snapshot.value?.guidance || []);
+const recentHistory = computed(() => snapshot.value?.recentHistory || []);
+
+function lifecycleText(key: string) {
+  const map: Record<string, string> = {
+    intake: t("wave.lifecycle.intake"),
+    allocation: t("wave.lifecycle.allocation"),
+    review: t("wave.lifecycle.review"),
+    execution: t("wave.lifecycle.execution"),
+    syncing_back: t("wave.lifecycle.syncing_back"),
+    awaiting_manual_closure: t("wave.lifecycle.awaiting_manual_closure"),
+    closed: t("wave.lifecycle.closed"),
+  };
+  return map[key] || key;
+}
+
+function summaryText(key: string) {
+  const map: Record<string, string> = {
+    ready: t("wave.summary.ready"),
+    waiting_for_input: t("wave.summary.waitingInput"),
+    deferred: t("wave.summary.deferred"),
+    excluded: t("wave.summary.excluded"),
+    supplier_orders: t("wave.summary.supplierOrders"),
+    shipments: t("wave.summary.shipments"),
+    pending_sync: t("wave.summary.pendingSync"),
+    failed_sync: t("wave.summary.failedSync"),
+    manual_closure_candidates: t("wave.summary.manualClosureCandidates"),
+    demand: t("wave.summary.demand"),
+    fulfillment: t("wave.summary.fulfillment"),
+    channel_sync_jobs: t("wave.summary.channelSyncJobs"),
+  };
+  return map[key] || key;
+}
+
+function historyCommandText(key: string) {
+  const map: Record<string, string> = {
+    system_baseline: t("wave.commandKinds.system_baseline"),
+    create_rule: t("wave.commandKinds.create_rule"),
+    update_rule: t("wave.commandKinds.update_rule"),
+    delete_rule: t("wave.commandKinds.delete_rule"),
+    reconcile_wave: t("wave.commandKinds.reconcile_wave"),
+    generate_participants: t("wave.commandKinds.generate_participants"),
+    assign_demand: t("wave.commandKinds.assign_demand"),
+    map_demand_lines: t("wave.commandKinds.map_demand_lines"),
+    record_adjustment: t("wave.commandKinds.record_adjustment"),
+    export_supplier_order: t("wave.commandKinds.export_supplier_order"),
+    create_shipment: t("wave.commandKinds.create_shipment"),
+    create_channel_sync_job: t("wave.commandKinds.create_channel_sync_job"),
+    execute_channel_sync_job: t("wave.commandKinds.execute_channel_sync_job"),
+    retry_channel_sync_job: t("wave.commandKinds.retry_channel_sync_job"),
+    record_closure_decision: t("wave.commandKinds.record_closure_decision"),
+    snapshot: t("wave.commandKinds.snapshot"),
+  };
+  return map[key] || key;
+}
 
 function goTo(stepKey: string) {
   const waveId = snapshot.value?.wave?.id;
@@ -37,11 +91,9 @@ function goTo(stepKey: string) {
       <NCard class="mb-4">
         <div class="flex items-start justify-between gap-6">
           <div>
-            <div class="app-kicker">{{ snapshot.projectedLifecycleStage }}</div>
+            <div class="app-kicker">{{ lifecycleText(snapshot.projectedLifecycleStage) }}</div>
             <h2 class="app-title mt-2">{{ t("wave.previewDecision") }}</h2>
-            <p class="app-copy mt-3">
-              在这里集中判断当前波次该继续执行、回前置修正，还是进入共享调整层。
-            </p>
+            <p class="app-copy mt-3">{{ t("wave.previewDescription") }}</p>
           </div>
           <NSpace vertical>
             <NButton type="primary" @click="goTo('supplier_execution')">
@@ -62,7 +114,7 @@ function goTo(stepKey: string) {
             :key="item.code"
             class="flex items-center justify-between gap-4"
           >
-            <span>{{ item.code }} ({{ item.count }})</span>
+            <span>{{ t(`wave.guidance.${item.code}`) || item.code }} ({{ item.count }})</span>
             <NButton size="small" @click="goTo(item.targetStepKey)">
               {{ item.targetStepKey }}
             </NButton>
@@ -75,19 +127,19 @@ function goTo(stepKey: string) {
           <NCard :title="t('wave.exceptionsGroup')">
             <NSpace vertical :size="10">
               <div class="flex items-center justify-between gap-4">
-                <span>Back to Membership Allocation</span>
+                <span>{{ t("wave.allocation") }}</span>
                 <NButton size="small" @click="goTo('membership_allocation')">
                   {{ t("wave.allocation") }}
                 </NButton>
               </div>
               <div class="flex items-center justify-between gap-4">
-                <span>Back to Demand Mapping</span>
+                <span>{{ t("wave.mapping") }}</span>
                 <NButton size="small" @click="goTo('demand_mapping')">
                   {{ t("wave.mapping") }}
                 </NButton>
               </div>
               <div class="flex items-center justify-between gap-4">
-                <span>Handle final fulfillment exceptions</span>
+                <span>{{ t("wave.adjustment") }}</span>
                 <NButton size="small" @click="goTo('adjustment_review')">
                   {{ t("wave.adjustment") }}
                 </NButton>
@@ -99,10 +151,10 @@ function goTo(stepKey: string) {
         <NGridItem>
           <NCard :title="t('wave.routingGroup')">
             <NList bordered>
-              <NListItem>Ready: {{ overview?.acceptedReadyOrNotRequired ?? 0 }}</NListItem>
-              <NListItem>Waiting Input: {{ overview?.acceptedWaitingForInput ?? 0 }}</NListItem>
-              <NListItem>Deferred: {{ overview?.deferredCount ?? 0 }}</NListItem>
-              <NListItem>Excluded: {{ (overview?.excludedManualCount ?? 0) + (overview?.excludedDuplicateCount ?? 0) + (overview?.excludedRevokedCount ?? 0) }}</NListItem>
+              <NListItem>{{ summaryText("ready") }}: {{ overview?.acceptedReadyOrNotRequired ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("waiting_for_input") }}: {{ overview?.acceptedWaitingForInput ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("deferred") }}: {{ overview?.deferredCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("excluded") }}: {{ (overview?.excludedManualCount ?? 0) + (overview?.excludedDuplicateCount ?? 0) + (overview?.excludedRevokedCount ?? 0) }}</NListItem>
             </NList>
           </NCard>
         </NGridItem>
@@ -110,46 +162,30 @@ function goTo(stepKey: string) {
         <NGridItem>
           <NCard :title="t('wave.executionGroup')">
             <NList bordered>
-              <NListItem>Supplier Orders: {{ overview?.supplierOrderCount ?? 0 }}</NListItem>
-              <NListItem>Shipments: {{ overview?.shipmentCount ?? 0 }}</NListItem>
-              <NListItem>Pending Sync: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
-              <NListItem>Manual Closure Candidates: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("supplier_orders") }}: {{ overview?.supplierOrderCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("shipments") }}: {{ overview?.shipmentCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("pending_sync") }}: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("manual_closure_candidates") }}: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
             </NList>
           </NCard>
         </NGridItem>
       </NGrid>
 
       <NGrid :cols="4" :x-gap="16" :y-gap="16" class="mb-5">
-        <NGridItem>
-          <NCard>
-            <NStatistic label="Demand" :value="overview?.demandCount ?? 0" />
-          </NCard>
-        </NGridItem>
-        <NGridItem>
-          <NCard>
-            <NStatistic label="Fulfillment" :value="overview?.fulfillmentCount ?? 0" />
-          </NCard>
-        </NGridItem>
-        <NGridItem>
-          <NCard>
-            <NStatistic label="Supplier Orders" :value="overview?.supplierOrderCount ?? 0" />
-          </NCard>
-        </NGridItem>
-        <NGridItem>
-          <NCard>
-            <NStatistic label="Shipments" :value="overview?.shipmentCount ?? 0" />
-          </NCard>
-        </NGridItem>
+        <NGridItem><NCard><NStatistic :label="summaryText('demand')" :value="overview?.demandCount ?? 0" /></NCard></NGridItem>
+        <NGridItem><NCard><NStatistic :label="summaryText('fulfillment')" :value="overview?.fulfillmentCount ?? 0" /></NCard></NGridItem>
+        <NGridItem><NCard><NStatistic :label="summaryText('supplier_orders')" :value="overview?.supplierOrderCount ?? 0" /></NCard></NGridItem>
+        <NGridItem><NCard><NStatistic :label="summaryText('shipments')" :value="overview?.shipmentCount ?? 0" /></NCard></NGridItem>
       </NGrid>
 
       <NGrid :cols="2" :x-gap="16" :y-gap="16">
         <NGridItem>
           <NCard :title="t('wave.executionGroup')">
             <NList bordered>
-              <NListItem>Channel Sync Jobs: {{ overview?.channelSyncJobCount ?? 0 }}</NListItem>
-              <NListItem>Pending Sync: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
-              <NListItem>Failed Sync: {{ overview?.channelSyncFailedCount ?? 0 }}</NListItem>
-              <NListItem>Manual Closure Candidates: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("channel_sync_jobs") }}: {{ overview?.channelSyncJobCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("pending_sync") }}: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("failed_sync") }}: {{ overview?.channelSyncFailedCount ?? 0 }}</NListItem>
+              <NListItem>{{ summaryText("manual_closure_candidates") }}: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
             </NList>
           </NCard>
         </NGridItem>
@@ -175,14 +211,33 @@ function goTo(stepKey: string) {
       </NGrid>
 
       <NCard class="mt-5" :title="t('wave.history')">
-        <NTimeline>
+        <template #header-extra>
+          <NSpace align="center" :size="8">
+            <NTag size="small" round :type="snapshot.historyHeadNodeId ? 'info' : 'default'">
+              {{ t("wave.historyMeta.head") }} #{{ snapshot.historyHeadNodeId || "0" }}
+            </NTag>
+            <NTag v-if="snapshot.historyHeadProjectionHash" size="small" round>
+              {{ snapshot.historyHeadProjectionHash.slice(0, 8) }}
+            </NTag>
+          </NSpace>
+        </template>
+        <NAlert v-if="recentHistory.length" class="mb-4" type="info">
+          {{ t("wave.historyMeta.currentHead") }}：{{ recentHistory[0].commandSummary }}
+        </NAlert>
+        <NEmpty v-if="recentHistory.length === 0" :description="t('common.empty')" />
+        <NTimeline v-else>
           <NTimelineItem
-            v-for="node in snapshot.recentHistory"
+            v-for="node in recentHistory"
             :key="node.id"
             :title="node.commandSummary"
             :time="node.createdAt"
           >
-            <NTag size="tiny" :bordered="false">{{ node.commandKind }}</NTag>
+            <NSpace align="center" :size="8">
+              <NTag size="tiny" :bordered="false">{{ historyCommandText(node.commandKind) }}</NTag>
+              <span v-if="node.parentNodeId">{{ t("wave.historyMeta.parent") }} #{{ node.parentNodeId }}</span>
+              <span v-if="node.preferredRedoChildId">{{ t("wave.historyMeta.redo") }} #{{ node.preferredRedoChildId }}</span>
+              <span v-if="node.checkpointHint">{{ t("wave.historyMeta.checkpoint") }}</span>
+            </NSpace>
           </NTimelineItem>
         </NTimeline>
       </NCard>

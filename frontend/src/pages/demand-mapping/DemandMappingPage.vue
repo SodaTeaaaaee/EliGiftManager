@@ -31,12 +31,12 @@ const columns = computed<DataTableColumns<dto.DemandDocumentDTO>>(() => [
 ]);
 
 const lineColumns: DataTableColumns<dto.DemandLineDTO> = [
-  { title: "Line", key: "sourceLineNo", width: 70 },
-  { title: "Type", key: "lineType", width: 120 },
-  { title: "Title", key: "externalTitle" },
-  { title: "Disposition", key: "routingDisposition", width: 140 },
-  { title: "Input", key: "recipientInputState", width: 140 },
-  { title: "Qty", key: "requestedQuantity", width: 70 },
+  { title: t("mapping.columns.line"), key: "sourceLineNo", width: 70 },
+  { title: t("mapping.columns.type"), key: "lineType", width: 120 },
+  { title: t("mapping.columns.title"), key: "externalTitle" },
+  { title: t("mapping.columns.disposition"), key: "routingDisposition", width: 140 },
+  { title: t("mapping.columns.input"), key: "recipientInputState", width: 140 },
+  { title: t("mapping.columns.qty"), key: "requestedQuantity", width: 70 },
 ];
 
 async function loadDocs() {
@@ -84,7 +84,7 @@ async function handleMap() {
         .map((line) => line.demandLineTitle || `#${line.demandLineId}`)
         .join(", ");
     }
-    message.success(`${t("mapping.mapDemand")} OK`);
+    message.success(t("mapping.mapDemandOk"));
   } catch (e: unknown) {
     message.error(e instanceof Error ? e.message : String(e));
   } finally {
@@ -103,11 +103,11 @@ onMounted(loadDocs);
       <p class="app-copy mt-3">{{ t("mapping.subtitle") }}</p>
     </div>
 
-    <NCard class="mb-4" title="Current Mapping Rhythm">
+    <NCard class="mb-4" :title="t('mapping.currentRhythm')">
       <NSpace vertical :size="10">
-        <div>1. Expand assigned demand documents and inspect demand lines.</div>
-        <div>2. Generate participants if this wave has not entered fulfillment context yet.</div>
-        <div>3. Run mapping and review blockers before returning to overview.</div>
+        <div>1. {{ t("mapping.instructionsStep1") }}</div>
+        <div>2. {{ t("mapping.instructionsStep2") }}</div>
+        <div>3. {{ t("mapping.instructionsStep3") }}</div>
       </NSpace>
     </NCard>
 

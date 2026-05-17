@@ -25,6 +25,7 @@ type WaveOverviewQueryUseCase interface {
 	ListWaveFulfillmentRows(waveID uint) ([]dto.WaveFulfillmentRowDTO, error)
 	ListWaveParticipantRows(waveID uint) ([]dto.WaveParticipantRowDTO, error)
 	ListDashboardRows() ([]dto.WaveDashboardRowDTO, error)
+	ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error)
 }
 
 // DemandMappingUseCase handles demand-driven mapping: converts accepted, input-ready

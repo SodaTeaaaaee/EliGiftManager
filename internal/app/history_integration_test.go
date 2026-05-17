@@ -235,10 +235,10 @@ func TestIntegration_UpdateRule_UndoRedo(t *testing.T) {
 	// 2. Record initial history node (create).
 	oldJSON, _ := json.Marshal(rule)
 	mustRecordNode(t, f, RecordNodeInput{
-		WaveID:         waveID,
-		CommandKind:    "create_rule",
-		CommandSummary: "create rule",
-		PatchPayload:   fmt.Sprintf(`{"op":"create_rule","rule_id":%d,"wave_id":%d,"data":%s}`, ruleID, waveID, oldJSON),
+		WaveID:              waveID,
+		CommandKind:         "create_rule",
+		CommandSummary:      "create rule",
+		PatchPayload:        fmt.Sprintf(`{"op":"create_rule","rule_id":%d,"wave_id":%d,"data":%s}`, ruleID, waveID, oldJSON),
 		InversePatchPayload: fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, ruleID),
 	})
 
@@ -324,10 +324,10 @@ func TestIntegration_DeleteRule_UndoRedo(t *testing.T) {
 	// Record create node.
 	ruleJSON, _ := json.Marshal(rule)
 	mustRecordNode(t, f, RecordNodeInput{
-		WaveID:         waveID,
-		CommandKind:    "create_rule",
-		CommandSummary: "create rule",
-		PatchPayload:   fmt.Sprintf(`{"op":"create_rule","rule_id":%d,"wave_id":%d,"data":%s}`, ruleID, waveID, ruleJSON),
+		WaveID:              waveID,
+		CommandKind:         "create_rule",
+		CommandSummary:      "create rule",
+		PatchPayload:        fmt.Sprintf(`{"op":"create_rule","rule_id":%d,"wave_id":%d,"data":%s}`, ruleID, waveID, ruleJSON),
 		InversePatchPayload: fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, ruleID),
 	})
 

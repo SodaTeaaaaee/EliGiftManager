@@ -35,16 +35,16 @@ func (s *HistoryRecordingService) FindScope(waveID uint) (*domain.HistoryScope, 
 }
 
 type RecordNodeInput struct {
-	WaveID              uint
-	CommandKind         string
-	CommandSummary      string
-	PatchPayload        string
-	InversePatchPayload string
-	CheckpointHint      bool
+	WaveID                  uint
+	CommandKind             string
+	CommandSummary          string
+	PatchPayload            string
+	InversePatchPayload     string
+	CheckpointHint          bool
 	BaselineSnapshotPayload string
-	SnapshotPayload     string
-	ProjectionHash      string
-	CreatedBy           string
+	SnapshotPayload         string
+	ProjectionHash          string
+	CreatedBy               string
 }
 
 func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.HistoryNode, error) {
@@ -143,23 +143,23 @@ func (s *HistoryRecordingService) createSystemBaseline(scope *domain.HistoryScop
 	}
 
 	if snapshotPayload != "" {
-			node.CheckpointHint = true
-			if err := s.nodeRepo.Create(node); err != nil {
-				return nil, fmt.Errorf("history: create baseline node: %w", err)
-			}
-			cp := &domain.HistoryCheckpoint{
-				HistoryScopeID:  scope.ID,
-				HistoryNodeID:   node.ID,
-				SnapshotPayload: snapshotPayload,
-				SchemaVersion:   snapshotSchemaVersion,
-			}
-			if err := s.checkpointRepo.Create(cp); err != nil {
-				return nil, fmt.Errorf("history: create baseline checkpoint: %w", err)
-			}
-			if err := s.scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
-				return nil, fmt.Errorf("history: update head to baseline: %w", err)
-			}
-			return node, nil
+		node.CheckpointHint = true
+		if err := s.nodeRepo.Create(node); err != nil {
+			return nil, fmt.Errorf("history: create baseline node: %w", err)
+		}
+		cp := &domain.HistoryCheckpoint{
+			HistoryScopeID:  scope.ID,
+			HistoryNodeID:   node.ID,
+			SnapshotPayload: snapshotPayload,
+			SchemaVersion:   snapshotSchemaVersion,
+		}
+		if err := s.checkpointRepo.Create(cp); err != nil {
+			return nil, fmt.Errorf("history: create baseline checkpoint: %w", err)
+		}
+		if err := s.scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+			return nil, fmt.Errorf("history: update head to baseline: %w", err)
+		}
+		return node, nil
 	}
 
 	if err := s.nodeRepo.Create(node); err != nil {
