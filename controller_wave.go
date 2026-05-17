@@ -25,6 +25,8 @@ type WaveController struct {
 	historyRecordingSvc *app.HistoryRecordingService
 	projHashSvc         *app.ProjectionHashService
 	snapshotSvc         *app.WaveSnapshotService
+	historyGraphUC      app.HistoryGraphQueryUseCase
+	historyGCSvc        *app.HistoryGCService
 }
 
 func NewWaveController() *WaveController {
@@ -42,6 +44,8 @@ func NewWaveController() *WaveController {
 	historyNodeRepo := infra.NewHistoryNodeRepository(gormDB)
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gormDB)
 
+	historyPinRepo := infra.NewHistoryPinRepository(gormDB)
+
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gormDB)
 	snapshotSvc := app.NewWaveSnapshotService(gormDB, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 
@@ -54,7 +58,7 @@ func NewWaveController() *WaveController {
 	return &WaveController{
 		waveUC:              app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
 		demandMappingUC:     app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil),
-		overviewQueryUC:     app.NewWaveOverviewQueryUseCase(waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo, productRepo, profileRepo, historyScopeRepo, historyNodeRepo, overviewProjUC),
+		overviewQueryUC:     app.NewWaveOverviewQueryUseCase(waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo, productRepo, profileRepo, historyScopeRepo, historyNodeRepo, overviewProjUC, adjustmentRepo),
 		assignmentRepo:      assignmentRepo,
 		demandRepo:          demandRepo,
 		nodeRepo:            historyNodeRepo,
@@ -63,6 +67,8 @@ func NewWaveController() *WaveController {
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
+		historyGraphUC:      app.NewHistoryGraphQueryUseCase(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, historyPinRepo),
+		historyGCSvc:        app.NewHistoryGCService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, historyPinRepo),
 	}
 }
 
@@ -376,4 +382,19 @@ func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
 // ListRecentHistory returns the most recent history nodes for a wave.
 func (c *WaveController) ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error) {
 	return c.overviewQueryUC.ListRecentHistory(waveID, limit)
+}
+
+// GetHistoryGraph returns the full history node graph for a wave.
+func (c *WaveController) GetHistoryGraph(waveID uint) (dto.HistoryGraphDTO, error) {
+	graph, err := c.historyGraphUC.GetHistoryGraph(waveID)
+	if err != nil {
+		return dto.HistoryGraphDTO{}, err
+	}
+	return *graph, nil
+}
+
+// RunHistoryGC runs garbage collection on the history for a wave, keeping the last 100 reachable nodes.
+// Returns the count of deleted nodes.
+func (c *WaveController) RunHistoryGC(waveID uint) (int, error) {
+	return c.historyGCSvc.CollectGarbageForWave(waveID, 100)
 }

@@ -658,6 +658,8 @@ func FulfillmentAdjustmentToDomain(p *FulfillmentAdjustment) *domain.Fulfillment
 		WaveParticipantSnapshotID: p.WaveParticipantSnapshotID,
 		AdjustmentKind:            p.AdjustmentKind,
 		QuantityDelta:             p.QuantityDelta,
+		FromProductID:             p.FromProductID,
+		ToProductID:               p.ToProductID,
 		ReasonCode:                p.ReasonCode,
 		OperatorID:                p.OperatorID,
 		Note:                      p.Note,
@@ -676,6 +678,8 @@ func FulfillmentAdjustmentFromDomain(d *domain.FulfillmentAdjustment) *Fulfillme
 		WaveParticipantSnapshotID: d.WaveParticipantSnapshotID,
 		AdjustmentKind:            d.AdjustmentKind,
 		QuantityDelta:             d.QuantityDelta,
+		FromProductID:             d.FromProductID,
+		ToProductID:               d.ToProductID,
 		ReasonCode:                d.ReasonCode,
 		OperatorID:                d.OperatorID,
 		Note:                      d.Note,
@@ -896,5 +900,34 @@ func FromPersistenceProduct(p *Product) *domain.Product {
 		ExtraData:        p.ExtraData,
 		CreatedAt:        formatTime(p.CreatedAt),
 		UpdatedAt:        formatTime(p.UpdatedAt),
+	}
+}
+
+// ---- CarrierMapping ----
+
+func ToPersistenceCarrierMapping(d *domain.CarrierMapping) *CarrierMapping {
+	p := &CarrierMapping{
+		IntegrationProfileID: d.IntegrationProfileID,
+		InternalCarrierCode:  d.InternalCarrierCode,
+		ExternalCarrierCode:  d.ExternalCarrierCode,
+		ExternalCarrierName:  d.ExternalCarrierName,
+		IsDefault:            d.IsDefault,
+	}
+	if d.ID != 0 {
+		p.ID = d.ID
+	}
+	return p
+}
+
+func FromPersistenceCarrierMapping(p *CarrierMapping) *domain.CarrierMapping {
+	return &domain.CarrierMapping{
+		ID:                   p.ID,
+		IntegrationProfileID: p.IntegrationProfileID,
+		InternalCarrierCode:  p.InternalCarrierCode,
+		ExternalCarrierCode:  p.ExternalCarrierCode,
+		ExternalCarrierName:  p.ExternalCarrierName,
+		IsDefault:            p.IsDefault,
+		CreatedAt:            formatTime(p.CreatedAt),
+		UpdatedAt:            formatTime(p.UpdatedAt),
 	}
 }

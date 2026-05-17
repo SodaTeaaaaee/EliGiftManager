@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, provide, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, NAlert, NButton, NTag } from 'naive-ui'
+import { useMessage, NAlert, NButton, NTag, NDrawer, NDrawerContent } from 'naive-ui'
 import WaveStepWizard from '@/shared/ui/WaveStepWizard.vue'
 import { useUndoRedo } from '@/shared/composables/useUndoRedo'
 import { getWaveWorkspaceSnapshot } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
 import { useI18n } from '@/shared/i18n'
+import WaveHistoryPanel from './WaveHistoryPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -24,6 +25,8 @@ const workspaceSnapshot = ref<dto.WaveWorkspaceSnapshotDTO | null>(null)
 provide('waveWorkspaceSnapshot', workspaceSnapshot)
 const loading = ref(false)
 const error = ref("")
+
+const historyDrawerOpen = ref(false)
 
 async function loadWorkspaceSnapshot() {
   if (!waveId.value) return
@@ -106,6 +109,9 @@ const stageTagType = computed(() => {
         >
           {{ t('wave.drifted') }}
         </NTag>
+        <NButton secondary size="small" @click="historyDrawerOpen = true">
+          {{ t('wave.historyMeta.historyPanel') }}
+        </NButton>
         <NButton secondary size="small" @click="router.push('/waves')">{{ t('wave.returnToQueue') }}</NButton>
       </div>
     </div>
@@ -114,6 +120,12 @@ const stageTagType = computed(() => {
     <div class="wave-shell-content">
       <router-view :key="refreshKey" />
     </div>
+
+    <NDrawer v-model:show="historyDrawerOpen" :width="360" placement="right">
+      <NDrawerContent :title="t('wave.historyMeta.historyPanel')" :native-scrollbar="false" closable>
+        <WaveHistoryPanel :wave-id="waveId" @close="historyDrawerOpen = false" />
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>
 
@@ -144,3 +156,4 @@ const stageTagType = computed(() => {
   min-height: 0;
 }
 </style>
+

@@ -46,6 +46,11 @@ type ShipmentUseCase interface {
 	CreateShipment(input dto.CreateShipmentInput) (*domain.Shipment, []domain.ShipmentLine, error)
 }
 
+// ShipmentImportUseCase handles bulk shipment import from factory return data.
+type ShipmentImportUseCase interface {
+	ImportShipments(input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error)
+}
+
 // ChannelSyncUseCase handles channel sync job creation.
 type ChannelSyncUseCase interface {
 	CreateChannelSyncJob(input dto.CreateChannelSyncJobInput) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error)
@@ -128,4 +133,11 @@ type ProfileManagementUseCase interface {
 	GetProfile(id uint) (*dto.IntegrationProfileDTO, error)
 	ListProfiles() ([]dto.IntegrationProfileDTO, error)
 	SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error)
+}
+
+// EntitlementRoutingUseCase handles demand line routing disposition and input state management.
+type EntitlementRoutingUseCase interface {
+	UpdateDemandLineRouting(input dto.UpdateDemandLineRoutingInput) error
+	BatchUpdateDemandLineRouting(input dto.BatchUpdateDemandLineRoutingInput) (*dto.BatchUpdateDemandLineRoutingResult, error)
+	GetWaveRoutingStats(waveID uint) (*dto.WaveRoutingStatsDTO, error)
 }

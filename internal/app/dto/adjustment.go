@@ -7,6 +7,8 @@ type RecordAdjustmentInput struct {
 	WaveParticipantSnapshotID *uint  `json:"waveParticipantSnapshotId"`
 	AdjustmentKind            string `json:"adjustmentKind"`
 	QuantityDelta             int    `json:"quantityDelta"`
+	FromProductID             *uint  `json:"fromProductId"`
+	ToProductID               *uint  `json:"toProductId"`
 	ReasonCode                string `json:"reasonCode"`
 	OperatorID                string `json:"operatorId"`
 	Note                      string `json:"note"`
@@ -21,6 +23,8 @@ type FulfillmentAdjustmentDTO struct {
 	WaveParticipantSnapshotID *uint  `json:"waveParticipantSnapshotId"`
 	AdjustmentKind            string `json:"adjustmentKind"`
 	QuantityDelta             int    `json:"quantityDelta"`
+	FromProductID             *uint  `json:"fromProductId"`
+	ToProductID               *uint  `json:"toProductId"`
 	ReasonCode                string `json:"reasonCode"`
 	OperatorID                string `json:"operatorId"`
 	Note                      string `json:"note"`

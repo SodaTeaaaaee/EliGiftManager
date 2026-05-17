@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, h, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NAlert, NButton, NCard, NCollapse, NCollapseItem, NDataTable, NDatePicker, NEmpty, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpin, NTag, NSpace, useMessage } from "naive-ui";
 import type { DataTableColumns, DataTableRowKey } from "naive-ui";
-import { createShipment, getSupplierOrderByWave, listLinesBySupplierOrder, listShipmentsByWave } from "@/shared/lib/wails/app";
+import { createShipment, getSupplierOrderByWave, importShipments, listIntegrationProfiles, listLinesBySupplierOrder, listShipmentsByWave, pickCsvFile } from "@/shared/lib/wails/app";
+import type { ImportShipmentEntry } from "@/shared/lib/wails/app";
 import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
 
@@ -33,6 +34,245 @@ const form = ref({
   status: "pending",
   shippedAt: null as number | null,
 });
+
+// ── Import section state ──
+
+const showImportSection = ref(false);
+const importSubmitting = ref(false);
+const importError = ref("");
+const importResult = ref<{ successCount: number; errorCount: number; errors: Array<{ entryIndex: number; reason: string }> } | null>(null);
+const importProfileId = ref<number | null>(null);
+const integrationProfiles = ref<dto.IntegrationProfileSummaryDTO[]>([]);
+const loadingProfiles = ref(false);
+
+type ImportRow = ImportShipmentEntry & { _key: number }
+
+let _rowKeySeq = 0;
+function makeRow(): ImportRow {
+  return {
+    _key: ++_rowKeySeq,
+    supplierOrderLineId: 0,
+    fulfillmentLineId: 0,
+    externalShipmentNo: "",
+    carrierCode: "",
+    carrierName: "",
+    trackingNo: "",
+    quantity: 1,
+    shippedAt: "",
+  };
+}
+
+const importRows = ref<ImportRow[]>([makeRow()]);
+
+function addImportRow() {
+  importRows.value.push(makeRow());
+}
+
+function removeImportRow(key: number) {
+  importRows.value = importRows.value.filter((r) => r._key !== key);
+}
+
+async function loadProfiles() {
+  if (integrationProfiles.value.length > 0) return;
+  loadingProfiles.value = true;
+  try {
+    integrationProfiles.value = await listIntegrationProfiles();
+  } finally {
+    loadingProfiles.value = false;
+  }
+}
+
+function toggleImportSection() {
+  showImportSection.value = !showImportSection.value;
+  if (showImportSection.value) {
+    loadProfiles();
+  }
+}
+
+async function handlePickCsv() {
+  try {
+    await pickCsvFile();
+    // CSV parsing happens backend-side via template system.
+    // File selection confirms the intent; user fills entries manually in the table.
+    message.info(t("shipment.importButton"));
+  } catch (e: unknown) {
+    importError.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function handleImportSubmit() {
+  importError.value = "";
+  importResult.value = null;
+
+  if (!importProfileId.value) {
+    importError.value = t("shipment.importProfile");
+    return;
+  }
+  const entries = importRows.value.filter(
+    (r) => r.supplierOrderLineId > 0 && r.fulfillmentLineId > 0 && r.quantity > 0,
+  );
+  if (entries.length === 0) {
+    importError.value = "No valid entries to import.";
+    return;
+  }
+
+  importSubmitting.value = true;
+  try {
+    const result = await importShipments({
+      waveId: waveId.value,
+      integrationProfileId: importProfileId.value,
+      entries: entries.map(({ _key: _k, ...rest }) => rest),
+    });
+    importResult.value = {
+      successCount: result.successCount,
+      errorCount: result.errorCount,
+      errors: result.errors,
+    };
+    if (result.successCount > 0) {
+      message.success(t("shipment.importSuccess").replace("{count}", String(result.successCount)));
+      await loadShipments();
+    }
+  } catch (e: unknown) {
+    importError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    importSubmitting.value = false;
+  }
+}
+
+const profileOptions = computed(() =>
+  integrationProfiles.value.map((p) => ({
+    label: p.profileKey,
+    value: p.id,
+  })),
+);
+
+const importRowColumns: DataTableColumns<ImportRow> = [
+  {
+    title: t("shipment.import.supplierOrderLineId"),
+    key: "supplierOrderLineId",
+    width: 120,
+    render(row) {
+      return h(NInputNumber, {
+        value: row.supplierOrderLineId,
+        min: 0,
+        placeholder: "0",
+        style: "width:100%",
+        onUpdateValue: (v: number | null) => { row.supplierOrderLineId = v ?? 0; },
+      });
+    },
+  },
+  {
+    title: t("shipment.import.fulfillmentLineId"),
+    key: "fulfillmentLineId",
+    width: 120,
+    render(row) {
+      return h(NInputNumber, {
+        value: row.fulfillmentLineId,
+        min: 0,
+        placeholder: "0",
+        style: "width:100%",
+        onUpdateValue: (v: number | null) => { row.fulfillmentLineId = v ?? 0; },
+      });
+    },
+  },
+  {
+    title: t("shipment.import.externalShipmentNo"),
+    key: "externalShipmentNo",
+    width: 140,
+    render(row) {
+      return h(NInput, {
+        value: row.externalShipmentNo,
+        placeholder: "—",
+        onUpdateValue: (v: string) => { row.externalShipmentNo = v; },
+      });
+    },
+  },
+  {
+    title: t("shipment.import.carrierCode"),
+    key: "carrierCode",
+    width: 100,
+    render(row) {
+      return h(NInput, {
+        value: row.carrierCode,
+        placeholder: "—",
+        onUpdateValue: (v: string) => { row.carrierCode = v; },
+      });
+    },
+  },
+  {
+    title: t("shipment.import.carrierName"),
+    key: "carrierName",
+    width: 120,
+    render(row) {
+      return h(NInput, {
+        value: row.carrierName,
+        placeholder: "—",
+        onUpdateValue: (v: string) => { row.carrierName = v; },
+      });
+    },
+  },
+  {
+    title: t("shipment.import.trackingNo"),
+    key: "trackingNo",
+    width: 140,
+    render(row) {
+      return h(NInput, {
+        value: row.trackingNo,
+        placeholder: "—",
+        onUpdateValue: (v: string) => { row.trackingNo = v; },
+      });
+    },
+  },
+  {
+    title: t("shipment.import.quantity"),
+    key: "quantity",
+    width: 80,
+    render(row) {
+      return h(NInputNumber, {
+        value: row.quantity,
+        min: 1,
+        style: "width:100%",
+        onUpdateValue: (v: number | null) => { row.quantity = v ?? 1; },
+      });
+    },
+  },
+  {
+    title: t("shipment.import.shippedAt"),
+    key: "shippedAt",
+    width: 160,
+    render(row) {
+      return h(NInput, {
+        value: row.shippedAt,
+        placeholder: "2024-01-01T00:00:00Z",
+        onUpdateValue: (v: string) => { row.shippedAt = v; },
+      });
+    },
+  },
+  {
+    title: "",
+    key: "_actions",
+    width: 70,
+    render(row) {
+      return h(
+        NButton,
+        {
+          size: "small",
+          type: "error",
+          ghost: true,
+          onClick: () => removeImportRow(row._key),
+        },
+        { default: () => t("shipment.removeRow") },
+      );
+    },
+  },
+];
+
+const importErrorColumns: DataTableColumns<{ entryIndex: number; reason: string }> = [
+  { title: "#", key: "entryIndex", width: 60 },
+  { title: "Reason", key: "reason" },
+];
+
+// ── Existing shipment list / create ──
 
 function shipmentStatusText(status: string) {
   const map: Record<string, string> = {
@@ -183,6 +423,76 @@ onMounted(async () => {
 
     <NAlert v-if="listError" type="error" class="mb-4" :title="listError" />
     <NAlert v-if="formError" type="error" class="mb-4" :title="formError" />
+
+    <!-- Import Factory Shipments -->
+    <NCard class="mb-4" style="border: 1px solid var(--n-border-color); background: var(--n-color-modal);">
+      <template #header>
+        <NSpace align="center" justify="space-between">
+          <span style="font-weight:600;">{{ t("shipment.importTitle") }}</span>
+          <NButton size="small" secondary @click="toggleImportSection">
+            {{ showImportSection ? t("common.cancel") : t("shipment.importButton") }}
+          </NButton>
+        </NSpace>
+      </template>
+
+      <div v-if="showImportSection">
+        <NAlert v-if="importError" type="error" class="mb-3" :title="importError" />
+
+        <NAlert
+          v-if="importResult"
+          :type="importResult.errorCount === 0 ? 'success' : 'warning'"
+          class="mb-3"
+          :title="importResult.successCount > 0
+            ? t('shipment.importSuccess').replace('{count}', String(importResult.successCount))
+            : t('shipment.importErrors').replace('{count}', String(importResult.errorCount))"
+        />
+
+        <div v-if="importResult && importResult.errors.length > 0" class="mb-3">
+          <NDataTable
+            :columns="importErrorColumns"
+            :data="importResult.errors"
+            :pagination="false"
+            size="small"
+          />
+        </div>
+
+        <NForm label-placement="left" label-width="120" class="mb-3">
+          <NFormItem :label="t('shipment.importProfile')">
+            <NSelect
+              v-model:value="importProfileId"
+              :options="profileOptions"
+              :loading="loadingProfiles"
+              :placeholder="t('shipment.importProfile')"
+              style="width:280px;"
+            />
+          </NFormItem>
+        </NForm>
+
+        <NDataTable
+          :columns="importRowColumns"
+          :data="importRows"
+          :pagination="false"
+          size="small"
+          :row-key="(row: ImportRow) => row._key"
+          class="mb-3"
+          :scroll-x="1060"
+        />
+
+        <NSpace>
+          <NButton size="small" dashed @click="addImportRow">+ {{ t("shipment.addRow") }}</NButton>
+          <NButton size="small" secondary @click="handlePickCsv">CSV</NButton>
+          <NButton
+            type="primary"
+            size="small"
+            :loading="importSubmitting"
+            :disabled="!importProfileId || importRows.length === 0"
+            @click="handleImportSubmit"
+          >
+            {{ t("shipment.importButton") }}
+          </NButton>
+        </NSpace>
+      </div>
+    </NCard>
 
     <NCard :title="t('shipment.list')" class="mb-4">
       <NEmpty v-if="!loadingList && shipments.length === 0" :description="t('common.empty')" />

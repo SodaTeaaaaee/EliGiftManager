@@ -331,6 +331,8 @@ type FulfillmentAdjustment struct {
 	WaveParticipantSnapshotID *uint  `gorm:"index"`
 	AdjustmentKind            string `gorm:"not null"`
 	QuantityDelta             int    `gorm:"not null;default:0"`
+	FromProductID             *uint  `gorm:"index"`
+	ToProductID               *uint  `gorm:"index"`
 	ReasonCode                string
 	OperatorID                string `gorm:"not null"`
 	Note                      string
@@ -447,3 +449,16 @@ type Product struct {
 }
 
 func (Product) TableName() string { return "products" }
+
+// ---- CarrierMapping ----
+
+type CarrierMapping struct {
+	gorm.Model
+	IntegrationProfileID uint   `gorm:"not null;index"`
+	InternalCarrierCode  string `gorm:"not null"`
+	ExternalCarrierCode  string `gorm:"not null"`
+	ExternalCarrierName  string
+	IsDefault            bool `gorm:"not null;default:false"`
+}
+
+func (CarrierMapping) TableName() string { return "carrier_mappings" }

@@ -99,6 +99,8 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 		WaveParticipantSnapshotID: adj.WaveParticipantSnapshotID,
 		AdjustmentKind:            adj.AdjustmentKind,
 		QuantityDelta:             adj.QuantityDelta,
+		FromProductID:             adj.FromProductID,
+		ToProductID:               adj.ToProductID,
 		ReasonCode:                adj.ReasonCode,
 		OperatorID:                adj.OperatorID,
 		Note:                      adj.Note,

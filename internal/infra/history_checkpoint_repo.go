@@ -36,3 +36,7 @@ func (r *historyCheckpointRepository) FindByNodeID(nodeID uint) (*domain.History
 	}
 	return persistence.HistoryCheckpointToDomain(&p), nil
 }
+
+func (r *historyCheckpointRepository) DeleteByNodeID(nodeID uint) error {
+	return r.db.Where("history_node_id = ?", nodeID).Delete(&persistence.HistoryCheckpoint{}).Error
+}

@@ -37,7 +37,7 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 	case "add", "reduce", "compensation", "remove":
 		// valid
 	case "replace":
-		return nil, fmt.Errorf("adjustment kind %q is not yet supported: from_product_id/to_product_id model fields required", input.AdjustmentKind)
+		// valid — requires FromProductID and ToProductID (validated below under target kind)
 	default:
 		return nil, fmt.Errorf("invalid adjustment kind: %q", input.AdjustmentKind)
 	}
@@ -48,6 +48,15 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		// compensation is only allowed with participant target
 		if input.AdjustmentKind == "compensation" {
 			return nil, fmt.Errorf("adjustment kind %q requires target_kind \"participant\"", input.AdjustmentKind)
+		}
+		// replace requires FromProductID and ToProductID
+		if input.AdjustmentKind == "replace" {
+			if input.FromProductID == nil || *input.FromProductID == 0 {
+				return nil, fmt.Errorf("adjustment kind \"replace\" requires non-zero from_product_id")
+			}
+			if input.ToProductID == nil || *input.ToProductID == 0 {
+				return nil, fmt.Errorf("adjustment kind \"replace\" requires non-zero to_product_id")
+			}
 		}
 		if input.FulfillmentLineID == nil || *input.FulfillmentLineID == 0 {
 			return nil, fmt.Errorf("fulfillment_line_id is required when target_kind is \"fulfillment_line\"")
@@ -65,9 +74,9 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		}
 
 	case "participant":
-		// add/reduce/remove require fulfillment_line target
+		// add/reduce/remove/replace require fulfillment_line target
 		switch input.AdjustmentKind {
-		case "add", "reduce", "remove":
+		case "add", "reduce", "remove", "replace":
 			return nil, fmt.Errorf("adjustment kind %q requires target_kind \"fulfillment_line\"", input.AdjustmentKind)
 		}
 		if input.WaveParticipantSnapshotID == nil || *input.WaveParticipantSnapshotID == 0 {
@@ -101,6 +110,8 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		WaveParticipantSnapshotID: input.WaveParticipantSnapshotID,
 		AdjustmentKind:            input.AdjustmentKind,
 		QuantityDelta:             input.QuantityDelta,
+		FromProductID:             input.FromProductID,
+		ToProductID:               input.ToProductID,
 		ReasonCode:                input.ReasonCode,
 		OperatorID:                input.OperatorID,
 		Note:                      input.Note,
@@ -128,6 +139,8 @@ func (uc *adjustmentUseCase) ListAdjustmentsByWave(waveID uint) ([]dto.Fulfillme
 			WaveParticipantSnapshotID: a.WaveParticipantSnapshotID,
 			AdjustmentKind:            a.AdjustmentKind,
 			QuantityDelta:             a.QuantityDelta,
+			FromProductID:             a.FromProductID,
+			ToProductID:               a.ToProductID,
 			ReasonCode:                a.ReasonCode,
 			OperatorID:                a.OperatorID,
 			Note:                      a.Note,

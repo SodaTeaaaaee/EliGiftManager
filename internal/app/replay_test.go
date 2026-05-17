@@ -218,10 +218,11 @@ func TestReplayAdjustments_ParticipantTarget_SingleMatch(t *testing.T) {
 	}
 }
 
-func TestReplayAdjustments_ReplaceIsNoOp(t *testing.T) {
+func TestReplayAdjustments_ReplaceIsNoOpWhenProductIDNil(t *testing.T) {
 	baselines := []domain.FulfillmentLine{
 		{ID: 1, Quantity: 8},
 	}
+	// No FromProductID / ToProductID — replace is a no-op for the product field.
 	adjustments := []domain.FulfillmentAdjustment{
 		{
 			ID:                1,
@@ -238,6 +239,69 @@ func TestReplayAdjustments_ReplaceIsNoOp(t *testing.T) {
 	}
 	if result[0].Quantity != 8 {
 		t.Fatalf("expected quantity unchanged at 8, got %d", result[0].Quantity)
+	}
+}
+
+func TestReplayAdjustments_ReplaceChangesProductID(t *testing.T) {
+	fromID := uint(1)
+	toID := uint(2)
+	baselines := []domain.FulfillmentLine{
+		{ID: 10, ProductID: &fromID, Quantity: 5},
+	}
+	adjustments := []domain.FulfillmentAdjustment{
+		{
+			ID:                1,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(10),
+			AdjustmentKind:    "replace",
+			QuantityDelta:     0,
+			FromProductID:     &fromID,
+			ToProductID:       &toID,
+		},
+	}
+
+	result, failures := ReplayAdjustments(baselines, adjustments)
+	if len(failures) != 0 {
+		t.Fatalf("expected no failures, got %v", failures)
+	}
+	if result[0].ProductID == nil || *result[0].ProductID != 2 {
+		t.Fatalf("expected ProductID to be 2, got %v", result[0].ProductID)
+	}
+	// Quantity must remain unchanged.
+	if result[0].Quantity != 5 {
+		t.Fatalf("expected quantity unchanged at 5, got %d", result[0].Quantity)
+	}
+}
+
+func TestReplayAdjustments_ReplaceNoOpWhenFromProductIDMismatch(t *testing.T) {
+	currentID := uint(99) // line has product 99
+	fromID := uint(1)     // replace targets product 1 — no match
+	toID := uint(2)
+	baselines := []domain.FulfillmentLine{
+		{ID: 10, ProductID: &currentID, Quantity: 5},
+	}
+	adjustments := []domain.FulfillmentAdjustment{
+		{
+			ID:                1,
+			TargetKind:        "fulfillment_line",
+			FulfillmentLineID: uint_ptr(10),
+			AdjustmentKind:    "replace",
+			QuantityDelta:     0,
+			FromProductID:     &fromID,
+			ToProductID:       &toID,
+		},
+	}
+
+	result, failures := ReplayAdjustments(baselines, adjustments)
+	if len(failures) != 0 {
+		t.Fatalf("expected no failures, got %v", failures)
+	}
+	// ProductID must remain 99 — from didn't match.
+	if result[0].ProductID == nil || *result[0].ProductID != 99 {
+		t.Fatalf("expected ProductID to remain 99, got %v", result[0].ProductID)
+	}
+	if result[0].Quantity != 5 {
+		t.Fatalf("expected quantity unchanged at 5, got %d", result[0].Quantity)
 	}
 }
 

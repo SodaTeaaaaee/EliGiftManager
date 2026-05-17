@@ -18,6 +18,7 @@ type waveOverviewQueryUseCase struct {
 	profileRepo      domain.IntegrationProfileRepository
 	historyScopeRepo domain.HistoryScopeRepository
 	historyNodeRepo  domain.HistoryNodeRepository
+	adjustmentRepo   domain.FulfillmentAdjustmentRepository
 	overviewProjUC   WaveOverviewProjectionUseCase
 }
 
@@ -38,7 +39,12 @@ func NewWaveOverviewQueryUseCase(
 	historyScopeRepo domain.HistoryScopeRepository,
 	historyNodeRepo domain.HistoryNodeRepository,
 	overviewProjUC WaveOverviewProjectionUseCase,
+	adjustmentRepo ...domain.FulfillmentAdjustmentRepository,
 ) WaveOverviewQueryUseCase {
+	var adjRepo domain.FulfillmentAdjustmentRepository
+	if len(adjustmentRepo) > 0 {
+		adjRepo = adjustmentRepo[0]
+	}
 	return &waveOverviewQueryUseCase{
 		waveRepo:         waveRepo,
 		fulfillRepo:      fulfillRepo,
@@ -50,6 +56,7 @@ func NewWaveOverviewQueryUseCase(
 		profileRepo:      profileRepo,
 		historyScopeRepo: historyScopeRepo,
 		historyNodeRepo:  historyNodeRepo,
+		adjustmentRepo:   adjRepo,
 		overviewProjUC:   overviewProjUC,
 	}
 }
@@ -151,6 +158,78 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		}
 	}
 
+	// Fulfillment state breakdown — single pass over already-fetched lines
+	var (
+		fulfillDraftCount        int
+		fulfillReadyCount        int
+		addressMissingCount      int
+		addressReadyCount        int
+		addressInvalidCount      int
+		supplierNotSubmittedCount int
+		supplierSubmittedCount   int
+		supplierShippedCount     int
+	)
+	for _, fl := range fulfillLines {
+		switch fl.AllocationState {
+		case "draft":
+			fulfillDraftCount++
+		case "ready":
+			fulfillReadyCount++
+		}
+		switch fl.AddressState {
+		case "missing":
+			addressMissingCount++
+		case "ready":
+			addressReadyCount++
+		case "invalid":
+			addressInvalidCount++
+		}
+		switch fl.SupplierState {
+		case "not_submitted":
+			supplierNotSubmittedCount++
+		case "submitted", "accepted", "producing", "partially_shipped":
+			supplierSubmittedCount++
+		case "shipped":
+			supplierShippedCount++
+		}
+	}
+
+	// Adjustment summary
+	var (
+		adjustmentCount        int
+		adjustmentAddCount     int
+		adjustmentReduceCount  int
+		adjustmentReplaceCount int
+		adjustmentRemoveCount  int
+	)
+	if uc.adjustmentRepo != nil {
+		adjustments, adjErr := uc.adjustmentRepo.ListByWave(waveID)
+		if adjErr != nil {
+			return dto.WaveOverviewDTO{}, adjErr
+		}
+		adjustmentCount = len(adjustments)
+		for _, adj := range adjustments {
+			switch adj.AdjustmentKind {
+			case "add":
+				adjustmentAddCount++
+			case "reduce":
+				adjustmentReduceCount++
+			case "replace":
+				adjustmentReplaceCount++
+			case "remove":
+				adjustmentRemoveCount++
+			}
+		}
+	}
+
+	// Next-step guidance
+	suggestedNextStep, nextStepReason := buildNextStepGuidance(
+		demandCount, len(fulfillLines), len(supplierOrders), shipmentCount, 0,
+	)
+
+	// Blocking issues
+	blockingIssues := buildBlockingIssues(addressMissingCount, false, false, mappingBlockedCount)
+
 	return dto.WaveOverviewDTO{
 		Wave:                       toWaveDTO(w),
 		DemandCount:                demandCount,
@@ -165,6 +244,25 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		ExcludedDuplicateCount:     excludedDuplicateCount,
 		ExcludedRevokedCount:       excludedRevokedCount,
 		MappingBlockedCount:        mappingBlockedCount,
+		// Fulfillment breakdown
+		FulfillmentDraftCount:     fulfillDraftCount,
+		FulfillmentReadyCount:     fulfillReadyCount,
+		AddressMissingCount:       addressMissingCount,
+		AddressReadyCount:         addressReadyCount,
+		AddressInvalidCount:       addressInvalidCount,
+		SupplierNotSubmittedCount: supplierNotSubmittedCount,
+		SupplierSubmittedCount:    supplierSubmittedCount,
+		SupplierShippedCount:      supplierShippedCount,
+		// Adjustment summary
+		AdjustmentCount:        adjustmentCount,
+		AdjustmentAddCount:     adjustmentAddCount,
+		AdjustmentReduceCount:  adjustmentReduceCount,
+		AdjustmentReplaceCount: adjustmentReplaceCount,
+		AdjustmentRemoveCount:  adjustmentRemoveCount,
+		// Next-step guidance
+		SuggestedNextStep: suggestedNextStep,
+		NextStepReason:    nextStepReason,
+		BlockingIssues:    blockingIssues,
 	}, nil
 }
 
@@ -179,7 +277,23 @@ func (uc *waveOverviewQueryUseCase) GetWaveOverview(waveID uint) (dto.WaveOvervi
 	}
 	base.AutoClosureCandidateCount = candidates.AutoCandidateCount
 	base.ManualClosureCandidateCount = candidates.ManualCandidateCount
-	return uc.overviewProjUC.ProjectWaveOverview(base)
+	projected, err := uc.overviewProjUC.ProjectWaveOverview(base)
+	if err != nil {
+		return dto.WaveOverviewDTO{}, err
+	}
+	// Re-compute next-step guidance and blocking issues now that projection has
+	// filled in HasDriftedBasis, HasRequiredReviewBasis and ChannelSyncPendingCount.
+	projected.SuggestedNextStep, projected.NextStepReason = buildNextStepGuidance(
+		projected.DemandCount, projected.FulfillmentCount, projected.SupplierOrderCount,
+		projected.ShipmentCount, projected.ChannelSyncPendingCount,
+	)
+	projected.BlockingIssues = buildBlockingIssues(
+		projected.AddressMissingCount,
+		projected.HasDriftedBasis,
+		projected.HasRequiredReviewBasis,
+		projected.MappingBlockedCount,
+	)
+	return projected, nil
 }
 
 func (uc *waveOverviewQueryUseCase) GetWaveWorkspaceSnapshot(waveID uint) (dto.WaveWorkspaceSnapshotDTO, error) {
@@ -530,6 +644,40 @@ func participantDisplay(p domain.WaveParticipantSnapshot) string {
 		return p.IdentityValue
 	}
 	return fmt.Sprintf("participant #%d", p.ID)
+}
+
+func buildNextStepGuidance(demandCount, fulfillCount, supplierOrderCount, shipmentCount, channelSyncPendingCount int) (step, reason string) {
+	switch {
+	case demandCount == 0:
+		return "demand_intake", "no_demands_assigned"
+	case fulfillCount == 0:
+		return "membership_allocation", "no_fulfillment_lines"
+	case supplierOrderCount == 0:
+		return "supplier_execution", "not_exported"
+	case shipmentCount == 0:
+		return "shipment_intake", "no_shipments"
+	case channelSyncPendingCount > 0:
+		return "channel_sync", "pending_sync"
+	default:
+		return "wave_overview", "all_steps_progressed"
+	}
+}
+
+func buildBlockingIssues(addressMissingCount int, hasDriftedBasis, hasRequiredReviewBasis bool, mappingBlockedCount int) []string {
+	issues := make([]string, 0, 4)
+	if addressMissingCount > 0 {
+		issues = append(issues, "address_missing")
+	}
+	if hasDriftedBasis {
+		issues = append(issues, "basis_drifted")
+	}
+	if hasRequiredReviewBasis {
+		issues = append(issues, "review_required")
+	}
+	if mappingBlockedCount > 0 {
+		issues = append(issues, "mapping_blocked")
+	}
+	return issues
 }
 
 func basisDriftStatusFromOverview(overview dto.WaveOverviewDTO) string {

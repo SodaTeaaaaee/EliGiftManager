@@ -13,6 +13,10 @@ const overview = computed(() => snapshot.value?.overview);
 const guidance = computed(() => snapshot.value?.guidance || []);
 const recentHistory = computed(() => snapshot.value?.recentHistory || []);
 
+const blockingIssues = computed(() => overview.value?.blockingIssues ?? []);
+const suggestedNextStep = computed(() => overview.value?.suggestedNextStep ?? "");
+const nextStepReason = computed(() => overview.value?.nextStepReason ?? "");
+
 function lifecycleText(key: string) {
   const map: Record<string, string> = {
     intake: t("wave.lifecycle.intake"),
@@ -66,6 +70,39 @@ function historyCommandText(key: string) {
   return map[key] || key;
 }
 
+const stepKeyDisplayMap: Record<string, string> = {
+  demand_intake: "demand_intake",
+  membership_allocation: "membership_allocation",
+  demand_mapping: "demand_mapping",
+  wave_overview: "wave_overview",
+  adjustment_review: "adjustment_review",
+  supplier_execution: "supplier_execution",
+  shipment_intake: "shipment_intake",
+  channel_sync: "channel_sync",
+};
+
+function nextStepReasonText(reason: string): string {
+  const map: Record<string, string> = {
+    no_demands_assigned: t("wave.overviewDetail.noDemandsAssigned"),
+    no_fulfillment_lines: t("wave.summary.fulfillment"),
+    not_exported: t("wave.overviewDetail.notExported"),
+    no_shipments: t("wave.summary.shipments"),
+    pending_sync: t("wave.summary.pendingSync"),
+    all_steps_progressed: "",
+  };
+  return map[reason] ?? reason;
+}
+
+function blockingIssueText(issue: string): string {
+  const map: Record<string, string> = {
+    address_missing: t("wave.overviewDetail.addressMissing"),
+    basis_drifted: t("wave.overviewDetail.basisDrifted"),
+    review_required: t("wave.overviewDetail.reviewRequired"),
+    mapping_blocked: t("wave.guidance.mapping_blocked"),
+  };
+  return map[issue] ?? issue;
+}
+
 function goTo(stepKey: string) {
   const waveId = snapshot.value?.wave?.id;
   if (!waveId) return;
@@ -88,6 +125,29 @@ function goTo(stepKey: string) {
     <NEmpty v-if="!snapshot" :description="t('common.loading')" />
 
     <template v-else>
+      <!-- Next Step Guidance card -->
+      <NCard v-if="suggestedNextStep && suggestedNextStep !== 'wave_overview'" class="mb-4" style="border-left: 4px solid var(--n-color-target, #18a058);">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <div class="app-kicker">{{ t("wave.overviewDetail.suggestedNext") }}</div>
+            <div class="app-heading-sm mt-1">{{ stepKeyDisplayMap[suggestedNextStep] ?? suggestedNextStep }}</div>
+            <p v-if="nextStepReasonText(nextStepReason)" class="app-copy mt-1" style="opacity:0.75;">
+              {{ nextStepReasonText(nextStepReason) }}
+            </p>
+          </div>
+          <NButton type="primary" size="small" @click="goTo(suggestedNextStep)">
+            {{ t("wave.overviewDetail.goToStep", { step: stepKeyDisplayMap[suggestedNextStep] ?? suggestedNextStep }) }}
+          </NButton>
+        </div>
+      </NCard>
+
+      <!-- Blocking Issues alert -->
+      <NAlert v-if="blockingIssues.length" type="warning" class="mb-4" :title="t('wave.overviewDetail.blockingIssues')">
+        <ul style="margin: 4px 0; padding-left: 1.2em;">
+          <li v-for="issue in blockingIssues" :key="issue">{{ blockingIssueText(issue) }}</li>
+        </ul>
+      </NAlert>
+
       <NCard class="mb-4">
         <div class="flex items-start justify-between gap-6">
           <div>
@@ -177,6 +237,64 @@ function goTo(stepKey: string) {
         <NGridItem><NCard><NStatistic :label="summaryText('supplier_orders')" :value="overview?.supplierOrderCount ?? 0" /></NCard></NGridItem>
         <NGridItem><NCard><NStatistic :label="summaryText('shipments')" :value="overview?.shipmentCount ?? 0" /></NCard></NGridItem>
       </NGrid>
+
+      <!-- Fulfillment Breakdown -->
+      <NCard :title="t('wave.overviewDetail.fulfillmentBreakdown')" class="mb-5">
+        <NGrid :cols="3" :x-gap="16" :y-gap="16">
+          <NGridItem>
+            <NSpace vertical :size="8">
+              <div class="app-kicker">Allocation</div>
+              <NGrid :cols="2" :x-gap="12">
+                <NGridItem><NStatistic label="Draft" :value="overview?.fulfillmentDraftCount ?? 0" /></NGridItem>
+                <NGridItem><NStatistic label="Ready" :value="overview?.fulfillmentReadyCount ?? 0" /></NGridItem>
+              </NGrid>
+            </NSpace>
+          </NGridItem>
+          <NGridItem>
+            <NSpace vertical :size="8">
+              <div class="app-kicker">Address</div>
+              <NGrid :cols="3" :x-gap="8">
+                <NGridItem>
+                  <NStatistic label="Missing" :value="overview?.addressMissingCount ?? 0">
+                    <template v-if="(overview?.addressMissingCount ?? 0) > 0" #prefix>
+                      <NTag size="tiny" type="warning" :bordered="false" style="margin-right:4px;">!</NTag>
+                    </template>
+                  </NStatistic>
+                </NGridItem>
+                <NGridItem><NStatistic label="Ready" :value="overview?.addressReadyCount ?? 0" /></NGridItem>
+                <NGridItem>
+                  <NStatistic label="Invalid" :value="overview?.addressInvalidCount ?? 0">
+                    <template v-if="(overview?.addressInvalidCount ?? 0) > 0" #prefix>
+                      <NTag size="tiny" type="error" :bordered="false" style="margin-right:4px;">!</NTag>
+                    </template>
+                  </NStatistic>
+                </NGridItem>
+              </NGrid>
+            </NSpace>
+          </NGridItem>
+          <NGridItem>
+            <NSpace vertical :size="8">
+              <div class="app-kicker">Supplier</div>
+              <NGrid :cols="3" :x-gap="8">
+                <NGridItem><NStatistic label="Pending" :value="overview?.supplierNotSubmittedCount ?? 0" /></NGridItem>
+                <NGridItem><NStatistic label="Submitted" :value="overview?.supplierSubmittedCount ?? 0" /></NGridItem>
+                <NGridItem><NStatistic label="Shipped" :value="overview?.supplierShippedCount ?? 0" /></NGridItem>
+              </NGrid>
+            </NSpace>
+          </NGridItem>
+        </NGrid>
+      </NCard>
+
+      <!-- Adjustments Summary -->
+      <NCard :title="t('wave.overviewDetail.adjustmentSummary')" class="mb-5">
+        <NGrid :cols="5" :x-gap="16">
+          <NGridItem><NStatistic label="Total" :value="overview?.adjustmentCount ?? 0" /></NGridItem>
+          <NGridItem><NStatistic :label="t('adjustment.add')" :value="overview?.adjustmentAddCount ?? 0" /></NGridItem>
+          <NGridItem><NStatistic :label="t('adjustment.reduce')" :value="overview?.adjustmentReduceCount ?? 0" /></NGridItem>
+          <NGridItem><NStatistic :label="t('adjustment.replace')" :value="overview?.adjustmentReplaceCount ?? 0" /></NGridItem>
+          <NGridItem><NStatistic :label="t('adjustment.remove')" :value="overview?.adjustmentRemoveCount ?? 0" /></NGridItem>
+        </NGrid>
+      </NCard>
 
       <NGrid :cols="2" :x-gap="16" :y-gap="16">
         <NGridItem>

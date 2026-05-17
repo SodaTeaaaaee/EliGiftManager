@@ -28,7 +28,7 @@ func (s SelectorPayload) Value() (driver.Value, error) {
 }
 
 // Scan implements sql.Scanner — deserializes JSON string from DB.
-func (s *SelectorPayload) Scan(src interface{}) error {
+func (s *SelectorPayload) Scan(src any) error {
 	if src == nil {
 		*s = SelectorPayload{}
 		return nil
@@ -368,6 +368,8 @@ type FulfillmentAdjustment struct {
 	WaveParticipantSnapshotID *uint  // required when TargetKind == "participant"
 	AdjustmentKind            string
 	QuantityDelta             int
+	FromProductID             *uint // used by "replace" kind: source product to swap out
+	ToProductID               *uint // used by "replace" kind: target product to swap in
 	ReasonCode                string
 	OperatorID                string
 	Note                      string
@@ -485,4 +487,18 @@ type Product struct {
 	ExtraData        string
 	CreatedAt        string
 	UpdatedAt        string
+}
+
+// ---- CarrierMapping ----
+
+// CarrierMapping maps an internal carrier code to a platform-specific external code.
+type CarrierMapping struct {
+	ID                   uint
+	IntegrationProfileID uint
+	InternalCarrierCode  string
+	ExternalCarrierCode  string
+	ExternalCarrierName  string
+	IsDefault            bool
+	CreatedAt            string
+	UpdatedAt            string
 }

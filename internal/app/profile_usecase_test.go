@@ -84,6 +84,10 @@ func (s *stubDemandDocumentRepo) FindLineByID(_ uint) (*domain.DemandLine, error
 func (s *stubDemandDocumentRepo) ListLinesByDocument(_ uint) ([]domain.DemandLine, error) {
 	return nil, nil
 }
+func (s *stubDemandDocumentRepo) UpdateLine(_ *domain.DemandLine) error { return nil }
+func (s *stubDemandDocumentRepo) UpdateLineRoutingFields(_ uint, _, _, _ string) error {
+	return nil
+}
 
 type stubChannelSyncRepo struct {
 	CountJobsByProfileIDFn func(profileID uint) (int64, error)

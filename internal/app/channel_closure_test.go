@@ -93,6 +93,10 @@ func (m *mockDemandRepoForClosure) CreateLine(line *domain.DemandLine) error    
 func (m *mockDemandRepoForClosure) ListLinesByDocument(docID uint) ([]domain.DemandLine, error) {
 	panic("not implemented")
 }
+func (m *mockDemandRepoForClosure) UpdateLine(_ *domain.DemandLine) error { panic("not implemented") }
+func (m *mockDemandRepoForClosure) UpdateLineRoutingFields(_ uint, _, _, _ string) error {
+	panic("not implemented")
+}
 
 // ── helper setup ──
 

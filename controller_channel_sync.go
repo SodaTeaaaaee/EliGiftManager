@@ -17,18 +17,20 @@ import (
 
 // ChannelSyncController exposes channel-sync Wails bindings.
 type ChannelSyncController struct {
-	channelSyncUC    app.ChannelSyncUseCase
-	channelSyncRepo  domain.ChannelSyncRepository
-	closureUC        app.ChannelClosureUseCase
-	executeSyncUC    app.ExecuteSyncUseCase
-	recordDecisionUC app.RecordClosureDecisionUseCase
-	retrySyncUC      app.RetrySyncUseCase
-	profileRepo      domain.IntegrationProfileRepository
-	fulfillRepo      domain.FulfillmentLineRepository
-	gdb              *gorm.DB
+	channelSyncUC       app.ChannelSyncUseCase
+	channelSyncRepo     domain.ChannelSyncRepository
+	closureUC           app.ChannelClosureUseCase
+	executeSyncUC       app.ExecuteSyncUseCase
+	recordDecisionUC    app.RecordClosureDecisionUseCase
+	retrySyncUC         app.RetrySyncUseCase
+	profileRepo         domain.IntegrationProfileRepository
+	fulfillRepo         domain.FulfillmentLineRepository
+	gdb                 *gorm.DB
 	historyRecordingSvc *app.HistoryRecordingService
 	projHashSvc         *app.ProjectionHashService
 	snapshotSvc         *app.WaveSnapshotService
+	carrierMappingUC    app.CarrierMappingUseCase
+	executorRegistry    *app.ExecutorRegistry
 }
 
 func NewChannelSyncController() *ChannelSyncController {
@@ -56,6 +58,8 @@ func NewChannelSyncController() *ChannelSyncController {
 
 	channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
 	executorProvider := buildExecutorProvider()
+	registry := buildExecutorRegistry()
+	carrierMappingRepo := infra.NewCarrierMappingRepository(gdb)
 	return &ChannelSyncController{
 		channelSyncUC:       channelSyncUC,
 		channelSyncRepo:     channelSyncRepo,
@@ -69,6 +73,8 @@ func NewChannelSyncController() *ChannelSyncController {
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo),
 		snapshotSvc:         snapshotSvc,
+		carrierMappingUC:    app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo),
+		executorRegistry:    registry,
 	}
 }
 
@@ -502,6 +508,20 @@ func domainToChannelSyncJobDTO(j *domain.ChannelSyncJob) dto.ChannelSyncJobDTO {
 	}
 }
 
+// buildExecutorRegistry constructs an ExecutorRegistry pre-populated with all
+// known CapableExecutor implementations.  It is kept in sync with
+// buildExecutorProvider so the two registrations never diverge.
+func buildExecutorRegistry() *app.ExecutorRegistry {
+	exportsDir, err := service.ResolveExportsDir()
+	if err != nil {
+		log.Printf("[channel_sync] resolve exports dir for registry: %v — falling back to os.TempDir", err)
+		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
+	}
+	registry := app.NewExecutorRegistry()
+	registry.Register(app.NewDocumentExportExecutor(exportsDir))
+	return registry
+}
+
 // buildExecutorProvider resolves the exports directory and wires the
 // document_export executor for the "eli.local_export" connector key.
 func buildExecutorProvider() app.ExecutorProvider {
@@ -537,4 +557,42 @@ func domainToChannelSyncItemDTO(it *domain.ChannelSyncItem) dto.ChannelSyncItemD
 		CreatedAt:          it.CreatedAt,
 		UpdatedAt:          it.UpdatedAt,
 	}
+}
+
+// ── CarrierMapping methods ──
+
+// CreateCarrierMapping creates a new carrier code mapping for an integration profile.
+func (c *ChannelSyncController) CreateCarrierMapping(input dto.CreateCarrierMappingInput) (dto.CarrierMappingDTO, error) {
+	result, err := c.carrierMappingUC.CreateMapping(input)
+	if err != nil {
+		return dto.CarrierMappingDTO{}, err
+	}
+	return *result, nil
+}
+
+// ListCarrierMappings returns all carrier mappings for the given integration profile.
+func (c *ChannelSyncController) ListCarrierMappings(profileID uint) ([]dto.CarrierMappingDTO, error) {
+	return c.carrierMappingUC.ListMappingsByProfile(profileID)
+}
+
+// DeleteCarrierMapping removes a carrier mapping by ID.
+func (c *ChannelSyncController) DeleteCarrierMapping(id uint) error {
+	return c.carrierMappingUC.DeleteMapping(id)
+}
+
+// ListConnectorCapabilities returns capability metadata for all registered connectors.
+func (c *ChannelSyncController) ListConnectorCapabilities() (map[string]any, error) {
+	caps := c.executorRegistry.ListCapabilities()
+	result := make(map[string]any, len(caps))
+	for k, v := range caps {
+		result[k] = map[string]any{
+			"supportsTrackingPush":    v.SupportsTrackingPush,
+			"supportsOrderExport":     v.SupportsOrderExport,
+			"supportsStatusQuery":     v.SupportsStatusQuery,
+			"requiresCarrierMapping":  v.RequiresCarrierMapping,
+			"requiresExternalOrderNo": v.RequiresExternalOrderNo,
+			"supportedDirections":     v.SupportedDirections,
+		}
+	}
+	return result, nil
 }

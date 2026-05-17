@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"time"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
@@ -90,4 +92,19 @@ func (r *demandRepository) ListLinesByDocument(docID uint) ([]domain.DemandLine,
 		result[i] = *persistence.FromPersistenceDemandLine(&p)
 	}
 	return result, nil
+}
+
+func (r *demandRepository) UpdateLine(line *domain.DemandLine) error {
+	p := persistence.ToPersistenceDemandLine(line)
+	p.ID = line.ID
+	return r.db.Save(p).Error
+}
+
+func (r *demandRepository) UpdateLineRoutingFields(lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error {
+	return r.db.Model(&persistence.DemandLine{}).Where("id = ?", lineID).Updates(map[string]interface{}{
+		"routing_disposition":   routingDisposition,
+		"recipient_input_state": recipientInputState,
+		"routing_reason_code":   routingReasonCode,
+		"updated_at":            time.Now(),
+	}).Error
 }

@@ -98,6 +98,16 @@ const router = createRouter({
           component: () =>
             import("@/pages/settings/SettingsPage.vue"),
         },
+        {
+          path: "templates",
+          name: "templates",
+          component: () => import("@/pages/template/TemplateManagementPage.vue"),
+        },
+        {
+          path: "templates/bindings",
+          name: "template-bindings",
+          component: () => import("@/pages/template/ProfileTemplateBindingPage.vue"),
+        },
         // Legacy wave-overview route — redirect to dashboard (consolidated into workspace wizard)
         {
           path: "wave-overview",

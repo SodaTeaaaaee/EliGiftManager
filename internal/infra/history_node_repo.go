@@ -52,3 +52,19 @@ func (r *historyNodeRepository) ListByScopeRecent(scopeID uint, limit int) ([]do
 	}
 	return result, nil
 }
+
+func (r *historyNodeRepository) ListByScope(scopeID uint) ([]domain.HistoryNode, error) {
+	var ps []persistence.HistoryNode
+	if err := r.db.Where("history_scope_id = ?", scopeID).Order("created_at ASC").Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.HistoryNode, len(ps))
+	for i := range ps {
+		result[i] = *persistence.HistoryNodeToDomain(&ps[i])
+	}
+	return result, nil
+}
+
+func (r *historyNodeRepository) DeleteByID(nodeID uint) error {
+	return r.db.Delete(&persistence.HistoryNode{}, nodeID).Error
+}

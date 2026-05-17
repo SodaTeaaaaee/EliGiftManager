@@ -436,3 +436,92 @@ func TestRecordAddSendRejectsParticipantTarget(t *testing.T) {
 		t.Fatal("expected error: add should require fulfillment_line target, got nil")
 	}
 }
+
+func TestRecordReplaceSuccess(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := dto.RecordAdjustmentInput{
+		WaveID:            10,
+		TargetKind:        "fulfillment_line",
+		FulfillmentLineID: uintPtr(1),
+		AdjustmentKind:    "replace",
+		QuantityDelta:     0,
+		FromProductID:     uintPtr(5),
+		ToProductID:       uintPtr(7),
+		ReasonCode:        "product_swap",
+		OperatorID:        "op-1",
+	}
+
+	adj, err := s.uc.RecordAdjustment(input)
+	if err != nil {
+		t.Fatalf("unexpected error for replace: %v", err)
+	}
+	if adj.AdjustmentKind != "replace" {
+		t.Errorf("AdjustmentKind = %q, want replace", adj.AdjustmentKind)
+	}
+	if adj.FromProductID == nil || *adj.FromProductID != 5 {
+		t.Errorf("FromProductID = %v, want 5", adj.FromProductID)
+	}
+	if adj.ToProductID == nil || *adj.ToProductID != 7 {
+		t.Errorf("ToProductID = %v, want 7", adj.ToProductID)
+	}
+}
+
+func TestRecordReplaceRejectsParticipantTarget(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := dto.RecordAdjustmentInput{
+		WaveID:                    10,
+		TargetKind:                "participant",
+		WaveParticipantSnapshotID: uintPtr(100),
+		AdjustmentKind:            "replace",
+		FromProductID:             uintPtr(5),
+		ToProductID:               uintPtr(7),
+		OperatorID:                "op-1",
+	}
+
+	_, err := s.uc.RecordAdjustment(input)
+	if err == nil {
+		t.Fatal("expected error: replace should require fulfillment_line target, got nil")
+	}
+}
+
+func TestRecordReplaceMissingFromProductID(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := dto.RecordAdjustmentInput{
+		WaveID:            10,
+		TargetKind:        "fulfillment_line",
+		FulfillmentLineID: uintPtr(1),
+		AdjustmentKind:    "replace",
+		ToProductID:       uintPtr(7),
+		OperatorID:        "op-1",
+	}
+
+	_, err := s.uc.RecordAdjustment(input)
+	if err == nil {
+		t.Fatal("expected error: replace without FromProductID should fail, got nil")
+	}
+}
+
+func TestRecordReplaceMissingToProductID(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := dto.RecordAdjustmentInput{
+		WaveID:            10,
+		TargetKind:        "fulfillment_line",
+		FulfillmentLineID: uintPtr(1),
+		AdjustmentKind:    "replace",
+		FromProductID:     uintPtr(5),
+		OperatorID:        "op-1",
+	}
+
+	_, err := s.uc.RecordAdjustment(input)
+	if err == nil {
+		t.Fatal("expected error: replace without ToProductID should fail, got nil")
+	}
+}

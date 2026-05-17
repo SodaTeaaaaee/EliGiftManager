@@ -34,4 +34,26 @@ type WaveOverviewDTO struct {
 	BasisDriftSignals      []BasisDriftSignalDTO `json:"basisDriftSignals"`
 	HasDriftedBasis        bool                  `json:"hasDriftedBasis"`
 	HasRequiredReviewBasis bool                  `json:"hasRequiredReviewBasis"`
+
+	// Fulfillment state breakdown
+	FulfillmentDraftCount     int `json:"fulfillmentDraftCount"`
+	FulfillmentReadyCount     int `json:"fulfillmentReadyCount"`
+	AddressMissingCount       int `json:"addressMissingCount"`
+	AddressReadyCount         int `json:"addressReadyCount"`
+	AddressInvalidCount       int `json:"addressInvalidCount"`
+	SupplierNotSubmittedCount int `json:"supplierNotSubmittedCount"`
+	SupplierSubmittedCount    int `json:"supplierSubmittedCount"`
+	SupplierShippedCount      int `json:"supplierShippedCount"`
+
+	// Adjustment summary
+	AdjustmentCount       int `json:"adjustmentCount"`
+	AdjustmentAddCount    int `json:"adjustmentAddCount"`
+	AdjustmentReduceCount int `json:"adjustmentReduceCount"`
+	AdjustmentReplaceCount int `json:"adjustmentReplaceCount"`
+	AdjustmentRemoveCount int `json:"adjustmentRemoveCount"`
+
+	// Next-step guidance
+	SuggestedNextStep string   `json:"suggestedNextStep"`
+	NextStepReason    string   `json:"nextStepReason"`
+	BlockingIssues    []string `json:"blockingIssues"`
 }

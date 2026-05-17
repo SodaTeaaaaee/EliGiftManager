@@ -91,6 +91,100 @@ export namespace dto {
 	        this.driftReasonCodes = source["driftReasonCodes"];
 	    }
 	}
+	export class UpdateDemandLineRoutingInput {
+	    demandLineId: number;
+	    routingDisposition: string;
+	    recipientInputState: string;
+	    routingReasonCode: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateDemandLineRoutingInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.demandLineId = source["demandLineId"];
+	        this.routingDisposition = source["routingDisposition"];
+	        this.recipientInputState = source["recipientInputState"];
+	        this.routingReasonCode = source["routingReasonCode"];
+	    }
+	}
+	export class BatchUpdateDemandLineRoutingInput {
+	    updates: UpdateDemandLineRoutingInput[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchUpdateDemandLineRoutingInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.updates = this.convertValues(source["updates"], UpdateDemandLineRoutingInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class DemandLineRoutingError {
+	    demandLineId: number;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandLineRoutingError(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.demandLineId = source["demandLineId"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class BatchUpdateDemandLineRoutingResult {
+	    updatedCount: number;
+	    errors: DemandLineRoutingError[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchUpdateDemandLineRoutingResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.updatedCount = source["updatedCount"];
+	        this.errors = this.convertValues(source["errors"], DemandLineRoutingError);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class BindTemplateToProfileInput {
 	    integrationProfileId: number;
 	    documentType: string;
@@ -107,6 +201,32 @@ export namespace dto {
 	        this.documentType = source["documentType"];
 	        this.templateId = source["templateId"];
 	        this.isDefault = source["isDefault"];
+	    }
+	}
+	export class CarrierMappingDTO {
+	    id: number;
+	    integrationProfileId: number;
+	    internalCarrierCode: string;
+	    externalCarrierCode: string;
+	    externalCarrierName: string;
+	    isDefault: boolean;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CarrierMappingDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.internalCarrierCode = source["internalCarrierCode"];
+	        this.externalCarrierCode = source["externalCarrierCode"];
+	        this.externalCarrierName = source["externalCarrierName"];
+	        this.isDefault = source["isDefault"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 	export class ChannelSyncItemDTO {
@@ -276,6 +396,26 @@ export namespace dto {
 		    }
 		    return a;
 		}
+	}
+	export class CreateCarrierMappingInput {
+	    integrationProfileId: number;
+	    internalCarrierCode: string;
+	    externalCarrierCode: string;
+	    externalCarrierName: string;
+	    isDefault: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateCarrierMappingInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.internalCarrierCode = source["internalCarrierCode"];
+	        this.externalCarrierCode = source["externalCarrierCode"];
+	        this.externalCarrierName = source["externalCarrierName"];
+	        this.isDefault = source["isDefault"];
+	    }
 	}
 	export class CreateChannelSyncItemInput {
 	    fulfillmentLineId: number;
@@ -745,6 +885,7 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	
 	export class DemandMappingBlockedLine {
 	    demandLineId: number;
 	    demandLineTitle: string;
@@ -917,6 +1058,8 @@ export namespace dto {
 	    waveParticipantSnapshotId?: number;
 	    adjustmentKind: string;
 	    quantityDelta: number;
+	    fromProductId?: number;
+	    toProductId?: number;
 	    reasonCode: string;
 	    operatorId: string;
 	    note: string;
@@ -937,6 +1080,8 @@ export namespace dto {
 	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
 	        this.adjustmentKind = source["adjustmentKind"];
 	        this.quantityDelta = source["quantityDelta"];
+	        this.fromProductId = source["fromProductId"];
+	        this.toProductId = source["toProductId"];
 	        this.reasonCode = source["reasonCode"];
 	        this.operatorId = source["operatorId"];
 	        this.note = source["note"];
@@ -944,6 +1089,75 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
+	}
+	
+	export class HistoryGraphNodeDTO {
+	    id: number;
+	    parentNodeId: number;
+	    preferredRedoChildId: number;
+	    commandKind: string;
+	    commandSummary: string;
+	    projectionHash: string;
+	    checkpointHint: boolean;
+	    createdAt: string;
+	    createdBy: string;
+	    isCurrentHead: boolean;
+	    isPinned: boolean;
+	    childCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryGraphNodeDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.parentNodeId = source["parentNodeId"];
+	        this.preferredRedoChildId = source["preferredRedoChildId"];
+	        this.commandKind = source["commandKind"];
+	        this.commandSummary = source["commandSummary"];
+	        this.projectionHash = source["projectionHash"];
+	        this.checkpointHint = source["checkpointHint"];
+	        this.createdAt = source["createdAt"];
+	        this.createdBy = source["createdBy"];
+	        this.isCurrentHead = source["isCurrentHead"];
+	        this.isPinned = source["isPinned"];
+	        this.childCount = source["childCount"];
+	    }
+	}
+	export class HistoryGraphDTO {
+	    scopeId: number;
+	    currentHeadId: number;
+	    nodes: HistoryGraphNodeDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryGraphDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.scopeId = source["scopeId"];
+	        this.currentHeadId = source["currentHeadId"];
+	        this.nodes = this.convertValues(source["nodes"], HistoryGraphNodeDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	
 	export class HistoryNodeDTO {
@@ -973,6 +1187,202 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.createdBy = source["createdBy"];
 	    }
+	}
+	export class ImportShipmentEntry {
+	    supplierOrderLineId: number;
+	    fulfillmentLineId: number;
+	    externalShipmentNo: string;
+	    carrierCode: string;
+	    carrierName: string;
+	    trackingNo: string;
+	    quantity: number;
+	    shippedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportShipmentEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supplierOrderLineId = source["supplierOrderLineId"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.externalShipmentNo = source["externalShipmentNo"];
+	        this.carrierCode = source["carrierCode"];
+	        this.carrierName = source["carrierName"];
+	        this.trackingNo = source["trackingNo"];
+	        this.quantity = source["quantity"];
+	        this.shippedAt = source["shippedAt"];
+	    }
+	}
+	export class ImportShipmentError {
+	    entryIndex: number;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportShipmentError(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entryIndex = source["entryIndex"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class ImportShipmentInput {
+	    waveId: number;
+	    integrationProfileId: number;
+	    entries: ImportShipmentEntry[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportShipmentInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.entries = this.convertValues(source["entries"], ImportShipmentEntry);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ShipmentLineDTO {
+	    id: number;
+	    shipmentId: number;
+	    supplierOrderLineId: number;
+	    fulfillmentLineId: number;
+	    quantity: number;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShipmentLineDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.shipmentId = source["shipmentId"];
+	        this.supplierOrderLineId = source["supplierOrderLineId"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.quantity = source["quantity"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class ShipmentDTO {
+	    id: number;
+	    supplierOrderId: number;
+	    supplierPlatform: string;
+	    shipmentNo: string;
+	    externalShipmentNo: string;
+	    carrierCode: string;
+	    carrierName: string;
+	    trackingNo: string;
+	    status: string;
+	    shippedAt: string;
+	    basisHistoryNodeId: string;
+	    basisProjectionHash: string;
+	    basisPayloadSnapshot: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	    lines: ShipmentLineDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ShipmentDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.supplierOrderId = source["supplierOrderId"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.shipmentNo = source["shipmentNo"];
+	        this.externalShipmentNo = source["externalShipmentNo"];
+	        this.carrierCode = source["carrierCode"];
+	        this.carrierName = source["carrierName"];
+	        this.trackingNo = source["trackingNo"];
+	        this.status = source["status"];
+	        this.shippedAt = source["shippedAt"];
+	        this.basisHistoryNodeId = source["basisHistoryNodeId"];
+	        this.basisProjectionHash = source["basisProjectionHash"];
+	        this.basisPayloadSnapshot = source["basisPayloadSnapshot"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.lines = this.convertValues(source["lines"], ShipmentLineDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportShipmentResult {
+	    createdShipments: ShipmentDTO[];
+	    errors: ImportShipmentError[];
+	    totalProcessed: number;
+	    successCount: number;
+	    errorCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportShipmentResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.createdShipments = this.convertValues(source["createdShipments"], ShipmentDTO);
+	        this.errors = this.convertValues(source["errors"], ImportShipmentError);
+	        this.totalProcessed = source["totalProcessed"];
+	        this.successCount = source["successCount"];
+	        this.errorCount = source["errorCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class IntegrationProfileDTO {
 	    id: number;
@@ -1245,6 +1655,8 @@ export namespace dto {
 	    waveParticipantSnapshotId?: number;
 	    adjustmentKind: string;
 	    quantityDelta: number;
+	    fromProductId?: number;
+	    toProductId?: number;
 	    reasonCode: string;
 	    operatorId: string;
 	    note: string;
@@ -1262,6 +1674,8 @@ export namespace dto {
 	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
 	        this.adjustmentKind = source["adjustmentKind"];
 	        this.quantityDelta = source["quantityDelta"];
+	        this.fromProductId = source["fromProductId"];
+	        this.toProductId = source["toProductId"];
 	        this.reasonCode = source["reasonCode"];
 	        this.operatorId = source["operatorId"];
 	        this.note = source["note"];
@@ -1325,90 +1739,7 @@ export namespace dto {
 		}
 	}
 	
-	export class ShipmentLineDTO {
-	    id: number;
-	    shipmentId: number;
-	    supplierOrderLineId: number;
-	    fulfillmentLineId: number;
-	    quantity: number;
-	    createdAt: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new ShipmentLineDTO(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.shipmentId = source["shipmentId"];
-	        this.supplierOrderLineId = source["supplierOrderLineId"];
-	        this.fulfillmentLineId = source["fulfillmentLineId"];
-	        this.quantity = source["quantity"];
-	        this.createdAt = source["createdAt"];
-	    }
-	}
-	export class ShipmentDTO {
-	    id: number;
-	    supplierOrderId: number;
-	    supplierPlatform: string;
-	    shipmentNo: string;
-	    externalShipmentNo: string;
-	    carrierCode: string;
-	    carrierName: string;
-	    trackingNo: string;
-	    status: string;
-	    shippedAt: string;
-	    basisHistoryNodeId: string;
-	    basisProjectionHash: string;
-	    basisPayloadSnapshot: string;
-	    extraData: string;
-	    createdAt: string;
-	    updatedAt: string;
-	    lines: ShipmentLineDTO[];
-	
-	    static createFrom(source: any = {}) {
-	        return new ShipmentDTO(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.supplierOrderId = source["supplierOrderId"];
-	        this.supplierPlatform = source["supplierPlatform"];
-	        this.shipmentNo = source["shipmentNo"];
-	        this.externalShipmentNo = source["externalShipmentNo"];
-	        this.carrierCode = source["carrierCode"];
-	        this.carrierName = source["carrierName"];
-	        this.trackingNo = source["trackingNo"];
-	        this.status = source["status"];
-	        this.shippedAt = source["shippedAt"];
-	        this.basisHistoryNodeId = source["basisHistoryNodeId"];
-	        this.basisProjectionHash = source["basisProjectionHash"];
-	        this.basisPayloadSnapshot = source["basisPayloadSnapshot"];
-	        this.extraData = source["extraData"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
-	        this.lines = this.convertValues(source["lines"], ShipmentLineDTO);
-	    }
-	
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	
 	export class SnapshotProductsInput {
 	    waveId: number;
@@ -1544,6 +1875,7 @@ export namespace dto {
 		    return a;
 		}
 	}
+	
 	export class UpdateProductMasterInput {
 	    id: number;
 	    supplierPlatform: string;
@@ -1758,6 +2090,22 @@ export namespace dto {
 	    basisDriftSignals: BasisDriftSignalDTO[];
 	    hasDriftedBasis: boolean;
 	    hasRequiredReviewBasis: boolean;
+	    fulfillmentDraftCount: number;
+	    fulfillmentReadyCount: number;
+	    addressMissingCount: number;
+	    addressReadyCount: number;
+	    addressInvalidCount: number;
+	    supplierNotSubmittedCount: number;
+	    supplierSubmittedCount: number;
+	    supplierShippedCount: number;
+	    adjustmentCount: number;
+	    adjustmentAddCount: number;
+	    adjustmentReduceCount: number;
+	    adjustmentReplaceCount: number;
+	    adjustmentRemoveCount: number;
+	    suggestedNextStep: string;
+	    nextStepReason: string;
+	    blockingIssues: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new WaveOverviewDTO(source);
@@ -1794,6 +2142,22 @@ export namespace dto {
 	        this.basisDriftSignals = this.convertValues(source["basisDriftSignals"], BasisDriftSignalDTO);
 	        this.hasDriftedBasis = source["hasDriftedBasis"];
 	        this.hasRequiredReviewBasis = source["hasRequiredReviewBasis"];
+	        this.fulfillmentDraftCount = source["fulfillmentDraftCount"];
+	        this.fulfillmentReadyCount = source["fulfillmentReadyCount"];
+	        this.addressMissingCount = source["addressMissingCount"];
+	        this.addressReadyCount = source["addressReadyCount"];
+	        this.addressInvalidCount = source["addressInvalidCount"];
+	        this.supplierNotSubmittedCount = source["supplierNotSubmittedCount"];
+	        this.supplierSubmittedCount = source["supplierSubmittedCount"];
+	        this.supplierShippedCount = source["supplierShippedCount"];
+	        this.adjustmentCount = source["adjustmentCount"];
+	        this.adjustmentAddCount = source["adjustmentAddCount"];
+	        this.adjustmentReduceCount = source["adjustmentReduceCount"];
+	        this.adjustmentReplaceCount = source["adjustmentReplaceCount"];
+	        this.adjustmentRemoveCount = source["adjustmentRemoveCount"];
+	        this.suggestedNextStep = source["suggestedNextStep"];
+	        this.nextStepReason = source["nextStepReason"];
+	        this.blockingIssues = source["blockingIssues"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -1844,6 +2208,34 @@ export namespace dto {
 	        this.sourceSummary = source["sourceSummary"];
 	        this.fulfillmentLineCount = source["fulfillmentLineCount"];
 	        this.readyFulfillmentCount = source["readyFulfillmentCount"];
+	    }
+	}
+	export class WaveRoutingStatsDTO {
+	    totalLines: number;
+	    acceptedReadyCount: number;
+	    acceptedWaitingCount: number;
+	    acceptedPartialCount: number;
+	    deferredCount: number;
+	    excludedManualCount: number;
+	    excludedDuplicateCount: number;
+	    excludedRevokedCount: number;
+	    pendingIntakeCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveRoutingStatsDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.totalLines = source["totalLines"];
+	        this.acceptedReadyCount = source["acceptedReadyCount"];
+	        this.acceptedWaitingCount = source["acceptedWaitingCount"];
+	        this.acceptedPartialCount = source["acceptedPartialCount"];
+	        this.deferredCount = source["deferredCount"];
+	        this.excludedManualCount = source["excludedManualCount"];
+	        this.excludedDuplicateCount = source["excludedDuplicateCount"];
+	        this.excludedRevokedCount = source["excludedRevokedCount"];
+	        this.pendingIntakeCount = source["pendingIntakeCount"];
 	    }
 	}
 	export class WaveStepStateDTO {

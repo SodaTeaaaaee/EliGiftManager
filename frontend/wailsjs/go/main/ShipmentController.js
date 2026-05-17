@@ -6,6 +6,10 @@ export function CreateShipment(arg1) {
   return window['go']['main']['ShipmentController']['CreateShipment'](arg1);
 }
 
+export function ImportShipments(arg1) {
+  return window['go']['main']['ShipmentController']['ImportShipments'](arg1);
+}
+
 export function ListShipmentsByWave(arg1) {
   return window['go']['main']['ShipmentController']['ListShipmentsByWave'](arg1);
 }

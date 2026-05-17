@@ -14,6 +14,7 @@ import (
 // ShipmentController exposes shipment-management Wails bindings.
 type ShipmentController struct {
 	shipmentUC          app.ShipmentUseCase
+	shipmentImportUC    app.ShipmentImportUseCase
 	shipmentRepo        domain.ShipmentRepository
 	gdb                 *gorm.DB
 	historyRecordingSvc *app.HistoryRecordingService
@@ -43,6 +44,7 @@ func NewShipmentController() *ShipmentController {
 
 	return &ShipmentController{
 		shipmentUC:          app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
+		shipmentImportUC:    app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
 		shipmentRepo:        shipmentRepo,
 		gdb:                 gdb,
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
@@ -162,6 +164,62 @@ func domainToShipmentDTO(s *domain.Shipment) dto.ShipmentDTO {
 		CreatedAt:            s.CreatedAt,
 		UpdatedAt:            s.UpdatedAt,
 	}
+}
+
+// ImportShipments performs a bulk import of shipments from factory return data.
+// Entries sharing the same ExternalShipmentNo are grouped into a single Shipment.
+// Partial success is supported — failed groups are recorded in the result Errors slice.
+func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto.ImportShipmentResult, error) {
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(input.WaveID)
+	if err != nil {
+		return dto.ImportShipmentResult{}, err
+	}
+
+	var importResult *dto.ImportShipmentResult
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		shipmentRepo := infra.NewShipmentRepository(tx)
+		supplierRepo := infra.NewSupplierOrderRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
+		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyPinRepo := infra.NewHistoryPinRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+		importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
+
+		res, importErr := importUC.ImportShipments(input)
+		if importErr != nil {
+			return importErr
+		}
+		importResult = res
+
+		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                  input.WaveID,
+			CommandKind:             domain.CmdCreateShipment,
+			CommandSummary:          fmt.Sprintf("import %d shipments for wave %d (%d succeeded, %d failed)", res.TotalProcessed, input.WaveID, res.SuccessCount, res.ErrorCount),
+			PatchPayload:            "",
+			InversePatchPayload:     "",
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+		})
+		return recordErr
+	})
+	if err != nil {
+		return dto.ImportShipmentResult{}, err
+	}
+
+	return *importResult, nil
 }
 
 // domainToShipmentLineDTO converts a domain ShipmentLine to a DTO.

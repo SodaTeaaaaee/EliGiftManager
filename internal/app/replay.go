@@ -212,7 +212,9 @@ func applyAdjustment(line *domain.FulfillmentLine, adj domain.FulfillmentAdjustm
 	case "remove":
 		line.Quantity = 0
 	case "replace":
-		// TODO: replace changes the product, not quantity.
-		// First version does not handle product replacement; no-op on quantity.
+		if adj.FromProductID != nil && adj.ToProductID != nil &&
+			line.ProductID != nil && *line.ProductID == *adj.FromProductID {
+			line.ProductID = adj.ToProductID
+		}
 	}
 }

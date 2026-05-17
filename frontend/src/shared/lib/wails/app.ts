@@ -40,6 +40,11 @@ import {
   CreateShipment,
   ListShipmentsByWave,
 } from "../../../../wailsjs/go/main/ShipmentController";
+
+// ImportShipments is not yet in the generated binding; call via runtime bridge directly.
+function _ImportShipments(req: unknown): Promise<unknown> {
+  return (window as any).go.main.ShipmentController.ImportShipments(req);
+}
 import {
   CreateChannelSyncJob,
   ExecuteChannelSyncJob,
@@ -283,6 +288,36 @@ export async function listShipmentsByWave(waveId: number): Promise<dto.ShipmentD
   return ListShipmentsByWave(waveId)
 }
 
+export interface ImportShipmentEntry {
+  supplierOrderLineId: number
+  fulfillmentLineId: number
+  externalShipmentNo: string
+  carrierCode: string
+  carrierName: string
+  trackingNo: string
+  quantity: number
+  shippedAt: string
+}
+
+export interface ImportShipmentsInput {
+  waveId: number
+  integrationProfileId: number
+  entries: ImportShipmentEntry[]
+}
+
+export interface ImportShipmentsResult {
+  createdShipments: dto.ShipmentDTO[]
+  errors: Array<{ entryIndex: number; reason: string }>
+  totalProcessed: number
+  successCount: number
+  errorCount: number
+}
+
+export async function importShipments(input: ImportShipmentsInput): Promise<ImportShipmentsResult> {
+  assertWailsRuntime()
+  return _ImportShipments(input) as Promise<ImportShipmentsResult>
+}
+
 // ── ChannelSyncController ──
 
 export async function createChannelSyncJob(input: {
@@ -351,6 +386,34 @@ export async function retryChannelSyncJob(
 export async function listIntegrationProfiles(): Promise<dto.IntegrationProfileSummaryDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
   return ListIntegrationProfiles()
+}
+
+// ── CarrierMapping ──
+
+export async function createCarrierMapping(input: {
+  integrationProfileId: number
+  internalCarrierCode: string
+  externalCarrierCode: string
+  externalCarrierName: string
+  isDefault: boolean
+}): Promise<any> {
+  assertWailsRuntime()
+  return (window as any).go.main.ChannelSyncController.CreateCarrierMapping(input)
+}
+
+export async function listCarrierMappings(profileId: number): Promise<any[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return (window as any).go.main.ChannelSyncController.ListCarrierMappings(profileId)
+}
+
+export async function deleteCarrierMapping(id: number): Promise<void> {
+  assertWailsRuntime()
+  return (window as any).go.main.ChannelSyncController.DeleteCarrierMapping(id)
+}
+
+export async function listConnectorCapabilities(): Promise<Record<string, any>> {
+  if (!isWailsRuntimeAvailable()) return {}
+  return (window as any).go.main.ChannelSyncController.ListConnectorCapabilities()
 }
 
 // ── ProfileController ──
@@ -570,6 +633,37 @@ export async function listRecentHistory(
   return ListRecentHistory(waveId, limit) as Promise<HistoryNodeDTO[]>
 }
 
+export interface HistoryGraphNodeDTO {
+  id: number
+  parentNodeId: number
+  preferredRedoChildId: number
+  commandKind: string
+  commandSummary: string
+  projectionHash: string
+  checkpointHint: boolean
+  createdAt: string
+  createdBy: string
+  isCurrentHead: boolean
+  isPinned: boolean
+  childCount: number
+}
+
+export interface HistoryGraphDTO {
+  scopeId: number
+  currentHeadId: number
+  nodes: HistoryGraphNodeDTO[]
+}
+
+export async function getHistoryGraph(waveId: number): Promise<HistoryGraphDTO> {
+  assertWailsRuntime()
+  return (window as any).go.main.WaveController.GetHistoryGraph(waveId)
+}
+
+export async function runHistoryGC(waveId: number): Promise<number> {
+  assertWailsRuntime()
+  return (window as any).go.main.WaveController.RunHistoryGC(waveId)
+}
+
 export async function recordAdjustment(
   input: {
     waveId: number;
@@ -582,10 +676,102 @@ export async function recordAdjustment(
     operatorId: string;
     note: string;
     evidenceRef: string;
+    fromProductId?: number | null;
+    toProductId?: number | null;
   },
 ): Promise<dto.FulfillmentAdjustmentDTO> {
   assertWailsRuntime();
   return RecordAdjustment(dto.RecordAdjustmentInput.createFrom(input));
+}
+
+// ── TemplateController ──
+
+import {
+  CreateDocumentTemplate,
+  ListDocumentTemplates,
+  BindTemplateToProfile,
+  ListBindingsByProfile,
+  GetDefaultTemplateForProfile,
+} from "../../../../wailsjs/go/main/TemplateController";
+
+export async function createDocumentTemplate(input: {
+  templateKey: string
+  documentType: string
+  format: string
+  mappingRules: string
+  extraData: string
+}): Promise<dto.DocumentTemplateDTO> {
+  assertWailsRuntime()
+  const req = dto.CreateDocumentTemplateInput.createFrom(input)
+  return CreateDocumentTemplate(req)
+}
+
+export async function listDocumentTemplates(): Promise<dto.DocumentTemplateDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListDocumentTemplates()
+}
+
+export async function bindTemplateToProfile(input: {
+  integrationProfileId: number
+  documentType: string
+  templateId: number
+  isDefault: boolean
+}): Promise<dto.ProfileTemplateBindingDTO> {
+  assertWailsRuntime()
+  const req = dto.BindTemplateToProfileInput.createFrom(input)
+  return BindTemplateToProfile(req)
+}
+
+export async function listBindingsByProfile(profileId: number): Promise<dto.ProfileTemplateBindingDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListBindingsByProfile(profileId)
+}
+
+export async function getDefaultTemplateForProfile(profileId: number, docType: string): Promise<dto.DocumentTemplateDTO> {
+  assertWailsRuntime()
+  return GetDefaultTemplateForProfile(profileId, docType)
+}
+
+// ── DemandController (routing management) ──
+
+export async function updateDemandLineRouting(input: {
+  demandLineId: number
+  routingDisposition: string
+  recipientInputState: string
+  routingReasonCode: string
+}): Promise<void> {
+  assertWailsRuntime()
+  return (window as any).go.main.DemandController.UpdateDemandLineRouting(input)
+}
+
+export async function batchUpdateDemandLineRouting(input: {
+  updates: Array<{
+    demandLineId: number
+    routingDisposition: string
+    recipientInputState: string
+    routingReasonCode: string
+  }>
+}): Promise<{
+  updatedCount: number
+  errors: Array<{ demandLineId: number; reason: string }>
+}> {
+  assertWailsRuntime()
+  return (window as any).go.main.DemandController.BatchUpdateDemandLineRouting(input)
+}
+
+export async function getWaveRoutingStats(waveId: number): Promise<{
+  totalLines: number
+  acceptedReadyCount: number
+  acceptedWaitingCount: number
+  acceptedPartialCount: number
+  deferredCount: number
+  excludedManualCount: number
+  excludedDuplicateCount: number
+  excludedRevokedCount: number
+  pendingIntakeCount: number
+}> {
+  assertWailsRuntime()
+  return (window as any).go.main.DemandController.GetWaveRoutingStats(waveId)
 }
 
 // ── App (utility) ──

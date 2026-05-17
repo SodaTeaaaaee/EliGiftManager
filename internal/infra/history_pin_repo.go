@@ -43,3 +43,17 @@ func (r *historyPinRepository) CountByNodeID(nodeID uint) (int64, error) {
 	}
 	return count, nil
 }
+
+func (r *historyPinRepository) ListPinnedNodeIDsByScope(scopeID uint) ([]uint, error) {
+	// Join history_pins with history_nodes to filter by scope
+	var nodeIDs []uint
+	err := r.db.Model(&persistence.HistoryPin{}).
+		Joins("JOIN history_nodes ON history_nodes.id = history_pins.history_node_id").
+		Where("history_nodes.history_scope_id = ?", scopeID).
+		Distinct("history_pins.history_node_id").
+		Pluck("history_pins.history_node_id", &nodeIDs).Error
+	if err != nil {
+		return nil, err
+	}
+	return nodeIDs, nil
+}

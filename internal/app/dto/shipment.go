@@ -48,3 +48,37 @@ type ShipmentLineDTO struct {
 	Quantity            int    `json:"quantity"`
 	CreatedAt           string `json:"createdAt"`
 }
+
+// ImportShipmentInput represents a bulk shipment import request.
+type ImportShipmentInput struct {
+	WaveID               uint                  `json:"waveId"`
+	IntegrationProfileID uint                  `json:"integrationProfileId"`
+	Entries              []ImportShipmentEntry `json:"entries"`
+}
+
+// ImportShipmentEntry represents one shipment row from a factory return file.
+type ImportShipmentEntry struct {
+	SupplierOrderLineID uint   `json:"supplierOrderLineId"`
+	FulfillmentLineID   uint   `json:"fulfillmentLineId"`
+	ExternalShipmentNo  string `json:"externalShipmentNo"`
+	CarrierCode         string `json:"carrierCode"`
+	CarrierName         string `json:"carrierName"`
+	TrackingNo          string `json:"trackingNo"`
+	Quantity            int    `json:"quantity"`
+	ShippedAt           string `json:"shippedAt"`
+}
+
+// ImportShipmentResult contains the outcome of a bulk shipment import.
+type ImportShipmentResult struct {
+	CreatedShipments []ShipmentDTO        `json:"createdShipments"`
+	Errors           []ImportShipmentError `json:"errors"`
+	TotalProcessed   int                  `json:"totalProcessed"`
+	SuccessCount     int                  `json:"successCount"`
+	ErrorCount       int                  `json:"errorCount"`
+}
+
+// ImportShipmentError records a single entry that failed during import.
+type ImportShipmentError struct {
+	EntryIndex int    `json:"entryIndex"`
+	Reason     string `json:"reason"`
+}

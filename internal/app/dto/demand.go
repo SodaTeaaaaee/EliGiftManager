@@ -89,3 +89,41 @@ type DemandInboxFilterInput struct {
 	Assignment string `json:"assignment"`
 	DemandKind string `json:"demandKind"`
 }
+
+// UpdateDemandLineRoutingInput represents a request to update routing fields on a demand line.
+type UpdateDemandLineRoutingInput struct {
+	DemandLineID        uint   `json:"demandLineId"`
+	RoutingDisposition  string `json:"routingDisposition"`
+	RecipientInputState string `json:"recipientInputState"`
+	RoutingReasonCode   string `json:"routingReasonCode"`
+}
+
+// BatchUpdateDemandLineRoutingInput allows bulk routing updates.
+type BatchUpdateDemandLineRoutingInput struct {
+	Updates []UpdateDemandLineRoutingInput `json:"updates"`
+}
+
+// BatchUpdateDemandLineRoutingResult contains the outcome.
+type BatchUpdateDemandLineRoutingResult struct {
+	UpdatedCount int                      `json:"updatedCount"`
+	Errors       []DemandLineRoutingError `json:"errors"`
+}
+
+// DemandLineRoutingError records a single line that failed routing update.
+type DemandLineRoutingError struct {
+	DemandLineID uint   `json:"demandLineId"`
+	Reason       string `json:"reason"`
+}
+
+// WaveRoutingStatsDTO provides routing disposition statistics for a wave's demand lines.
+type WaveRoutingStatsDTO struct {
+	TotalLines             int `json:"totalLines"`
+	AcceptedReadyCount     int `json:"acceptedReadyCount"`
+	AcceptedWaitingCount   int `json:"acceptedWaitingCount"`
+	AcceptedPartialCount   int `json:"acceptedPartialCount"`
+	DeferredCount          int `json:"deferredCount"`
+	ExcludedManualCount    int `json:"excludedManualCount"`
+	ExcludedDuplicateCount int `json:"excludedDuplicateCount"`
+	ExcludedRevokedCount   int `json:"excludedRevokedCount"`
+	PendingIntakeCount     int `json:"pendingIntakeCount"`
+}

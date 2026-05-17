@@ -21,6 +21,8 @@ type DemandDocumentRepository interface {
 	CreateLine(line *DemandLine) error
 	FindLineByID(id uint) (*DemandLine, error)
 	ListLinesByDocument(docID uint) ([]DemandLine, error)
+	UpdateLine(line *DemandLine) error
+	UpdateLineRoutingFields(lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error
 }
 
 // WaveRepository defines persistence operations for Wave and WaveParticipantSnapshot.
@@ -183,12 +185,15 @@ type HistoryNodeRepository interface {
 	FindByID(id uint) (*HistoryNode, error)
 	UpdatePreferredRedoChild(nodeID uint, childID uint) error
 	ListByScopeRecent(scopeID uint, limit int) ([]HistoryNode, error)
+	ListByScope(scopeID uint) ([]HistoryNode, error)
+	DeleteByID(nodeID uint) error
 }
 
 // HistoryCheckpointRepository defines persistence operations for HistoryCheckpoint.
 type HistoryCheckpointRepository interface {
 	Create(cp *HistoryCheckpoint) error
 	FindByNodeID(nodeID uint) (*HistoryCheckpoint, error)
+	DeleteByNodeID(nodeID uint) error
 }
 
 // HistoryPinRepository defines persistence operations for HistoryPin.
@@ -196,6 +201,7 @@ type HistoryPinRepository interface {
 	Create(pin *HistoryPin) error
 	ListByNodeID(nodeID uint) ([]HistoryPin, error)
 	CountByNodeID(nodeID uint) (int64, error)
+	ListPinnedNodeIDsByScope(scopeID uint) ([]uint, error)
 }
 
 // ProductMasterRepository defines persistence operations for ProductMaster.
@@ -215,4 +221,12 @@ type ProductRepository interface {
 	ListByWave(waveID uint) ([]Product, error)
 	FindByWaveAndSKU(waveID uint, platform, sku string) (*Product, error)
 	DeleteByWave(waveID uint) error
+}
+
+// CarrierMappingRepository defines persistence operations for CarrierMapping.
+type CarrierMappingRepository interface {
+	Create(mapping *CarrierMapping) error
+	ListByProfile(profileID uint) ([]CarrierMapping, error)
+	FindByProfileAndInternal(profileID uint, internalCode string) (*CarrierMapping, error)
+	Delete(id uint) error
 }

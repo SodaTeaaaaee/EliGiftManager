@@ -151,6 +151,25 @@ func (m *mockHistoryNodeRepo) ListByScopeRecent(scopeID uint, limit int) ([]doma
 	return result, nil
 }
 
+func (m *mockHistoryNodeRepo) ListByScope(scopeID uint) ([]domain.HistoryNode, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []domain.HistoryNode
+	for _, n := range m.nodes {
+		if n.HistoryScopeID == scopeID {
+			result = append(result, *n)
+		}
+	}
+	return result, nil
+}
+
+func (m *mockHistoryNodeRepo) DeleteByID(nodeID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.nodes, nodeID)
+	return nil
+}
+
 // ── tests: HistoryHeadQueryUseCase ──
 
 // When no HistoryScope exists for a wave, GetCurrentProjectionHash must return ("", nil).

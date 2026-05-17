@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NButton, NCard, NDataTable, NDrawer, NDrawerContent, NEmpty, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpace, NTag, useMessage } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import { listWaveFulfillmentRows, recordAdjustment } from "@/shared/lib/wails/app";
+import { listProductsByWave, listWaveFulfillmentRows, recordAdjustment } from "@/shared/lib/wails/app";
 import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
 
@@ -14,6 +14,7 @@ const { t } = useI18n();
 const waveId = computed(() => Number(route.params.waveId) || 0);
 
 const rows = ref<dto.WaveFulfillmentRowDTO[]>([]);
+const products = ref<dto.ProductDTO[]>([]);
 const loading = ref(false);
 const drawerVisible = ref(false);
 const selectedRow = ref<dto.WaveFulfillmentRowDTO | null>(null);
@@ -27,12 +28,15 @@ const form = reactive({
   note: "",
   evidenceRef: "",
   operatorId: "",
+  fromProductId: null as number | null,
+  toProductId: null as number | null,
 });
 
 const adjustmentOptions = computed(() => [
   { label: t("adjustment.add"), value: "add" },
   { label: t("adjustment.reduce"), value: "reduce" },
   { label: t("adjustment.remove"), value: "remove" },
+  { label: t("adjustment.replace"), value: "replace" },
 ]);
 
 function reviewText(value: string) {
@@ -72,7 +76,10 @@ async function loadRows() {
   if (!waveId.value) return;
   loading.value = true;
   try {
-    rows.value = await listWaveFulfillmentRows(waveId.value);
+    [rows.value, products.value] = await Promise.all([
+      listWaveFulfillmentRows(waveId.value),
+      listProductsByWave(waveId.value),
+    ]);
   } finally {
     loading.value = false;
   }
@@ -87,6 +94,8 @@ function openDrawer(row: dto.WaveFulfillmentRowDTO) {
   form.note = "";
   form.evidenceRef = "";
   form.operatorId = "";
+  form.fromProductId = null;
+  form.toProductId = null;
   drawerVisible.value = true;
 }
 
@@ -96,14 +105,16 @@ async function handleSubmit() {
   try {
     await recordAdjustment({
       waveId: waveId.value,
-      targetKind: form.targetKind,
+      targetKind: form.adjustmentKind === "replace" ? "fulfillment_line" : form.targetKind,
       fulfillmentLineId: selectedRow.value.fulfillmentLineId,
       adjustmentKind: form.adjustmentKind,
-      quantityDelta: form.adjustmentKind === "remove" ? 0 : form.quantityDelta,
+      quantityDelta: (form.adjustmentKind === "remove" || form.adjustmentKind === "replace") ? 0 : form.quantityDelta,
       reasonCode: form.reasonCode,
       note: form.note,
       evidenceRef: form.evidenceRef,
       operatorId: form.operatorId,
+      fromProductId: form.adjustmentKind === "replace" ? form.fromProductId : null,
+      toProductId: form.adjustmentKind === "replace" ? form.toProductId : null,
     });
     message.success(t("adjustment.create"));
     drawerVisible.value = false;
@@ -169,8 +180,24 @@ onMounted(loadRows);
               <NFormItem :label="t('adjustment.reason')">
                 <NSelect v-model:value="form.adjustmentKind" :options="adjustmentOptions" />
               </NFormItem>
-              <NFormItem :label="t('adjustment.quantity')" v-if="form.adjustmentKind !== 'remove'">
+              <NFormItem :label="t('adjustment.quantity')" v-if="form.adjustmentKind !== 'remove' && form.adjustmentKind !== 'replace'">
                 <NInputNumber v-model:value="form.quantityDelta" :min="1" class="w-full" />
+              </NFormItem>
+              <NFormItem :label="t('adjustment.fromProduct')" v-if="form.adjustmentKind === 'replace'">
+                <NSelect
+                  v-model:value="form.fromProductId"
+                  :options="products.map(p => ({ label: p.name, value: p.id }))"
+                  clearable
+                  class="w-full"
+                />
+              </NFormItem>
+              <NFormItem :label="t('adjustment.toProduct')" v-if="form.adjustmentKind === 'replace'">
+                <NSelect
+                  v-model:value="form.toProductId"
+                  :options="products.map(p => ({ label: p.name, value: p.id }))"
+                  clearable
+                  class="w-full"
+                />
               </NFormItem>
               <NFormItem :label="t('adjustment.reason')">
                 <NInput v-model:value="form.reasonCode" />

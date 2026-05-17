@@ -1,8 +1,16 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NInput, NInputNumber, NSelect, NSpace, NTag, useMessage } from "naive-ui";
+import { computed, h, onMounted, reactive, ref } from "vue";
+import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NInput, NInputNumber, NSelect, NSpace, NTag, NSpin, useMessage } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import { assignDemandToWave, importDemandDocument, listDemandInboxRows, listProfiles, listWaves } from "@/shared/lib/wails/app";
+import {
+  assignDemandToWave,
+  importDemandDocument,
+  listDemandInboxRows,
+  listDemandLines,
+  listProfiles,
+  listWaves,
+  updateDemandLineRouting,
+} from "@/shared/lib/wails/app";
 import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
 
@@ -17,6 +25,12 @@ const waves = ref<dto.WaveDTO[]>([]);
 const assigningId = ref<number | null>(null);
 const selectedWaveByDoc = ref<Record<number, number | null>>({});
 const creating = ref(false);
+
+// Routing panel state
+const selectedDocId = ref<number | null>(null);
+const demandLines = ref<dto.DemandLineDTO[]>([]);
+const linesLoading = ref(false);
+const updatingLineId = ref<number | null>(null);
 
 const filters = reactive({
   assignment: "all",
@@ -58,6 +72,44 @@ const demandKindOptions = [
   { label: "Retail", value: "retail_order" },
 ];
 
+const routingDispositionOptions = [
+  { label: t("demandIntake.routing.accepted"), value: "accepted" },
+  { label: t("demandIntake.routing.deferred"), value: "deferred" },
+  { label: t("demandIntake.routing.excluded"), value: "excluded_manual" },
+];
+
+const recipientInputStateOptions = [
+  { label: "not_required", value: "not_required" },
+  { label: "waiting_for_input", value: "waiting_for_input" },
+  { label: "partially_collected", value: "partially_collected" },
+  { label: "ready", value: "ready" },
+  { label: "waived", value: "waived" },
+  { label: "expired", value: "expired" },
+];
+
+function dispositionTagType(disposition: string): "success" | "warning" | "error" | "default" {
+  switch (disposition) {
+    case "accepted": return "success";
+    case "deferred": return "warning";
+    case "excluded_manual":
+    case "excluded_duplicate":
+    case "excluded_revoked": return "error";
+    default: return "default";
+  }
+}
+
+function inputStateTagType(state: string): "success" | "warning" | "error" | "default" {
+  switch (state) {
+    case "ready": return "success";
+    case "waiting_for_input": return "warning";
+    case "partially_collected": return "warning";
+    case "expired": return "error";
+    case "not_required":
+    case "waived": return "default";
+    default: return "default";
+  }
+}
+
 const columns = computed<DataTableColumns<dto.DemandInboxRowDTO>>(() => [
   { title: "ID", key: "demandDocumentId", width: 70 },
   { title: t("demandIntake.demandKind"), key: "kind", width: 180 },
@@ -74,6 +126,23 @@ const columns = computed<DataTableColumns<dto.DemandInboxRowDTO>>(() => [
   { title: t("demandIntake.waitingInput"), key: "waitingInputCount", width: 110 },
   { title: t("demandIntake.deferred"), key: "deferredCount", width: 90 },
   { title: t("demandIntake.excluded"), key: "excludedCount", width: 90 },
+  {
+    title: t("demandIntake.routing.disposition"),
+    key: "routingActions",
+    width: 120,
+    render(row) {
+      const isSelected = selectedDocId.value === row.demandDocumentId;
+      return h(
+        NButton,
+        {
+          size: "small",
+          type: isSelected ? "primary" : "default",
+          onClick: () => handleSelectDoc(row.demandDocumentId),
+        },
+        { default: () => isSelected ? "▲" : t("demandIntake.routing.disposition") },
+      );
+    },
+  },
   {
     title: t("demandIntake.assignToWave"),
     key: "actions",
@@ -107,6 +176,48 @@ const columns = computed<DataTableColumns<dto.DemandInboxRowDTO>>(() => [
   },
 ]);
 
+const lineColumns = computed<DataTableColumns<dto.DemandLineDTO>>(() => [
+  { title: "ID", key: "id", width: 60 },
+  { title: "Title", key: "externalTitle", ellipsis: true },
+  { title: "Qty", key: "requestedQuantity", width: 60 },
+  {
+    title: t("demandIntake.routing.disposition"),
+    key: "routingDisposition",
+    width: 200,
+    render(row) {
+      return h(NSelect, {
+        value: row.routingDisposition,
+        options: routingDispositionOptions,
+        size: "small",
+        style: "width: 180px",
+        loading: updatingLineId.value === row.id,
+        onUpdateValue: (val: string) => handleUpdateDisposition(row, val),
+      });
+    },
+  },
+  {
+    title: t("demandIntake.routing.inputState"),
+    key: "recipientInputState",
+    width: 220,
+    render(row) {
+      return h(NSpace, { size: "small", align: "center" }, () => [
+        h(NTag, {
+          type: inputStateTagType(row.recipientInputState),
+          size: "small",
+        }, { default: () => row.recipientInputState || "—" }),
+        h(NSelect, {
+          value: row.recipientInputState,
+          options: recipientInputStateOptions,
+          size: "small",
+          style: "width: 160px",
+          loading: updatingLineId.value === row.id,
+          onUpdateValue: (val: string) => handleUpdateInputState(row, val),
+        }),
+      ]);
+    },
+  },
+]);
+
 async function loadInbox() {
   loading.value = true;
   error.value = "";
@@ -126,6 +237,65 @@ async function loadInbox() {
 async function loadLookups() {
   profiles.value = await listProfiles();
   waves.value = await listWaves();
+}
+
+async function handleSelectDoc(docId: number) {
+  if (selectedDocId.value === docId) {
+    selectedDocId.value = null;
+    demandLines.value = [];
+    return;
+  }
+  selectedDocId.value = docId;
+  linesLoading.value = true;
+  try {
+    demandLines.value = await listDemandLines(docId);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    linesLoading.value = false;
+  }
+}
+
+async function handleUpdateDisposition(line: dto.DemandLineDTO, newDisposition: string) {
+  updatingLineId.value = line.id;
+  try {
+    await updateDemandLineRouting({
+      demandLineId: line.id,
+      routingDisposition: newDisposition,
+      recipientInputState: line.recipientInputState,
+      routingReasonCode: line.routingReasonCode || "",
+    });
+    message.success(t("demandIntake.routing.updateSuccess"));
+    if (selectedDocId.value !== null) {
+      demandLines.value = await listDemandLines(selectedDocId.value);
+    }
+    await loadInbox();
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    updatingLineId.value = null;
+  }
+}
+
+async function handleUpdateInputState(line: dto.DemandLineDTO, newState: string) {
+  updatingLineId.value = line.id;
+  try {
+    await updateDemandLineRouting({
+      demandLineId: line.id,
+      routingDisposition: line.routingDisposition,
+      recipientInputState: newState,
+      routingReasonCode: line.routingReasonCode || "",
+    });
+    message.success(t("demandIntake.routing.updateSuccess"));
+    if (selectedDocId.value !== null) {
+      demandLines.value = await listDemandLines(selectedDocId.value);
+    }
+    await loadInbox();
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    updatingLineId.value = null;
+  }
 }
 
 async function handleAssign(row: dto.DemandInboxRowDTO) {
@@ -216,6 +386,18 @@ onMounted(async () => {
             :columns="columns"
             :data="inbox"
             :loading="loading"
+            :pagination="false"
+            size="small"
+          />
+        </NCard>
+
+        <NCard v-if="selectedDocId !== null" :title="t('demandIntake.routing.disposition')" class="mt-4">
+          <NSpin v-if="linesLoading" />
+          <NEmpty v-else-if="demandLines.length === 0" :description="t('common.empty')" />
+          <NDataTable
+            v-else
+            :columns="lineColumns"
+            :data="demandLines"
             :pagination="false"
             size="small"
           />

@@ -6,6 +6,30 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
+// ConnectorCapabilities declares what a connector supports.
+// Connectors that implement CapableExecutor expose this metadata.
+type ConnectorCapabilities struct {
+	SupportsTrackingPush    bool
+	SupportsOrderExport     bool
+	SupportsStatusQuery     bool
+	RequiresCarrierMapping  bool
+	RequiresExternalOrderNo bool
+	SupportedDirections     []string // e.g. ["push_tracking", "query_status"]
+}
+
+// CapableExecutor is an optional extension of ChannelSyncExecutor that
+// allows a connector to advertise its connector key and capabilities.
+// Executors that implement this interface are automatically surfaced by
+// ExecutorRegistry.ListCapabilities().
+type CapableExecutor interface {
+	ChannelSyncExecutor
+	// ConnectorKey returns the unique key used to register this executor,
+	// e.g. "eli.local_export".
+	ConnectorKey() string
+	// Capabilities returns the declared capability flags for this connector.
+	Capabilities() ConnectorCapabilities
+}
+
 // ChannelSyncItemResult captures the outcome for a single item.
 type ChannelSyncItemResult struct {
 	ItemID       uint
@@ -67,8 +91,6 @@ func (p *runtimeExecutorProvider) Resolve(profile *domain.IntegrationProfile) (C
 	}
 	return exec, nil
 }
-
-
 
 // fakeExecutor is a test implementation that marks all items as "success".
 type fakeExecutor struct{}

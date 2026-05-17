@@ -13,6 +13,7 @@ import (
 // DemandController exposes demand-intake Wails bindings.
 type DemandController struct {
 	intakeUC           app.DemandIntakeUseCase
+	entitlementRoutingUC app.EntitlementRoutingUseCase
 	demandRepo         domain.DemandDocumentRepository
 	profileRepo        domain.CustomerProfileRepository
 	integrationProfile domain.IntegrationProfileRepository
@@ -28,12 +29,13 @@ func NewDemandController() *DemandController {
 	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
 	waveRepo := infra.NewWaveRepository(gdb)
 	return &DemandController{
-		intakeUC:           app.NewDemandIntakeUseCase(demandRepo),
-		demandRepo:         demandRepo,
-		profileRepo:        profileRepo,
-		integrationProfile: integrationProfileRepo,
-		assignmentRepo:     assignmentRepo,
-		waveRepo:           waveRepo,
+		intakeUC:             app.NewDemandIntakeUseCase(demandRepo),
+		entitlementRoutingUC: app.NewEntitlementRoutingUseCase(demandRepo, assignmentRepo),
+		demandRepo:           demandRepo,
+		profileRepo:          profileRepo,
+		integrationProfile:   integrationProfileRepo,
+		assignmentRepo:       assignmentRepo,
+		waveRepo:             waveRepo,
 	}
 }
 
@@ -304,4 +306,28 @@ func domainLineSliceToPtrs(lines []domain.DemandLine) []*domain.DemandLine {
 		ptrs[i] = &lines[i]
 	}
 	return ptrs
+}
+
+// UpdateDemandLineRouting updates routing disposition, recipient input state, and reason code
+// for a single demand line.
+func (c *DemandController) UpdateDemandLineRouting(input dto.UpdateDemandLineRoutingInput) error {
+	return c.entitlementRoutingUC.UpdateDemandLineRouting(input)
+}
+
+// BatchUpdateDemandLineRouting applies routing updates to multiple demand lines in one call.
+func (c *DemandController) BatchUpdateDemandLineRouting(input dto.BatchUpdateDemandLineRoutingInput) (dto.BatchUpdateDemandLineRoutingResult, error) {
+	result, err := c.entitlementRoutingUC.BatchUpdateDemandLineRouting(input)
+	if err != nil {
+		return dto.BatchUpdateDemandLineRoutingResult{}, err
+	}
+	return *result, nil
+}
+
+// GetWaveRoutingStats returns routing disposition counts for all demand lines in a wave.
+func (c *DemandController) GetWaveRoutingStats(waveID uint) (dto.WaveRoutingStatsDTO, error) {
+	stats, err := c.entitlementRoutingUC.GetWaveRoutingStats(waveID)
+	if err != nil {
+		return dto.WaveRoutingStatsDTO{}, err
+	}
+	return *stats, nil
 }

@@ -110,6 +110,37 @@ func (m *mockDemandRepo) ListLinesByDocument(docID uint) ([]domain.DemandLine, e
 	return out, nil
 }
 
+func (m *mockDemandRepo) UpdateLine(line *domain.DemandLine) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.lines[line.DemandDocumentID] == nil {
+		return fmt.Errorf("line not found")
+	}
+	for i, l := range m.lines[line.DemandDocumentID] {
+		if l.ID == line.ID {
+			m.lines[line.DemandDocumentID][i] = line
+			return nil
+		}
+	}
+	return fmt.Errorf("line not found")
+}
+
+func (m *mockDemandRepo) UpdateLineRoutingFields(lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, lines := range m.lines {
+		for _, l := range lines {
+			if l.ID == lineID {
+				l.RoutingDisposition = routingDisposition
+				l.RecipientInputState = recipientInputState
+				l.RoutingReasonCode = routingReasonCode
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("line %d not found", lineID)
+}
+
 // ── mock wave repo ──
 
 type mockWaveRepo struct {

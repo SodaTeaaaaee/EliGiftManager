@@ -20,8 +20,27 @@ type documentExportExecutor struct {
 // NewDocumentExportExecutor returns a real executor for the document_export
 // tracking_sync_mode. outputDir is resolved by the production wiring layer
 // (e.g. data/exports/ under the app data directory).
-func NewDocumentExportExecutor(outputDir string) ChannelSyncExecutor {
+// NewDocumentExportExecutor returns a CapableExecutor for the document_export
+// tracking_sync_mode under the "eli.local_export" connector key.
+func NewDocumentExportExecutor(outputDir string) CapableExecutor {
 	return &documentExportExecutor{outputDir: outputDir}
+}
+
+// ConnectorKey implements CapableExecutor.
+func (e *documentExportExecutor) ConnectorKey() string {
+	return "eli.local_export"
+}
+
+// Capabilities implements CapableExecutor.
+func (e *documentExportExecutor) Capabilities() ConnectorCapabilities {
+	return ConnectorCapabilities{
+		SupportsTrackingPush:    true,
+		SupportsOrderExport:     true,
+		SupportsStatusQuery:     false,
+		RequiresCarrierMapping:  false,
+		RequiresExternalOrderNo: false,
+		SupportedDirections:     []string{"push_tracking"},
+	}
 }
 
 type exportPayload struct {
@@ -94,7 +113,7 @@ func (e *documentExportExecutor) Execute(
 		}
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"status":       "ok",
 		"output_file":  filePath,
 		"item_count":   len(items),

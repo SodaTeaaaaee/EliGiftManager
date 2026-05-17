@@ -14,6 +14,10 @@ export function GenerateParticipants(arg1) {
   return window['go']['main']['WaveController']['GenerateParticipants'](arg1);
 }
 
+export function GetHistoryGraph(arg1) {
+  return window['go']['main']['WaveController']['GetHistoryGraph'](arg1);
+}
+
 export function GetWave(arg1) {
   return window['go']['main']['WaveController']['GetWave'](arg1);
 }
@@ -56,6 +60,10 @@ export function MapDemandLines(arg1) {
 
 export function RedoWaveAction(arg1) {
   return window['go']['main']['WaveController']['RedoWaveAction'](arg1);
+}
+
+export function RunHistoryGC(arg1) {
+  return window['go']['main']['WaveController']['RunHistoryGC'](arg1);
 }
 
 export function UndoWaveAction(arg1) {
