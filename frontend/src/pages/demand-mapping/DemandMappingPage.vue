@@ -1,312 +1,163 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from "vue"
-import { useRoute } from "vue-router"
-import {
-  NDataTable,
-  NTag,
-  NButton,
-  NCard,
-  NSpin,
-  NSpace,
-  NPopconfirm,
-  useMessage,
-} from "naive-ui"
-import type { DataTableColumns, DataTableExpandedRowKeys } from "naive-ui"
-import {
-  listAssignedDemandsByWave,
-  listUnassignedDemandDocuments,
-  listDemandLines,
-  assignDemandToWave,
-  generateParticipants,
-  mapDemandLines,
-} from "@/shared/lib/wails/app"
-import { dto } from "@/../wailsjs/go/models"
+import { computed, h, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { NAlert, NButton, NCard, NDataTable, NEmpty, NTag, NSpace, useMessage } from "naive-ui";
+import type { DataTableColumns } from "naive-ui";
+import { generateParticipants, listAssignedDemandsByWave, listDemandLines, mapDemandLines } from "@/shared/lib/wails/app";
+import { useI18n } from "@/shared/i18n";
+import { dto } from "@/../wailsjs/go/models";
 
-const route = useRoute()
-const message = useMessage()
-const waveId = computed(() => Number(route.params.waveId))
+const route = useRoute();
+const router = useRouter();
+const message = useMessage();
+const { t } = useI18n();
+const waveId = computed(() => Number(route.params.waveId) || 0);
 
-// ── State ──
-const assignedDocs = ref<dto.DemandDocumentDTO[]>([])
-const availableDocs = ref<dto.DemandDocumentDTO[]>([])
-const loadingAssigned = ref(true)
-const loadingAvailable = ref(true)
-const linesCache = ref<Record<number, dto.DemandLineDTO[]>>({})
-const linesLoading = ref<Record<number, boolean>>({})
-const expandedRowKeys = ref<DataTableExpandedRowKeys>([])
-const generatingParticipants = ref(false)
-const applyingRules = ref(false)
-const assigningId = ref<number | null>(null)
-const participantsGenerated = ref(false)
+const docs = ref<dto.DemandDocumentDTO[]>([]);
+const loading = ref(false);
+const applying = ref(false);
+const participantsGenerated = ref(false);
+const lineCache = ref<Record<number, dto.DemandLineDTO[]>>({});
+const expandedKeys = ref<number[]>([]);
+const blockedSummary = ref<string>("");
 
-// ── Loaders ──
-async function loadAssigned() {
-  if (!waveId.value) return
-  loadingAssigned.value = true
+const columns = computed<DataTableColumns<dto.DemandDocumentDTO>>(() => [
+  { type: "expand" },
+  { title: "ID", key: "id", width: 60 },
+  { title: "Kind", key: "kind", width: 180 },
+  { title: "Source", key: "sourceDocumentNo", width: 180 },
+  { title: "Profile", key: "customerProfileId", width: 100 },
+  { title: "Channel", key: "sourceChannel", width: 100 },
+]);
+
+const lineColumns: DataTableColumns<dto.DemandLineDTO> = [
+  { title: "Line", key: "sourceLineNo", width: 70 },
+  { title: "Type", key: "lineType", width: 120 },
+  { title: "Title", key: "externalTitle" },
+  { title: "Disposition", key: "routingDisposition", width: 140 },
+  { title: "Input", key: "recipientInputState", width: 140 },
+  { title: "Qty", key: "requestedQuantity", width: 70 },
+];
+
+async function loadDocs() {
+  loading.value = true;
   try {
-    assignedDocs.value = await listAssignedDemandsByWave(waveId.value)
-  } catch (e: any) {
-    message.error(`加载已分配需求失败: ${e?.message || e}`)
+    docs.value = await listAssignedDemandsByWave(waveId.value);
   } finally {
-    loadingAssigned.value = false
+    loading.value = false;
   }
-}
-
-async function loadAvailable() {
-  loadingAvailable.value = true
-  try {
-    availableDocs.value = await listUnassignedDemandDocuments()
-  } catch (e: any) {
-    message.error(`加载可分配需求失败: ${e?.message || e}`)
-  } finally {
-    loadingAvailable.value = false
-  }
-}
-
-async function loadBoth() {
-  await Promise.all([loadAssigned(), loadAvailable()])
 }
 
 async function loadLines(docId: number) {
-  if (linesCache.value[docId]) return
-  linesLoading.value[docId] = true
-  try {
-    linesCache.value[docId] = await listDemandLines(docId)
-  } catch (e: any) {
-    message.error(`加载需求行失败: ${e?.message || e}`)
-  } finally {
-    linesLoading.value[docId] = false
-  }
-}
-
-// ── Actions ──
-async function handleAssign(docId: number) {
-  assigningId.value = docId
-  try {
-    await assignDemandToWave(waveId.value, docId)
-    message.success("分配成功")
-    await loadBoth()
-  } catch (e: any) {
-    const msg = String(e?.message || e)
-    if (/unique|duplicate|already/i.test(msg)) {
-      message.warning("该需求已分配到此波次")
-      await loadBoth()
-    } else {
-      message.error(`分配失败: ${msg}`)
-    }
-  } finally {
-    assigningId.value = null
-  }
-}
-
-async function handleGenerate() {
-  generatingParticipants.value = true
-  try {
-    const count = await generateParticipants(waveId.value)
-    message.success(`已生成 ${count} 个参与者`)
-    participantsGenerated.value = true
-  } catch (e: any) {
-    message.error(`生成参与者失败: ${e?.message || e}`)
-  } finally {
-    generatingParticipants.value = false
-  }
-}
-
-async function handleMapDemand() {
-  applyingRules.value = true
-  try {
-    const result = await mapDemandLines(waveId.value)
-    if (result.blockedLines && result.blockedLines.length > 0) {
-      const blockedTitles = result.blockedLines.map((b: any) => b.demandLineTitle || `#${b.demandLineId}`).join(', ')
-      message.warning(`已映射 ${result.createdLines?.length ?? 0} 条履约行，${result.blockedLines.length} 条阻塞: ${blockedTitles}`)
-    } else {
-      message.success(`已映射 ${result.createdLines?.length ?? 0} 条履约行`)
-    }
-  } catch (e: any) {
-    message.error(`需求映射失败: ${e?.message || e}`)
-  } finally {
-    applyingRules.value = false
-  }
-}
-
-// ── Kind tag type ──
-function kindTagType(kind: string): "info" | "success" | "default" {
-  if (kind === "membership_entitlement") return "info"
-  if (kind === "retail_order") return "success"
-  return "default"
-}
-
-// ── Routing disposition tag type ──
-function dispositionTagType(
-  d: string,
-): "success" | "warning" | "error" | "default" {
-  if (d === "accepted") return "success"
-  if (d === "deferred") return "warning"
-  if (d.startsWith("excluded")) return "error"
-  return "default"
-}
-
-// ── Disposition summary ──
-function dispositionSummary(lines: dto.DemandLineDTO[]) {
-  const counts = { accepted: 0, deferred: 0, excluded: 0, pending: 0 }
-  for (const l of lines) {
-    if (l.routingDisposition === "accepted") counts.accepted++
-    else if (l.routingDisposition === "deferred") counts.deferred++
-    else if (l.routingDisposition.startsWith("excluded")) counts.excluded++
-    else counts.pending++
-  }
-  return counts
-}
-
-// ── Columns ──
-const docColumns: DataTableColumns<dto.DemandDocumentDTO> = [
-  { type: "expand" },
-  { title: "ID", key: "id", width: 60 },
-  {
-    title: "Kind",
-    key: "kind",
-    width: 180,
-    render(row) {
-      return h(NTag, { type: kindTagType(row.kind), size: "small" }, () => row.kind)
-    },
-  },
-  { title: "渠道", key: "sourceChannel", width: 120 },
-  { title: "单据号", key: "sourceDocumentNo", ellipsis: { tooltip: true } },
-  { title: "客户档案ID", key: "customerProfileId", width: 110 },
-  { title: "创建时间", key: "createdAt", width: 180 },
-]
-
-const availableColumns: DataTableColumns<dto.DemandDocumentDTO> = [
-  ...docColumns,
-  {
-    title: "操作",
-    key: "actions",
-    width: 80,
-    render(row) {
-      return h(
-        NButton,
-        {
-          size: "small",
-          type: "primary",
-          loading: assigningId.value === row.id,
-          disabled: assigningId.value !== null,
-          onClick: () => handleAssign(row.id),
-        },
-        () => "分配",
-      )
-    },
-  },
-]
-
-const lineColumns: DataTableColumns<dto.DemandLineDTO> = [
-  { title: "ID", key: "id", width: 60 },
-  { title: "行号", key: "sourceLineNo", width: 60 },
-  { title: "类型", key: "lineType", width: 100 },
-  { title: "标题", key: "externalTitle", ellipsis: { tooltip: true } },
-  { title: "数量", key: "requestedQuantity", width: 60 },
-  {
-    title: "路由处置",
-    key: "routingDisposition",
-    width: 140,
-    render(row) {
-      return h(
-        NTag,
-        { type: dispositionTagType(row.routingDisposition), size: "small" },
-        () => row.routingDisposition,
-      )
-    },
-  },
-]
-
-// ── Expand handling ──
-function handleExpandChange(keys: DataTableExpandedRowKeys) {
-  expandedRowKeys.value = keys
-  for (const key of keys) {
-    loadLines(key as number)
-  }
+  if (lineCache.value[docId]) return;
+  lineCache.value[docId] = await listDemandLines(docId);
 }
 
 function renderExpand(row: dto.DemandDocumentDTO) {
-  const docId = row.id
-  if (linesLoading.value[docId]) {
-    return h(NSpin, { size: "small", style: "padding: 12px" })
-  }
-  const lines = linesCache.value[docId]
-  if (!lines || lines.length === 0) {
-    return h("div", { style: "padding: 12px; color: #999" }, "无需求行")
-  }
-  const summary = dispositionSummary(lines)
-  return h("div", { style: "padding: 8px 0" }, [
-    h(NSpace, { style: "margin-bottom: 8px" }, () => [
-      h(NTag, { type: "success", size: "small" }, () => `accepted: ${summary.accepted}`),
-      h(NTag, { type: "warning", size: "small" }, () => `deferred: ${summary.deferred}`),
-      h(NTag, { type: "error", size: "small" }, () => `excluded: ${summary.excluded}`),
-      h(NTag, { size: "small" }, () => `pending: ${summary.pending}`),
-    ]),
-    h(NDataTable, {
-      columns: lineColumns,
-      data: lines,
-      size: "small",
-      bordered: false,
-      rowKey: (r: dto.DemandLineDTO) => r.id,
-    }),
-  ])
+  const lines = lineCache.value[row.id] || [];
+  return h(NDataTable, {
+    columns: lineColumns,
+    data: lines,
+    size: "small",
+    bordered: false,
+    pagination: false,
+  });
 }
 
-onMounted(() => loadBoth())
+async function handleGenerateParticipants() {
+  try {
+    const count = await generateParticipants(waveId.value);
+    participantsGenerated.value = true;
+    message.success(`${t("mapping.generateParticipants")}: ${count}`);
+  } catch (e: unknown) {
+    message.error(e instanceof Error ? e.message : String(e));
+  }
+}
+
+async function handleMap() {
+  applying.value = true;
+  blockedSummary.value = "";
+  try {
+    const result = await mapDemandLines(waveId.value);
+    if (result.blockedLines?.length) {
+      blockedSummary.value = result.blockedLines
+        .map((line) => line.demandLineTitle || `#${line.demandLineId}`)
+        .join(", ");
+    }
+    message.success(`${t("mapping.mapDemand")} OK`);
+  } catch (e: unknown) {
+    message.error(e instanceof Error ? e.message : String(e));
+  } finally {
+    applying.value = false;
+  }
+}
+
+onMounted(loadDocs);
 </script>
 
 <template>
-  <div class="p-4 flex flex-col gap-4">
-    <NCard title="已分配需求">
+  <div class="demand-mapping-page">
+    <div class="mb-6">
+      <div class="app-kicker">{{ t("wave.mapping") }}</div>
+      <h2 class="app-title mt-2">{{ t("mapping.title") }}</h2>
+      <p class="app-copy mt-3">{{ t("mapping.subtitle") }}</p>
+    </div>
+
+    <NCard class="mb-4" title="Current Mapping Rhythm">
+      <NSpace vertical :size="10">
+        <div>1. Expand assigned demand documents and inspect demand lines.</div>
+        <div>2. Generate participants if this wave has not entered fulfillment context yet.</div>
+        <div>3. Run mapping and review blockers before returning to overview.</div>
+      </NSpace>
+    </NCard>
+
+    <NAlert v-if="blockedSummary" type="warning" class="mb-4">
+      {{ blockedSummary }}
+    </NAlert>
+
+    <NCard :title="t('mapping.assigned')">
       <template #header-extra>
         <NSpace>
-          <NPopconfirm @positive-click="handleGenerate">
-            <template #trigger>
-              <NButton
-                size="small"
-                :loading="generatingParticipants"
-              >
-                生成参与者
-              </NButton>
-            </template>
-            此操作会批量生成数据，确认执行？
-          </NPopconfirm>
-          <NPopconfirm @positive-click="handleMapDemand">
-            <template #trigger>
-              <NButton
-                type="primary"
-                size="small"
-                :loading="applyingRules"
-                :disabled="assignedDocs.length === 0 || !participantsGenerated"
-              >
-                映射需求
-              </NButton>
-            </template>
-            此操作会将零售订单需求映射为履约行，确认执行？
-          </NPopconfirm>
+          <NButton size="small" @click="handleGenerateParticipants">
+            {{ t("mapping.generateParticipants") }}
+          </NButton>
+          <NButton
+            size="small"
+            type="primary"
+            :disabled="!participantsGenerated"
+            :loading="applying"
+            @click="handleMap"
+          >
+            {{ t("mapping.mapDemand") }}
+          </NButton>
         </NSpace>
       </template>
+
+      <NEmpty v-if="!loading && docs.length === 0" :description="t('common.empty')" />
       <NDataTable
-        :columns="docColumns"
-        :data="assignedDocs"
-        :loading="loadingAssigned"
-        :row-key="(row: dto.DemandDocumentDTO) => row.id"
-        :expanded-row-keys="expandedRowKeys"
-        :render-expand="renderExpand"
+        v-else
+        :columns="columns"
+        :data="docs"
+        :loading="loading"
+        :pagination="false"
         size="small"
-        @update:expanded-row-keys="handleExpandChange"
+        :expanded-row-keys="expandedKeys"
+        :render-expand="renderExpand"
+        @update:expanded-row-keys="(keys) => {
+          expandedKeys = keys as number[]
+          for (const key of keys as number[]) {
+            void loadLines(key)
+          }
+        }"
       />
     </NCard>
 
-    <NCard title="可分配需求">
-      <NDataTable
-        :columns="availableColumns"
-        :data="availableDocs"
-        :loading="loadingAvailable"
-        :row-key="(row: dto.DemandDocumentDTO) => row.id"
-        size="small"
-      />
-    </NCard>
+    <div class="mt-4 flex justify-between">
+      <NButton @click="router.push(`/waves/${waveId}`)">{{ t("wave.prevStep") }}</NButton>
+      <NSpace>
+        <NButton secondary @click="router.push(`/waves/${waveId}`)">{{ t("wave.backToOverview") }}</NButton>
+        <NButton type="primary" @click="router.push(`/waves/${waveId}`)">{{ t("wave.nextStep") }}</NButton>
+      </NSpace>
+    </div>
   </div>
 </template>

@@ -177,7 +177,30 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	// Use halt-on-first-failure mode: if any adjustment fails to resolve,
 	// abort the entire reconcile to preserve the old data.
 	var failures []ReplayFailure
+	adjustmentLineTargets := make(map[uint]LineHint)
 	if len(adjustments) > 0 {
+		for _, adj := range adjustments {
+			if adj.TargetKind != "fulfillment_line" || adj.FulfillmentLineID == nil {
+				continue
+			}
+			hint, ok := lineHints[*adj.FulfillmentLineID]
+			if ok {
+				adjustmentLineTargets[adj.ID] = hint
+				continue
+			}
+			for _, line := range newLines {
+				if line.ID == *adj.FulfillmentLineID &&
+					line.WaveParticipantSnapshotID != nil &&
+					line.ProductID != nil {
+					adjustmentLineTargets[adj.ID] = LineHint{
+						WaveParticipantSnapshotID: *line.WaveParticipantSnapshotID,
+						ProductID:                 *line.ProductID,
+					}
+					break
+				}
+			}
+		}
+
 		newLines, failures = ReplayAdjustments(newLines, adjustments, ReplayOptions{
 			Mode:      ReplayHaltOnFirstFailure,
 			LineHints: lineHints,
@@ -214,6 +237,45 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 
 	if err := uc.fulfillRepo.ReplaceByWaveAndGeneratedBy(waveID, "allocation_policy_driven", persistLines); err != nil {
 		return nil, err
+	}
+
+	// After an ID-breaking rebuild, re-anchor fulfillment_line adjustments to the
+	// newly persisted line IDs so the next reconcile can resolve them directly.
+	if len(adjustmentLineTargets) > 0 {
+		currentLines, err := uc.fulfillRepo.ListByWave(waveID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range adjustments {
+			adj := &adjustments[i]
+			if adj.TargetKind != "fulfillment_line" || adj.FulfillmentLineID == nil {
+				continue
+			}
+			hint, ok := adjustmentLineTargets[adj.ID]
+			if !ok {
+				continue
+			}
+			var matchedID uint
+			matchCount := 0
+			for _, line := range currentLines {
+				if line.GeneratedBy != "allocation_policy_driven" {
+					continue
+				}
+				if line.WaveParticipantSnapshotID != nil &&
+					*line.WaveParticipantSnapshotID == hint.WaveParticipantSnapshotID &&
+					line.ProductID != nil &&
+					*line.ProductID == hint.ProductID {
+					matchedID = line.ID
+					matchCount++
+				}
+			}
+			if matchCount == 1 && matchedID != *adj.FulfillmentLineID {
+				adj.FulfillmentLineID = &matchedID
+				if err := uc.adjustmentRepo.Update(adj); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	return &dto.ReconcileResultDTO{

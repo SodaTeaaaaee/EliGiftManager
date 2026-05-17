@@ -12,11 +12,17 @@ export function GetWave(arg1:number):Promise<dto.WaveDTO>;
 
 export function GetWaveOverview(arg1:number):Promise<dto.WaveOverviewDTO>;
 
+export function GetWaveWorkspaceSnapshot(arg1:number):Promise<dto.WaveWorkspaceSnapshotDTO>;
+
 export function ListAssignedDemandsByWave(arg1:number):Promise<Array<dto.DemandDocumentDTO>>;
 
 export function ListRecentHistory(arg1:number,arg2:number):Promise<Array<dto.HistoryNodeDTO>>;
 
 export function ListWaveDashboardRows():Promise<Array<dto.WaveDashboardRowDTO>>;
+
+export function ListWaveFulfillmentRows(arg1:number):Promise<Array<dto.WaveFulfillmentRowDTO>>;
+
+export function ListWaveParticipantRows(arg1:number):Promise<Array<dto.WaveParticipantRowDTO>>;
 
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
 

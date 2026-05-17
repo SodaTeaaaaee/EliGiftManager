@@ -633,6 +633,68 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class DemandInboxFilterInput {
+	    assignment: string;
+	    demandKind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandInboxFilterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.assignment = source["assignment"];
+	        this.demandKind = source["demandKind"];
+	    }
+	}
+	export class DemandInboxRowDTO {
+	    demandDocumentId: number;
+	    kind: string;
+	    captureMode: string;
+	    sourceChannel: string;
+	    sourceSurface: string;
+	    sourceDocumentNo: string;
+	    customerProfileId?: number;
+	    integrationProfileId?: number;
+	    integrationProfileLabel: string;
+	    assigned: boolean;
+	    assignedWaveId?: number;
+	    assignedWaveLabel: string;
+	    totalLineCount: number;
+	    acceptedCount: number;
+	    readyAcceptedCount: number;
+	    waitingInputCount: number;
+	    deferredCount: number;
+	    excludedCount: number;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandInboxRowDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.demandDocumentId = source["demandDocumentId"];
+	        this.kind = source["kind"];
+	        this.captureMode = source["captureMode"];
+	        this.sourceChannel = source["sourceChannel"];
+	        this.sourceSurface = source["sourceSurface"];
+	        this.sourceDocumentNo = source["sourceDocumentNo"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.integrationProfileLabel = source["integrationProfileLabel"];
+	        this.assigned = source["assigned"];
+	        this.assignedWaveId = source["assignedWaveId"];
+	        this.assignedWaveLabel = source["assignedWaveLabel"];
+	        this.totalLineCount = source["totalLineCount"];
+	        this.acceptedCount = source["acceptedCount"];
+	        this.readyAcceptedCount = source["readyAcceptedCount"];
+	        this.waitingInputCount = source["waitingInputCount"];
+	        this.deferredCount = source["deferredCount"];
+	        this.excludedCount = source["excludedCount"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
 	export class DemandLineDTO {
 	    id: number;
 	    demandDocumentId: number;
@@ -1602,6 +1664,62 @@ export namespace dto {
 	        this.projectedLifecycleStage = source["projectedLifecycleStage"];
 	    }
 	}
+	export class WaveFulfillmentRowDTO {
+	    fulfillmentLineId: number;
+	    waveId: number;
+	    waveParticipantSnapshotId?: number;
+	    customerProfileId?: number;
+	    participantType: string;
+	    participantDisplay: string;
+	    participantBadge: string;
+	    productId?: number;
+	    productDisplay: string;
+	    demandDocumentId?: number;
+	    demandLineId?: number;
+	    demandKind: string;
+	    demandSourceSummary: string;
+	    quantity: number;
+	    allocationState: string;
+	    addressState: string;
+	    supplierState: string;
+	    channelSyncState: string;
+	    lineReason: string;
+	    generatedBy: string;
+	    basisDriftStatus: string;
+	    reviewRequirement: string;
+	    reviewReasonSummary: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveFulfillmentRowDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.waveId = source["waveId"];
+	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.participantType = source["participantType"];
+	        this.participantDisplay = source["participantDisplay"];
+	        this.participantBadge = source["participantBadge"];
+	        this.productId = source["productId"];
+	        this.productDisplay = source["productDisplay"];
+	        this.demandDocumentId = source["demandDocumentId"];
+	        this.demandLineId = source["demandLineId"];
+	        this.demandKind = source["demandKind"];
+	        this.demandSourceSummary = source["demandSourceSummary"];
+	        this.quantity = source["quantity"];
+	        this.allocationState = source["allocationState"];
+	        this.addressState = source["addressState"];
+	        this.supplierState = source["supplierState"];
+	        this.channelSyncState = source["channelSyncState"];
+	        this.lineReason = source["lineReason"];
+	        this.generatedBy = source["generatedBy"];
+	        this.basisDriftStatus = source["basisDriftStatus"];
+	        this.reviewRequirement = source["reviewRequirement"];
+	        this.reviewReasonSummary = source["reviewReasonSummary"];
+	    }
+	}
 	export class WaveOverviewDTO {
 	    wave: WaveDTO;
 	    demandCount: number;
@@ -1668,6 +1786,134 @@ export namespace dto {
 	        this.basisDriftSignals = this.convertValues(source["basisDriftSignals"], BasisDriftSignalDTO);
 	        this.hasDriftedBasis = source["hasDriftedBasis"];
 	        this.hasRequiredReviewBasis = source["hasRequiredReviewBasis"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WaveParticipantRowDTO {
+	    waveParticipantSnapshotId: number;
+	    waveId: number;
+	    customerProfileId: number;
+	    snapshotType: string;
+	    displayName: string;
+	    identityPlatform: string;
+	    identityValue: string;
+	    giftLevel: string;
+	    sourceSummary: string;
+	    fulfillmentLineCount: number;
+	    readyFulfillmentCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveParticipantRowDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
+	        this.waveId = source["waveId"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.snapshotType = source["snapshotType"];
+	        this.displayName = source["displayName"];
+	        this.identityPlatform = source["identityPlatform"];
+	        this.identityValue = source["identityValue"];
+	        this.giftLevel = source["giftLevel"];
+	        this.sourceSummary = source["sourceSummary"];
+	        this.fulfillmentLineCount = source["fulfillmentLineCount"];
+	        this.readyFulfillmentCount = source["readyFulfillmentCount"];
+	    }
+	}
+	export class WaveStepStateDTO {
+	    stepKey: string;
+	    status: string;
+	    primaryCount: number;
+	    secondaryCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveStepStateDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.stepKey = source["stepKey"];
+	        this.status = source["status"];
+	        this.primaryCount = source["primaryCount"];
+	        this.secondaryCount = source["secondaryCount"];
+	    }
+	}
+	export class WaveWorkspaceBasisSummaryDTO {
+	    driftedCount: number;
+	    requiredReviewCount: number;
+	    hasDriftedBasis: boolean;
+	    hasRequiredReview: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveWorkspaceBasisSummaryDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.driftedCount = source["driftedCount"];
+	        this.requiredReviewCount = source["requiredReviewCount"];
+	        this.hasDriftedBasis = source["hasDriftedBasis"];
+	        this.hasRequiredReview = source["hasRequiredReview"];
+	    }
+	}
+	export class WaveWorkspaceGuidanceDTO {
+	    code: string;
+	    severity: string;
+	    targetStepKey: string;
+	    count: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveWorkspaceGuidanceDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.severity = source["severity"];
+	        this.targetStepKey = source["targetStepKey"];
+	        this.count = source["count"];
+	    }
+	}
+	export class WaveWorkspaceSnapshotDTO {
+	    wave: WaveDTO;
+	    projectedLifecycleStage: string;
+	    overview: WaveOverviewDTO;
+	    stepStates: WaveStepStateDTO[];
+	    guidance: WaveWorkspaceGuidanceDTO[];
+	    basisSummary: WaveWorkspaceBasisSummaryDTO;
+	    recentHistory: HistoryNodeDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveWorkspaceSnapshotDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.wave = this.convertValues(source["wave"], WaveDTO);
+	        this.projectedLifecycleStage = source["projectedLifecycleStage"];
+	        this.overview = this.convertValues(source["overview"], WaveOverviewDTO);
+	        this.stepStates = this.convertValues(source["stepStates"], WaveStepStateDTO);
+	        this.guidance = this.convertValues(source["guidance"], WaveWorkspaceGuidanceDTO);
+	        this.basisSummary = this.convertValues(source["basisSummary"], WaveWorkspaceBasisSummaryDTO);
+	        this.recentHistory = this.convertValues(source["recentHistory"], HistoryNodeDTO);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

@@ -14,6 +14,10 @@ export function ListDemandDocuments() {
   return window['go']['main']['DemandController']['ListDemandDocuments']();
 }
 
+export function ListDemandInboxRows(arg1) {
+  return window['go']['main']['DemandController']['ListDemandInboxRows'](arg1);
+}
+
 export function ListDemandLines(arg1) {
   return window['go']['main']['DemandController']['ListDemandLines'](arg1);
 }

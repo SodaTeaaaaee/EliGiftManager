@@ -1,50 +1,113 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { NSteps, NStep } from 'naive-ui'
+import { computed } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { NStep, NSteps, NTag } from "naive-ui";
+import { useI18n } from "@/shared/i18n";
+import { dto } from "@/../wailsjs/go/models";
 
-const route = useRoute()
-const router = useRouter()
+const props = defineProps<{
+  snapshot?: dto.WaveWorkspaceSnapshotDTO | null
+}>()
 
-const waveId = computed(() => route.params.waveId as string)
+const route = useRoute();
+const router = useRouter();
+const { t } = useI18n();
 
-const steps = [
-  { title: '总览', routeName: 'wave-overview-step', path: '' },
-  { title: '需求映射', routeName: 'wave-demand-mapping', path: 'demand-mapping' },
-  { title: '分配规则', routeName: 'wave-allocation', path: 'allocation' },
-  { title: '履约调整', routeName: 'wave-adjustment-review', path: 'adjustment-review' },
-  { title: '导出', routeName: 'wave-export', path: 'export' },
-  { title: '物流', routeName: 'wave-shipment', path: 'shipment' },
-  { title: '回填', routeName: 'wave-channel-sync', path: 'channel-sync' },
-]
+const waveId = computed(() => route.params.waveId as string | undefined);
+
+const stepDefs = computed(() => [
+  { key: "wave_overview", title: t("wave.overview"), path: "" },
+  { key: "membership_allocation", title: t("wave.allocation"), path: "allocation" },
+  { key: "demand_mapping", title: t("wave.mapping"), path: "demand-mapping" },
+  { key: "adjustment_review", title: t("wave.adjustment"), path: "adjustment-review" },
+  { key: "supplier_execution", title: t("wave.execution"), path: "export" },
+  { key: "shipment_intake", title: t("wave.shipment"), path: "shipment" },
+  { key: "channel_sync", title: t("wave.sync"), path: "channel-sync" },
+]);
 
 const currentStep = computed(() => {
-  const name = route.name as string
-  const byName = steps.findIndex(s => s.routeName === name)
-  if (byName >= 0) return byName + 1
-  // Fallback: path-based matching — iterate in reverse so more-specific paths win
-  const path = route.path
-  for (let i = steps.length - 1; i >= 0; i--) {
-    const s = steps[i]
-    if (s.path === '' && /\/waves\/[^/]+$/.test(path)) return i + 1
-    if (s.path && path.endsWith('/' + s.path)) return i + 1
-  }
-  return 1
-})
+  const name = route.name as string;
+  if (name === "wave-overview-step") return 1;
+  if (name === "wave-allocation") return 2;
+  if (name === "wave-demand-mapping") return 3;
+  if (name === "wave-adjustment-review") return 4;
+  if (name === "wave-export") return 5;
+  if (name === "wave-shipment") return 6;
+  if (name === "wave-channel-sync") return 7;
+  return 1;
+});
 
-function handleStepClick(step: number) {
-  const target = steps[step - 1]
-  if (!target || !waveId.value) return
-  const base = `/waves/${waveId.value}`
-  const path = target.path ? `${base}/${target.path}` : base
-  router.push(path)
+const stepStateMap = computed(() => {
+  const map = new Map<string, dto.WaveStepStateDTO>();
+  for (const step of props.snapshot?.stepStates || []) {
+    map.set(step.stepKey, step);
+  }
+  return map;
+});
+
+function navigateTo(index: number) {
+  const step = stepDefs.value[index - 1];
+  if (!step || !waveId.value) return;
+  const base = `/waves/${waveId.value}`;
+  router.push(step.path ? `${base}/${step.path}` : base);
+}
+
+function statusText(key: string) {
+  return stepStateMap.value.get(key)?.status || "idle";
 }
 </script>
 
 <template>
-  <div class="wave-step-wizard mb-4">
-    <n-steps :current="currentStep" size="small" @update:current="handleStepClick">
-      <n-step v-for="step in steps" :key="step.routeName" :title="step.title" />
-    </n-steps>
+  <div class="wave-step-shell">
+    <NSteps :current="currentStep" status="process" @update:current="navigateTo">
+      <NStep
+        v-for="step in stepDefs"
+        :key="step.key"
+        :title="step.title"
+        :description="statusText(step.key)"
+      />
+    </NSteps>
+
+    <div class="wave-step-summary">
+      <div
+        v-for="step in stepDefs"
+        :key="step.key"
+        class="wave-step-summary__item"
+      >
+        <span>{{ step.title }}</span>
+        <NTag size="small" :bordered="false">
+          {{ stepStateMap.get(step.key)?.primaryCount ?? 0 }}
+        </NTag>
+      </div>
+    </div>
   </div>
 </template>
+
+<style scoped>
+.wave-step-shell {
+  margin-bottom: 16px;
+  padding: 14px 16px 12px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, var(--surface-strong) 0%, var(--surface-muted) 100%);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.wave-step-summary {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.wave-step-summary__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--text);
+  font-size: 12px;
+}
+</style>

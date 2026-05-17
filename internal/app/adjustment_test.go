@@ -72,6 +72,18 @@ func (m *mockAdjustmentRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, e
 	return nil, nil
 }
 
+func (m *mockAdjustmentRepo) Update(adj *domain.FulfillmentAdjustment) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.records {
+		if m.records[i].ID == adj.ID {
+			m.records[i] = *adj
+			return nil
+		}
+	}
+	return fmt.Errorf("adjustment %d not found", adj.ID)
+}
+
 func (m *mockAdjustmentRepo) Delete(id uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

@@ -143,6 +143,7 @@ type IntegrationProfileRepository interface {
 type FulfillmentAdjustmentRepository interface {
 	Create(adj *FulfillmentAdjustment) error
 	FindByID(id uint) (*FulfillmentAdjustment, error)
+	Update(adj *FulfillmentAdjustment) error
 	Delete(id uint) error
 	DeleteByWave(waveID uint) error
 	ListByWave(waveID uint) ([]FulfillmentAdjustment, error)

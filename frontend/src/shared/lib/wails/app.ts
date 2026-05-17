@@ -4,6 +4,7 @@
 import {
   GetDemandDocument,
   ImportDemandDocument,
+  ListDemandInboxRows,
   ListDemandDocuments,
   ListDemandLines,
   ListUnassignedDemandDocuments,
@@ -14,6 +15,9 @@ import {
   ListWaveDashboardRows,
   GetWave,
   GetWaveOverview,
+  GetWaveWorkspaceSnapshot,
+  ListWaveFulfillmentRows,
+  ListWaveParticipantRows,
   MapDemandLines,
   AssignDemandToWave,
   GenerateParticipants,
@@ -93,6 +97,14 @@ export async function listDemandDocuments(): Promise<dto.DemandDocumentDTO[]> {
   return ListDemandDocuments();
 }
 
+export async function listDemandInboxRows(input: {
+  assignment?: string;
+  demandKind?: string;
+}): Promise<dto.DemandInboxRowDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
+  return ListDemandInboxRows(dto.DemandInboxFilterInput.createFrom(input));
+}
+
 export async function listUnassignedDemandDocuments(): Promise<dto.DemandDocumentDTO[]> {
   if (!isWailsRuntimeAvailable()) return [];
   return ListUnassignedDemandDocuments();
@@ -170,6 +182,27 @@ export async function getWaveOverview(
 ): Promise<dto.WaveOverviewDTO> {
   assertWailsRuntime();
   return GetWaveOverview(waveId);
+}
+
+export async function getWaveWorkspaceSnapshot(
+  waveId: number,
+): Promise<dto.WaveWorkspaceSnapshotDTO> {
+  assertWailsRuntime();
+  return GetWaveWorkspaceSnapshot(waveId);
+}
+
+export async function listWaveFulfillmentRows(
+  waveId: number,
+): Promise<dto.WaveFulfillmentRowDTO[]> {
+  assertWailsRuntime();
+  return ListWaveFulfillmentRows(waveId);
+}
+
+export async function listWaveParticipantRows(
+  waveId: number,
+): Promise<dto.WaveParticipantRowDTO[]> {
+  assertWailsRuntime();
+  return ListWaveParticipantRows(waveId);
 }
 
 /** Assign a demand document to a wave. */

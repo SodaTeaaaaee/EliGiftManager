@@ -84,3 +84,8 @@ type DemandMappingResult struct {
 	CreatedLines []FulfillmentLineDTO        `json:"createdLines"`
 	BlockedLines []DemandMappingBlockedLine  `json:"blockedLines"`
 }
+
+type DemandInboxFilterInput struct {
+	Assignment string `json:"assignment"`
+	DemandKind string `json:"demandKind"`
+}

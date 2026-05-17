@@ -1,47 +1,28 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, h } from "vue"
-import { useRoute } from "vue-router"
-import {
-  NDataTable,
-  NTag,
-  NSpin,
-  NAlert,
-  NCollapse,
-  NCollapseItem,
-  NForm,
-  NFormItem,
-  NInput,
-  NInputNumber,
-  NSelect,
-  NDatePicker,
-  NButton,
-  useMessage,
-} from "naive-ui"
-import type { DataTableColumns, DataTableRowKey } from "naive-ui"
-import {
-  listShipmentsByWave,
-  getSupplierOrderByWave,
-  listLinesBySupplierOrder,
-  createShipment,
-} from "@/shared/lib/wails/app"
-import { dto } from "@/../wailsjs/go/models"
+import { computed, onMounted, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { NAlert, NButton, NCard, NCollapse, NCollapseItem, NDataTable, NDatePicker, NEmpty, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpin, NTag, NSpace, useMessage } from "naive-ui";
+import type { DataTableColumns, DataTableRowKey } from "naive-ui";
+import { createShipment, getSupplierOrderByWave, listLinesBySupplierOrder, listShipmentsByWave } from "@/shared/lib/wails/app";
+import { useI18n } from "@/shared/i18n";
+import { dto } from "@/../wailsjs/go/models";
 
-const route = useRoute()
-const message = useMessage()
-const waveId = computed(() => Number(route.params.waveId))
+const route = useRoute();
+const router = useRouter();
+const message = useMessage();
+const { t } = useI18n();
+const waveId = computed(() => Number(route.params.waveId) || 0);
 
-// ── State ──
-const loadingList = ref(true)
-const loadingOrder = ref(true)
-const submitting = ref(false)
-const listError = ref("")
-const formError = ref("")
-const shipments = ref<dto.ShipmentDTO[]>([])
-const supplierOrder = ref<dto.SupplierOrderDTO | null>(null)
-const orderLines = ref<dto.SupplierOrderLineDTO[]>([])
-const selectedLineKeys = ref<DataTableRowKey[]>([])
-const lineQuantities = ref<Record<number, number>>({})
-const formCollapsed = ref<string[]>([])
+const loadingList = ref(false);
+const loadingOrder = ref(false);
+const submitting = ref(false);
+const listError = ref("");
+const formError = ref("");
+const shipments = ref<dto.ShipmentDTO[]>([]);
+const supplierOrder = ref<dto.SupplierOrderDTO | null>(null);
+const orderLines = ref<dto.SupplierOrderLineDTO[]>([]);
+const selectedLineKeys = ref<DataTableRowKey[]>([]);
+const lineQuantities = ref<Record<number, number>>({});
 
 const form = ref({
   shipmentNo: "",
@@ -51,69 +32,41 @@ const form = ref({
   trackingNo: "",
   status: "pending",
   shippedAt: null as number | null,
-})
-// ── Status options ──
+});
+
 const statusOptions = [
-  { label: "待发货", value: "pending" },
-  { label: "已发货", value: "shipped" },
-  { label: "运输中", value: "in_transit" },
-  { label: "已签收", value: "delivered" },
-  { label: "异常", value: "exception" },
-  { label: "已退回", value: "returned" },
-]
+  { label: "pending", value: "pending" },
+  { label: "shipped", value: "shipped" },
+  { label: "in_transit", value: "in_transit" },
+  { label: "delivered", value: "delivered" },
+  { label: "exception", value: "exception" },
+  { label: "returned", value: "returned" },
+];
 
-const statusColorMap: Record<string, "default" | "info" | "success" | "error" | "warning"> = {
-  pending: "default",
-  shipped: "info",
-  in_transit: "info",
-  delivered: "success",
-  exception: "error",
-  returned: "warning",
-}
-
-// ── Shipment list columns ──
 const shipmentColumns: DataTableColumns<dto.ShipmentDTO> = [
-  { type: "expand" },
-  { title: "ID", key: "id", width: 60 },
-  { title: "发货单号", key: "shipmentNo", ellipsis: { tooltip: true } },
-  { title: "外部单号", key: "externalShipmentNo", ellipsis: { tooltip: true } },
-  { title: "承运商", key: "carrierName", width: 120 },
-  { title: "运单号", key: "trackingNo", ellipsis: { tooltip: true } },
+  { title: "Shipment No", key: "shipmentNo", width: 160 },
+  { title: "Carrier", key: "carrierName", width: 120 },
+  { title: "Tracking", key: "trackingNo", width: 180 },
   {
-    title: "状态",
+    title: "Status",
     key: "status",
     width: 100,
     render(row) {
-      return h(NTag, { type: statusColorMap[row.status] || "default", size: "small" }, { default: () => row.status })
+      const type = row.status === "delivered" ? "success" : row.status === "exception" ? "error" : "default";
+      return h(NTag, { type, size: "small", round: true }, { default: () => row.status });
     },
   },
-  { title: "发货时间", key: "shippedAt", width: 160 },
-  {
-    title: "行数",
-    key: "lineCount",
-    width: 60,
-    render(row) {
-      return String(row.lines?.length ?? 0)
-    },
-  },
-]
+  { title: "Shipped At", key: "shippedAt", width: 180 },
+];
 
-// ── Expanded row (shipment lines) columns ──
-const shipmentLineColumns: DataTableColumns<dto.ShipmentLineDTO> = [
-  { title: "发货行ID", key: "id", width: 80 },
-  { title: "供应商订单行ID", key: "supplierOrderLineId", width: 130 },
-  { title: "履约行ID", key: "fulfillmentLineId", width: 100 },
-  { title: "数量", key: "quantity", width: 80 },
-]
-// ── Line selection columns (for create form) ──
 const lineSelectionColumns: DataTableColumns<dto.SupplierOrderLineDTO> = [
   { type: "selection" },
-  { title: "行号", key: "supplierLineNo", width: 80 },
-  { title: "供应商SKU", key: "supplierSku", ellipsis: { tooltip: true } },
-  { title: "提交数量", key: "submittedQuantity", width: 100 },
-  { title: "履约行ID", key: "fulfillmentLineId", width: 100 },
+  { title: "Line", key: "supplierLineNo", width: 80 },
+  { title: "Supplier SKU", key: "supplierSku", width: 160 },
+  { title: "Submitted", key: "submittedQuantity", width: 100 },
+  { title: "Fulfillment Line", key: "fulfillmentLineId", width: 120 },
   {
-    title: "本次数量",
+    title: "This Shipment",
     key: "qty",
     width: 120,
     render(row) {
@@ -121,66 +74,52 @@ const lineSelectionColumns: DataTableColumns<dto.SupplierOrderLineDTO> = [
         value: lineQuantities.value[row.id] ?? row.submittedQuantity,
         min: 1,
         max: row.submittedQuantity,
-        size: "small",
-        style: "width: 100px",
-        onUpdateValue: (val: number | null) => {
-          lineQuantities.value[row.id] = val ?? 1
+        onUpdateValue: (value: number | null) => {
+          lineQuantities.value[row.id] = value ?? 1;
         },
-      })
+      });
     },
   },
-]
+];
 
-// ── Load functions ──
 async function loadShipments() {
-  if (!waveId.value) return
-  loadingList.value = true
-  listError.value = ""
+  loadingList.value = true;
+  listError.value = "";
   try {
-    shipments.value = await listShipmentsByWave(waveId.value)
-  } catch (e: any) {
-    listError.value = e?.message || String(e)
+    shipments.value = await listShipmentsByWave(waveId.value);
+  } catch (e: unknown) {
+    listError.value = e instanceof Error ? e.message : String(e);
   } finally {
-    loadingList.value = false
+    loadingList.value = false;
   }
 }
 
 async function loadSupplierOrder() {
-  if (!waveId.value) return
-  loadingOrder.value = true
-  formError.value = ""
+  loadingOrder.value = true;
+  formError.value = "";
   try {
-    const o = await getSupplierOrderByWave(waveId.value)
-    if (o && o.id > 0) {
-      supplierOrder.value = o
-      orderLines.value = await listLinesBySupplierOrder(o.id)
-    } else {
-      supplierOrder.value = null
-      orderLines.value = []
-    }
-  } catch (e: any) {
-    formError.value = e?.message || String(e)
+    const order = await getSupplierOrderByWave(waveId.value);
+    supplierOrder.value = order && order.id > 0 ? order : null;
+    orderLines.value = supplierOrder.value ? await listLinesBySupplierOrder(supplierOrder.value.id) : [];
+  } catch (e: unknown) {
+    formError.value = e instanceof Error ? e.message : String(e);
   } finally {
-    loadingOrder.value = false
+    loadingOrder.value = false;
   }
 }
-// ── Submit ──
+
 async function handleSubmit() {
-  if (!supplierOrder.value) return
-  submitting.value = true
-  formError.value = ""
+  if (!supplierOrder.value) return;
+  submitting.value = true;
+  formError.value = "";
   try {
     const selectedLines = orderLines.value
-      .filter((l) => selectedLineKeys.value.includes(l.id))
-      .map((l) => ({
-        supplierOrderLineId: l.id,
-        fulfillmentLineId: l.fulfillmentLineId,
-        quantity: lineQuantities.value[l.id] ?? l.submittedQuantity,
-      }))
-
-    const shippedAtISO = form.value.shippedAt
-      ? new Date(form.value.shippedAt).toISOString()
-      : ""
+      .filter((line) => selectedLineKeys.value.includes(line.id))
+      .map((line) => ({
+        supplierOrderLineId: line.id,
+        fulfillmentLineId: line.fulfillmentLineId,
+        quantity: lineQuantities.value[line.id] ?? line.submittedQuantity,
+      }));
 
     await createShipment({
       supplierOrderId: supplierOrder.value.id,
@@ -191,13 +130,13 @@ async function handleSubmit() {
       carrierName: form.value.carrierName,
       trackingNo: form.value.trackingNo,
       status: form.value.status,
-      shippedAt: shippedAtISO,
+      shippedAt: form.value.shippedAt ? new Date(form.value.shippedAt).toISOString() : "",
       basisPayloadSnapshot: "",
       lines: selectedLines,
-    })
+    });
 
-    message.success("发货单创建成功")
-    // Reset form
+    message.success(t("shipment.create"));
+    await loadShipments();
     form.value = {
       shipmentNo: "",
       externalShipmentNo: "",
@@ -206,120 +145,95 @@ async function handleSubmit() {
       trackingNo: "",
       status: "pending",
       shippedAt: null,
-    }
-    selectedLineKeys.value = []
-    lineQuantities.value = {}
-    formCollapsed.value = []
-    await loadShipments()
-  } catch (e: any) {
-    formError.value = e?.message || String(e)
+    };
+    selectedLineKeys.value = [];
+    lineQuantities.value = {};
+  } catch (e: unknown) {
+    formError.value = e instanceof Error ? e.message : String(e);
   } finally {
-    submitting.value = false
+    submitting.value = false;
   }
 }
 
-onMounted(() => {
-  loadShipments()
-  loadSupplierOrder()
-})
+onMounted(async () => {
+  await loadShipments();
+  await loadSupplierOrder();
+});
 </script>
+
 <template>
-  <div class="wave-shipment-step p-4">
-    <h3 class="text-lg font-medium mb-4">发货单列表</h3>
+  <div class="wave-shipment-step">
+    <div class="mb-6">
+      <div class="app-kicker">{{ t("wave.shipment") }}</div>
+      <h2 class="app-title mt-2">{{ t("shipment.title") }}</h2>
+      <p class="app-copy mt-3">{{ t("shipment.subtitle") }}</p>
+    </div>
 
-    <n-alert v-if="listError" type="error" class="mb-4" title="加载错误">
-      {{ listError }}
-    </n-alert>
+    <NAlert v-if="listError" type="error" class="mb-4" :title="listError" />
+    <NAlert v-if="formError" type="error" class="mb-4" :title="formError" />
 
-    <n-spin :show="loadingList">
-      <n-data-table
+    <NCard :title="t('shipment.list')" class="mb-4">
+      <NEmpty v-if="!loadingList && shipments.length === 0" :description="t('common.empty')" />
+      <NDataTable
+        v-else
         :columns="shipmentColumns"
         :data="shipments"
-        :bordered="true"
-        :single-line="false"
+        :loading="loadingList"
+        :pagination="false"
         size="small"
         :row-key="(row: dto.ShipmentDTO) => row.id"
-        :default-expand-all="false"
-      >
-        <template #expand="{ rowData }">
-          <n-data-table
-            :columns="shipmentLineColumns"
-            :data="(rowData as dto.ShipmentDTO).lines || []"
-            :bordered="false"
-            size="small"
-            :row-key="(row: dto.ShipmentLineDTO) => row.id"
-          />
-        </template>
-      </n-data-table>
-    </n-spin>
+      />
+    </NCard>
 
-    <h3 class="text-lg font-medium mt-6 mb-4">创建发货单</h3>
+    <NCard :title="t('shipment.create')">
+      <NSpin :show="loadingOrder">
+        <NForm label-placement="left" label-width="120">
+          <NFormItem label="Supplier Order ID">
+            <NInput :value="supplierOrder ? String(supplierOrder.id) : '—'" readonly />
+          </NFormItem>
+          <NFormItem label="Shipment No">
+            <NInput v-model:value="form.shipmentNo" />
+          </NFormItem>
+          <NFormItem label="External Shipment No">
+            <NInput v-model:value="form.externalShipmentNo" />
+          </NFormItem>
+          <NFormItem label="Carrier Code">
+            <NInput v-model:value="form.carrierCode" />
+          </NFormItem>
+          <NFormItem label="Carrier Name">
+            <NInput v-model:value="form.carrierName" />
+          </NFormItem>
+          <NFormItem label="Tracking No">
+            <NInput v-model:value="form.trackingNo" />
+          </NFormItem>
+          <NFormItem label="Status">
+            <NSelect v-model:value="form.status" :options="statusOptions" />
+          </NFormItem>
+          <NFormItem label="Shipped At">
+            <NDatePicker v-model:value="form.shippedAt" type="datetime" clearable />
+          </NFormItem>
+        </NForm>
 
-    <n-alert v-if="formError" type="error" class="mb-4" title="错误">
-      {{ formError }}
-    </n-alert>
-    <n-collapse v-model:expanded-names="formCollapsed">
-      <n-collapse-item title="新建发货单" name="create-form">
-        <n-spin :show="loadingOrder">
-          <n-form label-placement="left" label-width="120">
-            <n-form-item label="供应商订单ID">
-              <n-input
-                :value="supplierOrder ? String(supplierOrder.id) : '—'"
-                readonly
-              />
-            </n-form-item>
-            <n-form-item label="发货单号">
-              <n-input v-model:value="form.shipmentNo" placeholder="输入发货单号" />
-            </n-form-item>
-            <n-form-item label="外部单号">
-              <n-input v-model:value="form.externalShipmentNo" placeholder="外部发货单号" />
-            </n-form-item>
-            <n-form-item label="承运商编码">
-              <n-input v-model:value="form.carrierCode" placeholder="承运商编码" />
-            </n-form-item>
-            <n-form-item label="承运商名称">
-              <n-input v-model:value="form.carrierName" placeholder="承运商名称" />
-            </n-form-item>
-            <n-form-item label="运单号">
-              <n-input v-model:value="form.trackingNo" placeholder="运单号" />
-            </n-form-item>
-            <n-form-item label="状态">
-              <n-select v-model:value="form.status" :options="statusOptions" />
-            </n-form-item>
-            <n-form-item label="发货时间">
-              <n-date-picker
-                v-model:value="form.shippedAt"
-                type="datetime"
-                clearable
-              />
-            </n-form-item>
-          </n-form>
+        <NDataTable
+          class="mt-4"
+          :columns="lineSelectionColumns"
+          :data="orderLines"
+          :pagination="false"
+          size="small"
+          :row-key="(row: dto.SupplierOrderLineDTO) => row.id"
+          v-model:checked-row-keys="selectedLineKeys"
+        />
 
-          <h4 class="text-base font-medium mb-2 mt-4">选择发货行</h4>
-          <n-data-table
-            :columns="lineSelectionColumns"
-            :data="orderLines"
-            :bordered="true"
-            :single-line="false"
-            size="small"
-            :row-key="(row: dto.SupplierOrderLineDTO) => row.id"
-            v-model:checked-row-keys="selectedLineKeys"
-            :row-props="() => ({ style: 'cursor: pointer' })"
-          />
-          <!-- NDataTable shows selection column automatically when v-model:checked-row-keys is bound -->
-
-          <div class="mt-4">
-            <n-button
-              type="primary"
-              :loading="submitting"
-              :disabled="!supplierOrder || selectedLineKeys.length === 0"
-              @click="handleSubmit"
-            >
-              提交发货单
-            </n-button>
-          </div>
-        </n-spin>
-      </n-collapse-item>
-    </n-collapse>
+        <div class="mt-4 flex justify-between">
+          <NButton @click="router.push(`/waves/${waveId}/export`)">{{ t("wave.prevStep") }}</NButton>
+          <NSpace>
+            <NButton type="primary" :loading="submitting" :disabled="selectedLineKeys.length === 0" @click="handleSubmit">
+              {{ t("shipment.create") }}
+            </NButton>
+            <NButton secondary @click="router.push(`/waves/${waveId}/channel-sync`)">{{ t("wave.nextStep") }}</NButton>
+          </NSpace>
+        </div>
+      </NSpin>
+    </NCard>
   </div>
 </template>

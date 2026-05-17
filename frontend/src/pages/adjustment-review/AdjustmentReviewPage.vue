@@ -1,116 +1,26 @@
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, watch, h } from "vue";
-import { useRoute } from "vue-router";
-import { NTag, useMessage } from "naive-ui";
+import { computed, onMounted, reactive, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { NButton, NCard, NDataTable, NDrawer, NDrawerContent, NEmpty, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpace, NTag, useMessage } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
-import { listAdjustmentsByWave, recordAdjustment } from "@/shared/lib/wails/app";
+import { listWaveFulfillmentRows, recordAdjustment } from "@/shared/lib/wails/app";
+import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
 
 const route = useRoute();
+const router = useRouter();
 const message = useMessage();
+const { t } = useI18n();
 const waveId = computed(() => Number(route.params.waveId) || 0);
 
-// ── List state ──
-
-const adjustments = ref<dto.FulfillmentAdjustmentDTO[]>([]);
-const loading = ref(true);
-const error = ref("");
-
-async function loadAdjustments() {
-  if (!waveId.value) return;
-  loading.value = true;
-  error.value = "";
-  try {
-    adjustments.value = await listAdjustmentsByWave(waveId.value);
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
-    message.error(`加载调整记录失败: ${error.value}`);
-  } finally {
-    loading.value = false;
-  }
-}
-
-onMounted(loadAdjustments);
-
-// ── Table columns ──
-
-const kindColorMap: Record<string, string> = {
-  add: "success",
-  reduce: "warning",
-  compensation: "info",
-  remove: "error",
-};
-
-const columns: DataTableColumns<dto.FulfillmentAdjustmentDTO> = [
-  { title: "ID", key: "id", width: 60 },
-  {
-    title: "目标类型",
-    key: "targetKind",
-    width: 120,
-    render(row) {
-      const label = row.targetKind === "fulfillment_line" ? "履约行" : "参与者";
-      return h(NTag, { size: "small", bordered: false }, { default: () => label });
-    },
-  },
-  {
-    title: "目标ID",
-    key: "targetId",
-    width: 100,
-    render(row) {
-      return row.targetKind === "fulfillment_line"
-        ? String(row.fulfillmentLineId ?? "-")
-        : String(row.waveParticipantSnapshotId ?? "-");
-    },
-  },
-  {
-    title: "调整类型",
-    key: "adjustmentKind",
-    width: 120,
-    render(row) {
-      const color = kindColorMap[row.adjustmentKind] ?? "default";
-      return h(
-        NTag,
-        { size: "small", type: color as any, bordered: false },
-        { default: () => row.adjustmentKind },
-      );
-    },
-  },
-  {
-    title: "数量变化",
-    key: "quantityDelta",
-    width: 100,
-    render(row) {
-      const v = row.quantityDelta;
-      const prefix = v > 0 ? "+" : "";
-      return `${prefix}${v}`;
-    },
-  },
-  { title: "原因码", key: "reasonCode", width: 120, ellipsis: { tooltip: true } },
-  { title: "备注", key: "note", ellipsis: { tooltip: true } },
-  { title: "创建时间", key: "createdAt", width: 160 },
-];
-
-// ── Drawer state ──
-
+const rows = ref<dto.WaveFulfillmentRowDTO[]>([]);
+const loading = ref(false);
 const drawerVisible = ref(false);
+const selectedRow = ref<dto.WaveFulfillmentRowDTO | null>(null);
 const submitting = ref(false);
 
-interface AdjustmentForm {
-  targetKind: string;
-  fulfillmentLineId: number | null;
-  waveParticipantSnapshotId: number | null;
-  adjustmentKind: string;
-  quantityDelta: number;
-  reasonCode: string;
-  note: string;
-  evidenceRef: string;
-  operatorId: string;
-}
-
-const defaultForm = (): AdjustmentForm => ({
+const form = reactive({
   targetKind: "fulfillment_line",
-  fulfillmentLineId: null,
-  waveParticipantSnapshotId: null,
   adjustmentKind: "add",
   quantityDelta: 1,
   reasonCode: "",
@@ -119,161 +29,160 @@ const defaultForm = (): AdjustmentForm => ({
   operatorId: "",
 });
 
-const form = reactive<AdjustmentForm>(defaultForm());
+const adjustmentOptions = computed(() => [
+  { label: t("adjustment.add"), value: "add" },
+  { label: t("adjustment.reduce"), value: "reduce" },
+  { label: t("adjustment.remove"), value: "remove" },
+]);
 
-const adjustmentKindOptions = computed(() => {
-  if (form.targetKind === "participant") {
-    return [{ label: "compensation（补偿）", value: "compensation" }];
+const columns = computed<DataTableColumns<dto.WaveFulfillmentRowDTO>>(() => [
+  { title: "ID", key: "fulfillmentLineId", width: 70 },
+  { title: t("adjustment.participant"), key: "participantDisplay", width: 180 },
+  { title: "Product", key: "productDisplay", width: 200 },
+  { title: "Source", key: "demandSourceSummary", width: 180 },
+  { title: t("adjustment.quantity"), key: "quantity", width: 80 },
+  { title: "Supplier", key: "supplierState", width: 110 },
+  { title: "Sync", key: "channelSyncState", width: 110 },
+  {
+    title: "Review",
+    key: "reviewRequirement",
+    width: 120,
+    render(row) {
+      const type =
+        row.reviewRequirement === "required"
+          ? "error"
+          : row.reviewRequirement === "recommended"
+            ? "warning"
+            : "default";
+      return h(NTag, { type, size: "small", round: true }, { default: () => row.reviewRequirement });
+    },
+  },
+]);
+
+async function loadRows() {
+  if (!waveId.value) return;
+  loading.value = true;
+  try {
+    rows.value = await listWaveFulfillmentRows(waveId.value);
+  } finally {
+    loading.value = false;
   }
-  return [
-    { label: "add（新增）", value: "add" },
-    { label: "reduce（减少）", value: "reduce" },
-    { label: "remove（移除）", value: "remove" },
-  ];
-});
+}
 
-watch(
-  () => form.targetKind,
-  () => {
-    form.adjustmentKind =
-      form.targetKind === "participant" ? "compensation" : "add";
-  },
-);
-
-watch(
-  () => form.adjustmentKind,
-  (kind) => {
-    if (kind === "remove") form.quantityDelta = 0;
-  },
-);
-
-function openDrawer() {
-  Object.assign(form, defaultForm());
+function openDrawer(row: dto.WaveFulfillmentRowDTO) {
+  selectedRow.value = row;
+  form.targetKind = "fulfillment_line";
+  form.adjustmentKind = "add";
+  form.quantityDelta = 1;
+  form.reasonCode = "";
+  form.note = "";
+  form.evidenceRef = "";
+  form.operatorId = "";
   drawerVisible.value = true;
 }
 
 async function handleSubmit() {
+  if (!selectedRow.value) return;
   submitting.value = true;
   try {
-    const payload: any = {
+    await recordAdjustment({
       waveId: waveId.value,
       targetKind: form.targetKind,
+      fulfillmentLineId: selectedRow.value.fulfillmentLineId,
       adjustmentKind: form.adjustmentKind,
       quantityDelta: form.adjustmentKind === "remove" ? 0 : form.quantityDelta,
       reasonCode: form.reasonCode,
       note: form.note,
       evidenceRef: form.evidenceRef,
       operatorId: form.operatorId,
-    };
-    if (form.targetKind === "fulfillment_line") {
-      payload.fulfillmentLineId = form.fulfillmentLineId;
-    } else {
-      payload.waveParticipantSnapshotId = form.waveParticipantSnapshotId;
-    }
-    await recordAdjustment(payload);
-    message.success("调整记录已创建");
+    });
+    message.success(t("adjustment.create"));
     drawerVisible.value = false;
-    await loadAdjustments();
-  } catch (e: any) {
-    message.error(`提交失败: ${e?.message ?? String(e)}`);
+  } catch (e: unknown) {
+    message.error(e instanceof Error ? e.message : String(e));
   } finally {
     submitting.value = false;
   }
 }
+
+onMounted(loadRows);
 </script>
 
 <template>
-  <div class="p-4">
-    <n-card title="履约调整审核">
-      <template #header-extra>
-        <n-button type="primary" @click="openDrawer">新增调整</n-button>
-      </template>
+  <div class="adjustment-review-page">
+    <div class="mb-6">
+      <div class="app-kicker">{{ t("wave.adjustment") }}</div>
+      <h2 class="app-title mt-2">{{ t("adjustment.title") }}</h2>
+      <p class="app-copy mt-3">{{ t("adjustment.subtitle") }}</p>
+    </div>
 
-      <n-data-table
+    <NCard class="mb-4" title="Editing Intent">
+      <NSpace vertical :size="10">
+        <div>Use this step only for wave-local final fulfillment exceptions.</div>
+        <div>Go back to Membership Allocation or Demand Mapping if you need to change default generation logic.</div>
+      </NSpace>
+    </NCard>
+
+    <NCard>
+      <NEmpty v-if="!loading && rows.length === 0" :description="t('common.empty')" />
+      <NDataTable
+        v-else
         :columns="columns"
-        :data="adjustments"
+        :data="rows"
         :loading="loading"
-        :bordered="false"
-        :single-line="false"
+        :pagination="false"
         size="small"
+        :row-props="(row: dto.WaveFulfillmentRowDTO) => ({
+          style: 'cursor:pointer',
+          onClick: () => openDrawer(row),
+        })"
       />
-    </n-card>
+    </NCard>
 
-    <n-drawer v-model:show="drawerVisible" :width="480" placement="right">
-      <n-drawer-content title="新增履约调整" closable>
-        <n-form label-placement="top">
-          <n-form-item label="目标类型">
-            <n-radio-group v-model:value="form.targetKind">
-              <n-radio-button value="fulfillment_line">履约行</n-radio-button>
-              <n-radio-button value="participant">参与者</n-radio-button>
-            </n-radio-group>
-          </n-form-item>
+    <div class="mt-4 flex justify-between">
+      <NButton @click="router.push(`/waves/${waveId}`)">{{ t("wave.prevStep") }}</NButton>
+      <NSpace>
+        <NButton secondary @click="router.push(`/waves/${waveId}`)">{{ t("wave.backToOverview") }}</NButton>
+      </NSpace>
+    </div>
 
-          <n-form-item v-if="form.targetKind === 'fulfillment_line'" label="履约行 ID">
-            <n-input-number
-              v-model:value="form.fulfillmentLineId"
-              :min="1"
-              placeholder="输入履约行 ID"
-              class="w-full"
-            />
-          </n-form-item>
+    <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
+      <NDrawerContent :title="selectedRow ? `${t('adjustment.line')} #${selectedRow.fulfillmentLineId}` : t('adjustment.noSelection')" closable>
+        <template v-if="selectedRow">
+          <NSpace vertical :size="16">
+            <NCard size="small">
+              <div><strong>{{ selectedRow.participantDisplay }}</strong></div>
+              <div>{{ selectedRow.productDisplay }}</div>
+              <div class="app-copy mt-2">{{ selectedRow.demandSourceSummary }}</div>
+            </NCard>
 
-          <n-form-item v-if="form.targetKind === 'participant'" label="参与者快照 ID">
-            <n-input-number
-              v-model:value="form.waveParticipantSnapshotId"
-              :min="1"
-              placeholder="输入参与者快照 ID"
-              class="w-full"
-            />
-          </n-form-item>
+            <NForm label-placement="top">
+              <NFormItem :label="t('adjustment.reason')">
+                <NSelect v-model:value="form.adjustmentKind" :options="adjustmentOptions" />
+              </NFormItem>
+              <NFormItem :label="t('adjustment.quantity')" v-if="form.adjustmentKind !== 'remove'">
+                <NInputNumber v-model:value="form.quantityDelta" :min="1" class="w-full" />
+              </NFormItem>
+              <NFormItem :label="t('adjustment.reason')">
+                <NInput v-model:value="form.reasonCode" />
+              </NFormItem>
+              <NFormItem :label="t('adjustment.note')">
+                <NInput v-model:value="form.note" type="textarea" :rows="3" />
+              </NFormItem>
+              <NFormItem label="Evidence Ref">
+                <NInput v-model:value="form.evidenceRef" />
+              </NFormItem>
+              <NFormItem label="Operator ID">
+                <NInput v-model:value="form.operatorId" />
+              </NFormItem>
+            </NForm>
 
-          <n-form-item label="调整类型">
-            <n-select
-              v-model:value="form.adjustmentKind"
-              :options="adjustmentKindOptions"
-            />
-          </n-form-item>
-
-          <n-form-item v-if="form.adjustmentKind !== 'remove'" label="数量变化">
-            <n-input-number
-              v-model:value="form.quantityDelta"
-              placeholder="数量"
-              class="w-full"
-            />
-          </n-form-item>
-
-          <n-form-item label="原因码">
-            <n-input v-model:value="form.reasonCode" placeholder="原因码" />
-          </n-form-item>
-
-          <n-form-item label="备注">
-            <n-input
-              v-model:value="form.note"
-              type="textarea"
-              placeholder="备注信息"
-              :rows="3"
-            />
-          </n-form-item>
-
-          <n-form-item label="证据引用">
-            <n-input v-model:value="form.evidenceRef" placeholder="证据引用" />
-          </n-form-item>
-
-          <n-form-item label="操作人 ID">
-            <n-input v-model:value="form.operatorId" placeholder="操作人 ID" />
-          </n-form-item>
-        </n-form>
-
-        <template #footer>
-          <n-button
-            type="primary"
-            :loading="submitting"
-            @click="handleSubmit"
-          >
-            提交
-          </n-button>
+            <NButton type="primary" :loading="submitting" @click="handleSubmit">
+              {{ t("adjustment.create") }}
+            </NButton>
+          </NSpace>
         </template>
-      </n-drawer-content>
-    </n-drawer>
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>

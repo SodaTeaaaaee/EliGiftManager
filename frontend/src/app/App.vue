@@ -13,8 +13,10 @@ import {
   type GlobalThemeOverrides,
 } from "naive-ui";
 import { useThemeStore } from "@/shared/model/theme";
+import { useLocaleStore } from "@/shared/model/locale";
 import { useContextMenu } from "@/shared/composables/useContextMenu";
 import ContextMenu from "@/shared/ui/ContextMenu.vue";
+import { useI18n } from "@/shared/i18n";
 
 const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
@@ -46,6 +48,9 @@ const darkThemeOverrides: GlobalThemeOverrides = {
 
 const themeStore = useThemeStore()
 themeStore.hydrate()
+const localeStore = useLocaleStore()
+localeStore.hydrate()
+const { locale } = useI18n()
 
 const osTheme = useOsTheme()
 
@@ -68,6 +73,7 @@ watchEffect(() => {
   }
 
   document.documentElement.dataset.theme = resolvedTheme.value
+  document.documentElement.lang = locale.value
   document.documentElement.style.colorScheme = resolvedTheme.value
 })
 

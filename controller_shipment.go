@@ -1,17 +1,24 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"gorm.io/gorm"
 )
 
 // ShipmentController exposes shipment-management Wails bindings.
 type ShipmentController struct {
-	shipmentUC   app.ShipmentUseCase
-	shipmentRepo domain.ShipmentRepository
+	shipmentUC          app.ShipmentUseCase
+	shipmentRepo        domain.ShipmentRepository
+	gdb                 *gorm.DB
+	historyRecordingSvc *app.HistoryRecordingService
+	projHashSvc         *app.ProjectionHashService
+	snapshotSvc         *app.WaveSnapshotService
 }
 
 func NewShipmentController() *ShipmentController {
@@ -19,22 +26,85 @@ func NewShipmentController() *ShipmentController {
 	shipmentRepo := infra.NewShipmentRepository(gdb)
 	supplierRepo := infra.NewSupplierOrderRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
+	ruleRepo := infra.NewRuleRepository(gdb)
+	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
+	waveRepo := infra.NewWaveRepository(gdb)
+	productRepo := infra.NewProductRepository(gdb)
+	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyPinRepo := infra.NewHistoryPinRepository(gdb)
+	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
 
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 	basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 
 	return &ShipmentController{
-		shipmentUC:   app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
-		shipmentRepo: shipmentRepo,
+		shipmentUC:          app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
+		shipmentRepo:        shipmentRepo,
+		gdb:                 gdb,
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
+		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
+		snapshotSvc:         snapshotSvc,
 	}
 }
 
 // CreateShipment creates a shipment with its lines.
 func (c *ShipmentController) CreateShipment(input dto.CreateShipmentInput) (dto.ShipmentDTO, error) {
-	shipment, lines, err := c.shipmentUC.CreateShipment(input)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshotForSupplierOrder(input.SupplierOrderID)
+	if err != nil {
+		return dto.ShipmentDTO{}, err
+	}
+
+	var shipment *domain.Shipment
+	var lines []domain.ShipmentLine
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		shipmentRepo := infra.NewShipmentRepository(tx)
+		supplierRepo := infra.NewSupplierOrderRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
+		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyPinRepo := infra.NewHistoryPinRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+		shipmentUC := app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
+
+		createdShipment, createdLines, createErr := shipmentUC.CreateShipment(input)
+		if createErr != nil {
+			return createErr
+		}
+		shipment = createdShipment
+		lines = createdLines
+
+		supplierOrder, findErr := supplierRepo.FindByID(input.SupplierOrderID)
+		if findErr != nil {
+			return findErr
+		}
+
+		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                  supplierOrder.WaveID,
+			CommandKind:             domain.CmdCreateShipment,
+			CommandSummary:          fmt.Sprintf("create shipment %d for wave %d", shipment.ID, supplierOrder.WaveID),
+			PatchPayload:            "",
+			InversePatchPayload:     "",
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:          projHashSvc.ComputeHash(supplierOrder.WaveID),
+		})
+		return recordErr
+	})
 	if err != nil {
 		return dto.ShipmentDTO{}, err
 	}

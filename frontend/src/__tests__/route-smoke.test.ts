@@ -17,6 +17,11 @@ const routes = [
         component: () => import("@/pages/dashboard/DashboardPage.vue"),
       },
       {
+        path: "waves",
+        name: "waves",
+        component: () => import("@/pages/waves/WavesPage.vue"),
+      },
+      {
         path: "demand-intake",
         name: "demand-intake",
         component: () => import("@/pages/demand-intake/DemandIntakePage.vue"),
@@ -52,6 +57,16 @@ const routes = [
         name: "profiles",
         component: () => import("@/pages/profile/ProfileManagementPage.vue"),
       },
+      {
+        path: "products",
+        name: "products",
+        component: () => import("@/pages/product/ProductManagementPage.vue"),
+      },
+      {
+        path: "settings",
+        name: "settings",
+        component: () => import("@/pages/settings/SettingsPage.vue"),
+      },
     ],
   },
 ];
@@ -73,6 +88,12 @@ async function mountAtRoute(path: string) {
       plugins: [router, pinia],
       stubs: {
         NDataTable: { template: "<div class='n-data-table' />" },
+        NButton: { template: "<button><slot /></button>" },
+        NCard: { template: "<div><slot name='header' /><slot /><slot name='header-extra' /></div>" },
+        NAlert: { template: "<div><slot /></div>" },
+        NTag: { template: "<span><slot /></span>" },
+        NSwitch: { template: "<button />" },
+        NRadioGroup: { template: "<div><slot /></div>" },
         NDrawer: { template: "<div><slot /></div>" },
         NDrawerContent: { template: "<div><slot /></div>" },
         NModal: { template: "<div><slot /></div>" },
@@ -102,8 +123,11 @@ async function mountAtRoute(path: string) {
 describe("Route smoke tests — mount without crash", () => {
   const routeCases = [
     { path: "/dashboard", name: "Dashboard" },
+    { path: "/waves", name: "Waves" },
     { path: "/demand-intake", name: "DemandIntake" },
     { path: "/profiles", name: "Profiles" },
+    { path: "/products", name: "Products" },
+    { path: "/settings", name: "Settings" },
     { path: "/waves/1", name: "WaveOverview" },
     { path: "/waves/1/demand-mapping", name: "WaveDemandMapping" },
     { path: "/waves/1/allocation", name: "WaveAllocation" },

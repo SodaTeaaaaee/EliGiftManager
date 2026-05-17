@@ -43,7 +43,7 @@ func NewWaveController() *WaveController {
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gormDB)
 
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gormDB)
-	snapshotSvc := app.NewWaveSnapshotService(gormDB, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+	snapshotSvc := app.NewWaveSnapshotService(gormDB, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 
 	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
@@ -61,7 +61,7 @@ func NewWaveController() *WaveController {
 		gdb:                gormDB,
 		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gormDB, snapshotSvc)),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
-		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
+		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
 	}
 }
@@ -104,6 +104,18 @@ func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, erro
 	return c.overviewQueryUC.GetWaveOverview(waveID)
 }
 
+func (c *WaveController) GetWaveWorkspaceSnapshot(waveID uint) (dto.WaveWorkspaceSnapshotDTO, error) {
+	return c.overviewQueryUC.GetWaveWorkspaceSnapshot(waveID)
+}
+
+func (c *WaveController) ListWaveFulfillmentRows(waveID uint) ([]dto.WaveFulfillmentRowDTO, error) {
+	return c.overviewQueryUC.ListWaveFulfillmentRows(waveID)
+}
+
+func (c *WaveController) ListWaveParticipantRows(waveID uint) ([]dto.WaveParticipantRowDTO, error) {
+	return c.overviewQueryUC.ListWaveParticipantRows(waveID)
+}
+
 // ListWaveDashboardRows returns batch-projected dashboard rows with authoritative
 // projected lifecycle stages. This is the only dashboard data source.
 func (c *WaveController) ListWaveDashboardRows() ([]dto.WaveDashboardRowDTO, error) {
@@ -137,9 +149,13 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
 		waveRepo := infra.NewWaveRepository(tx)
 		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
-		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
+		snapshotSvc = app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
+		historySvc = app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
 		now := time.Now().Format(time.RFC3339)
 		assignment := &domain.WaveDemandAssignment{
@@ -185,14 +201,16 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 		ruleRepo := infra.NewRuleRepository(tx)
 		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
 		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
 		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
 		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
 		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
 
 		waveUC := app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
-		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
-		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
+		productRepo := infra.NewProductRepository(tx)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
 		generatedCount, genErr := waveUC.GenerateParticipants(waveID)
 		if genErr != nil {
@@ -243,14 +261,15 @@ func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, 
 		ruleRepo := infra.NewRuleRepository(tx)
 		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
 		productRepo := infra.NewProductRepository(tx)
+		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
 		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
 		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
 		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
 
 		dmUC := app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, productRepo)
-		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
-		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
 		result, applyErr := dmUC.MapDemandToFulfillment(waveID)
 		if applyErr != nil {

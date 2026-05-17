@@ -1,220 +1,191 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
-import {
-  NCard,
-  NDivider,
-  NAlert,
-  NStatistic,
-  NGrid,
-  NGridItem,
-  NTag,
-  NText,
-  NSpace,
-  NTimeline,
-  NTimelineItem,
-  NEmpty,
-} from 'naive-ui'
-import { getWaveOverview, listRecentHistory } from '@/shared/lib/wails/app'
-import type { HistoryNodeDTO } from '@/shared/lib/wails/app'
-import { dto } from '@/../wailsjs/go/models'
+import { computed, inject } from "vue";
+import { useRouter } from "vue-router";
+import { NAlert, NButton, NCard, NEmpty, NGrid, NGridItem, NList, NListItem, NStatistic, NSpace, NTag, NTimeline, NTimelineItem } from "naive-ui";
+import { dto } from "@/../wailsjs/go/models";
+import { useI18n } from "@/shared/i18n";
 
-const route = useRoute()
-const waveId = computed(() => Number(route.params.waveId) || 0)
-const overview = ref<dto.WaveOverviewDTO | null>(null)
-const recentHistory = ref<HistoryNodeDTO[]>([])
-const loading = ref(false)
-const error = ref('')
+const snapshot = inject("waveWorkspaceSnapshot", computed(() => null)) as { value: dto.WaveWorkspaceSnapshotDTO | null };
+const router = useRouter();
+const { t } = useI18n();
 
-const stageLabel: Record<string, string> = {
-  intake: '需求录入',
-  allocation: '分配中',
-  review: '审核中',
-  execution: '执行中',
-  syncing_back: '回填中',
-  awaiting_manual_closure: '待人工闭环',
-  closed: '已关闭',
+const overview = computed(() => snapshot.value?.overview);
+const guidance = computed(() => snapshot.value?.guidance || []);
+
+function goTo(stepKey: string) {
+  const waveId = snapshot.value?.wave?.id;
+  if (!waveId) return;
+  const targetMap: Record<string, string> = {
+    demand_intake: "/demand-intake",
+    membership_allocation: `/waves/${waveId}/allocation`,
+    demand_mapping: `/waves/${waveId}/demand-mapping`,
+    wave_overview: `/waves/${waveId}`,
+    adjustment_review: `/waves/${waveId}/adjustment-review`,
+    supplier_execution: `/waves/${waveId}/export`,
+    shipment_intake: `/waves/${waveId}/shipment`,
+    channel_sync: `/waves/${waveId}/channel-sync`,
+  };
+  router.push(targetMap[stepKey] || `/waves/${waveId}`);
 }
-
-const stageTagType: Record<string, 'default' | 'info' | 'success' | 'warning'> = {
-  intake: 'info',
-  allocation: 'info',
-  review: 'warning',
-  execution: 'warning',
-  syncing_back: 'info',
-  awaiting_manual_closure: 'warning',
-  closed: 'default',
-}
-
-const nextStepGuidance = computed(() => {
-  if (!overview.value) return ''
-  const o = overview.value
-  if (o.acceptedWaitingForInput && o.acceptedWaitingForInput > 0) {
-    return `有 ${o.acceptedWaitingForInput} 条需求等待输入补齐，无法进入执行。请返回「需求导入」补全。`
-  }
-  if ((o.mappingBlockedCount ?? 0) > 0) {
-    return `有 ${o.mappingBlockedCount} 条需求因商品映射缺失被阻塞。请返回「需求映射」补充波次商品引用。`
-  }
-  if (o.projectedLifecycleStage === 'awaiting_manual_closure') {
-    return '当前波次已进入待人工闭环阶段。请前往「回填」完成手动闭环决策。'
-  }
-  if (o.projectedLifecycleStage === 'syncing_back') {
-    return '当前波次正在等待回填结果。请前往「回填」查看任务状态或处理失败项。'
-  }
-  if (o.acceptedReadyOrNotRequired === 0 && o.deferredCount === 0) return '下一步：前往「需求映射」接手需求文档'
-  if (o.fulfillmentCount === 0) return '下一步：前往「分配规则」或「需求映射」生成履约行'
-  if (o.supplierOrderCount === 0) return '下一步：前往「导出」生成供应商订单'
-  if (o.shipmentCount === 0) return '下一步：前往「物流」录入发货信息'
-  if (o.channelSyncJobCount === 0) return '下一步：前往「回填」创建渠道同步任务'
-  return '所有主要步骤已完成'
-})
-
-async function loadOverview() {
-  loading.value = true
-  error.value = ''
-  try {
-    overview.value = await getWaveOverview(waveId.value)
-    recentHistory.value = await listRecentHistory(waveId.value, 10)
-  } catch (e: unknown) {
-    error.value = e instanceof Error ? e.message : String(e)
-  } finally {
-    loading.value = false
-  }
-}
-
-onMounted(loadOverview)
 </script>
 
 <template>
-  <div>
-    <n-alert v-if="error" type="error" :title="error" class="mb-4" closable />
+  <div class="wave-overview-page">
+    <NEmpty v-if="!snapshot" :description="t('common.loading')" />
 
-    <template v-if="overview">
-      <n-card class="mb-4">
-        <template #header>
-          <n-space align="center">
-            <span class="text-lg font-medium">{{ overview.wave?.name || '波次概览' }}</span>
-            <n-tag
-              :type="stageTagType[overview.projectedLifecycleStage] || 'default'"
-              size="medium"
-              round
-            >
-              {{ stageLabel[overview.projectedLifecycleStage] || overview.projectedLifecycleStage || '未知' }}
-            </n-tag>
-          </n-space>
-        </template>
+    <template v-else>
+      <NCard class="mb-4">
+        <div class="flex items-start justify-between gap-6">
+          <div>
+            <div class="app-kicker">{{ snapshot.projectedLifecycleStage }}</div>
+            <h2 class="app-title mt-2">{{ t("wave.previewDecision") }}</h2>
+            <p class="app-copy mt-3">
+              在这里集中判断当前波次该继续执行、回前置修正，还是进入共享调整层。
+            </p>
+          </div>
+          <NSpace vertical>
+            <NButton type="primary" @click="goTo('supplier_execution')">
+              {{ t("wave.continueToExecution") }}
+            </NButton>
+            <NButton secondary @click="goTo('adjustment_review')">
+              {{ t("wave.adjustment") }}
+            </NButton>
+          </NSpace>
+        </div>
+      </NCard>
 
-        <n-alert v-if="nextStepGuidance" type="info" class="mb-4">
-          {{ nextStepGuidance }}
-        </n-alert>
+      <NAlert v-if="guidance.length" type="warning" class="mb-4">
+        <NSpace vertical :size="10">
+          <div class="app-heading-sm">{{ t("wave.nextAction") }}</div>
+          <div
+            v-for="item in guidance"
+            :key="item.code"
+            class="flex items-center justify-between gap-4"
+          >
+            <span>{{ item.code }} ({{ item.count }})</span>
+            <NButton size="small" @click="goTo(item.targetStepKey)">
+              {{ item.targetStepKey }}
+            </NButton>
+          </div>
+        </NSpace>
+      </NAlert>
 
-        <n-grid :cols="4" :x-gap="16" :y-gap="16">
-          <n-grid-item>
-            <n-statistic label="需求行" :value="overview.demandCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="履约行" :value="overview.fulfillmentCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="供应商订单" :value="overview.supplierOrderCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="发货单" :value="overview.shipmentCount ?? 0" />
-          </n-grid-item>
-        </n-grid>
-      </n-card>
+      <NGrid :cols="3" :x-gap="16" :y-gap="16" class="mb-5">
+        <NGridItem>
+          <NCard :title="t('wave.exceptionsGroup')">
+            <NSpace vertical :size="10">
+              <div class="flex items-center justify-between gap-4">
+                <span>Back to Membership Allocation</span>
+                <NButton size="small" @click="goTo('membership_allocation')">
+                  {{ t("wave.allocation") }}
+                </NButton>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <span>Back to Demand Mapping</span>
+                <NButton size="small" @click="goTo('demand_mapping')">
+                  {{ t("wave.mapping") }}
+                </NButton>
+              </div>
+              <div class="flex items-center justify-between gap-4">
+                <span>Handle final fulfillment exceptions</span>
+                <NButton size="small" @click="goTo('adjustment_review')">
+                  {{ t("wave.adjustment") }}
+                </NButton>
+              </div>
+            </NSpace>
+          </NCard>
+        </NGridItem>
 
-      <n-card title="需求前置状态" class="mb-4" size="small">
-        <n-grid :cols="6" :x-gap="12">
-          <n-grid-item>
-            <n-statistic label="可执行" :value="overview.acceptedReadyOrNotRequired ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="等待输入" :value="overview.acceptedWaitingForInput ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="延后" :value="overview.deferredCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="排除(手工)" :value="overview.excludedManualCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="排除(重复)" :value="overview.excludedDuplicateCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="排除(撤销)" :value="overview.excludedRevokedCount ?? 0" />
-          </n-grid-item>
-        </n-grid>
-      </n-card>
+        <NGridItem>
+          <NCard :title="t('wave.routingGroup')">
+            <NList bordered>
+              <NListItem>Ready: {{ overview?.acceptedReadyOrNotRequired ?? 0 }}</NListItem>
+              <NListItem>Waiting Input: {{ overview?.acceptedWaitingForInput ?? 0 }}</NListItem>
+              <NListItem>Deferred: {{ overview?.deferredCount ?? 0 }}</NListItem>
+              <NListItem>Excluded: {{ (overview?.excludedManualCount ?? 0) + (overview?.excludedDuplicateCount ?? 0) + (overview?.excludedRevokedCount ?? 0) }}</NListItem>
+            </NList>
+          </NCard>
+        </NGridItem>
 
-      <n-card title="渠道同步" class="mb-4" size="small">
-        <n-grid :cols="5" :x-gap="12">
-          <n-grid-item>
-            <n-statistic label="待执行" :value="overview.channelSyncPendingCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="执行中" :value="overview.channelSyncRunningCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="成功" :value="overview.channelSyncSuccessCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="部分成功" :value="overview.channelSyncPartialSuccessCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="失败" :value="overview.channelSyncFailedCount ?? 0" />
-          </n-grid-item>
-        </n-grid>
-      </n-card>
+        <NGridItem>
+          <NCard :title="t('wave.executionGroup')">
+            <NList bordered>
+              <NListItem>Supplier Orders: {{ overview?.supplierOrderCount ?? 0 }}</NListItem>
+              <NListItem>Shipments: {{ overview?.shipmentCount ?? 0 }}</NListItem>
+              <NListItem>Pending Sync: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
+              <NListItem>Manual Closure Candidates: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
+            </NList>
+          </NCard>
+        </NGridItem>
+      </NGrid>
 
-      <n-card title="手动闭环决策" class="mb-4" size="small">
-        <n-grid :cols="4" :x-gap="12">
-          <n-grid-item>
-            <n-statistic label="决策总数" :value="overview.manualClosureDecisionCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="不支持" :value="overview.manualUnsupportedCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="已跳过" :value="overview.manualSkippedCount ?? 0" />
-          </n-grid-item>
-          <n-grid-item>
-            <n-statistic label="手动完成" :value="overview.manualCompletedCount ?? 0" />
-          </n-grid-item>
-        </n-grid>
-      </n-card>
+      <NGrid :cols="4" :x-gap="16" :y-gap="16" class="mb-5">
+        <NGridItem>
+          <NCard>
+            <NStatistic label="Demand" :value="overview?.demandCount ?? 0" />
+          </NCard>
+        </NGridItem>
+        <NGridItem>
+          <NCard>
+            <NStatistic label="Fulfillment" :value="overview?.fulfillmentCount ?? 0" />
+          </NCard>
+        </NGridItem>
+        <NGridItem>
+          <NCard>
+            <NStatistic label="Supplier Orders" :value="overview?.supplierOrderCount ?? 0" />
+          </NCard>
+        </NGridItem>
+        <NGridItem>
+          <NCard>
+            <NStatistic label="Shipments" :value="overview?.shipmentCount ?? 0" />
+          </NCard>
+        </NGridItem>
+      </NGrid>
 
-      <n-card title="基线偏移检测" size="small">
-        <n-alert
-          v-if="overview.hasDriftedBasis"
-          type="warning"
-          title="检测到基线偏移"
-        >
-          供应商订单或发货数据与当前工作区状态存在偏差，请检查一致性。
-        </n-alert>
-        <n-alert
-          v-else-if="overview.hasRequiredReviewBasis"
-          type="info"
-          title="存在待审查基线"
-        >
-          部分基线引用需要人工确认。
-        </n-alert>
-        <n-text v-else depth="3">无偏移信号</n-text>
-      </n-card>
+      <NGrid :cols="2" :x-gap="16" :y-gap="16">
+        <NGridItem>
+          <NCard :title="t('wave.executionGroup')">
+            <NList bordered>
+              <NListItem>Channel Sync Jobs: {{ overview?.channelSyncJobCount ?? 0 }}</NListItem>
+              <NListItem>Pending Sync: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
+              <NListItem>Failed Sync: {{ overview?.channelSyncFailedCount ?? 0 }}</NListItem>
+              <NListItem>Manual Closure Candidates: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
+            </NList>
+          </NCard>
+        </NGridItem>
 
-      <n-card title="最近操作" class="mt-4" size="small">
-        <n-empty v-if="recentHistory.length === 0" description="暂无操作记录" />
-        <n-timeline v-else>
-          <n-timeline-item
-            v-for="node in recentHistory"
+        <NGridItem>
+          <NCard :title="t('wave.basis')">
+            <NSpace vertical :size="12">
+              <div class="flex items-center gap-2">
+                <NTag size="small" :type="snapshot.basisSummary.hasDriftedBasis ? 'warning' : 'default'">
+                  {{ t("wave.drifted") }}
+                </NTag>
+                <span>{{ snapshot.basisSummary.driftedCount }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <NTag size="small" :type="snapshot.basisSummary.hasRequiredReview ? 'error' : 'default'">
+                  {{ t("wave.reviewRequired") }}
+                </NTag>
+                <span>{{ snapshot.basisSummary.requiredReviewCount }}</span>
+              </div>
+            </NSpace>
+          </NCard>
+        </NGridItem>
+      </NGrid>
+
+      <NCard class="mt-5" :title="t('wave.history')">
+        <NTimeline>
+          <NTimelineItem
+            v-for="node in snapshot.recentHistory"
             :key="node.id"
             :title="node.commandSummary"
-            :time="node.createdAt ? new Date(node.createdAt).toLocaleString('zh-CN') : ''"
+            :time="node.createdAt"
           >
-            <n-tag size="tiny" :bordered="false">{{ node.commandKind }}</n-tag>
-          </n-timeline-item>
-        </n-timeline>
-      </n-card>
+            <NTag size="tiny" :bordered="false">{{ node.commandKind }}</NTag>
+          </NTimelineItem>
+        </NTimeline>
+      </NCard>
     </template>
   </div>
 </template>

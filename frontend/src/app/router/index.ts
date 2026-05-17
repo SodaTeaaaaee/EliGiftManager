@@ -14,6 +14,11 @@ const router = createRouter({
           component: () => import("@/pages/dashboard/DashboardPage.vue"),
         },
         {
+          path: "waves",
+          name: "waves",
+          component: () => import("@/pages/waves/WavesPage.vue"),
+        },
+        {
           path: "demand-intake",
           name: "demand-intake",
           component: () =>
@@ -86,6 +91,12 @@ const router = createRouter({
           name: "products",
           component: () =>
             import("@/pages/product/ProductManagementPage.vue"),
+        },
+        {
+          path: "settings",
+          name: "settings",
+          component: () =>
+            import("@/pages/settings/SettingsPage.vue"),
         },
         // Legacy wave-overview route — redirect to dashboard (consolidated into workspace wizard)
         {

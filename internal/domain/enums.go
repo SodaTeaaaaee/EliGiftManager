@@ -218,6 +218,12 @@ const (
 	CmdUpdateRule           = "update_rule"
 	CmdDeleteRule           = "delete_rule"
 	CmdRecordAdjustment     = "record_adjustment"
+	CmdExportSupplierOrder  = "export_supplier_order"
+	CmdCreateShipment       = "create_shipment"
+	CmdCreateChannelSyncJob = "create_channel_sync_job"
+	CmdExecuteChannelSyncJob = "execute_channel_sync_job"
+	CmdRetryChannelSyncJob  = "retry_channel_sync_job"
+	CmdRecordClosureDecision = "record_closure_decision"
 )
 
 // ProductMaster: ProductKind

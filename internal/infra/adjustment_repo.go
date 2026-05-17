@@ -48,6 +48,16 @@ func (r *fulfillmentAdjustmentRepository) FindByID(id uint) (*domain.Fulfillment
 	return persistence.FulfillmentAdjustmentToDomain(&p), nil
 }
 
+func (r *fulfillmentAdjustmentRepository) Update(adj *domain.FulfillmentAdjustment) error {
+	p := persistence.FulfillmentAdjustmentFromDomain(adj)
+	if err := r.db.Save(p).Error; err != nil {
+		return err
+	}
+	updated := persistence.FulfillmentAdjustmentToDomain(p)
+	*adj = *updated
+	return nil
+}
+
 func (r *fulfillmentAdjustmentRepository) Delete(id uint) error {
 	return r.db.Delete(&persistence.FulfillmentAdjustment{}, id).Error
 }

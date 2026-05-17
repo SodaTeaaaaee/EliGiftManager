@@ -26,14 +26,16 @@ func NewAdjustmentController() *AdjustmentController {
 	waveRepo := infra.NewWaveRepository(gdb)
 	ruleRepo := infra.NewRuleRepository(gdb)
 	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
+	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
-	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+	productRepo := infra.NewProductRepository(gdb)
+	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 	return &AdjustmentController{
 		adjustmentUC:        app.NewAdjustmentUseCase(adjustmentRepo, fulfillRepo, waveRepo),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
-		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo),
+		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
 		gdb:                 gdb,
 	}
@@ -52,14 +54,16 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 		waveRepo := infra.NewWaveRepository(tx)
 		ruleRepo := infra.NewRuleRepository(tx)
 		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
 		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
 		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
 		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
 
 		adjustmentUC := app.NewAdjustmentUseCase(adjustmentRepo, fulfillRepo, waveRepo)
-		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
-		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
 		recordedAdj, recordErr := adjustmentUC.RecordAdjustment(input)
 		if recordErr != nil {

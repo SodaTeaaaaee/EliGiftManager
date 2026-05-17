@@ -16,6 +16,8 @@ type DemandController struct {
 	demandRepo         domain.DemandDocumentRepository
 	profileRepo        domain.CustomerProfileRepository
 	integrationProfile domain.IntegrationProfileRepository
+	assignmentRepo     domain.WaveDemandAssignmentRepository
+	waveRepo           domain.WaveRepository
 }
 
 func NewDemandController() *DemandController {
@@ -23,11 +25,15 @@ func NewDemandController() *DemandController {
 	demandRepo := infra.NewDemandRepository(gdb)
 	profileRepo := infra.NewProfileRepository(gdb)
 	integrationProfileRepo := infra.NewIntegrationProfileRepository(gdb)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
+	waveRepo := infra.NewWaveRepository(gdb)
 	return &DemandController{
 		intakeUC:           app.NewDemandIntakeUseCase(demandRepo),
 		demandRepo:         demandRepo,
 		profileRepo:        profileRepo,
 		integrationProfile: integrationProfileRepo,
+		assignmentRepo:     assignmentRepo,
+		waveRepo:           waveRepo,
 	}
 }
 
@@ -145,6 +151,89 @@ func (c *DemandController) GetDemandDocument(id uint) (dto.DemandDocumentDTO, er
 		return dto.DemandDocumentDTO{}, err
 	}
 	return domainToDemandDTO(doc), nil
+}
+
+func (c *DemandController) ListDemandInboxRows(input dto.DemandInboxFilterInput) ([]dto.DemandInboxRowDTO, error) {
+	docs, err := c.demandRepo.List()
+	if err != nil {
+		return nil, err
+	}
+	waves, err := c.waveRepo.List()
+	if err != nil {
+		return nil, err
+	}
+	waveMap := make(map[uint]domain.Wave, len(waves))
+	for _, w := range waves {
+		waveMap[w.ID] = w
+	}
+
+	rows := make([]dto.DemandInboxRowDTO, 0, len(docs))
+	for _, doc := range docs {
+		if input.DemandKind != "" && doc.Kind != input.DemandKind {
+			continue
+		}
+
+		assignments, err := c.assignmentRepo.ListByDemandDocument(doc.ID)
+		if err != nil {
+			return nil, err
+		}
+		assigned := len(assignments) > 0
+		if input.Assignment == "assigned" && !assigned {
+			continue
+		}
+		if input.Assignment == "unassigned" && assigned {
+			continue
+		}
+
+		lines, err := c.demandRepo.ListLinesByDocument(doc.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		row := dto.DemandInboxRowDTO{
+			DemandDocumentID:     doc.ID,
+			Kind:                 doc.Kind,
+			CaptureMode:          doc.CaptureMode,
+			SourceChannel:        doc.SourceChannel,
+			SourceSurface:        doc.SourceSurface,
+			SourceDocumentNo:     doc.SourceDocumentNo,
+			CustomerProfileID:    doc.CustomerProfileID,
+			IntegrationProfileID: doc.IntegrationProfileID,
+			Assigned:             assigned,
+			CreatedAt:            doc.CreatedAt,
+		}
+		if doc.IntegrationProfileID != nil {
+			if profile, profileErr := c.integrationProfile.FindByID(*doc.IntegrationProfileID); profileErr == nil && profile != nil {
+				row.IntegrationProfileLabel = fmt.Sprintf("%s (%s)", profile.ProfileKey, profile.SourceChannel)
+			}
+		}
+		if assigned {
+			waveID := assignments[0].WaveID
+			row.AssignedWaveID = &waveID
+			if wave, ok := waveMap[waveID]; ok {
+				row.AssignedWaveLabel = fmt.Sprintf("%s — %s", wave.WaveNo, wave.Name)
+			}
+		}
+		for _, line := range lines {
+			row.TotalLineCount++
+			switch line.RoutingDisposition {
+			case "accepted":
+				row.AcceptedCount++
+				if line.RecipientInputState == "ready" || line.RecipientInputState == "not_required" {
+					row.ReadyAcceptedCount++
+				}
+				if line.RecipientInputState == "waiting_for_input" || line.RecipientInputState == "partially_collected" {
+					row.WaitingInputCount++
+				}
+			case "deferred":
+				row.DeferredCount++
+			case "excluded_manual", "excluded_duplicate", "excluded_revoked":
+				row.ExcludedCount++
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
 }
 
 // domainToDemandDTO converts a domain DemandDocument to a DTO.

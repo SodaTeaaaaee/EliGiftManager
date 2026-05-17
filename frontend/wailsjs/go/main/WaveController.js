@@ -22,6 +22,10 @@ export function GetWaveOverview(arg1) {
   return window['go']['main']['WaveController']['GetWaveOverview'](arg1);
 }
 
+export function GetWaveWorkspaceSnapshot(arg1) {
+  return window['go']['main']['WaveController']['GetWaveWorkspaceSnapshot'](arg1);
+}
+
 export function ListAssignedDemandsByWave(arg1) {
   return window['go']['main']['WaveController']['ListAssignedDemandsByWave'](arg1);
 }
@@ -32,6 +36,14 @@ export function ListRecentHistory(arg1, arg2) {
 
 export function ListWaveDashboardRows() {
   return window['go']['main']['WaveController']['ListWaveDashboardRows']();
+}
+
+export function ListWaveFulfillmentRows(arg1) {
+  return window['go']['main']['WaveController']['ListWaveFulfillmentRows'](arg1);
+}
+
+export function ListWaveParticipantRows(arg1) {
+  return window['go']['main']['WaveController']['ListWaveParticipantRows'](arg1);
 }
 
 export function ListWaves() {

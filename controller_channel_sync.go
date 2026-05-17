@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
+	"gorm.io/gorm"
 )
 
 // ChannelSyncController exposes channel-sync Wails bindings.
@@ -23,6 +25,10 @@ type ChannelSyncController struct {
 	retrySyncUC      app.RetrySyncUseCase
 	profileRepo      domain.IntegrationProfileRepository
 	fulfillRepo      domain.FulfillmentLineRepository
+	gdb              *gorm.DB
+	historyRecordingSvc *app.HistoryRecordingService
+	projHashSvc         *app.ProjectionHashService
+	snapshotSvc         *app.WaveSnapshotService
 }
 
 func NewChannelSyncController() *ChannelSyncController {
@@ -34,35 +40,92 @@ func NewChannelSyncController() *ChannelSyncController {
 	demandRepo := infra.NewDemandRepository(gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	decisionRepo := infra.NewClosureDecisionRepository(gdb)
+	ruleRepo := infra.NewRuleRepository(gdb)
+	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gdb)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
+	waveRepo := infra.NewWaveRepository(gdb)
+	productRepo := infra.NewProductRepository(gdb)
 	historyScopeRepo := infra.NewHistoryScopeRepository(gdb)
 	historyNodeRepo := infra.NewHistoryNodeRepository(gdb)
 	historyPinRepo := infra.NewHistoryPinRepository(gdb)
+	historyCheckpointRepo := infra.NewHistoryCheckpointRepository(gdb)
 
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 	basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
 
 	channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
 	executorProvider := buildExecutorProvider()
 	return &ChannelSyncController{
-		channelSyncUC:    channelSyncUC,
-		channelSyncRepo:  channelSyncRepo,
-		closureUC:        app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC),
-		executeSyncUC:    app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, executorProvider),
-		recordDecisionUC: app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo),
-		retrySyncUC:      app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, executorProvider),
-		profileRepo:      profileRepo,
-		fulfillRepo:      fulfillRepo,
+		channelSyncUC:       channelSyncUC,
+		channelSyncRepo:     channelSyncRepo,
+		closureUC:           app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC),
+		executeSyncUC:       app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, executorProvider),
+		recordDecisionUC:    app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo),
+		retrySyncUC:         app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, executorProvider),
+		profileRepo:         profileRepo,
+		fulfillRepo:         fulfillRepo,
+		gdb:                 gdb,
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
+		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo),
+		snapshotSvc:         snapshotSvc,
 	}
 }
 
 // CreateChannelSyncJob creates a channel sync job with its items.
 func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSyncJobInput) (dto.ChannelSyncJobDTO, error) {
-	job, items, err := c.channelSyncUC.CreateChannelSyncJob(input)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(input.WaveID)
 	if err != nil {
 		return dto.ChannelSyncJobDTO{}, err
 	}
-	// Project channel_sync_state → pending for all candidate fulfillment lines
-	c.projectChannelSyncPending(items)
+
+	var job *domain.ChannelSyncJob
+	var items []domain.ChannelSyncItem
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		channelSyncRepo := infra.NewChannelSyncRepository(tx)
+		shipmentRepo := infra.NewShipmentRepository(tx)
+		supplierRepo := infra.NewSupplierOrderRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		decisionRepo := infra.NewClosureDecisionRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyPinRepo := infra.NewHistoryPinRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+		channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
+
+		createdJob, createdItems, createErr := channelSyncUC.CreateChannelSyncJob(input)
+		if createErr != nil {
+			return createErr
+		}
+		job = createdJob
+		items = createdItems
+		projectChannelSyncPendingWithRepo(fulfillRepo, items)
+
+		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                  input.WaveID,
+			CommandKind:             domain.CmdCreateChannelSyncJob,
+			CommandSummary:          fmt.Sprintf("create channel sync job %d for wave %d", job.ID, input.WaveID),
+			PatchPayload:            "",
+			InversePatchPayload:     "",
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+		})
+		return recordErr
+	})
+	if err != nil {
+		return dto.ChannelSyncJobDTO{}, err
+	}
 	result := domainToChannelSyncJobDTO(job)
 	result.Items = make([]dto.ChannelSyncItemDTO, len(items))
 	for i, it := range items {
@@ -72,6 +135,10 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 }
 
 func (c *ChannelSyncController) projectChannelSyncPending(items []domain.ChannelSyncItem) {
+	projectChannelSyncPendingWithRepo(c.fulfillRepo, items)
+}
+
+func projectChannelSyncPendingWithRepo(repo domain.FulfillmentLineRepository, items []domain.ChannelSyncItem) {
 	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(items))
 	for _, it := range items {
 		updates = append(updates, domain.FulfillmentLineStateUpdate{
@@ -80,13 +147,70 @@ func (c *ChannelSyncController) projectChannelSyncPending(items []domain.Channel
 		})
 	}
 	if len(updates) > 0 {
-		_ = c.fulfillRepo.BulkUpdateStates(updates)
+		_ = repo.BulkUpdateStates(updates)
 	}
 }
 
 // PlanChannelClosure is the high-level orchestration entry point.
 func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureInput) (dto.PlanChannelClosureResult, error) {
-	result, err := c.closureUC.PlanChannelClosure(input)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(input.WaveID)
+	if err != nil {
+		return dto.PlanChannelClosureResult{}, err
+	}
+
+	var result *dto.PlanChannelClosureResult
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		channelSyncRepo := infra.NewChannelSyncRepository(tx)
+		shipmentRepo := infra.NewShipmentRepository(tx)
+		supplierRepo := infra.NewSupplierOrderRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		demandRepo := infra.NewDemandRepository(tx)
+		profileRepo := infra.NewIntegrationProfileRepository(tx)
+		decisionRepo := infra.NewClosureDecisionRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyPinRepo := infra.NewHistoryPinRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+		channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		closureUC := app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
+
+		planned, planErr := closureUC.PlanChannelClosure(input)
+		if planErr != nil {
+			return planErr
+		}
+		result = planned
+		if result.Decision == dto.ClosureDecisionCreateJob && result.Job != nil {
+			items := make([]domain.ChannelSyncItem, len(result.Items))
+			for i := range result.Items {
+				items[i] = domain.ChannelSyncItem{
+					FulfillmentLineID: result.Items[i].FulfillmentLineID,
+				}
+			}
+			projectChannelSyncPendingWithRepo(fulfillRepo, items)
+			_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+				WaveID:                  input.WaveID,
+				CommandKind:             domain.CmdCreateChannelSyncJob,
+				CommandSummary:          fmt.Sprintf("create channel sync job %d for wave %d", result.Job.ID, input.WaveID),
+				PatchPayload:            "",
+				InversePatchPayload:     "",
+				BaselineSnapshotPayload: preSnapshot,
+				ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+			})
+			return recordErr
+		}
+		return nil
+	})
 	if err != nil {
 		return dto.PlanChannelClosureResult{}, err
 	}
@@ -95,10 +219,52 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 
 // ExecuteChannelSyncJob executes a pending ChannelSyncJob.
 func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSyncResult, error) {
-	result, err := c.executeSyncUC.ExecuteChannelSyncJob(jobID)
-	// Always project — success or failure, the items have been persisted with their
-	// final statuses by the use case before returning.
-	c.projectChannelSyncStates(jobID)
+	job, err := c.channelSyncRepo.FindJobByID(jobID)
+	if err != nil {
+		return dto.ExecuteSyncResult{}, err
+	}
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(job.WaveID)
+	if err != nil {
+		return dto.ExecuteSyncResult{}, err
+	}
+
+	var result *dto.ExecuteSyncResult
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		channelSyncRepo := infra.NewChannelSyncRepository(tx)
+		profileRepo := infra.NewIntegrationProfileRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
+		decisionRepo := infra.NewClosureDecisionRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		executeSyncUC := app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, buildExecutorProvider())
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
+
+		executed, execErr := executeSyncUC.ExecuteChannelSyncJob(jobID)
+		projectChannelSyncStatesWithRepo(channelSyncRepo, fulfillRepo, jobID)
+		if execErr != nil {
+			return execErr
+		}
+		result = executed
+		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                  job.WaveID,
+			CommandKind:             domain.CmdExecuteChannelSyncJob,
+			CommandSummary:          fmt.Sprintf("execute channel sync job %d for wave %d (%s)", jobID, job.WaveID, result.JobStatus),
+			PatchPayload:            "",
+			InversePatchPayload:     "",
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:          projHashSvc.ComputeHash(job.WaveID),
+		})
+		return recordErr
+	})
 	if err != nil {
 		return dto.ExecuteSyncResult{}, err
 	}
@@ -108,7 +274,11 @@ func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSy
 // projectChannelSyncStates updates FulfillmentLine.ChannelSyncState based on
 // the current state of all items in the given job.
 func (c *ChannelSyncController) projectChannelSyncStates(jobID uint) {
-	items, err := c.channelSyncRepo.ListItemsByJob(jobID)
+	projectChannelSyncStatesWithRepo(c.channelSyncRepo, c.fulfillRepo, jobID)
+}
+
+func projectChannelSyncStatesWithRepo(channelSyncRepo domain.ChannelSyncRepository, fulfillRepo domain.FulfillmentLineRepository, jobID uint) {
+	items, err := channelSyncRepo.ListItemsByJob(jobID)
 	if err != nil {
 		return
 	}
@@ -129,18 +299,59 @@ func (c *ChannelSyncController) projectChannelSyncStates(jobID uint) {
 		})
 	}
 	if len(updates) > 0 {
-		_ = c.fulfillRepo.BulkUpdateStates(updates)
+		_ = fulfillRepo.BulkUpdateStates(updates)
 	}
 }
 
 // RecordChannelClosureDecision persists manual closure decisions and projects
 // channel sync state onto the affected fulfillment lines.
 func (c *ChannelSyncController) RecordChannelClosureDecision(input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error) {
-	records, err := c.recordDecisionUC.RecordChannelClosureDecision(input)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(input.WaveID)
 	if err != nil {
 		return nil, err
 	}
-	c.projectManualClosureStates(input.Entries)
+
+	var records []dto.ClosureDecisionRecordDTO
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		decisionRepo := infra.NewClosureDecisionRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		profileRepo := infra.NewIntegrationProfileRepository(tx)
+		demandRepo := infra.NewDemandRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		recordDecisionUC := app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
+
+		recorded, recordErr := recordDecisionUC.RecordChannelClosureDecision(input)
+		if recordErr != nil {
+			return recordErr
+		}
+		records = recorded
+		projectManualClosureStatesWithRepo(fulfillRepo, input.Entries)
+
+		_, historyErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                  input.WaveID,
+			CommandKind:             domain.CmdRecordClosureDecision,
+			CommandSummary:          fmt.Sprintf("record %d closure decisions for wave %d", len(records), input.WaveID),
+			PatchPayload:            "",
+			InversePatchPayload:     "",
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+		})
+		return historyErr
+	})
+	if err != nil {
+		return nil, err
+	}
 	return records, nil
 }
 
@@ -152,6 +363,10 @@ var decisionKindToChannelSyncState = map[string]string{
 }
 
 func (c *ChannelSyncController) projectManualClosureStates(entries []dto.RecordClosureDecisionEntry) {
+	projectManualClosureStatesWithRepo(c.fulfillRepo, entries)
+}
+
+func projectManualClosureStatesWithRepo(repo domain.FulfillmentLineRepository, entries []dto.RecordClosureDecisionEntry) {
 	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(entries))
 	for _, e := range entries {
 		csState, ok := decisionKindToChannelSyncState[e.DecisionKind]
@@ -164,15 +379,58 @@ func (c *ChannelSyncController) projectManualClosureStates(entries []dto.RecordC
 		})
 	}
 	if len(updates) > 0 {
-		_ = c.fulfillRepo.BulkUpdateStates(updates)
+		_ = repo.BulkUpdateStates(updates)
 	}
 }
 
 // RetryChannelSyncJob retries failed items in a ChannelSyncJob.
 func (c *ChannelSyncController) RetryChannelSyncJob(jobID uint) (dto.ExecuteSyncResult, error) {
-	result, err := c.retrySyncUC.RetryChannelSyncJob(jobID)
-	// Always project — success or failure, items have been persisted by the use case.
-	c.projectChannelSyncStates(jobID)
+	job, err := c.channelSyncRepo.FindJobByID(jobID)
+	if err != nil {
+		return dto.ExecuteSyncResult{}, err
+	}
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(job.WaveID)
+	if err != nil {
+		return dto.ExecuteSyncResult{}, err
+	}
+
+	var result *dto.ExecuteSyncResult
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		channelSyncRepo := infra.NewChannelSyncRepository(tx)
+		profileRepo := infra.NewIntegrationProfileRepository(tx)
+		fulfillRepo := infra.NewFulfillmentRepository(tx)
+		ruleRepo := infra.NewRuleRepository(tx)
+		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveRepo := infra.NewWaveRepository(tx)
+		productRepo := infra.NewProductRepository(tx)
+		decisionRepo := infra.NewClosureDecisionRepository(tx)
+		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
+		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
+		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+
+		retrySyncUC := app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, buildExecutorProvider())
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
+
+		retried, retryErr := retrySyncUC.RetryChannelSyncJob(jobID)
+		projectChannelSyncStatesWithRepo(channelSyncRepo, fulfillRepo, jobID)
+		if retryErr != nil {
+			return retryErr
+		}
+		result = retried
+		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+			WaveID:                  job.WaveID,
+			CommandKind:             domain.CmdRetryChannelSyncJob,
+			CommandSummary:          fmt.Sprintf("retry channel sync job %d for wave %d (%s)", jobID, job.WaveID, result.JobStatus),
+			PatchPayload:            "",
+			InversePatchPayload:     "",
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:          projHashSvc.ComputeHash(job.WaveID),
+		})
+		return recordErr
+	})
 	if err != nil {
 		return dto.ExecuteSyncResult{}, err
 	}

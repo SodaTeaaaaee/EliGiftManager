@@ -11,21 +11,39 @@ import (
 )
 
 type ProjectionHashService struct {
-	fulfillRepo domain.FulfillmentLineRepository
-	ruleRepo    domain.AllocationPolicyRuleRepository
-	adjRepo     domain.FulfillmentAdjustmentRepository
+	fulfillRepo    domain.FulfillmentLineRepository
+	ruleRepo       domain.AllocationPolicyRuleRepository
+	adjRepo        domain.FulfillmentAdjustmentRepository
+	assignmentRepo domain.WaveDemandAssignmentRepository
+	waveRepo       domain.WaveRepository
+	productRepo    domain.ProductRepository
+	closureRepo    domain.ChannelClosureDecisionRepository
 }
 
 func NewProjectionHashService(
 	fulfillRepo domain.FulfillmentLineRepository,
 	ruleRepo domain.AllocationPolicyRuleRepository,
 	adjRepo domain.FulfillmentAdjustmentRepository,
+	extraRepos ...interface{},
 ) *ProjectionHashService {
-	return &ProjectionHashService{
+	svc := &ProjectionHashService{
 		fulfillRepo: fulfillRepo,
 		ruleRepo:    ruleRepo,
 		adjRepo:     adjRepo,
 	}
+	for _, repo := range extraRepos {
+		switch r := repo.(type) {
+		case domain.WaveDemandAssignmentRepository:
+			svc.assignmentRepo = r
+		case domain.WaveRepository:
+			svc.waveRepo = r
+		case domain.ProductRepository:
+			svc.productRepo = r
+		case domain.ChannelClosureDecisionRepository:
+			svc.closureRepo = r
+		}
+	}
+	return svc
 }
 
 // ptrVal safely dereferences a *uint; returns 0 for nil.
@@ -94,6 +112,71 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 	for _, a := range adjs {
 		fmt.Fprintf(h, "A:%s:%d:%s:%d;",
 			a.AdjustmentKind, a.QuantityDelta, a.TargetKind, ptrVal(a.FulfillmentLineID))
+	}
+
+	// Demand assignments — sort by DemandDocumentID.
+	if s.assignmentRepo != nil {
+		assignments, _ := s.assignmentRepo.ListByWave(waveID)
+		sort.Slice(assignments, func(i, j int) bool {
+			return assignments[i].DemandDocumentID < assignments[j].DemandDocumentID
+		})
+		for _, a := range assignments {
+			fmt.Fprintf(h, "D:%d:%s;", a.DemandDocumentID, a.AcceptedBy)
+		}
+	}
+
+	// Wave participant snapshots — sort by (CustomerProfileID, SnapshotType, IdentityPlatform, IdentityValue).
+	if s.waveRepo != nil {
+		participants, _ := s.waveRepo.ListParticipantsByWave(waveID)
+		sort.Slice(participants, func(i, j int) bool {
+			if participants[i].CustomerProfileID != participants[j].CustomerProfileID {
+				return participants[i].CustomerProfileID < participants[j].CustomerProfileID
+			}
+			if participants[i].SnapshotType != participants[j].SnapshotType {
+				return participants[i].SnapshotType < participants[j].SnapshotType
+			}
+			if participants[i].IdentityPlatform != participants[j].IdentityPlatform {
+				return participants[i].IdentityPlatform < participants[j].IdentityPlatform
+			}
+			return participants[i].IdentityValue < participants[j].IdentityValue
+		})
+		for _, p := range participants {
+			fmt.Fprintf(h, "P:%d:%s:%s:%s:%s;",
+				p.CustomerProfileID, p.SnapshotType, p.IdentityPlatform, p.IdentityValue, p.GiftLevel)
+		}
+	}
+
+	// Wave-scoped product snapshots — sort by (SupplierPlatform, FactorySKU).
+	if s.productRepo != nil {
+		products, _ := s.productRepo.ListByWave(waveID)
+		sort.Slice(products, func(i, j int) bool {
+			if products[i].SupplierPlatform != products[j].SupplierPlatform {
+				return products[i].SupplierPlatform < products[j].SupplierPlatform
+			}
+			return products[i].FactorySKU < products[j].FactorySKU
+		})
+		for _, p := range products {
+			fmt.Fprintf(h, "W:%d:%s:%s:%s;",
+				ptrVal(p.ProductMasterID), p.SupplierPlatform, p.FactorySKU, p.Name)
+		}
+	}
+
+	// Manual closure decisions — sort by (FulfillmentLineID, DecisionKind, IntegrationProfileID).
+	if s.closureRepo != nil {
+		decisions, _ := s.closureRepo.ListByWave(waveID)
+		sort.Slice(decisions, func(i, j int) bool {
+			if decisions[i].FulfillmentLineID != decisions[j].FulfillmentLineID {
+				return decisions[i].FulfillmentLineID < decisions[j].FulfillmentLineID
+			}
+			if decisions[i].DecisionKind != decisions[j].DecisionKind {
+				return decisions[i].DecisionKind < decisions[j].DecisionKind
+			}
+			return decisions[i].IntegrationProfileID < decisions[j].IntegrationProfileID
+		})
+		for _, d := range decisions {
+			fmt.Fprintf(h, "C:%d:%d:%s:%s;",
+				d.FulfillmentLineID, d.IntegrationProfileID, d.DecisionKind, d.ReasonCode)
+		}
 	}
 
 	return hex.EncodeToString(h.Sum(nil))

@@ -227,6 +227,18 @@ func (m *policyAdjRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, error)
 	return nil, nil
 }
 
+func (m *policyAdjRepo) Update(adj *domain.FulfillmentAdjustment) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.adjs {
+		if m.adjs[i].ID == adj.ID {
+			m.adjs[i] = *adj
+			return nil
+		}
+	}
+	return fmt.Errorf("adjustment %d not found", adj.ID)
+}
+
 func (m *policyAdjRepo) Delete(id uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -708,5 +720,92 @@ func TestUpdateRuleRejectsProductFromDifferentWave(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for cross-wave product update, got nil")
+	}
+}
+
+func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *testing.T) {
+	t.Parallel()
+
+	waveRepo := newPolicyWaveRepo()
+	ruleRepo := newPolicyRuleRepo()
+	fulfillRepo := newMockFulfillRepo()
+	adjRepo := newPolicyAdjRepo()
+
+	waveID := uint(1)
+	participantID := uint(10)
+	customerProfileID := uint(100)
+	productID := uint(55)
+
+	waveRepo.participants[waveID] = []domain.WaveParticipantSnapshot{
+		{ID: participantID, WaveID: waveID, CustomerProfileID: customerProfileID, IdentityPlatform: "bilibili", GiftLevel: "L1"},
+	}
+
+	if err := ruleRepo.Create(&domain.AllocationPolicyRule{
+		WaveID:               waveID,
+		ProductID:            productID,
+		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		ContributionQuantity: 2,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	}); err != nil {
+		t.Fatalf("setup rule Create failed: %v", err)
+	}
+
+	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
+
+	first, err := uc.ReconcileWave(waveID)
+	if err != nil {
+		t.Fatalf("first ReconcileWave failed: %v", err)
+	}
+	if first.Created != 1 {
+		t.Fatalf("expected first reconcile to create 1 line, got %d", first.Created)
+	}
+
+	lines, _ := fulfillRepo.ListByWave(waveID)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line after first reconcile, got %d", len(lines))
+	}
+	originalLineID := lines[0].ID
+
+	if err := adjRepo.Create(&domain.FulfillmentAdjustment{
+		WaveID:            waveID,
+		TargetKind:        "fulfillment_line",
+		FulfillmentLineID: &originalLineID,
+		AdjustmentKind:    "add",
+		QuantityDelta:     3,
+		OperatorID:        "op-1",
+	}); err != nil {
+		t.Fatalf("setup adjustment Create failed: %v", err)
+	}
+
+	second, err := uc.ReconcileWave(waveID)
+	if err != nil {
+		t.Fatalf("second ReconcileWave failed: %v", err)
+	}
+	if len(second.Failures) != 0 {
+		t.Fatalf("expected 0 replay failures after re-anchor, got %v", second.Failures)
+	}
+
+	updatedAdj, err := adjRepo.FindByID(1)
+	if err != nil {
+		t.Fatalf("FindByID(updated adjustment): %v", err)
+	}
+	if updatedAdj == nil || updatedAdj.FulfillmentLineID == nil {
+		t.Fatal("expected updated adjustment with fulfillment line target")
+	}
+	if *updatedAdj.FulfillmentLineID == originalLineID {
+		t.Fatalf("expected adjustment target to be re-anchored away from old line ID %d", originalLineID)
+	}
+
+	lines, _ = fulfillRepo.ListByWave(waveID)
+	if len(lines) != 1 {
+		t.Fatalf("expected 1 line after second reconcile, got %d", len(lines))
+	}
+	if lines[0].Quantity != 5 {
+		t.Fatalf("expected replayed quantity 5 after rebuild + add, got %d", lines[0].Quantity)
+	}
+	if *updatedAdj.FulfillmentLineID != lines[0].ID {
+		t.Fatalf("expected adjustment target %d to match current line ID %d", *updatedAdj.FulfillmentLineID, lines[0].ID)
 	}
 }

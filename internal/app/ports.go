@@ -21,6 +21,9 @@ type WaveUseCase interface {
 type WaveOverviewQueryUseCase interface {
 	BuildBaseOverview(waveID uint) (dto.WaveOverviewDTO, error)
 	GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, error)
+	GetWaveWorkspaceSnapshot(waveID uint) (dto.WaveWorkspaceSnapshotDTO, error)
+	ListWaveFulfillmentRows(waveID uint) ([]dto.WaveFulfillmentRowDTO, error)
+	ListWaveParticipantRows(waveID uint) ([]dto.WaveParticipantRowDTO, error)
 	ListDashboardRows() ([]dto.WaveDashboardRowDTO, error)
 }
 
