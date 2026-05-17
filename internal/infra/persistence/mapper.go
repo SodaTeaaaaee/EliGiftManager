@@ -106,6 +106,7 @@ func ToPersistenceDemandDocument(d *domain.DemandDocument) *DemandDocument {
 		AuthoritySnapshotAt:  parseTimePtr(d.AuthoritySnapshotAt),
 		RawPayload:           d.RawPayload,
 		ExtraData:            d.ExtraData,
+		BoundProfileSnapshot: d.BoundProfileSnapshot,
 	}
 }
 
@@ -126,6 +127,7 @@ func FromPersistenceDemandDocument(p *DemandDocument) *domain.DemandDocument {
 		AuthoritySnapshotAt:  formatTimePtr(p.AuthoritySnapshotAt),
 		RawPayload:           p.RawPayload,
 		ExtraData:            p.ExtraData,
+		BoundProfileSnapshot: p.BoundProfileSnapshot,
 		CreatedAt:            formatTime(p.CreatedAt),
 		UpdatedAt:            formatTime(p.UpdatedAt),
 	}

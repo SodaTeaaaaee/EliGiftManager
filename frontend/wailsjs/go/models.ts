@@ -1231,6 +1231,7 @@ export namespace dto {
 	export class ImportShipmentInput {
 	    waveId: number;
 	    integrationProfileId: number;
+	    importMode: string;
 	    entries: ImportShipmentEntry[];
 	
 	    static createFrom(source: any = {}) {
@@ -1241,6 +1242,7 @@ export namespace dto {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.waveId = source["waveId"];
 	        this.integrationProfileId = source["integrationProfileId"];
+	        this.importMode = source["importMode"];
 	        this.entries = this.convertValues(source["entries"], ImportShipmentEntry);
 	    }
 	
@@ -2103,6 +2105,8 @@ export namespace dto {
 	    adjustmentReduceCount: number;
 	    adjustmentReplaceCount: number;
 	    adjustmentRemoveCount: number;
+	    replayHealthy: boolean;
+	    replayFailureCount: number;
 	    suggestedNextStep: string;
 	    nextStepReason: string;
 	    blockingIssues: string[];
@@ -2155,6 +2159,8 @@ export namespace dto {
 	        this.adjustmentReduceCount = source["adjustmentReduceCount"];
 	        this.adjustmentReplaceCount = source["adjustmentReplaceCount"];
 	        this.adjustmentRemoveCount = source["adjustmentRemoveCount"];
+	        this.replayHealthy = source["replayHealthy"];
+	        this.replayFailureCount = source["replayFailureCount"];
 	        this.suggestedNextStep = source["suggestedNextStep"];
 	        this.nextStepReason = source["nextStepReason"];
 	        this.blockingIssues = source["blockingIssues"];

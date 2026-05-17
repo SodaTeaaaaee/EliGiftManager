@@ -10,6 +10,8 @@ type waveOverviewProjectionUseCase struct {
 	closureRepo     domain.ChannelClosureDecisionRepository
 	driftUC         BasisDriftDetectionUseCase
 	historyHeadUC   HistoryHeadQueryUseCase
+	fulfillRepo     domain.FulfillmentLineRepository
+	adjustmentRepo  domain.FulfillmentAdjustmentRepository
 }
 
 func NewWaveOverviewProjectionUseCase(
@@ -17,13 +19,23 @@ func NewWaveOverviewProjectionUseCase(
 	closureRepo domain.ChannelClosureDecisionRepository,
 	driftUC BasisDriftDetectionUseCase,
 	historyHeadUC HistoryHeadQueryUseCase,
+	repos ...interface{},
 ) WaveOverviewProjectionUseCase {
-	return &waveOverviewProjectionUseCase{
+	uc := &waveOverviewProjectionUseCase{
 		channelSyncRepo: channelSyncRepo,
 		closureRepo:     closureRepo,
 		driftUC:         driftUC,
 		historyHeadUC:   historyHeadUC,
 	}
+	for _, r := range repos {
+		switch v := r.(type) {
+		case domain.FulfillmentLineRepository:
+			uc.fulfillRepo = v
+		case domain.FulfillmentAdjustmentRepository:
+			uc.adjustmentRepo = v
+		}
+	}
+	return uc
 }
 
 func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOverviewDTO) (dto.WaveOverviewDTO, error) {
@@ -117,6 +129,29 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 		}
 		if s.ReviewRequirement == "required" {
 			base.HasRequiredReviewBasis = true
+		}
+	}
+
+	// Replay health check: run a mark-and-continue dry replay against current
+	// fulfillment lines to surface orphaned/ambiguous adjustment targets.
+	// Only runs when both repos are wired in; skips silently otherwise.
+	base.ReplayHealthy = true
+	if uc.fulfillRepo != nil && uc.adjustmentRepo != nil {
+		lines, lErr := uc.fulfillRepo.ListByWave(waveID)
+		if lErr != nil {
+			return dto.WaveOverviewDTO{}, lErr
+		}
+		adjustments, aErr := uc.adjustmentRepo.ListByWave(waveID)
+		if aErr != nil {
+			return dto.WaveOverviewDTO{}, aErr
+		}
+		if len(adjustments) > 0 {
+			_, failures := ReplayAdjustments(lines, adjustments,
+				ReplayOptions{Mode: ReplayMarkAndContinue})
+			base.ReplayFailureCount = len(failures)
+			if len(failures) > 0 {
+				base.ReplayHealthy = false
+			}
 		}
 	}
 

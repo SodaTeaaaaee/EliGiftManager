@@ -15,12 +15,12 @@ const waveId = computed(() => Number(route.params.waveId) || 0);
 
 const loading = ref(false);
 const exporting = ref(false);
-const order = ref<dto.SupplierOrderDTO | null>(null);
-const lines = ref<dto.SupplierOrderLineDTO[]>([]);
+const orders = ref<dto.SupplierOrderDTO[]>([]);
+const orderLines = ref<Map<number, dto.SupplierOrderLineDTO[]>>(new Map());
 const error = ref("");
 
-const hasOrder = computed(() => !!(order.value && order.value.id > 0));
-const isDraft = computed(() => hasOrder.value && order.value?.status === "draft");
+const hasOrders = computed(() => orders.value.length > 0);
+const hasDraft = computed(() => orders.value.some((o) => o.status === "draft"));
 
 function statusText(status: string) {
   const map: Record<string, string> = {
@@ -48,12 +48,16 @@ async function loadOrder() {
   error.value = "";
   try {
     const result = await getSupplierOrderByWave(waveId.value);
-    if (result && result.id > 0) {
-      order.value = result;
-      lines.value = await listLinesBySupplierOrder(result.id);
+    if (result && result.length > 0) {
+      orders.value = result;
+      const linesMap = new Map<number, dto.SupplierOrderLineDTO[]>();
+      for (const o of result) {
+        linesMap.set(o.id, await listLinesBySupplierOrder(o.id));
+      }
+      orderLines.value = linesMap;
     } else {
-      order.value = null;
-      lines.value = [];
+      orders.value = [];
+      orderLines.value = new Map();
     }
   } catch (e: unknown) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -87,7 +91,7 @@ onMounted(loadOrder);
       <p class="app-copy mt-3">{{ t("execution.subtitle") }}</p>
     </div>
 
-    <NAlert v-if="isDraft" type="warning" class="mb-4">
+    <NAlert v-if="hasDraft" type="warning" class="mb-4">
       {{ t("execution.draftExists") }}
     </NAlert>
     <NAlert v-if="error" type="error" class="mb-4" :title="error" />
@@ -97,12 +101,12 @@ onMounted(loadOrder);
         <div>
           <div class="app-heading-sm">{{ t("execution.title") }}</div>
           <p class="app-copy mt-2">
-            {{ hasOrder ? t("execution.reexport") : t("execution.noOrder") }}
+            {{ hasOrders ? t("execution.reexport") : t("execution.noOrder") }}
           </p>
         </div>
         <NSpace vertical>
           <NButton type="primary" :loading="exporting" @click="handleExport">
-            {{ hasOrder ? t("execution.reexport") : t("execution.export") }}
+            {{ hasOrders ? t("execution.reexport") : t("execution.export") }}
           </NButton>
           <NButton secondary @click="router.push(`/waves/${waveId}/shipment`)">
             {{ t("wave.nextStep") }}
@@ -111,24 +115,24 @@ onMounted(loadOrder);
       </div>
     </NCard>
 
-    <template v-if="hasOrder && order">
-      <NDescriptions bordered :column="2" class="mb-4" label-placement="left">
-        <NDescriptionsItem :label="t('execution.orderId')">{{ order.id }}</NDescriptionsItem>
-        <NDescriptionsItem :label="t('execution.status')">
-          <NTag :type="order.status === 'draft' ? 'warning' : 'success'" size="small" round>
-            {{ statusText(order.status) }}
-          </NTag>
-        </NDescriptionsItem>
-        <NDescriptionsItem :label="t('execution.supplierPlatform')">{{ order.supplierPlatform }}</NDescriptionsItem>
-        <NDescriptionsItem :label="t('execution.basis')">{{ order.basisHistoryNodeId || "—" }}</NDescriptionsItem>
-        <NDescriptionsItem :label="t('execution.batch')">{{ order.batchNo || "—" }}</NDescriptionsItem>
-        <NDescriptionsItem :label="t('execution.externalOrderNo')">{{ order.externalOrderNo || "—" }}</NDescriptionsItem>
-      </NDescriptions>
+    <template v-if="hasOrders">
+      <NCard v-for="order in orders" :key="order.id" class="mb-4">
+        <NDescriptions bordered :column="2" class="mb-4" label-placement="left">
+          <NDescriptionsItem :label="t('execution.orderId')">{{ order.id }}</NDescriptionsItem>
+          <NDescriptionsItem :label="t('execution.status')">
+            <NTag :type="order.status === 'draft' ? 'warning' : 'success'" size="small" round>
+              {{ statusText(order.status) }}
+            </NTag>
+          </NDescriptionsItem>
+          <NDescriptionsItem :label="t('execution.supplierPlatform')">{{ order.supplierPlatform || "—" }}</NDescriptionsItem>
+          <NDescriptionsItem :label="t('execution.basis')">{{ order.basisHistoryNodeId || "—" }}</NDescriptionsItem>
+          <NDescriptionsItem :label="t('execution.batch')">{{ order.batchNo || "—" }}</NDescriptionsItem>
+          <NDescriptionsItem :label="t('execution.externalOrderNo')">{{ order.externalOrderNo || "—" }}</NDescriptionsItem>
+        </NDescriptions>
 
-      <NCard :title="t('execution.lines')">
         <NDataTable
           :columns="columns"
-          :data="lines"
+          :data="orderLines.get(order.id) || []"
           :loading="loading"
           :pagination="false"
           size="small"

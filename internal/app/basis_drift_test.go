@@ -4,6 +4,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
@@ -11,19 +12,37 @@ import (
 // mockSupplierRepoForDrift only implements ListByWave; all other methods panic.
 
 type mockSupplierRepoForDrift struct {
-	mu     sync.Mutex
-	orders []domain.SupplierOrder
-	waveID uint // orders are scoped to this wave
+	mu         sync.Mutex
+	orders     []domain.SupplierOrder
+	orderLines map[uint][]domain.SupplierOrderLine // orderID → lines
+	lastID     uint
+	waveID     uint // orders are scoped to this wave
 }
 
 func newMockSupplierRepoForDrift(waveID uint) *mockSupplierRepoForDrift {
-	return &mockSupplierRepoForDrift{waveID: waveID}
+	return &mockSupplierRepoForDrift{
+		waveID:     waveID,
+		orderLines: make(map[uint][]domain.SupplierOrderLine),
+	}
 }
+
+func (m *mockSupplierRepoForDrift) nextID() uint { m.lastID++; return m.lastID }
 
 func (m *mockSupplierRepoForDrift) add(o domain.SupplierOrder) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if o.ID == 0 {
+		o.ID = m.nextID()
+	}
 	m.orders = append(m.orders, o)
+}
+
+// addLine attaches a SupplierOrderLine to an existing order by orderID.
+func (m *mockSupplierRepoForDrift) addLine(orderID uint, line domain.SupplierOrderLine) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	line.SupplierOrderID = orderID
+	m.orderLines[orderID] = append(m.orderLines[orderID], line)
 }
 
 func (m *mockSupplierRepoForDrift) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
@@ -48,12 +67,18 @@ func (m *mockSupplierRepoForDrift) CreateLine(line *domain.SupplierOrderLine) er
 	panic("not implemented")
 }
 func (m *mockSupplierRepoForDrift) ListLinesByOrder(orderID uint) ([]domain.SupplierOrderLine, error) {
-	panic("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	lines := m.orderLines[orderID]
+	out := make([]domain.SupplierOrderLine, len(lines))
+	copy(out, lines)
+	return out, nil
 }
 func (m *mockSupplierRepoForDrift) FindLineByID(id uint) (*domain.SupplierOrderLine, error) {
 	panic("not implemented")
 }
 func (m *mockSupplierRepoForDrift) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
+func (m *mockSupplierRepoForDrift) Update(order *domain.SupplierOrder) error { panic("not implemented") }
 func (m *mockSupplierRepoForDrift) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
 	panic("not implemented")
 }
@@ -64,6 +89,7 @@ type driftTestSetup struct {
 	supplierRepo    *mockSupplierRepoForDrift
 	shipmentRepo    *mockShipmentRepo
 	channelSyncRepo *mockChannelSyncRepo
+	fulfillRepo     *mockFulfillRepo
 	uc              BasisDriftDetectionUseCase
 	waveID          uint
 }
@@ -73,22 +99,54 @@ func newDriftTestSetup() *driftTestSetup {
 	sr := newMockSupplierRepoForDrift(waveID)
 	sh := newMockShipmentRepo()
 	cs := newMockChannelSyncRepo()
+	fr := newMockFulfillRepo()
 	return &driftTestSetup{
 		supplierRepo:    sr,
 		shipmentRepo:    sh,
 		channelSyncRepo: cs,
-		uc:              NewBasisDriftDetectionUseCase(sr, sh, cs),
+		fulfillRepo:     fr,
+		uc:              NewBasisDriftDetectionUseCase(sr, sh, cs, fr),
 		waveID:          waveID,
 	}
 }
 
-// addSupplierOrder adds a supplier order scoped to the test wave.
-func (d *driftTestSetup) addSupplierOrder(nodeID, storedHash string) {
+// addSupplierOrder adds a supplier order scoped to the test wave and returns its ID.
+func (d *driftTestSetup) addSupplierOrder(nodeID, storedHash string) uint {
+	d.supplierRepo.mu.Lock()
+	id := d.supplierRepo.nextID()
+	d.supplierRepo.mu.Unlock()
 	d.supplierRepo.add(domain.SupplierOrder{
+		ID:                  id,
 		WaveID:              d.waveID,
 		BasisHistoryNodeID:  nodeID,
 		BasisProjectionHash: storedHash,
+		Status:              "submitted",
 	})
+	return id
+}
+
+// addSupplierOrderWithStatus adds a supplier order with an explicit status and returns its ID.
+func (d *driftTestSetup) addSupplierOrderWithStatus(nodeID, storedHash, status string) uint {
+	d.supplierRepo.mu.Lock()
+	id := d.supplierRepo.nextID()
+	d.supplierRepo.mu.Unlock()
+	d.supplierRepo.add(domain.SupplierOrder{
+		ID:                  id,
+		WaveID:              d.waveID,
+		BasisHistoryNodeID:  nodeID,
+		BasisProjectionHash: storedHash,
+		Status:              status,
+	})
+	return id
+}
+
+// addFulfillmentLine adds a fulfillment line to the wave and returns its ID.
+func (d *driftTestSetup) addFulfillmentLine() uint {
+	fl := domain.FulfillmentLine{WaveID: d.waveID}
+	if err := d.fulfillRepo.Create(&fl); err != nil {
+		panic("driftTestSetup.addFulfillmentLine: " + err.Error())
+	}
+	return fl.ID
 }
 
 // addShipment adds a shipment scoped to the test wave via supplierOrderID 1.
@@ -255,5 +313,155 @@ func TestBasisDriftCurrentHashUnavailable(t *testing.T) {
 	}
 	if len(s.DriftReasonCodes) != 1 || s.DriftReasonCodes[0] != "projection_hash_unavailable" {
 		t.Errorf("DriftReasonCodes = %v, want [projection_hash_unavailable]", s.DriftReasonCodes)
+	}
+}
+
+// TestBasisDriftTargetDeletedTriggersRequired verifies that a submitted supplier order
+// whose line references a fulfillment line that no longer exists in the wave emits
+// a "required" signal with reason code "target_deleted".
+func TestBasisDriftTargetDeletedTriggersRequired(t *testing.T) {
+	t.Parallel()
+	d := newDriftTestSetup()
+
+	// Add a submitted order (no basis node — structural check is independent of hash state).
+	orderID := d.addSupplierOrderWithStatus("", "", "submitted")
+
+	// Attach a line referencing fulfillment line ID 999, which does NOT exist in the wave.
+	d.supplierRepo.addLine(orderID, domain.SupplierOrderLine{
+		FulfillmentLineID: 999,
+	})
+
+	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "hash-current")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Find the structural signal.
+	var found *dto.BasisDriftSignalDTO
+	for i := range signals {
+		if signals[i].BasisKind == "supplier_order" {
+			found = &signals[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected a supplier_order structural signal, got signals: %v", signals)
+	}
+	if found.ReviewRequirement != "required" {
+		t.Errorf("ReviewRequirement = %q, want %q", found.ReviewRequirement, "required")
+	}
+	if len(found.DriftReasonCodes) != 1 || found.DriftReasonCodes[0] != "target_deleted" {
+		t.Errorf("DriftReasonCodes = %v, want [target_deleted]", found.DriftReasonCodes)
+	}
+	if found.BasisDriftStatus != "drifted" {
+		t.Errorf("BasisDriftStatus = %q, want %q", found.BasisDriftStatus, "drifted")
+	}
+}
+
+// TestBasisDriftDraftOrdersSkipped verifies that draft supplier orders with orphaned
+// line references do NOT trigger a "required" structural signal, because drafts are
+// rebuilt on re-export and carry no structural commitment.
+func TestBasisDriftDraftOrdersSkipped(t *testing.T) {
+	t.Parallel()
+	d := newDriftTestSetup()
+
+	// Add a draft order with a line referencing a non-existent fulfillment line.
+	orderID := d.addSupplierOrderWithStatus("", "", "draft")
+	d.supplierRepo.addLine(orderID, domain.SupplierOrderLine{
+		FulfillmentLineID: 999,
+	})
+
+	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "hash-current")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, s := range signals {
+		if s.BasisKind == "supplier_order" && s.ReviewRequirement == "required" {
+			t.Errorf("draft order should not produce a required signal, got: %+v", s)
+		}
+	}
+}
+
+// TestBasisDriftNoStructuralIssueStaysRecommended verifies that a hash mismatch with
+// all fulfillment line references intact stays at "recommended", not "required".
+func TestBasisDriftNoStructuralIssueStaysRecommended(t *testing.T) {
+	t.Parallel()
+	d := newDriftTestSetup()
+
+	// Add a real fulfillment line in the wave.
+	flID := d.addFulfillmentLine()
+
+	// Add a submitted order with a line referencing that valid fulfillment line,
+	// but with a stored hash that differs from the current hash.
+	orderID := d.addSupplierOrderWithStatus("node-abc", "hash-old", "submitted")
+	d.supplierRepo.addLine(orderID, domain.SupplierOrderLine{
+		FulfillmentLineID: flID,
+	})
+
+	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "hash-new")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, s := range signals {
+		if s.ReviewRequirement == "required" {
+			t.Errorf("expected no required signals when all references are valid, got: %+v", s)
+		}
+	}
+
+	// Confirm the hash-mismatch signal is still present as recommended.
+	var hashSignal *dto.BasisDriftSignalDTO
+	for i := range signals {
+		if signals[i].BasisKind == "supplier_order_basis" {
+			hashSignal = &signals[i]
+			break
+		}
+	}
+	if hashSignal == nil {
+		t.Fatal("expected a supplier_order_basis hash-mismatch signal")
+	}
+	if hashSignal.ReviewRequirement != "recommended" {
+		t.Errorf("ReviewRequirement = %q, want %q", hashSignal.ReviewRequirement, "recommended")
+	}
+}
+
+// TestBasisDriftInSyncPlusRequiredCannotOccur verifies the invariant: even when all
+// hash-based signals are in_sync, a structural target_deleted signal still surfaces
+// with ReviewRequirement "required". The two layers are independent.
+func TestBasisDriftInSyncPlusRequiredCannotOccur(t *testing.T) {
+	t.Parallel()
+	d := newDriftTestSetup()
+
+	const hash = "hash-v1"
+
+	// Add a submitted order whose hash is in sync, but whose line references a
+	// fulfillment line that no longer exists — structural unsafety despite hash match.
+	orderID := d.addSupplierOrderWithStatus("node-abc", hash, "submitted")
+	d.supplierRepo.addLine(orderID, domain.SupplierOrderLine{
+		FulfillmentLineID: 999, // does not exist in wave
+	})
+
+	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, hash)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var hasInSync, hasRequired bool
+	for _, s := range signals {
+		if s.BasisDriftStatus == "in_sync" {
+			hasInSync = true
+		}
+		if s.ReviewRequirement == "required" {
+			hasRequired = true
+		}
+	}
+
+	// Hash layer sees in_sync; structural layer sees required — both must be present.
+	if !hasInSync {
+		t.Error("expected at least one in_sync signal from hash layer")
+	}
+	if !hasRequired {
+		t.Error("expected at least one required signal from structural layer")
 	}
 }

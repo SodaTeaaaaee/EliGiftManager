@@ -92,6 +92,7 @@ type DemandDocument struct {
 	AuthoritySnapshotAt  string
 	RawPayload           string
 	ExtraData            string
+	BoundProfileSnapshot string // JSON snapshot of execution-relevant profile fields at wave assignment time
 	CreatedAt            string
 	UpdatedAt            string
 }

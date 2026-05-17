@@ -66,6 +66,7 @@ cd frontend && deno task preview      # preview production build
 10. **Enum alignment**: Go `domain/enums.go` and frontend `entities/*.ts` enum values must be identical strings. No code generation — manual sync required.
 11. **Undo/Redo**: `useUndoRedo` composable handles Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y with focus guard (skips text inputs). After success, `refreshKey` increments to force child route remount.
 12. **Tailwind in h() render functions**: Tailwind JIT does NOT scan Vue `h()` string literals. Use `<style>`-block CSS classes or inline styles instead of Tailwind utilities in render functions.
+13. **History scope**: Only `wave` scope is implemented. Profile/template history is explicitly deferred (see `docs/fulfillment-v2-refactor/03-data-model/06a-history-scope-deferral.md`).
 
 ## Code Style
 

@@ -235,7 +235,7 @@ export async function redoWaveAction(waveId: number): Promise<string> {
 
 export async function exportSupplierOrder(
   waveId: number,
-): Promise<dto.SupplierOrderDTO> {
+): Promise<dto.SupplierOrderDTO[]> {
   assertWailsRuntime();
   return ExportSupplierOrder(waveId);
 }
@@ -247,8 +247,8 @@ export async function listSupplierOrders(): Promise<dto.SupplierOrderDTO[]> {
 
 export async function getSupplierOrderByWave(
   waveId: number,
-): Promise<dto.SupplierOrderDTO> {
-  if (!isWailsRuntimeAvailable()) return new dto.SupplierOrderDTO();
+): Promise<dto.SupplierOrderDTO[]> {
+  if (!isWailsRuntimeAvailable()) return [];
   return GetSupplierOrderByWave(waveId);
 }
 

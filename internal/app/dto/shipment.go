@@ -53,6 +53,7 @@ type ShipmentLineDTO struct {
 type ImportShipmentInput struct {
 	WaveID               uint                  `json:"waveId"`
 	IntegrationProfileID uint                  `json:"integrationProfileId"`
+	ImportMode           string                `json:"importMode"` // "reject_all" | "skip_invalid" (default: "skip_invalid")
 	Entries              []ImportShipmentEntry `json:"entries"`
 }
 

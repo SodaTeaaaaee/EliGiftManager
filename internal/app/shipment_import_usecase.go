@@ -32,9 +32,18 @@ func NewShipmentImportUseCase(
 
 // ImportShipments performs a bulk import of shipments from factory return data.
 // Entries are grouped by ExternalShipmentNo; each group becomes one Shipment with
-// multiple lines. Groups that fail validation are skipped and recorded in Errors.
-// Groups that pass are persisted atomically. Partial success is supported.
+// multiple lines.
+//
+// ImportMode controls failure handling:
+//   - "skip_invalid" (default): skip failed groups, persist valid ones (partial success).
+//   - "reject_all": validate all groups first; if any error exists, return errors and
+//     persist nothing.
 func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error) {
+	mode := input.ImportMode
+	if mode == "" {
+		mode = "skip_invalid"
+	}
+
 	// 1. Validate that the wave has at least one supplier order.
 	supplierOrders, err := uc.supplierRepo.ListByWave(input.WaveID)
 	if err != nil {
@@ -88,25 +97,30 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 		}
 	}
 
-	shipmentIndex := 0
+	now := time.Now().Format(time.RFC3339)
 
-	for _, key := range groupOrder {
+	// validatedGroup holds the outcome of the validation pass for one group.
+	type validatedGroup struct {
+		grp                *group
+		groupErr           []dto.ImportShipmentError
+		groupLines         []*domain.ShipmentLine
+		groupSupplierOrder uint
+		firstEntry         dto.ImportShipmentEntry
+		shipmentIndex      int
+	}
+
+	validated := make([]validatedGroup, 0, len(groupOrder))
+
+	// 3. Validation pass — iterate all groups, collect errors and valid lines.
+	//    No persistence happens here regardless of mode.
+	for i, key := range groupOrder {
 		grp := groupMap[key]
-		shipmentIndex++
 
-		// 3. Validate all entries in this group.
 		var groupErr []dto.ImportShipmentError
 		var groupLines []*domain.ShipmentLine
-
-		// Pick representative fields from first entry for the shipment header.
-		firstEntry := input.Entries[grp.indices[0]]
-
-		// Track the supplier order ID for this group — all lines in a group must
-		// resolve to supplier orders belonging to the same wave. We derive the
-		// supplier order from the supplier order line.
 		var groupSupplierOrderID uint
 
-		now := time.Now().Format(time.RFC3339)
+		firstEntry := input.Entries[grp.indices[0]]
 
 		for _, idx := range grp.indices {
 			e := input.Entries[idx]
@@ -167,10 +181,18 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 				})
 				continue
 			}
-			if e.Quantity > sol.SubmittedQuantity {
+			alreadyShipped, sumErr := uc.shipmentRepo.SumShippedQuantityBySOL(sol.ID)
+			if sumErr != nil {
 				groupErr = append(groupErr, dto.ImportShipmentError{
 					EntryIndex: idx,
-					Reason:     fmt.Sprintf("entry %d: quantity %d exceeds supplier order line %d submitted quantity %d", idx, e.Quantity, e.SupplierOrderLineID, sol.SubmittedQuantity),
+					Reason:     fmt.Sprintf("entry %d: failed to query shipped quantity for SOL %d", idx, sol.ID),
+				})
+				continue
+			}
+			if alreadyShipped+e.Quantity > sol.SubmittedQuantity {
+				groupErr = append(groupErr, dto.ImportShipmentError{
+					EntryIndex: idx,
+					Reason:     fmt.Sprintf("entry %d: over-shipment: already shipped %d + %d > submitted %d for SOL %d", idx, alreadyShipped, e.Quantity, sol.SubmittedQuantity, sol.ID),
 				})
 				continue
 			}
@@ -193,36 +215,71 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			})
 		}
 
-		// If any entry in the group failed, skip the whole group.
-		if len(groupErr) > 0 {
-			result.Errors = append(result.Errors, groupErr...)
-			result.ErrorCount += len(grp.indices)
-			continue
-		}
+		validated = append(validated, validatedGroup{
+			grp:                grp,
+			groupErr:           groupErr,
+			groupLines:         groupLines,
+			groupSupplierOrder: groupSupplierOrderID,
+			firstEntry:         firstEntry,
+			shipmentIndex:      i + 1,
+		})
+	}
 
-		// If no lines were built (shouldn't happen given the above, but guard anyway).
-		if len(groupLines) == 0 {
-			result.Errors = append(result.Errors, dto.ImportShipmentError{
-				EntryIndex: grp.indices[0],
+	// 4. Collect all validation errors across groups.
+	var allErrors []dto.ImportShipmentError
+	for _, vg := range validated {
+		allErrors = append(allErrors, vg.groupErr...)
+		if len(vg.groupLines) == 0 && len(vg.groupErr) == 0 {
+			// Guard: group produced no lines and no errors (shouldn't happen).
+			allErrors = append(allErrors, dto.ImportShipmentError{
+				EntryIndex: vg.grp.indices[0],
 				Reason:     "group produced no valid lines",
 			})
-			result.ErrorCount += len(grp.indices)
+		}
+	}
+
+	// 5. reject_all early-return: if any error exists, return without persisting anything.
+	if mode == "reject_all" && len(allErrors) > 0 {
+		return &dto.ImportShipmentResult{
+			TotalProcessed: len(input.Entries),
+			SuccessCount:   0,
+			ErrorCount:     len(allErrors),
+			Errors:         allErrors,
+		}, nil
+	}
+
+	// 6. Persistence pass — skip_invalid: persist valid groups, record errors for invalid ones.
+	for _, vg := range validated {
+		// If any entry in the group failed, skip the whole group.
+		if len(vg.groupErr) > 0 {
+			result.Errors = append(result.Errors, vg.groupErr...)
+			result.ErrorCount += len(vg.grp.indices)
 			continue
 		}
 
-		// 4. Build shipment domain object.
-		shippedAt := firstEntry.ShippedAt
+		// Guard: group produced no valid lines.
+		if len(vg.groupLines) == 0 {
+			result.Errors = append(result.Errors, dto.ImportShipmentError{
+				EntryIndex: vg.grp.indices[0],
+				Reason:     "group produced no valid lines",
+			})
+			result.ErrorCount += len(vg.grp.indices)
+			continue
+		}
+
+		// Build shipment domain object.
+		shippedAt := vg.firstEntry.ShippedAt
 		if shippedAt == "" {
 			shippedAt = now
 		}
-		shipmentNo := fmt.Sprintf("IMP-%d-%d", input.WaveID, shipmentIndex)
+		shipmentNo := fmt.Sprintf("IMP-%d-%d", input.WaveID, vg.shipmentIndex)
 		shipment := &domain.Shipment{
-			SupplierOrderID:     groupSupplierOrderID,
+			SupplierOrderID:     vg.groupSupplierOrder,
 			ShipmentNo:          shipmentNo,
-			ExternalShipmentNo:  firstEntry.ExternalShipmentNo,
-			CarrierCode:         firstEntry.CarrierCode,
-			CarrierName:         firstEntry.CarrierName,
-			TrackingNo:          firstEntry.TrackingNo,
+			ExternalShipmentNo:  vg.firstEntry.ExternalShipmentNo,
+			CarrierCode:         vg.firstEntry.CarrierCode,
+			CarrierName:         vg.firstEntry.CarrierName,
+			TrackingNo:          vg.firstEntry.TrackingNo,
 			Status:              "shipped",
 			ShippedAt:           shippedAt,
 			BasisHistoryNodeID:  basisNodeID,
@@ -240,21 +297,21 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			}
 		}
 
-		// 5. Persist atomically.
-		if createErr := uc.shipmentRepo.AtomicCreateShipment(shipment, groupLines, pin); createErr != nil {
-			for _, idx := range grp.indices {
+		// Persist atomically.
+		if createErr := uc.shipmentRepo.AtomicCreateShipment(shipment, vg.groupLines, pin); createErr != nil {
+			for _, idx := range vg.grp.indices {
 				result.Errors = append(result.Errors, dto.ImportShipmentError{
 					EntryIndex: idx,
 					Reason:     fmt.Sprintf("persist failed: %v", createErr),
 				})
 			}
-			result.ErrorCount += len(grp.indices)
+			result.ErrorCount += len(vg.grp.indices)
 			continue
 		}
 
-		// 6. Project supplier_state → FulfillmentLine (same logic as CreateShipment).
-		stateUpdates := make([]domain.FulfillmentLineStateUpdate, 0, len(groupLines))
-		for _, l := range groupLines {
+		// Project supplier_state → FulfillmentLine (same logic as CreateShipment).
+		stateUpdates := make([]domain.FulfillmentLineStateUpdate, 0, len(vg.groupLines))
+		for _, l := range vg.groupLines {
 			stateUpdates = append(stateUpdates, domain.FulfillmentLineStateUpdate{
 				ID:            l.FulfillmentLineID,
 				SupplierState: "shipped",
@@ -264,7 +321,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			_ = uc.fulfillRepo.BulkUpdateStates(stateUpdates)
 		}
 
-		// 7. Collect result DTO.
+		// Collect result DTO.
 		shipmentDTO := dto.ShipmentDTO{
 			ID:                  shipment.ID,
 			SupplierOrderID:     shipment.SupplierOrderID,
@@ -281,8 +338,8 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			CreatedAt:           shipment.CreatedAt,
 			UpdatedAt:           shipment.UpdatedAt,
 		}
-		shipmentDTO.Lines = make([]dto.ShipmentLineDTO, len(groupLines))
-		for i, l := range groupLines {
+		shipmentDTO.Lines = make([]dto.ShipmentLineDTO, len(vg.groupLines))
+		for i, l := range vg.groupLines {
 			shipmentDTO.Lines[i] = dto.ShipmentLineDTO{
 				ID:                  l.ID,
 				ShipmentID:          l.ShipmentID,
@@ -293,7 +350,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			}
 		}
 		result.CreatedShipments = append(result.CreatedShipments, shipmentDTO)
-		result.SuccessCount += len(grp.indices)
+		result.SuccessCount += len(vg.grp.indices)
 	}
 
 	return result, nil

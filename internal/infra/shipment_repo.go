@@ -108,3 +108,12 @@ func (r *shipmentRepository) ListLinesByShipment(shipmentID uint) ([]domain.Ship
 	}
 	return result, nil
 }
+
+func (r *shipmentRepository) SumShippedQuantityBySOL(supplierOrderLineID uint) (int, error) {
+	var total int
+	err := r.db.Model(&persistence.ShipmentLine{}).
+		Where("supplier_order_line_id = ?", supplierOrderLineID).
+		Select("COALESCE(SUM(quantity), 0)").
+		Scan(&total).Error
+	return total, err
+}

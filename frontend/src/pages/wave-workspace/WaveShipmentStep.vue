@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NAlert, NButton, NCard, NCollapse, NCollapseItem, NDataTable, NDatePicker, NEmpty, NForm, NFormItem, NInput, NInputNumber, NSelect, NSpin, NTag, NSpace, useMessage } from "naive-ui";
+import { NAlert, NButton, NCard, NCollapse, NCollapseItem, NDataTable, NDatePicker, NEmpty, NForm, NFormItem, NInput, NInputNumber, NRadio, NRadioGroup, NSelect, NSpin, NTag, NSpace, useMessage } from "naive-ui";
 import type { DataTableColumns, DataTableRowKey } from "naive-ui";
 import { createShipment, getSupplierOrderByWave, importShipments, listIntegrationProfiles, listLinesBySupplierOrder, listShipmentsByWave, pickCsvFile } from "@/shared/lib/wails/app";
 import type { ImportShipmentEntry } from "@/shared/lib/wails/app";
@@ -42,6 +42,7 @@ const importSubmitting = ref(false);
 const importError = ref("");
 const importResult = ref<{ successCount: number; errorCount: number; errors: Array<{ entryIndex: number; reason: string }> } | null>(null);
 const importProfileId = ref<number | null>(null);
+const importMode = ref<'skip_invalid' | 'reject_all'>('skip_invalid');
 const integrationProfiles = ref<dto.IntegrationProfileSummaryDTO[]>([]);
 const loadingProfiles = ref(false);
 
@@ -121,6 +122,7 @@ async function handleImportSubmit() {
     const result = await importShipments({
       waveId: waveId.value,
       integrationProfileId: importProfileId.value,
+      importMode: importMode.value,
       entries: entries.map(({ _key: _k, ...rest }) => rest),
     });
     importResult.value = {
@@ -465,6 +467,12 @@ onMounted(async () => {
               :placeholder="t('shipment.importProfile')"
               style="width:280px;"
             />
+          </NFormItem>
+          <NFormItem :label="t('shipment.importMode')">
+            <NRadioGroup v-model:value="importMode">
+              <NRadio value="skip_invalid">{{ t('shipment.importModeSkipInvalid') }}</NRadio>
+              <NRadio value="reject_all" style="margin-left:16px;">{{ t('shipment.importModeRejectAll') }}</NRadio>
+            </NRadioGroup>
           </NFormItem>
         </NForm>
 

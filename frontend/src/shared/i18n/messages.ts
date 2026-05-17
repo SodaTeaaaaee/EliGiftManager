@@ -254,6 +254,9 @@ export const zhCN = {
     addRow: "添加行",
     removeRow: "移除",
     importProfile: "集成配置",
+    importMode: "导入模式",
+    importModeSkipInvalid: "跳过无效行继续导入",
+    importModeRejectAll: "任一行无效则全部拒绝",
     import: {
       supplierOrderLineId: "供应商订单行 ID",
       fulfillmentLineId: "履约行 ID",
@@ -716,6 +719,9 @@ export const enUS = {
     addRow: "Add Row",
     removeRow: "Remove",
     importProfile: "Integration Profile",
+    importMode: "Import Mode",
+    importModeSkipInvalid: "Skip invalid rows, import the rest",
+    importModeRejectAll: "Reject all if any row is invalid",
     import: {
       supplierOrderLineId: "Supplier Order Line ID",
       fulfillmentLineId: "Fulfillment Line ID",

@@ -36,6 +36,33 @@ export interface Shipment {
   lines: ShipmentLine[]
 }
 
+/** Import mode for bulk shipment import. */
+export type ImportMode = 'reject_all' | 'skip_invalid'
+
+/**
+ * Input for bulk shipment import (aligned to Go dto.ImportShipmentInput).
+ */
+export interface ImportShipmentInput {
+  waveId: number
+  integrationProfileId: number
+  importMode?: ImportMode
+  entries: ImportShipmentEntry[]
+}
+
+/**
+ * One row in a bulk shipment import (aligned to Go dto.ImportShipmentEntry).
+ */
+export interface ImportShipmentEntry {
+  supplierOrderLineId: number
+  fulfillmentLineId: number
+  externalShipmentNo: string
+  carrierCode: string
+  carrierName: string
+  trackingNo: string
+  quantity: number
+  shippedAt: string
+}
+
 /**
  * ShipmentLine (aligned to Go dto.ShipmentLineDTO).
  */

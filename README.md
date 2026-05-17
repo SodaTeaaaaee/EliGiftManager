@@ -1,74 +1,114 @@
 # EliGiftManager
 
-多平台桌面发货管理工具。从 Bilibili 等平台导入会员列表，从柔造等工厂平台导入商品数据，通过 Tag 系统做等级-礼物匹配，批量生成工厂规格的发货清单 CSV。
+Desktop gift fulfillment management application built with Wails v2.
 
-## 技术栈
+## Tech Stack
 
-| 层   | 技术                                                    |
-| ---- | ------------------------------------------------------- |
-| 后端 | Go 1.26 + Wails v2.12 + GORM + SQLite (WAL)             |
-| 前端 | Vue 3.5 + TypeScript + Vite 8 + Naive UI + Tailwind CSS |
-| 工具 | Deno 2.7 (前端), Go modules (后端)                      |
+| Layer    | Technology                                              |
+| -------- | ------------------------------------------------------- |
+| Backend  | Go + Wails v2 + GORM + SQLite (WAL mode)                |
+| Frontend | Vue 3 SFC + TypeScript + Vite + Naive UI + Tailwind CSS |
+| Tooling  | Deno (exclusive frontend toolchain)                     |
+| Desktop  | Wails native window lifecycle via `main.go`             |
 
-## 快速开始
+## Architecture
+
+### Backend — 4-layer
+
+```
+internal/domain/        Pure business structs, repository interfaces, enums
+internal/app/           Use cases, DTOs, business orchestration
+internal/infra/         Repository implementations (GORM), one file per aggregate
+controller_*.go         Wails-bound methods (one file per domain, package main)
+```
+
+Each controller is self-contained: it constructs its own repos and use cases from the `database.GetDB()` singleton. Adding a new controller requires `wails generate module` to produce JS/TS bindings.
+
+### Frontend — entity-based
+
+```
+frontend/src/app/                    App shell, layout, router
+frontend/src/pages/                  Route-level screens
+frontend/src/entities/               TypeScript entity types (mirrors Go DTOs)
+frontend/src/shared/composables/     useUndoRedo, useContextMenu, useAdaptiveTable
+frontend/src/shared/model/           Reactive singletons (settings, theme)
+frontend/src/shared/ui/              Shared UI components
+frontend/src/shared/lib/wails/app.ts Single entry point for all Wails bridge calls
+frontend/wailsjs/                    Generated Wails bindings (committed)
+```
+
+All pages and composables call through `frontend/src/shared/lib/wails/app.ts`. Direct imports from `wailsjs/` outside that layer are not allowed.
+
+### Data directory — three-tier resolution
+
+Path resolution via `internal/service/path_service.go`:
+
+1. **Dev** — temp directory adjacent to workdir
+2. **Portable** — `.portable` marker file present next to the binary
+3. **System** — `UserConfigDir` (OS default)
+
+Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths.
+
+## Domain Controllers
+
+| Controller                  | Responsibility                                              |
+| --------------------------- | ----------------------------------------------------------- |
+| `DemandController`          | Demand document intake and routing                          |
+| `WaveController`            | Wave lifecycle, participants, overview                      |
+| `ExportController`          | Supplier order export with execution grouping               |
+| `ShipmentController`        | Shipment creation and bulk import                           |
+| `ChannelSyncController`     | Channel sync planning and execution                         |
+| `AdjustmentController`      | Fulfillment adjustments and replay                          |
+| `ProductController`         | Product catalog management                                  |
+| `ProfileController`         | Integration profile configuration                           |
+| `TemplateController`        | Document template and binding management                    |
+| `AllocationPolicyController`| Policy-driven allocation rules                              |
+
+## Core Workflow
+
+1. **Demand Intake** — Import demand documents with profile binding
+2. **Wave Creation** — Group demands, generate participants
+3. **Fulfillment Generation** — Dual-path: demand-driven mapping + policy-driven allocation
+4. **Supplier Export** — Grouped by execution boundary (profile + template)
+5. **Shipment Tracking** — Manual creation + bulk import with quantity safety
+6. **Channel Sync** — Profile-driven closure with carrier mapping enforcement
+
+## Key Design Principles
+
+- Workspace history with undo/redo (wave scope) — `useUndoRedo` composable
+- Basis drift detection with review requirement signals
+- Bound profile behavior for active waves
+- Import failure mode selection (reject-all / skip-invalid)
+- DTO convention: Go DTOs are the authoritative source for field names; frontend `entities/*.ts` mirrors them exactly
+- Enum values in `domain/enums.go` and `entities/*.ts` must be identical strings — manual sync, no code generation
+
+## Development
 
 ```bash
-go mod tidy
-cd frontend && deno install
-cd .. && wails dev          # 开发模式
-wails build                  # 生产构建
-deno task typecheck          # 前端类型检查
-go test ./...                # 后端测试
+# Backend
+go mod tidy                           # install Go deps
+go test ./...                         # run all tests
+go test -v -run TestX ./internal/...  # run specific test
+wails dev                             # start desktop dev server
+wails build                           # build packaged binary
+
+# Frontend (Deno only — never npm/yarn/pnpm)
+cd frontend && deno install           # install deps
+cd frontend && deno task dev          # Vite dev server on :5173
+cd frontend && deno task build        # typecheck + production build
+cd frontend && deno task typecheck    # vue-tsc type checking only
+cd frontend && deno task preview      # preview production build
 ```
 
-## 核心流程
+## Generated vs. Authored
 
-1. 导入会员 (Bilibili CSV) → Member 表 + Wave.LevelTags
-2. 导入商品 (柔造 ZIP) → Product 表 + ProductImage 多图
-3. Tag 商品 → ProductTag 关联
-4. AllocateByTags → DispatchRecord 创建
-5. BindDefaultAddresses → 补全收件地址
-6. ExportOrderCSV → 工厂规格 CSV 导出
+| Path                                          | Status              |
+| --------------------------------------------- | ------------------- |
+| `frontend/wailsjs/`                           | Generated, committed|
+| `frontend/dist/`, `frontend/node_modules/`    | Generated, ignored  |
+| `build/bin/`                                  | Generated, ignored  |
+| `.cache/`, `.claude/`, `.agents/`             | Tool caches, ignored|
 
-## 目录结构
+## Documentation
 
-```
-├── main.go                       # Wails bootstrap, DB 单例, Controller 绑定
-├── app.go                        # 生命周期 + PickCSV/ZIP + 共享类型/函数
-├── controller_*.go               # 5 个领域 Controller (Member/Product/Wave/System/Template)
-├── internal/
-│   ├── config/                   # 应用元数据
-│   ├── db/                       # SQLite 初始化 (WAL), 自动迁移, DB 单例
-│   ├── middleware/               # AssetServer Middleware (/local-images/)
-│   ├── model/                    # GORM 模型 (Member, Product, Wave, ProductTag, etc.)
-│   └── service/                  # 业务逻辑 (CSV 解析, 导入流水线, 图片存储, 智能路径)
-├── frontend/
-│   ├── src/pages/                # 路由级 Vue 页面
-│   ├── src/shared/lib/wails/app.ts  # Wails 桥接层 (单一入口)
-│   └── wailsjs/                  # 生成的 Wails 绑定 (已提交, 按 Controller 拆分)
-└── data/                         # 运行时数据 (gitignored)
-    ├── eligiftmanager.db
-    └── assets/
-```
-
-## 数据存储
-
-- **数据库**: 三级智能路径 (Temp dev → `.portable` 便携 → UserConfigDir 系统)
-- **图片**: SHA256 Content-Addressable, `data/assets/{hash[:2]}/{hash}.{ext}`
-- **代理**: Wails Middleware `/local-images/` → `data/assets/`
-
-## 开发约定
-
-- Wails 桥接层收敛在 `app.ts`，导入自 6 个 Controller 绑定文件
-- Deno only — 前端工具链不用 npm/yarn/pnpm
-- Controller 按领域拆分，新增业务方法应加入对应 Controller
-- DB 访问通过 `database.GetDB()` 单例
-- 路径解析统一使用 `service.ResolveDataDir()` / `ResolveAssetsDir()`
-- 模板不自动写入 DB，用户通过「添加模板」弹窗从预设选择或自定义
-
-## 生成与忽略
-
-- `frontend/wailsjs/` — Wails 生成, 已提交
-- `frontend/dist/`, `frontend/node_modules/`, `build/bin/` — 生成, 已忽略
-- `data/` — 运行时, 已忽略
-- `.cache/`, `.claude/`, `.agents/` — 工具缓存, 已忽略
+Detailed V2 design documentation is in `docs/fulfillment-v2-refactor/`.

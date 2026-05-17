@@ -63,7 +63,7 @@ func NewChannelSyncController() *ChannelSyncController {
 	return &ChannelSyncController{
 		channelSyncUC:       channelSyncUC,
 		channelSyncRepo:     channelSyncRepo,
-		closureUC:           app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC),
+		closureUC:           app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC, carrierMappingRepo),
 		executeSyncUC:       app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, executorProvider),
 		recordDecisionUC:    app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo),
 		retrySyncUC:         app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, executorProvider),
@@ -183,10 +183,11 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 		historyPinRepo := infra.NewHistoryPinRepository(tx)
 		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
 
+		carrierMappingRepo := infra.NewCarrierMappingRepository(tx)
 		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
 		channelSyncUC := app.NewChannelSyncUseCase(channelSyncRepo, shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
-		closureUC := app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC)
+		closureUC := app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC, carrierMappingRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)

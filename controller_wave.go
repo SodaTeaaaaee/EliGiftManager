@@ -49,7 +49,7 @@ func NewWaveController() *WaveController {
 	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(gormDB)
 	snapshotSvc := app.NewWaveSnapshotService(gormDB, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 
-	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo)
+	basisDriftUC := app.NewBasisDriftDetectionUseCase(supplierRepo, shipmentRepo, channelSyncRepo, fulfillRepo)
 	historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 	overviewProjUC := app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC)
 	productRepo := infra.NewProductRepository(gormDB)
@@ -157,6 +157,8 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		fulfillRepo := infra.NewFulfillmentRepository(tx)
 		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
 		productRepo := infra.NewProductRepository(tx)
+		demandRepoTx := infra.NewDemandRepository(tx)
+		integrationProfileRepoTx := infra.NewIntegrationProfileRepository(tx)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
 		snapshotSvc = app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
@@ -173,6 +175,18 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		}
 		if err := assignmentRepo.Create(assignment); err != nil {
 			return err
+		}
+
+		// Capture profile snapshot onto the demand document at assignment time.
+		// This binds the wave to the profile's current execution behavior; subsequent
+		// profile edits will not silently affect this wave's closure/sync logic.
+		doc, docErr := demandRepoTx.FindByID(demandDocumentID)
+		if docErr == nil && doc != nil && doc.IntegrationProfileID != nil {
+			profile, profErr := integrationProfileRepoTx.FindByID(*doc.IntegrationProfileID)
+			if profErr == nil && profile != nil {
+				snapshot := app.CaptureProfileSnapshot(profile)
+				_ = demandRepoTx.UpdateBoundProfileSnapshot(demandDocumentID, snapshot)
+			}
 		}
 
 		_, err := historySvc.RecordNode(app.RecordNodeInput{

@@ -228,7 +228,7 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 	)
 
 	// Blocking issues
-	blockingIssues := buildBlockingIssues(addressMissingCount, false, false, mappingBlockedCount)
+	blockingIssues := buildBlockingIssues(addressMissingCount, false, false, mappingBlockedCount, true)
 
 	return dto.WaveOverviewDTO{
 		Wave:                       toWaveDTO(w),
@@ -292,6 +292,7 @@ func (uc *waveOverviewQueryUseCase) GetWaveOverview(waveID uint) (dto.WaveOvervi
 		projected.HasDriftedBasis,
 		projected.HasRequiredReviewBasis,
 		projected.MappingBlockedCount,
+		projected.ReplayHealthy,
 	)
 	return projected, nil
 }
@@ -663,8 +664,8 @@ func buildNextStepGuidance(demandCount, fulfillCount, supplierOrderCount, shipme
 	}
 }
 
-func buildBlockingIssues(addressMissingCount int, hasDriftedBasis, hasRequiredReviewBasis bool, mappingBlockedCount int) []string {
-	issues := make([]string, 0, 4)
+func buildBlockingIssues(addressMissingCount int, hasDriftedBasis, hasRequiredReviewBasis bool, mappingBlockedCount int, replayHealthy bool) []string {
+	issues := make([]string, 0, 5)
 	if addressMissingCount > 0 {
 		issues = append(issues, "address_missing")
 	}
@@ -676,6 +677,9 @@ func buildBlockingIssues(addressMissingCount int, hasDriftedBasis, hasRequiredRe
 	}
 	if mappingBlockedCount > 0 {
 		issues = append(issues, "mapping_blocked")
+	}
+	if !replayHealthy {
+		issues = append(issues, "replay_failures_detected")
 	}
 	return issues
 }
@@ -701,7 +705,7 @@ func buildWorkspaceStepStates(overview dto.WaveOverviewDTO, rows []dto.WaveFulfi
 }
 
 func buildWorkspaceGuidance(overview dto.WaveOverviewDTO) []dto.WaveWorkspaceGuidanceDTO {
-	guidance := make([]dto.WaveWorkspaceGuidanceDTO, 0, 4)
+	guidance := make([]dto.WaveWorkspaceGuidanceDTO, 0, 5)
 	if overview.AcceptedWaitingForInput > 0 {
 		guidance = append(guidance, dto.WaveWorkspaceGuidanceDTO{
 			Code:          "waiting_input",
@@ -731,6 +735,14 @@ func buildWorkspaceGuidance(overview dto.WaveOverviewDTO) []dto.WaveWorkspaceGui
 			Severity:      "warning",
 			TargetStepKey: "wave_overview",
 			Count:         1,
+		})
+	}
+	if !overview.ReplayHealthy {
+		guidance = append(guidance, dto.WaveWorkspaceGuidanceDTO{
+			Code:          "replay_failures",
+			Severity:      "warning",
+			TargetStepKey: "wave_overview",
+			Count:         overview.ReplayFailureCount,
 		})
 	}
 	return guidance

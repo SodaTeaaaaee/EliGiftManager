@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -407,13 +408,37 @@ type exportUseCase struct {
 	supplierRepo domain.SupplierOrderRepository
 	fulfillRepo  domain.FulfillmentLineRepository
 	basisStamp   *BasisStampService
+	demandRepo   domain.DemandDocumentRepository
+	profileRepo  domain.IntegrationProfileRepository
+	bindingRepo  domain.ProfileTemplateBindingRepository
 }
 
-func NewExportUseCase(supplierRepo domain.SupplierOrderRepository, fulfillRepo domain.FulfillmentLineRepository, basisStamp *BasisStampService) ExportUseCase {
-	return &exportUseCase{supplierRepo: supplierRepo, fulfillRepo: fulfillRepo, basisStamp: basisStamp}
+func NewExportUseCase(
+	supplierRepo domain.SupplierOrderRepository,
+	fulfillRepo domain.FulfillmentLineRepository,
+	basisStamp *BasisStampService,
+	demandRepo domain.DemandDocumentRepository,
+	profileRepo domain.IntegrationProfileRepository,
+	bindingRepo domain.ProfileTemplateBindingRepository,
+) ExportUseCase {
+	return &exportUseCase{
+		supplierRepo: supplierRepo,
+		fulfillRepo:  fulfillRepo,
+		basisStamp:   basisStamp,
+		demandRepo:   demandRepo,
+		profileRepo:  profileRepo,
+		bindingRepo:  bindingRepo,
+	}
 }
 
-func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder, error) {
+// supplierOrderGroupKey identifies a unique execution boundary for grouping
+// fulfillment lines into a single SupplierOrder.
+type supplierOrderGroupKey struct {
+	IntegrationProfileID uint
+	TemplateID           uint
+}
+
+func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrder, error) {
 	// Delete only existing draft orders for this wave (rebuild pattern for idempotency)
 	if err := uc.supplierRepo.DeleteDraftsByWave(waveID); err != nil {
 		return nil, err
@@ -433,53 +458,154 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) (*domain.SupplierOrder
 		}
 	}
 
-	// [V2-STUB] aggregate all FulfillmentLines for the wave into a SupplierOrder with lines
+	// Get all fulfillment lines for the wave
 	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
 	if err != nil {
 		return nil, err
 	}
 
-	now := time.Now().Format(time.RFC3339)
-	order := &domain.SupplierOrder{
-		WaveID:              waveID,
-		Status:              "draft",
-		SubmissionMode:      "csv",
-		BasisHistoryNodeID:  basisNodeID,
-		BasisProjectionHash: basisHash,
-		CreatedAt:           now,
-		UpdatedAt:           now,
-	}
+	// Group lines by execution boundary (IntegrationProfileID + TemplateID).
+	// Lines whose DemandDocument has no IntegrationProfileID fall into the
+	// catch-all group (zero-value key), preserving backward-compatible behavior.
+	docCache := make(map[uint]*domain.DemandDocument)
+	profileCache := make(map[uint]*domain.IntegrationProfile)
+	groups := make(map[supplierOrderGroupKey][]int) // key → indices into fulfillLines
 
-	lines := make([]*domain.SupplierOrderLine, len(fulfillLines))
 	for i := range fulfillLines {
-		fl := &fulfillLines[i]
-		lines[i] = &domain.SupplierOrderLine{
-			FulfillmentLineID: fl.ID,
-			SubmittedQuantity: fl.Quantity,
-			Status:            "draft",
-			CreatedAt:         now,
-			UpdatedAt:         now,
+		key := uc.resolveGroupKey(&fulfillLines[i], docCache, profileCache)
+		groups[key] = append(groups[key], i)
+	}
+
+	// Sort keys for stable BatchNo assignment across identical inputs
+	sortedKeys := make([]supplierOrderGroupKey, 0, len(groups))
+	for k := range groups {
+		sortedKeys = append(sortedKeys, k)
+	}
+	sort.Slice(sortedKeys, func(i, j int) bool {
+		if sortedKeys[i].IntegrationProfileID != sortedKeys[j].IntegrationProfileID {
+			return sortedKeys[i].IntegrationProfileID < sortedKeys[j].IntegrationProfileID
+		}
+		return sortedKeys[i].TemplateID < sortedKeys[j].TemplateID
+	})
+
+	now := time.Now().Format(time.RFC3339)
+	var results []*domain.SupplierOrder
+
+	for batchIdx, key := range sortedKeys {
+		indices := groups[key]
+
+		// Derive execution metadata from the resolved profile
+		supplierPlatform := ""
+		submissionMode := "csv"
+		templateID := ""
+		if key.IntegrationProfileID != 0 {
+			if profile, ok := profileCache[key.IntegrationProfileID]; ok {
+				supplierPlatform = profile.ConnectorKey
+				if profile.SupportsAPIExport {
+					submissionMode = "api"
+				}
+			}
+		}
+		if key.TemplateID != 0 {
+			templateID = fmt.Sprintf("%d", key.TemplateID)
+		}
+
+		order := &domain.SupplierOrder{
+			WaveID:              waveID,
+			SupplierPlatform:    supplierPlatform,
+			TemplateID:          templateID,
+			BatchNo:             fmt.Sprintf("WAVE-%d-BATCH-%d", waveID, batchIdx+1),
+			Status:              "draft",
+			SubmissionMode:      submissionMode,
+			BasisHistoryNodeID:  basisNodeID,
+			BasisProjectionHash: basisHash,
+			CreatedAt:           now,
+			UpdatedAt:           now,
+		}
+
+		lines := make([]*domain.SupplierOrderLine, len(indices))
+		for li, flIdx := range indices {
+			fl := &fulfillLines[flIdx]
+			lines[li] = &domain.SupplierOrderLine{
+				FulfillmentLineID: fl.ID,
+				SupplierLineNo:    li + 1,
+				// FulfillmentLine has no ProductSKU field; SupplierSKU left empty
+				SupplierSKU:       "",
+				SubmittedQuantity: fl.Quantity,
+				Status:            "draft",
+				CreatedAt:         now,
+				UpdatedAt:         now,
+			}
+		}
+
+		// Only the first order in the wave gets the basis pin (pin is per-wave, not per-order)
+		var pin *domain.BasisPinParam
+		if batchIdx == 0 && pinNodeID != 0 {
+			pin = &domain.BasisPinParam{
+				HistoryNodeID: pinNodeID,
+				PinKind:       "supplier_order_basis",
+				RefType:       "supplier_order",
+			}
+		}
+
+		if err := uc.supplierRepo.AtomicCreateSupplierOrder(order, lines, pin); err != nil {
+			return nil, err
+		}
+
+		uc.projectSupplierStateFromOrder(order, lines)
+		results = append(results, order)
+	}
+
+	return results, nil
+}
+
+// resolveGroupKey determines the execution boundary for a FulfillmentLine by
+// walking DemandDocument → IntegrationProfile → template binding. Lines that
+// cannot be resolved fall into the catch-all group (zero-value key).
+func (uc *exportUseCase) resolveGroupKey(
+	fl *domain.FulfillmentLine,
+	docCache map[uint]*domain.DemandDocument,
+	profileCache map[uint]*domain.IntegrationProfile,
+) supplierOrderGroupKey {
+	if fl.DemandDocumentID == nil || uc.demandRepo == nil {
+		return supplierOrderGroupKey{}
+	}
+
+	docID := *fl.DemandDocumentID
+	doc, ok := docCache[docID]
+	if !ok {
+		found, err := uc.demandRepo.FindByID(docID)
+		if err != nil || found == nil {
+			return supplierOrderGroupKey{}
+		}
+		doc = found
+		docCache[docID] = doc
+	}
+
+	if doc.IntegrationProfileID == nil {
+		return supplierOrderGroupKey{}
+	}
+
+	profileID := *doc.IntegrationProfileID
+	if _, ok := profileCache[profileID]; !ok && uc.profileRepo != nil {
+		found, err := uc.profileRepo.FindByID(profileID)
+		if err != nil || found == nil {
+			// Profile ID known but not resolvable; still group by profile ID alone
+			return supplierOrderGroupKey{IntegrationProfileID: profileID}
+		}
+		profileCache[profileID] = found
+	}
+
+	// Resolve the default template binding for export_supplier_order
+	var templateID uint
+	if uc.bindingRepo != nil {
+		binding, err := uc.bindingRepo.FindDefaultByProfileAndType(profileID, "export_supplier_order")
+		if err == nil && binding != nil {
+			templateID = binding.TemplateID
 		}
 	}
 
-	var pin *domain.BasisPinParam
-	if pinNodeID != 0 {
-		pin = &domain.BasisPinParam{
-			HistoryNodeID: pinNodeID,
-			PinKind:       "supplier_order_basis",
-			RefType:       "supplier_order",
-		}
-	}
-
-	if err := uc.supplierRepo.AtomicCreateSupplierOrder(order, lines, pin); err != nil {
-		return nil, err
-	}
-
-	// Project supplier_state from the newly created supplier order onto each
-	// referenced FulfillmentLine. This is a fact-driven write-path projection.
-	uc.projectSupplierStateFromOrder(order, lines)
-
-	return order, nil
+	return supplierOrderGroupKey{IntegrationProfileID: profileID, TemplateID: templateID}
 }
 
 // projectSupplierStateFromOrder maps a SupplierOrder.Status to the corresponding

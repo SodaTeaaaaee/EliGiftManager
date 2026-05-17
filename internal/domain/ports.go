@@ -18,6 +18,10 @@ type DemandDocumentRepository interface {
 	ListUnassigned() ([]DemandDocument, error)
 	CountByProfileID(profileID uint) (int64, error)
 
+	// UpdateBoundProfileSnapshot persists only the BoundProfileSnapshot field for the given document ID.
+	// Used at wave assignment time and during explicit profile refresh.
+	UpdateBoundProfileSnapshot(docID uint, snapshot string) error
+
 	CreateLine(line *DemandLine) error
 	FindLineByID(id uint) (*DemandLine, error)
 	ListLinesByDocument(docID uint) ([]DemandLine, error)
@@ -69,6 +73,8 @@ type SupplierOrderRepository interface {
 
 	// AtomicCreateSupplierOrder creates order + lines + optional basis pin in one transaction.
 	AtomicCreateSupplierOrder(order *SupplierOrder, lines []*SupplierOrderLine, pin *BasisPinParam) error
+
+	Update(order *SupplierOrder) error
 }
 
 // AllocationPolicyRuleRepository defines persistence operations for AllocationPolicyRule.
@@ -100,6 +106,11 @@ type ShipmentRepository interface {
 
 	CreateLine(line *ShipmentLine) error
 	ListLinesByShipment(shipmentID uint) ([]ShipmentLine, error)
+
+	// SumShippedQuantityBySOL returns the total quantity already shipped for a given
+	// SupplierOrderLine across all existing shipments. Used for cumulative over-shipment
+	// validation before persisting a new shipment.
+	SumShippedQuantityBySOL(supplierOrderLineID uint) (int, error)
 
 	// AtomicCreateShipment creates a shipment, its lines, and optional basis pin atomically.
 	AtomicCreateShipment(shipment *Shipment, lines []*ShipmentLine, pin *BasisPinParam) error

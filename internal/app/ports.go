@@ -38,7 +38,7 @@ type DemandMappingUseCase interface {
 
 // ExportUseCase handles exporting supplier orders from a wave.
 type ExportUseCase interface {
-	ExportSupplierOrder(waveID uint) (*domain.SupplierOrder, error)
+	ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrder, error)
 }
 
 // ShipmentUseCase handles shipment creation and lifecycle.

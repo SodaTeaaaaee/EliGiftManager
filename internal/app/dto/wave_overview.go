@@ -46,11 +46,17 @@ type WaveOverviewDTO struct {
 	SupplierShippedCount      int `json:"supplierShippedCount"`
 
 	// Adjustment summary
-	AdjustmentCount       int `json:"adjustmentCount"`
-	AdjustmentAddCount    int `json:"adjustmentAddCount"`
-	AdjustmentReduceCount int `json:"adjustmentReduceCount"`
+	AdjustmentCount        int `json:"adjustmentCount"`
+	AdjustmentAddCount     int `json:"adjustmentAddCount"`
+	AdjustmentReduceCount  int `json:"adjustmentReduceCount"`
 	AdjustmentReplaceCount int `json:"adjustmentReplaceCount"`
-	AdjustmentRemoveCount int `json:"adjustmentRemoveCount"`
+	AdjustmentRemoveCount  int `json:"adjustmentRemoveCount"`
+
+	// Replay health — reflects whether current adjustments replay cleanly onto
+	// the current fulfillment lines. False means at least one adjustment has an
+	// orphaned or ambiguous target and requires operator attention.
+	ReplayHealthy      bool `json:"replayHealthy"`
+	ReplayFailureCount int  `json:"replayFailureCount"`
 
 	// Next-step guidance
 	SuggestedNextStep string   `json:"suggestedNextStep"`

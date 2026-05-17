@@ -141,6 +141,10 @@ func (m *mockDemandRepo) UpdateLineRoutingFields(lineID uint, routingDisposition
 	return fmt.Errorf("line %d not found", lineID)
 }
 
+func (m *mockDemandRepo) UpdateBoundProfileSnapshot(_ uint, _ string) error {
+	return nil
+}
+
 // ── mock wave repo ──
 
 type mockWaveRepo struct {
@@ -538,6 +542,17 @@ func (m *mockSupplierRepo) DeleteDraftsByWave(waveID uint) error {
 	return nil
 }
 
+func (m *mockSupplierRepo) Update(order *domain.SupplierOrder) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.orders[order.ID]; !ok {
+		return fmt.Errorf("supplier order %d not found", order.ID)
+	}
+	cp := *order
+	m.orders[order.ID] = &cp
+	return nil
+}
+
 func (m *mockSupplierRepo) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, _ *domain.BasisPinParam) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -820,7 +835,7 @@ func TestExportSupplierOrder(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	supplierRepo := newMockSupplierRepo()
 
-	// Setup: create fulfillment lines
+	// Setup: create fulfillment lines (no DemandDocumentID → catch-all group)
 	waveID := uint(42)
 	for i := 0; i < 3; i++ {
 		err := fulfillRepo.Create(&domain.FulfillmentLine{
@@ -833,11 +848,17 @@ func TestExportSupplierOrder(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil)
-	order, err := exportUC.ExportSupplierOrder(waveID)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
+	orders, err := exportUC.ExportSupplierOrder(waveID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder failed: %v", err)
 	}
+
+	// All lines have nil DemandDocumentID → single catch-all group
+	if len(orders) != 1 {
+		t.Fatalf("expected 1 supplier order (catch-all group), got %d", len(orders))
+	}
+	order := orders[0]
 
 	if order.ID == 0 {
 		t.Error("expected SupplierOrder.ID to be set")
@@ -929,11 +950,15 @@ func TestFullVerticalSlice(t *testing.T) {
 	}
 
 	// Step 4: Export Supplier Order
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil)
-	order, err := exportUC.ExportSupplierOrder(wave.ID)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
+	exportedOrders, err := exportUC.ExportSupplierOrder(wave.ID)
 	if err != nil {
 		t.Fatalf("Step 4 ExportSupplierOrder failed: %v", err)
 	}
+	if len(exportedOrders) != 1 {
+		t.Fatalf("Step 4: expected 1 supplier order (catch-all group), got %d", len(exportedOrders))
+	}
+	order := exportedOrders[0]
 	if order.Status != "draft" {
 		t.Errorf("Step 4: expected draft order, got %q", order.Status)
 	}
@@ -1071,12 +1096,15 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
 
 	// First export
-	order1, err := exportUC.ExportSupplierOrder(waveID)
+	orders1, err := exportUC.ExportSupplierOrder(waveID)
 	if err != nil {
 		t.Fatalf("first ExportSupplierOrder failed: %v", err)
+	}
+	if len(orders1) != 1 {
+		t.Fatalf("expected 1 order after first export, got %d", len(orders1))
 	}
 
 	ordersAfter1, _ := supplierRepo.ListByWave(waveID)
@@ -1086,9 +1114,12 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 	}
 
 	// Second export — should be idempotent for draft
-	order2, err := exportUC.ExportSupplierOrder(waveID)
+	orders2, err := exportUC.ExportSupplierOrder(waveID)
 	if err != nil {
 		t.Fatalf("second ExportSupplierOrder failed: %v", err)
+	}
+	if len(orders2) != 1 {
+		t.Fatalf("expected 1 order after second export, got %d", len(orders2))
 	}
 
 	ordersAfter2, _ := supplierRepo.ListByWave(waveID)
@@ -1097,10 +1128,10 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		t.Errorf("idempotent violation: expected 1 order after second export, got %d", orderCount2)
 	}
 
-	if order1.ID == order2.ID {
+	if orders1[0].ID == orders2[0].ID {
 		t.Log("both exports produced same order ID (reused)")
 	} else {
-		t.Logf("order IDs differ: %d vs %d (rebuild pattern ok)", order1.ID, order2.ID)
+		t.Logf("order IDs differ: %d vs %d (rebuild pattern ok)", orders1[0].ID, orders2[0].ID)
 	}
 
 	// Verify the wave still has exactly 1 draft order
@@ -1276,8 +1307,7 @@ func TestMapDemandToFulfillmentBlocksUnmappedProduct(t *testing.T) {
 	}
 }
 
-func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {
-	t.Parallel()
+func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {	t.Parallel()
 
 	demandRepo := newMockDemandRepo()
 	fulfillRepo := newMockFulfillRepo()
@@ -1323,5 +1353,143 @@ func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {
 	}
 	if len(result.BlockedLines) != 0 {
 		t.Errorf("expected 0 blocked lines, got %d", len(result.BlockedLines))
+	}
+}
+
+// ── Export grouping tests ──
+
+// mockProfileRepoForExport is a minimal in-memory IntegrationProfileRepository
+// used only by export grouping tests (avoids collision with mockProfileRepo in
+// channel_closure_test.go which lives in the same test package).
+type mockProfileRepoForExport struct {
+	profiles map[uint]*domain.IntegrationProfile
+}
+
+func newMockProfileRepoForExport(profiles ...*domain.IntegrationProfile) *mockProfileRepoForExport {
+	m := &mockProfileRepoForExport{profiles: make(map[uint]*domain.IntegrationProfile)}
+	for _, p := range profiles {
+		m.profiles[p.ID] = p
+	}
+	return m
+}
+
+func (m *mockProfileRepoForExport) Create(profile *domain.IntegrationProfile) error { return nil }
+func (m *mockProfileRepoForExport) FindByID(id uint) (*domain.IntegrationProfile, error) {
+	p, ok := m.profiles[id]
+	if !ok {
+		return nil, fmt.Errorf("profile %d not found", id)
+	}
+	cp := *p
+	return &cp, nil
+}
+func (m *mockProfileRepoForExport) FindByProfileKey(key string) (*domain.IntegrationProfile, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (m *mockProfileRepoForExport) List() ([]domain.IntegrationProfile, error)              { return nil, nil }
+func (m *mockProfileRepoForExport) Update(profile *domain.IntegrationProfile) error         { return nil }
+func (m *mockProfileRepoForExport) Delete(id uint) error                                    { return nil }
+
+// mockBindingRepo is a minimal in-memory ProfileTemplateBindingRepository for tests.
+type mockBindingRepo struct{}
+
+func (m *mockBindingRepo) Create(b *domain.IntegrationProfileTemplateBinding) error { return nil }
+func (m *mockBindingRepo) ListByProfile(profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+	return nil, nil
+}
+func (m *mockBindingRepo) FindDefaultByProfileAndType(profileID uint, docType string) (*domain.IntegrationProfileTemplateBinding, error) {
+	return nil, nil
+}
+func (m *mockBindingRepo) Delete(id uint) error                          { return nil }
+func (m *mockBindingRepo) CountByProfileID(profileID uint) (int64, error) { return 0, nil }
+
+// TestExportSupplierOrderGroupsByProfile verifies that fulfillment lines belonging
+// to different IntegrationProfiles are split into separate SupplierOrders, while
+// lines with no DemandDocumentID fall into a single catch-all group.
+func TestExportSupplierOrderGroupsByProfile(t *testing.T) {
+	t.Parallel()
+
+	waveID := uint(10)
+	profileA := uint(1)
+	profileB := uint(2)
+
+	demandRepo := newMockDemandRepo()
+	fulfillRepo := newMockFulfillRepo()
+	supplierRepo := newMockSupplierRepo()
+
+	// Create demand documents with different integration profiles
+	docA := &domain.DemandDocument{IntegrationProfileID: &profileA}
+	docB := &domain.DemandDocument{IntegrationProfileID: &profileB}
+	if err := demandRepo.Create(docA); err != nil {
+		t.Fatal(err)
+	}
+	if err := demandRepo.Create(docB); err != nil {
+		t.Fatal(err)
+	}
+
+	// 2 lines for profile A, 1 line for profile B, 1 catch-all (no doc)
+	for i := 0; i < 2; i++ {
+		if err := fulfillRepo.Create(&domain.FulfillmentLine{
+			WaveID:           waveID,
+			Quantity:         5,
+			DemandDocumentID: &docA.ID,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := fulfillRepo.Create(&domain.FulfillmentLine{
+		WaveID:           waveID,
+		Quantity:         3,
+		DemandDocumentID: &docB.ID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := fulfillRepo.Create(&domain.FulfillmentLine{
+		WaveID:   waveID,
+		Quantity: 1,
+		// no DemandDocumentID → catch-all group
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	profileRepo := newMockProfileRepoForExport(
+		&domain.IntegrationProfile{ID: profileA, ConnectorKey: "platform_a"},
+		&domain.IntegrationProfile{ID: profileB, ConnectorKey: "platform_b"},
+	)
+	bindingRepo := &mockBindingRepo{}
+
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, bindingRepo)
+	orders, err := exportUC.ExportSupplierOrder(waveID)
+	if err != nil {
+		t.Fatalf("ExportSupplierOrder failed: %v", err)
+	}
+
+	// Expect 3 groups: catch-all (profileID=0), profileA, profileB
+	if len(orders) != 3 {
+		t.Fatalf("expected 3 supplier orders (one per group), got %d", len(orders))
+	}
+
+	// Verify total line count across all orders equals 4
+	totalLines := 0
+	for _, o := range orders {
+		lines, err := supplierRepo.ListLinesByOrder(o.ID)
+		if err != nil {
+			t.Fatalf("ListLinesByOrder(%d) failed: %v", o.ID, err)
+		}
+		totalLines += len(lines)
+		if o.Status != "draft" {
+			t.Errorf("order %d: expected status 'draft', got %q", o.ID, o.Status)
+		}
+	}
+	if totalLines != 4 {
+		t.Errorf("expected 4 total order lines across all groups, got %d", totalLines)
+	}
+
+	// Verify BatchNo values are distinct
+	batchNos := make(map[string]bool)
+	for _, o := range orders {
+		if batchNos[o.BatchNo] {
+			t.Errorf("duplicate BatchNo %q", o.BatchNo)
+		}
+		batchNos[o.BatchNo] = true
 	}
 }

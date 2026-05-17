@@ -137,6 +137,20 @@ func (m *mockShipmentRepo) ListLinesByShipment(shipmentID uint) ([]domain.Shipme
 	return out, nil
 }
 
+func (m *mockShipmentRepo) SumShippedQuantityBySOL(supplierOrderLineID uint) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	total := 0
+	for _, lines := range m.shipmentLines {
+		for _, l := range lines {
+			if l.SupplierOrderLineID == supplierOrderLineID {
+				total += l.Quantity
+			}
+		}
+	}
+	return total, nil
+}
+
 // ── tests ──
 
 func TestCreateShipmentPersistsShipmentAndLines(t *testing.T) {
@@ -419,16 +433,41 @@ func (m *mockSupplierRepoForShipment) FindLineByID(id uint) (*domain.SupplierOrd
 func (m *mockSupplierRepoForShipment) Create(order *domain.SupplierOrder) error { panic("not implemented") }
 func (m *mockSupplierRepoForShipment) List() ([]domain.SupplierOrder, error)    { panic("not implemented") }
 func (m *mockSupplierRepoForShipment) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
-	panic("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.SupplierOrder
+	for _, o := range m.orders {
+		if o.WaveID == waveID {
+			cp := *o
+			out = append(out, cp)
+		}
+	}
+	return out, nil
 }
 func (m *mockSupplierRepoForShipment) DeleteDraftsByWave(waveID uint) error { panic("not implemented") }
 func (m *mockSupplierRepoForShipment) CreateLine(line *domain.SupplierOrderLine) error {
 	panic("not implemented")
 }
 func (m *mockSupplierRepoForShipment) ListLinesByOrder(orderID uint) ([]domain.SupplierOrderLine, error) {
-	panic("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.SupplierOrderLine
+	for _, l := range m.orderLines {
+		if l.SupplierOrderID == orderID {
+			cp := *l
+			out = append(out, cp)
+		}
+	}
+	return out, nil
 }
 func (m *mockSupplierRepoForShipment) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
+func (m *mockSupplierRepoForShipment) Update(order *domain.SupplierOrder) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cp := *order
+	m.orders[order.ID] = &cp
+	return nil
+}
 func (m *mockSupplierRepoForShipment) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
 	panic("not implemented")
 }
@@ -727,5 +766,192 @@ func TestCreateShipmentRollsBackWhenLinePersistenceFails(t *testing.T) {
 	}
 	if len(shipmentRepo.shipmentLines) != 0 {
 		t.Errorf("expected 0 shipment lines after rollback, got %d", len(shipmentRepo.shipmentLines))
+	}
+}
+
+// ── cumulative over-shipment tests ──
+
+func TestCreateShipmentRejectsOverShipment(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := "2026-01-01T00:00:00Z"
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	// First shipment: ship full quantity (10 of 10).
+	input1 := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test",
+		ShipmentNo:       "SHIP-001",
+		Status:           "shipped",
+		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10}},
+	}
+	if _, _, err := uc.CreateShipment(input1); err != nil {
+		t.Fatalf("first shipment should succeed: %v", err)
+	}
+
+	// Second shipment: any additional quantity must be rejected.
+	input2 := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test",
+		ShipmentNo:       "SHIP-002",
+		Status:           "shipped",
+		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 1}},
+	}
+	_, _, err := uc.CreateShipment(input2)
+	if err == nil {
+		t.Fatal("expected over-shipment error on second attempt, got nil")
+	}
+}
+
+func TestCreateShipmentAllowsPartialThenRemainder(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := "2026-01-01T00:00:00Z"
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	// First shipment: partial (5 of 10).
+	input1 := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test",
+		ShipmentNo:       "SHIP-PARTIAL",
+		Status:           "shipped",
+		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 5}},
+	}
+	if _, _, err := uc.CreateShipment(input1); err != nil {
+		t.Fatalf("partial shipment should succeed: %v", err)
+	}
+
+	// Second shipment: remaining 5 — must succeed.
+	input2 := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test",
+		ShipmentNo:       "SHIP-REMAINDER",
+		Status:           "shipped",
+		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 5}},
+	}
+	if _, _, err := uc.CreateShipment(input2); err != nil {
+		t.Fatalf("remainder shipment should succeed: %v", err)
+	}
+
+	// Third shipment: one more — must be rejected (already at 10/10).
+	input3 := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test",
+		ShipmentNo:       "SHIP-OVER",
+		Status:           "shipped",
+		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 1}},
+	}
+	_, _, err := uc.CreateShipment(input3)
+	if err == nil {
+		t.Fatal("expected over-shipment error after full quantity shipped, got nil")
+	}
+}
+
+func TestImportShipmentsRejectsOverShipment(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := "2026-01-01T00:00:00Z"
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	// Seed an existing shipment line directly so SumShippedQuantityBySOL returns 10.
+	shipmentRepo.shipmentLines[999] = []*domain.ShipmentLine{
+		{ID: 1, ShipmentID: 999, SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10},
+	}
+
+	input := dto.ImportShipmentInput{
+		WaveID: 1,
+		Entries: []dto.ImportShipmentEntry{
+			{
+				ExternalShipmentNo:  "EXT-001",
+				SupplierOrderLineID: 1,
+				FulfillmentLineID:   1,
+				Quantity:            1,
+				CarrierCode:         "SF",
+				TrackingNo:          "T001",
+			},
+		},
+	}
+
+	result, err := uc.ImportShipments(input)
+	if err != nil {
+		t.Fatalf("ImportShipments returned unexpected error: %v", err)
+	}
+	if result.SuccessCount != 0 {
+		t.Errorf("expected 0 successes, got %d", result.SuccessCount)
+	}
+	if result.ErrorCount == 0 {
+		t.Error("expected at least one error for over-shipment, got 0")
+	}
+}
+
+func TestShipmentStatusProjectionPartiallyShipped(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := "2026-01-01T00:00:00Z"
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	// Two SOLs: 10 each.
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	supplierRepo.orderLines[2] = &domain.SupplierOrderLine{ID: 2, SupplierOrderID: 1, FulfillmentLineID: 2, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+	fulfillRepo.lines[2] = &domain.FulfillmentLine{ID: 2, WaveID: 1}
+
+	// Ship only SOL 1 (partial order).
+	input := dto.CreateShipmentInput{
+		SupplierOrderID:  1,
+		SupplierPlatform: "test",
+		ShipmentNo:       "SHIP-PARTIAL",
+		Status:           "shipped",
+		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10}},
+	}
+	shipment, lines, err := uc.CreateShipment(input)
+	if err != nil {
+		t.Fatalf("CreateShipment failed: %v", err)
+	}
+	if shipment == nil || len(lines) == 0 {
+		t.Fatal("expected non-nil shipment and lines")
+	}
+
+	// Verify SumShippedQuantityBySOL reflects the persisted line.
+	sum, err := shipmentRepo.SumShippedQuantityBySOL(1)
+	if err != nil {
+		t.Fatalf("SumShippedQuantityBySOL: %v", err)
+	}
+	if sum != 10 {
+		t.Errorf("expected sum=10 for SOL 1, got %d", sum)
+	}
+
+	// SOL 2 should still be 0.
+	sum2, err := shipmentRepo.SumShippedQuantityBySOL(2)
+	if err != nil {
+		t.Fatalf("SumShippedQuantityBySOL SOL2: %v", err)
+	}
+	if sum2 != 0 {
+		t.Errorf("expected sum=0 for SOL 2, got %d", sum2)
 	}
 }

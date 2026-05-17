@@ -49,6 +49,7 @@ type DemandDocument struct {
 	AuthoritySnapshotAt  *time.Time
 	RawPayload           string `gorm:"type:text"` // JSON
 	ExtraData            string `gorm:"type:text"` // JSON
+	BoundProfileSnapshot string `gorm:"type:text"` // JSON snapshot of execution-relevant profile fields at wave assignment time
 }
 
 func (DemandDocument) TableName() string { return "demand_documents" }

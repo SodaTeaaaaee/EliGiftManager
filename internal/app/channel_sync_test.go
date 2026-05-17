@@ -227,6 +227,9 @@ func (m *mockShipmentRepoForSync) CreateLine(line *domain.ShipmentLine) error { 
 func (m *mockShipmentRepoForSync) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine, _ *domain.BasisPinParam) error {
 	panic("not implemented")
 }
+func (m *mockShipmentRepoForSync) SumShippedQuantityBySOL(supplierOrderLineID uint) (int, error) {
+	return 0, nil
+}
 
 // ── mock supplier order repo ──
 
@@ -267,6 +270,7 @@ func (m *mockSupplierRepoForSync) FindLineByID(id uint) (*domain.SupplierOrderLi
 	panic("not implemented")
 }
 func (m *mockSupplierRepoForSync) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
+func (m *mockSupplierRepoForSync) Update(order *domain.SupplierOrder) error { panic("not implemented") }
 func (m *mockSupplierRepoForSync) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
 	panic("not implemented")
 }

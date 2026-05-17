@@ -108,3 +108,10 @@ func (r *demandRepository) UpdateLineRoutingFields(lineID uint, routingDispositi
 		"updated_at":            time.Now(),
 	}).Error
 }
+
+func (r *demandRepository) UpdateBoundProfileSnapshot(docID uint, snapshot string) error {
+	return r.db.Model(&persistence.DemandDocument{}).Where("id = ?", docID).Updates(map[string]interface{}{
+		"bound_profile_snapshot": snapshot,
+		"updated_at":             time.Now(),
+	}).Error
+}

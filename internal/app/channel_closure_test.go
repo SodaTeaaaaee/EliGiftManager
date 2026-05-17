@@ -97,17 +97,50 @@ func (m *mockDemandRepoForClosure) UpdateLine(_ *domain.DemandLine) error { pani
 func (m *mockDemandRepoForClosure) UpdateLineRoutingFields(_ uint, _, _, _ string) error {
 	panic("not implemented")
 }
+func (m *mockDemandRepoForClosure) UpdateBoundProfileSnapshot(_ uint, _ string) error {
+	return nil
+}
+
+// ── mock carrier mapping repo ──
+
+type mockCarrierMappingRepo struct {
+	mu       sync.Mutex
+	mappings map[uint][]domain.CarrierMapping // keyed by profileID
+}
+
+func newMockCarrierMappingRepo() *mockCarrierMappingRepo {
+	return &mockCarrierMappingRepo{mappings: make(map[uint][]domain.CarrierMapping)}
+}
+
+func (m *mockCarrierMappingRepo) FindByProfileAndInternal(profileID uint, internalCode string) (*domain.CarrierMapping, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, cm := range m.mappings[profileID] {
+		if cm.InternalCarrierCode == internalCode {
+			cp := cm
+			return &cp, nil
+		}
+	}
+	return nil, fmt.Errorf("carrier mapping not found for profile %d, internal code %q", profileID, internalCode)
+}
+
+func (m *mockCarrierMappingRepo) Create(mapping *domain.CarrierMapping) error { panic("not implemented") }
+func (m *mockCarrierMappingRepo) ListByProfile(profileID uint) ([]domain.CarrierMapping, error) {
+	panic("not implemented")
+}
+func (m *mockCarrierMappingRepo) Delete(id uint) error { panic("not implemented") }
 
 // ── helper setup ──
 
 type closureTestSetup struct {
-	profile     *mockProfileRepo
-	shipment    *mockShipmentRepoForSync
-	fulfill     *mockFulfillRepoForSync
-	demand      *mockDemandRepoForClosure
-	channelSync *mockChannelSyncRepo
-	supplier    *mockSupplierRepoForSync
-	uc          ChannelClosureUseCase
+	profile        *mockProfileRepo
+	shipment       *mockShipmentRepoForSync
+	fulfill        *mockFulfillRepoForSync
+	demand         *mockDemandRepoForClosure
+	channelSync    *mockChannelSyncRepo
+	supplier       *mockSupplierRepoForSync
+	carrierMapping *mockCarrierMappingRepo
+	uc             ChannelClosureUseCase
 }
 
 func newClosureTestSetup() *closureTestSetup {
@@ -117,6 +150,7 @@ func newClosureTestSetup() *closureTestSetup {
 	dm := newMockDemandRepoForClosure()
 	cs := newMockChannelSyncRepo()
 	su := newMockSupplierRepoForSync()
+	cm := newMockCarrierMappingRepo()
 
 	// Default profile: api_push, allows_manual_closure
 	pr.profiles[1] = &domain.IntegrationProfile{
@@ -142,13 +176,14 @@ func newClosureTestSetup() *closureTestSetup {
 	lowLevelUC := NewChannelSyncUseCase(cs, sh, su, fl, nil)
 
 	return &closureTestSetup{
-		profile:     pr,
-		shipment:    sh,
-		fulfill:     fl,
-		demand:      dm,
-		channelSync: cs,
-		supplier:    su,
-		uc:          NewChannelClosureUseCase(pr, sh, fl, dm, lowLevelUC),
+		profile:        pr,
+		shipment:       sh,
+		fulfill:        fl,
+		demand:         dm,
+		channelSync:    cs,
+		supplier:       su,
+		carrierMapping: cm,
+		uc:             NewChannelClosureUseCase(pr, sh, fl, dm, lowLevelUC, cm),
 	}
 }
 
@@ -418,6 +453,48 @@ func TestPlanChannelClosureReturnsNoCandidatesAfterProfileFiltering(t *testing.T
 	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error after profile filtering removes all candidates, got nil")
+	}
+}
+
+// ── ListByWave filtering tests ──
+
+// ── carrier mapping enforcement tests ──
+
+func TestPlanChannelClosureRejectsMissingCarrierMapping(t *testing.T) {
+	t.Parallel()
+	s := newClosureTestSetup()
+	s.profile.profiles[1].RequiresCarrierMapping = true
+	// No mapping registered for carrier "SF" — expect rejection.
+
+	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	if err == nil {
+		t.Fatal("expected error when requires_carrier_mapping=true and no mapping exists, got nil")
+	}
+}
+
+func TestPlanChannelClosureTranslatesCarrierCode(t *testing.T) {
+	t.Parallel()
+	s := newClosureTestSetup()
+	s.profile.profiles[1].RequiresCarrierMapping = true
+	// Register a mapping: internal "SF" → external "SF-EXPRESS"
+	s.carrierMapping.mappings[1] = []domain.CarrierMapping{
+		{
+			ID:                   1,
+			IntegrationProfileID: 1,
+			InternalCarrierCode:  "SF",
+			ExternalCarrierCode:  "SF-EXPRESS",
+		},
+	}
+
+	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(result.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(result.Items))
+	}
+	if result.Items[0].CarrierCode != "SF-EXPRESS" {
+		t.Errorf("CarrierCode = %q, want %q (translated external code)", result.Items[0].CarrierCode, "SF-EXPRESS")
 	}
 }
 
