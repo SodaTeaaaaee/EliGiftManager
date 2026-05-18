@@ -185,6 +185,20 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class BindAddressInput {
+	    fulfillmentLineId: number;
+	    customerAddressId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BindAddressInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.customerAddressId = source["customerAddressId"];
+	    }
+	}
 	export class BindTemplateToProfileInput {
 	    integrationProfileId: number;
 	    documentType: string;
@@ -351,6 +365,48 @@ export namespace dto {
 	        this.evidenceRef = source["evidenceRef"];
 	        this.operatorId = source["operatorId"];
 	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class CreateAddressInput {
+	    customerProfileId: number;
+	    label: string;
+	    recipientName: string;
+	    phone: string;
+	    country: string;
+	    province: string;
+	    city: string;
+	    district: string;
+	    addressLine1: string;
+	    addressLine2: string;
+	    postalCode: string;
+	    isDefault: boolean;
+	    isTest: boolean;
+	    validationStatus: string;
+	    validationDetail: string;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateAddressInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.customerProfileId = source["customerProfileId"];
+	        this.label = source["label"];
+	        this.recipientName = source["recipientName"];
+	        this.phone = source["phone"];
+	        this.country = source["country"];
+	        this.province = source["province"];
+	        this.city = source["city"];
+	        this.district = source["district"];
+	        this.addressLine1 = source["addressLine1"];
+	        this.addressLine2 = source["addressLine2"];
+	        this.postalCode = source["postalCode"];
+	        this.isDefault = source["isDefault"];
+	        this.isTest = source["isTest"];
+	        this.validationStatus = source["validationStatus"];
+	        this.validationDetail = source["validationDetail"];
+	        this.extraData = source["extraData"];
 	    }
 	}
 	export class CreateAllocationPolicyRuleInput {
@@ -727,6 +783,54 @@ export namespace dto {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
+	    }
+	}
+	export class CustomerAddressDTO {
+	    id: number;
+	    customerProfileId: number;
+	    label: string;
+	    recipientName: string;
+	    phone: string;
+	    country: string;
+	    province: string;
+	    city: string;
+	    district: string;
+	    addressLine1: string;
+	    addressLine2: string;
+	    postalCode: string;
+	    isDefault: boolean;
+	    isTest: boolean;
+	    validationStatus: string;
+	    validationDetail: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerAddressDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.label = source["label"];
+	        this.recipientName = source["recipientName"];
+	        this.phone = source["phone"];
+	        this.country = source["country"];
+	        this.province = source["province"];
+	        this.city = source["city"];
+	        this.district = source["district"];
+	        this.addressLine1 = source["addressLine1"];
+	        this.addressLine2 = source["addressLine2"];
+	        this.postalCode = source["postalCode"];
+	        this.isDefault = source["isDefault"];
+	        this.isTest = source["isTest"];
+	        this.validationStatus = source["validationStatus"];
+	        this.validationDetail = source["validationDetail"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 	export class DemandDocumentDTO {
@@ -1188,6 +1292,26 @@ export namespace dto {
 	        this.createdBy = source["createdBy"];
 	    }
 	}
+	export class ImportDemandTemplateInput {
+	    integrationProfileId: number;
+	    documentType: string;
+	    sourceDocumentNo: string;
+	    sourceCustomerRef: string;
+	    rows: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportDemandTemplateInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.documentType = source["documentType"];
+	        this.sourceDocumentNo = source["sourceDocumentNo"];
+	        this.sourceCustomerRef = source["sourceCustomerRef"];
+	        this.rows = source["rows"];
+	    }
+	}
 	export class ImportShipmentEntry {
 	    supplierOrderLineId: number;
 	    fulfillmentLineId: number;
@@ -1464,6 +1588,58 @@ export namespace dto {
 	        this.trackingSyncMode = source["trackingSyncMode"];
 	        this.closurePolicy = source["closurePolicy"];
 	        this.allowsManualClosure = source["allowsManualClosure"];
+	    }
+	}
+	export class MergeProfilesInput {
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeProfilesInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	    }
+	}
+	export class MergeProfilesResult {
+	    migratedIdentityCount: number;
+	    migratedAddressCount: number;
+	    updatedDemandDocs: number;
+	    updatedParticipants: number;
+	    updatedFulfillmentLines: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeProfilesResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.migratedIdentityCount = source["migratedIdentityCount"];
+	        this.migratedAddressCount = source["migratedAddressCount"];
+	        this.updatedDemandDocs = source["updatedDemandDocs"];
+	        this.updatedParticipants = source["updatedParticipants"];
+	        this.updatedFulfillmentLines = source["updatedFulfillmentLines"];
+	    }
+	}
+	export class PaginationInput {
+	    page: number;
+	    pageSize: number;
+	    sortBy: string;
+	    sortDesc: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PaginationInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.page = source["page"];
+	        this.pageSize = source["pageSize"];
+	        this.sortBy = source["sortBy"];
+	        this.sortDesc = source["sortDesc"];
 	    }
 	}
 	export class PlanChannelClosureInput {
@@ -1831,6 +2007,50 @@ export namespace dto {
 	        this.extraData = source["extraData"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class UpdateAddressInput {
+	    id: number;
+	    customerProfileId: number;
+	    label: string;
+	    recipientName: string;
+	    phone: string;
+	    country: string;
+	    province: string;
+	    city: string;
+	    district: string;
+	    addressLine1: string;
+	    addressLine2: string;
+	    postalCode: string;
+	    isDefault: boolean;
+	    isTest: boolean;
+	    validationStatus: string;
+	    validationDetail: string;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateAddressInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.label = source["label"];
+	        this.recipientName = source["recipientName"];
+	        this.phone = source["phone"];
+	        this.country = source["country"];
+	        this.province = source["province"];
+	        this.city = source["city"];
+	        this.district = source["district"];
+	        this.addressLine1 = source["addressLine1"];
+	        this.addressLine2 = source["addressLine2"];
+	        this.postalCode = source["postalCode"];
+	        this.isDefault = source["isDefault"];
+	        this.isTest = source["isTest"];
+	        this.validationStatus = source["validationStatus"];
+	        this.validationDetail = source["validationDetail"];
+	        this.extraData = source["extraData"];
 	    }
 	}
 	export class UpdateAllocationPolicyRuleInput {

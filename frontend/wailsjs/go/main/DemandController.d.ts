@@ -10,6 +10,8 @@ export function GetWaveRoutingStats(arg1:number):Promise<dto.WaveRoutingStatsDTO
 
 export function ImportDemandDocument(arg1:dto.CreateDemandInput):Promise<dto.DemandDocumentDTO>;
 
+export function ImportDemandFromCSV(arg1:dto.ImportDemandTemplateInput):Promise<dto.DemandDocumentDTO>;
+
 export function ListDemandDocuments():Promise<Array<dto.DemandDocumentDTO>>;
 
 export function ListDemandInboxRows(arg1:dto.DemandInboxFilterInput):Promise<Array<dto.DemandInboxRowDTO>>;

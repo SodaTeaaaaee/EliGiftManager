@@ -18,6 +18,10 @@ export function ImportDemandDocument(arg1) {
   return window['go']['main']['DemandController']['ImportDemandDocument'](arg1);
 }
 
+export function ImportDemandFromCSV(arg1) {
+  return window['go']['main']['DemandController']['ImportDemandFromCSV'](arg1);
+}
+
 export function ListDemandDocuments() {
   return window['go']['main']['DemandController']['ListDemandDocuments']();
 }

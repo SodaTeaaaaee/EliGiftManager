@@ -200,10 +200,11 @@ type demandMappingUseCase struct {
 	assignmentRepo domain.WaveDemandAssignmentRepository
 	waveRepo       domain.WaveRepository
 	productRepo    domain.ProductRepository
+	addressRepo    domain.CustomerAddressRepository
 }
 
-func NewDemandMappingUseCase(demandRepo domain.DemandDocumentRepository, fulfillRepo domain.FulfillmentLineRepository, assignmentRepo domain.WaveDemandAssignmentRepository, waveRepo domain.WaveRepository, productRepo domain.ProductRepository) DemandMappingUseCase {
-	return &demandMappingUseCase{demandRepo: demandRepo, fulfillRepo: fulfillRepo, assignmentRepo: assignmentRepo, waveRepo: waveRepo, productRepo: productRepo}
+func NewDemandMappingUseCase(demandRepo domain.DemandDocumentRepository, fulfillRepo domain.FulfillmentLineRepository, assignmentRepo domain.WaveDemandAssignmentRepository, waveRepo domain.WaveRepository, productRepo domain.ProductRepository, addressRepo domain.CustomerAddressRepository) DemandMappingUseCase {
+	return &demandMappingUseCase{demandRepo: demandRepo, fulfillRepo: fulfillRepo, assignmentRepo: assignmentRepo, waveRepo: waveRepo, productRepo: productRepo, addressRepo: addressRepo}
 }
 
 // isEligibleForFulfillment checks the unified execution-eligibility rule:
@@ -325,6 +326,20 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 				}
 			}
 
+
+				// Address readiness gate: when addressRepo is wired, block lines whose
+				// profile has no valid addresses.
+				if uc.addressRepo != nil && doc.CustomerProfileID != nil {
+					addrs, addrErr := uc.addressRepo.ListByProfile(*doc.CustomerProfileID)
+					if addrErr == nil && len(addrs) == 0 {
+						blockedLines = append(blockedLines, dto.DemandMappingBlockedLine{
+							DemandLineID:    dl.ID,
+							DemandLineTitle: dl.ExternalTitle,
+							Reason:          "address_unavailable",
+						})
+						continue
+					}
+				}
 			docID := doc.ID
 			lineID := dl.ID
 			fl := domain.FulfillmentLine{

@@ -63,3 +63,26 @@ func (r *profileRepository) ListIdentitiesByProfile(profileID uint) ([]domain.Cu
 	}
 	return result, nil
 }
+
+func (r *profileRepository) FindIdentityByPlatformAndValue(platform, value string) (*domain.CustomerIdentity, error) {
+	var p persistence.CustomerIdentity
+	if err := r.db.Where("identity_platform = ? AND identity_value = ?", platform, value).First(&p).Error; err != nil {
+		return nil, err
+	}
+	return persistence.FromPersistenceCustomerIdentity(&p), nil
+}
+
+func (r *profileRepository) UpdateIdentityProfileID(identityID uint, newProfileID uint) error {
+	return r.db.Model(&persistence.CustomerIdentity{}).Where("id = ?", identityID).Update("customer_profile_id", newProfileID).Error
+}
+
+func (r *profileRepository) BulkUpdateIdentityProfileID(identityIDs []uint, newProfileID uint) error {
+	if len(identityIDs) == 0 {
+		return nil
+	}
+	return r.db.Model(&persistence.CustomerIdentity{}).Where("id IN ?", identityIDs).Update("customer_profile_id", newProfileID).Error
+}
+
+func (r *profileRepository) SoftDelete(id uint) error {
+	return r.db.Delete(&persistence.CustomerProfile{}, id).Error
+}

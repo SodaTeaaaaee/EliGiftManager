@@ -54,6 +54,10 @@ export function ListWaves() {
   return window['go']['main']['WaveController']['ListWaves']();
 }
 
+export function ListWavesPaginated(arg1) {
+  return window['go']['main']['WaveController']['ListWavesPaginated'](arg1);
+}
+
 export function MapDemandLines(arg1) {
   return window['go']['main']['WaveController']['MapDemandLines'](arg1);
 }
@@ -68,4 +72,8 @@ export function RunHistoryGC(arg1) {
 
 export function UndoWaveAction(arg1) {
   return window['go']['main']['WaveController']['UndoWaveAction'](arg1);
+}
+
+export function ValidateStepAccess(arg1, arg2) {
+  return window['go']['main']['WaveController']['ValidateStepAccess'](arg1, arg2);
 }

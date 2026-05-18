@@ -31,6 +31,30 @@ type CustomerIdentity struct {
 
 func (CustomerIdentity) TableName() string { return "customer_identities" }
 
+// ---- CustomerAddress ----
+
+type CustomerAddress struct {
+	gorm.Model
+	CustomerProfileID uint   `gorm:"index;not null"`
+	Label             string
+	RecipientName     string
+	Phone             string
+	Country           string
+	Province          string
+	City              string
+	District          string
+	AddressLine1      string
+	AddressLine2      string
+	PostalCode        string
+	IsDefault         bool `gorm:"not null;default:false"`
+	IsTest            bool `gorm:"not null;default:false"`
+	ValidationStatus  AddressValidationStatus `gorm:"type:text;not null;default:'unvalidated'"`
+	ValidationDetail  string                  `gorm:"type:text"` // JSON
+	ExtraData         string                  `gorm:"type:text"` // JSON
+}
+
+func (CustomerAddress) TableName() string { return "customer_addresses" }
+
 // ---- DemandDocument ----
 
 type DemandDocument struct {

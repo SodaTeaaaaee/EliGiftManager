@@ -289,6 +289,15 @@ const (
 	DocumentFormatAPIPayload = "api_payload"
 )
 
+// CustomerAddress: ValidationStatus
+type AddressValidationStatus string
+
+const (
+	AddressValidationStatusUnvalidated AddressValidationStatus = "unvalidated"
+	AddressValidationStatusValid       AddressValidationStatus = "valid"
+	AddressValidationStatusInvalid     AddressValidationStatus = "invalid"
+)
+
 // ---- ProductKind ----
 
 type ProductKind string

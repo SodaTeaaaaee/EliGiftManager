@@ -124,7 +124,7 @@ func TestExecuteChannelSyncJobSuccess(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()))
+	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -161,7 +161,7 @@ func TestExecuteChannelSyncJobPartialSuccess(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakePartialExecutor()))
+	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakePartialExecutor()), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -179,7 +179,7 @@ func TestExecuteChannelSyncJobFailed(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeFailingExecutor()))
+	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeFailingExecutor()), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -202,7 +202,7 @@ func TestExecuteChannelSyncJobPersistsRequestAndResponsePayload(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()))
+	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -223,7 +223,7 @@ func TestExecuteChannelSyncJobRejectsNonPendingJob(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()))
+	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 	_, err := uc.ExecuteChannelSyncJob(jobID)
@@ -248,7 +248,7 @@ func TestExecuteChannelSyncJobFailsWhenNoExecutorIsAvailable(t *testing.T) {
 		ConnectorKey:      "unknown.connector",
 		ProfileKey:        "test.profile",
 	}
-	uc := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider())
+	uc := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider(), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -278,7 +278,7 @@ func TestExecuteChannelSyncJobPersistsFailedStateWhenExecutorReturnsError(t *tes
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
 
 	errorProvider := &failingExecutorProvider{}
-	uc := NewExecuteSyncUseCase(cs, pr, errorProvider)
+	uc := NewExecuteSyncUseCase(cs, pr, errorProvider, nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -312,7 +312,7 @@ func TestRetryChannelSyncJobRetriesOnlyFailedItems(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	executeUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakePartialExecutor()))
+	executeUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakePartialExecutor()), nil)
 	retryUC := NewRetrySyncUseCase(cs, pr, ep(NewFakeExecutor()))
 
 	jobID, _, _ := setupPendingJob(cs)
@@ -339,7 +339,7 @@ func TestRetryChannelSyncJobRejectsSuccessJob(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	executeUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()))
+	executeUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()), nil)
 	retryUC := NewRetrySyncUseCase(cs, pr, ep(NewFakeExecutor()))
 
 	jobID, _, _ := setupPendingJob(cs)
@@ -384,7 +384,7 @@ func TestExecuteChannelSyncJobMarksItemsFailedWhenExecutorProviderResolutionFail
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push", ConnectorKey: "unknown.connector"}
-	uc := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider())
+	uc := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider(), nil)
 
 	jobID, item1ID, item2ID := setupPendingJob(cs)
 
@@ -420,7 +420,7 @@ func TestExecuteChannelSyncJobMarksItemsFailedWhenExecutorReturnsHardError(t *te
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
-	uc := NewExecuteSyncUseCase(cs, pr, ep(NewHardErrorExecutor()))
+	uc := NewExecuteSyncUseCase(cs, pr, ep(NewHardErrorExecutor()), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -452,7 +452,7 @@ func TestRetryChannelSyncJobCanRetryAfterProviderResolutionFailure(t *testing.T)
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push", ConnectorKey: "unknown.connector"}
 
-	failingUC := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider())
+	failingUC := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider(), nil)
 	jobID, _, _ := setupPendingJob(cs)
 	_, err := failingUC.ExecuteChannelSyncJob(jobID)
 	if err == nil {
@@ -488,7 +488,7 @@ func TestRetryChannelSyncJobCanRetryAfterExecuteFailure(t *testing.T) {
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, TrackingSyncMode: "api_push"}
 
-	failingUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakeFailingExecutor()))
+	failingUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakeFailingExecutor()), nil)
 	jobID, _, _ := setupPendingJob(cs)
 	result1, err := failingUC.ExecuteChannelSyncJob(jobID)
 	if err != nil {
@@ -751,7 +751,7 @@ func TestExecuteChannelSyncJobWithRegisteredDocumentExportExecutorSucceeds(t *te
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
-	uc := NewExecuteSyncUseCase(cs, pr, provider)
+	uc := NewExecuteSyncUseCase(cs, pr, provider, nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -819,7 +819,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testi
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
-	uc := NewExecuteSyncUseCase(cs, pr, provider)
+	uc := NewExecuteSyncUseCase(cs, pr, provider, nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -908,7 +908,7 @@ func TestExecuteChannelSyncJobRejectsModeMismatchAtRuntime(t *testing.T) {
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
-	uc := NewExecuteSyncUseCase(cs, pr, provider)
+	uc := NewExecuteSyncUseCase(cs, pr, provider, nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
@@ -948,7 +948,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorPersistsRealRequestPaylo
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
-	uc := NewExecuteSyncUseCase(cs, pr, provider)
+	uc := NewExecuteSyncUseCase(cs, pr, provider, nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 

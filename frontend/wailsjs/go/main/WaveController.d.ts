@@ -28,6 +28,8 @@ export function ListWaveParticipantRows(arg1:number):Promise<Array<dto.WaveParti
 
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
 
+export function ListWavesPaginated(arg1:dto.PaginationInput):Promise<Record<string, any>>;
+
 export function MapDemandLines(arg1:number):Promise<dto.DemandMappingResult>;
 
 export function RedoWaveAction(arg1:number):Promise<string>;
@@ -35,3 +37,5 @@ export function RedoWaveAction(arg1:number):Promise<string>;
 export function RunHistoryGC(arg1:number):Promise<number>;
 
 export function UndoWaveAction(arg1:number):Promise<string>;
+
+export function ValidateStepAccess(arg1:number,arg2:string):Promise<void>;

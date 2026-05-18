@@ -88,6 +88,53 @@ func FromPersistenceCustomerIdentity(p *CustomerIdentity) *domain.CustomerIdenti
 	}
 }
 
+// ---- CustomerAddress ----
+
+func ToPersistenceCustomerAddress(d *domain.CustomerAddress) *CustomerAddress {
+	return &CustomerAddress{
+		CustomerProfileID: d.CustomerProfileID,
+		Label:             d.Label,
+		RecipientName:     d.RecipientName,
+		Phone:             d.Phone,
+		Country:           d.Country,
+		Province:          d.Province,
+		City:              d.City,
+		District:          d.District,
+		AddressLine1:      d.AddressLine1,
+		AddressLine2:      d.AddressLine2,
+		PostalCode:        d.PostalCode,
+		IsDefault:         d.IsDefault,
+		IsTest:            d.IsTest,
+		ValidationStatus:  AddressValidationStatus(d.ValidationStatus),
+		ValidationDetail:  d.ValidationDetail,
+		ExtraData:         d.ExtraData,
+	}
+}
+
+func FromPersistenceCustomerAddress(p *CustomerAddress) *domain.CustomerAddress {
+	return &domain.CustomerAddress{
+		ID:                p.ID,
+		CustomerProfileID: p.CustomerProfileID,
+		Label:             p.Label,
+		RecipientName:     p.RecipientName,
+		Phone:             p.Phone,
+		Country:           p.Country,
+		Province:          p.Province,
+		City:              p.City,
+		District:          p.District,
+		AddressLine1:      p.AddressLine1,
+		AddressLine2:      p.AddressLine2,
+		PostalCode:        p.PostalCode,
+		IsDefault:         p.IsDefault,
+		IsTest:            p.IsTest,
+		ValidationStatus:  string(p.ValidationStatus),
+		ValidationDetail:  p.ValidationDetail,
+		ExtraData:         p.ExtraData,
+		CreatedAt:         formatTime(p.CreatedAt),
+		UpdatedAt:         formatTime(p.UpdatedAt),
+	}
+}
+
 // ---- DemandDocument ----
 
 func ToPersistenceDemandDocument(d *domain.DemandDocument) *DemandDocument {

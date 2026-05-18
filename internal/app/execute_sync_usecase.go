@@ -12,17 +12,20 @@ type executeSyncUseCase struct {
 	channelSyncRepo  domain.ChannelSyncRepository
 	profileRepo      domain.IntegrationProfileRepository
 	executorProvider ExecutorProvider
+	fulfillmentRepo  domain.FulfillmentLineRepository
 }
 
 func NewExecuteSyncUseCase(
 	channelSyncRepo domain.ChannelSyncRepository,
 	profileRepo domain.IntegrationProfileRepository,
 	executorProvider ExecutorProvider,
+	fulfillmentRepo domain.FulfillmentLineRepository,
 ) ExecuteSyncUseCase {
 	return &executeSyncUseCase{
 		channelSyncRepo:  channelSyncRepo,
 		profileRepo:      profileRepo,
 		executorProvider: executorProvider,
+		fulfillmentRepo:  fulfillmentRepo,
 	}
 }
 
@@ -70,6 +73,7 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 			items[i].UpdatedAt = now
 			_ = uc.channelSyncRepo.SaveItem(&items[i])
 		}
+		uc.projectSyncStateToFulfillment(items)
 		return nil, fmt.Errorf("resolve executor: %w", err)
 	}
 
@@ -87,6 +91,7 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 			items[i].UpdatedAt = now
 			_ = uc.channelSyncRepo.SaveItem(&items[i])
 		}
+		uc.projectSyncStateToFulfillment(items)
 		return nil, fmt.Errorf("executor failed: %w", err)
 	}
 
@@ -107,6 +112,9 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 		}
 	}
 
+	// Project sync state to fulfillment lines
+	uc.projectSyncStateToFulfillment(updatedItems)
+
 	// Update job aggregate
 	job.Status = result.AggregateStatus
 	job.RequestPayload = result.RequestPayload
@@ -119,6 +127,39 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 	}
 
 	return toExecuteSyncResult(job, updatedItems), nil
+}
+
+// projectSyncStateToFulfillment projects each ChannelSyncItem.Status back into
+// the corresponding FulfillmentLine.ChannelSyncState.
+func (uc *executeSyncUseCase) projectSyncStateToFulfillment(items []domain.ChannelSyncItem) {
+	if uc.fulfillmentRepo == nil {
+		return
+	}
+	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(items))
+	for _, item := range items {
+		state := syncItemStatusToFulfillmentState(item.Status)
+		if state == "" {
+			continue
+		}
+		updates = append(updates, domain.FulfillmentLineStateUpdate{
+			ID:               item.FulfillmentLineID,
+			ChannelSyncState: state,
+		})
+	}
+	if len(updates) > 0 {
+		_ = uc.fulfillmentRepo.BulkUpdateStates(updates)
+	}
+}
+
+func syncItemStatusToFulfillmentState(status string) string {
+	switch status {
+	case "success":
+		return "synced"
+	case "failed":
+		return "failed"
+	default:
+		return ""
+	}
 }
 
 func toExecuteSyncResult(job *domain.ChannelSyncJob, items []domain.ChannelSyncItem) *dto.ExecuteSyncResult {

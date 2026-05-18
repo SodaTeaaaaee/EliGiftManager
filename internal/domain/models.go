@@ -74,6 +74,30 @@ type CustomerIdentity struct {
 	UpdatedAt         string
 }
 
+// ---- CustomerAddress ----
+
+type CustomerAddress struct {
+	ID                uint
+	CustomerProfileID uint
+	Label             string
+	RecipientName     string
+	Phone             string
+	Country           string
+	Province          string
+	City              string
+	District          string
+	AddressLine1      string
+	AddressLine2      string
+	PostalCode        string
+	IsDefault         bool
+	IsTest            bool
+	ValidationStatus  string
+	ValidationDetail  string
+	ExtraData         string
+	CreatedAt         string
+	UpdatedAt         string
+}
+
 // ---- DemandDocument ----
 
 type DemandDocument struct {

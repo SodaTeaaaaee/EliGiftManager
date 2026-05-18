@@ -132,7 +132,7 @@ func TestListDashboardRowsUsesProjectedStage(t *testing.T) {
 	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
 		{ID: 1, WaveID: wave.ID, CustomerProfileID: profileID, SnapshotType: "buyer"},
 	})
-	if _, err := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil).MapDemandToFulfillment(wave.ID); err != nil {
+	if _, err := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil).MapDemandToFulfillment(wave.ID); err != nil {
 		t.Fatalf("MapDemandToFulfillment: %v", err)
 	}
 

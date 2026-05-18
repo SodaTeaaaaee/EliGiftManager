@@ -320,6 +320,8 @@ func (m *mockFulfillRepoForSync) DeleteByWave(waveID uint) error {
 	panic("not implemented")
 }
 func (m *mockFulfillRepoForSync) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
+func (m *mockFulfillRepoForSync) Update(line *domain.FulfillmentLine) error { panic("not implemented") }
+func (m *mockFulfillRepoForSync) BulkUpdateCustomerProfileID(_, _ uint) error { return nil }
 
 
 // ── helper: build valid setup ──

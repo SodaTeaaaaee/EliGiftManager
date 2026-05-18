@@ -27,6 +27,8 @@ type WaveController struct {
 	snapshotSvc         *app.WaveSnapshotService
 	historyGraphUC      app.HistoryGraphQueryUseCase
 	historyGCSvc        *app.HistoryGCService
+	lifecycleSvc        *app.LifecycleProjectionService
+	workspaceGuard      *app.WorkspaceGuardService
 }
 
 func NewWaveController() *WaveController {
@@ -54,10 +56,11 @@ func NewWaveController() *WaveController {
 	overviewProjUC := app.NewWaveOverviewProjectionUseCase(channelSyncRepo, closureDecisionRepo, basisDriftUC, historyHeadUC)
 	productRepo := infra.NewProductRepository(gormDB)
 	profileRepo := infra.NewIntegrationProfileRepository(gormDB)
+	addressRepo := infra.NewAddressRepository(gormDB)
 
 	return &WaveController{
 		waveUC:              app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo),
-		demandMappingUC:     app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil),
+		demandMappingUC:     app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, addressRepo),
 		overviewQueryUC:     app.NewWaveOverviewQueryUseCase(waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo, productRepo, profileRepo, historyScopeRepo, historyNodeRepo, overviewProjUC, adjustmentRepo),
 		assignmentRepo:      assignmentRepo,
 		demandRepo:          demandRepo,
@@ -69,6 +72,14 @@ func NewWaveController() *WaveController {
 		snapshotSvc:         snapshotSvc,
 		historyGraphUC:      app.NewHistoryGraphQueryUseCase(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, historyPinRepo),
 		historyGCSvc:        app.NewHistoryGCService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, historyPinRepo),
+		lifecycleSvc:        app.NewLifecycleProjectionService(waveRepo, fulfillRepo, supplierRepo, shipmentRepo, assignmentRepo, channelSyncRepo),
+		workspaceGuard:      app.NewWorkspaceGuardService(assignmentRepo, fulfillRepo, supplierRepo, shipmentRepo),
+	}
+}
+
+func (c *WaveController) persistLifecycle(waveID uint) {
+	if c.lifecycleSvc != nil {
+		_ = c.lifecycleSvc.ProjectAndPersist(waveID)
 	}
 }
 
@@ -130,6 +141,8 @@ func (c *WaveController) ListWaveDashboardRows() ([]dto.WaveDashboardRowDTO, err
 
 // AssignDemandToWave assigns a demand document to a wave.
 func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) error {
+	defer c.persistLifecycle(waveID)
+
 	gormDB := c.gdb
 
 	// Validate wave existence
@@ -178,8 +191,6 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		}
 
 		// Capture profile snapshot onto the demand document at assignment time.
-		// This binds the wave to the profile's current execution behavior; subsequent
-		// profile edits will not silently affect this wave's closure/sync logic.
 		doc, docErr := demandRepoTx.FindByID(demandDocumentID)
 		if docErr == nil && doc != nil && doc.IntegrationProfileID != nil {
 			profile, profErr := integrationProfileRepoTx.FindByID(*doc.IntegrationProfileID)
@@ -207,6 +218,8 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 
 // GenerateParticipants generates WaveParticipantSnapshots from accepted demand lines.
 func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
+	defer c.persistLifecycle(waveID)
+
 	gormDB := c.gdb
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
 	if err != nil {
@@ -261,11 +274,10 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 	return count, nil
 }
 
-// MapDemandLines converts eligible demand-driven DemandLines into FulfillmentLines
-// for retail_order demand documents assigned to the given wave.
-// Returns a DemandMappingResult that includes both successfully mapped lines
-// and any lines blocked by missing product references.
+// MapDemandLines converts eligible demand-driven DemandLines into FulfillmentLines.
 func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, error) {
+	defer c.persistLifecycle(waveID)
+
 	gormDB := c.gdb
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
 	if err != nil {
@@ -285,8 +297,9 @@ func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, 
 		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
 		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
 		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		addressRepo := infra.NewAddressRepository(tx)
 
-		dmUC := app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, productRepo)
+		dmUC := app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, productRepo, addressRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
@@ -385,11 +398,13 @@ func (c *WaveController) ListAssignedDemandsByWave(waveID uint) ([]dto.DemandDoc
 
 // UndoWaveAction undoes the last action for the given wave.
 func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
+	defer c.persistLifecycle(waveID)
 	return c.undoRedoUC.Undo(waveID)
 }
 
 // RedoWaveAction redoes the last undone action for the given wave.
 func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
+	defer c.persistLifecycle(waveID)
 	return c.undoRedoUC.Redo(waveID)
 }
 
@@ -408,7 +423,54 @@ func (c *WaveController) GetHistoryGraph(waveID uint) (dto.HistoryGraphDTO, erro
 }
 
 // RunHistoryGC runs garbage collection on the history for a wave, keeping the last 100 reachable nodes.
-// Returns the count of deleted nodes.
 func (c *WaveController) RunHistoryGC(waveID uint) (int, error) {
 	return c.historyGCSvc.CollectGarbageForWave(waveID, 100)
 }
+
+// ListWavesPaginated returns a paginated list of waves.
+func (c *WaveController) ListWavesPaginated(input dto.PaginationInput) (map[string]any, error) {
+	input = dto.NormalizePagination(input)
+	waves, err := c.waveUC.ListWaves()
+	if err != nil {
+		return nil, err
+	}
+	total := len(waves)
+	result := dto.PaginationResult{Page: input.Page, PageSize: input.PageSize, TotalCount: total}
+	result.ComputePages()
+
+	start := (input.Page - 1) * input.PageSize
+	if start >= total {
+		return map[string]any{"items": []dto.WaveDTO{}, "pagination": result}, nil
+	}
+	end := start + input.PageSize
+	if end > total {
+		end = total
+	}
+	pageWaves := waves[start:end]
+	dtos := make([]dto.WaveDTO, len(pageWaves))
+	for i, w := range pageWaves {
+		dtos[i] = domainToWaveDTO(&w)
+	}
+	return map[string]any{"items": dtos, "pagination": result}, nil
+}
+
+// ValidateStepAccess checks workspace guard invariants for a wave step.
+func (c *WaveController) ValidateStepAccess(waveID uint, stepKey string) error {
+	if c.workspaceGuard == nil {
+		return nil
+	}
+	switch stepKey {
+	case "allocation":
+		return c.workspaceGuard.GuardAllocationRequiresDemandIntake(waveID)
+	case "review":
+		return c.workspaceGuard.GuardReviewRequiresFulfillment(waveID)
+	case "execution":
+		return c.workspaceGuard.GuardExecutionRequiresReview(waveID)
+	case "shipment":
+		return c.workspaceGuard.GuardShipmentRequiresSupplierOrder(waveID)
+	case "sync":
+		return c.workspaceGuard.GuardSyncRequiresShipment(waveID)
+	}
+	return nil
+}
+

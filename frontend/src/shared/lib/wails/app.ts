@@ -70,6 +70,15 @@ import {
   UpdateProductMaster,
 } from "../../../../wailsjs/go/main/ProductController";
 import {
+  CreateAddress,
+  DeleteAddress,
+  GetAddress,
+  ListAddressesByProfile,
+  UpdateAddress,
+  BindAddressToLine,
+  UnbindAddressFromLine,
+} from "../../../../wailsjs/go/main/AddressController";
+import {
   PickCSVFile,
   PickZIPFile,
   SaveZoom,
@@ -789,6 +798,135 @@ export async function pickZipFile(): Promise<string> {
 export async function saveZoom(zoomPercent: number): Promise<void> {
   if (!isWailsRuntimeAvailable()) return;
   await SaveZoom(zoomPercent);
+}
+
+// ── AddressController ──
+
+export async function createAddress(input: {
+  customerProfileId: number
+  label: string
+  recipientName: string
+  phone: string
+  country: string
+  province: string
+  city: string
+  district: string
+  addressLine1: string
+  addressLine2: string
+  postalCode: string
+  isDefault: boolean
+  isTest: boolean
+  validationStatus: string
+  validationDetail: string
+  extraData: string
+}): Promise<dto.CustomerAddressDTO> {
+  assertWailsRuntime()
+  const req = dto.CreateAddressInput.createFrom(input)
+  return CreateAddress(req)
+}
+
+export async function updateAddress(input: {
+  id: number
+  customerProfileId: number
+  label: string
+  recipientName: string
+  phone: string
+  country: string
+  province: string
+  city: string
+  district: string
+  addressLine1: string
+  addressLine2: string
+  postalCode: string
+  isDefault: boolean
+  isTest: boolean
+  validationStatus: string
+  validationDetail: string
+  extraData: string
+}): Promise<dto.CustomerAddressDTO> {
+  assertWailsRuntime()
+  const req = dto.UpdateAddressInput.createFrom(input)
+  return UpdateAddress(req)
+}
+
+export async function deleteAddress(id: number): Promise<void> {
+  assertWailsRuntime()
+  return DeleteAddress(id)
+}
+
+export async function getAddress(id: number): Promise<dto.CustomerAddressDTO> {
+  assertWailsRuntime()
+  return GetAddress(id)
+}
+
+export async function listAddressesByProfile(profileID: number): Promise<dto.CustomerAddressDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListAddressesByProfile(profileID)
+}
+
+export async function bindAddressToLine(input: {
+  fulfillmentLineId: number
+  customerAddressId: number
+}): Promise<dto.CustomerAddressDTO> {
+  assertWailsRuntime()
+  const req = dto.BindAddressInput.createFrom(input)
+  return BindAddressToLine(req)
+}
+
+export async function unbindAddressFromLine(fulfillmentLineID: number): Promise<void> {
+  assertWailsRuntime()
+  return UnbindAddressFromLine(fulfillmentLineID)
+}
+
+// ── Paginated waves ──
+
+export interface PaginationInput {
+  page: number
+  pageSize: number
+  sortBy: string
+  sortDesc: boolean
+}
+
+export interface PaginationResult {
+  page: number
+  pageSize: number
+  totalCount: number
+  totalPages: number
+}
+
+export async function listWavesPaginated(input: PaginationInput): Promise<{
+  items: dto.WaveDTO[]
+  pagination: PaginationResult
+}> {
+  if (!isWailsRuntimeAvailable()) return { items: [], pagination: { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 } }
+  return (window as any).go.main.WaveController.ListWavesPaginated(input)
+}
+
+export async function validateStepAccess(waveId: number, stepKey: string): Promise<void> {
+  assertWailsRuntime()
+  return (window as any).go.main.WaveController.ValidateStepAccess(waveId, stepKey)
+}
+
+// ── MergeController ──
+
+import {
+  MergeProfiles as _MergeProfiles,
+} from "../../../../wailsjs/go/main/MergeController";
+
+export interface MergeProfilesResult {
+  migratedIdentityCount: number
+  migratedAddressCount: number
+  updatedDemandDocs: number
+  updatedParticipants: number
+  updatedFulfillmentLines: number
+}
+
+export async function mergeProfiles(input: {
+  sourceProfileId: number
+  targetProfileId: number
+}): Promise<MergeProfilesResult> {
+  assertWailsRuntime()
+  return _MergeProfiles(input as any) as Promise<MergeProfilesResult>
 }
 
 export { isWailsRuntimeAvailable, assertWailsRuntime };

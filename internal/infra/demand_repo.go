@@ -115,3 +115,7 @@ func (r *demandRepository) UpdateBoundProfileSnapshot(docID uint, snapshot strin
 		"updated_at":             time.Now(),
 	}).Error
 }
+
+func (r *demandRepository) BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) error {
+	return r.db.Model(&persistence.DemandDocument{}).Where("customer_profile_id = ?", oldProfileID).Update("customer_profile_id", newProfileID).Error
+}

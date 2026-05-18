@@ -8,6 +8,21 @@ type CustomerProfileRepository interface {
 
 	CreateIdentity(identity *CustomerIdentity) error
 	ListIdentitiesByProfile(profileID uint) ([]CustomerIdentity, error)
+	FindIdentityByPlatformAndValue(platform, value string) (*CustomerIdentity, error)
+	UpdateIdentityProfileID(identityID uint, newProfileID uint) error
+	BulkUpdateIdentityProfileID(identityIDs []uint, newProfileID uint) error
+	SoftDelete(id uint) error
+}
+
+// CustomerAddressRepository defines persistence operations for CustomerAddress.
+type CustomerAddressRepository interface {
+	Create(addr *CustomerAddress) error
+	FindByID(id uint) (*CustomerAddress, error)
+	ListByProfile(profileID uint) ([]CustomerAddress, error)
+	Update(addr *CustomerAddress) error
+	SoftDelete(id uint) error
+	ClearDefaultByProfile(profileID uint) error
+	BulkUpdateProfileID(oldProfileID, newProfileID uint) error
 }
 
 // DemandDocumentRepository defines persistence operations for DemandDocument and DemandLine.
@@ -22,6 +37,9 @@ type DemandDocumentRepository interface {
 	// Used at wave assignment time and during explicit profile refresh.
 	UpdateBoundProfileSnapshot(docID uint, snapshot string) error
 
+	// BulkUpdateCustomerProfileID reassigns all demand documents from oldProfileID to newProfileID.
+	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) error
+
 	CreateLine(line *DemandLine) error
 	FindLineByID(id uint) (*DemandLine, error)
 	ListLinesByDocument(docID uint) ([]DemandLine, error)
@@ -35,9 +53,12 @@ type WaveRepository interface {
 	FindByID(id uint) (*Wave, error)
 	FindByWaveNo(waveNo string) (*Wave, error)
 	List() ([]Wave, error)
+	UpdateLifecycle(waveID uint, stage string, progressSnapshot string) error
 
 	AddParticipant(snap *WaveParticipantSnapshot) error
 	ListParticipantsByWave(waveID uint) ([]WaveParticipantSnapshot, error)
+	ListParticipantsByProfile(profileID uint) ([]WaveParticipantSnapshot, error)
+	UpdateParticipantProfileID(oldProfileID, newProfileID uint) error
 	DeleteParticipantsByWave(waveID uint) error
 }
 
@@ -52,10 +73,12 @@ type FulfillmentLineRepository interface {
 	Create(line *FulfillmentLine) error
 	FindByID(id uint) (*FulfillmentLine, error)
 	ListByWave(waveID uint) ([]FulfillmentLine, error)
+	Update(line *FulfillmentLine) error
 	DeleteByWave(waveID uint) error
 	DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error
 	ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []FulfillmentLine) error
 	BulkUpdateStates(updates []FulfillmentLineStateUpdate) error
+	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) error
 }
 
 // SupplierOrderRepository defines persistence operations for SupplierOrder and SupplierOrderLine.

@@ -100,6 +100,7 @@ func (m *mockDemandRepoForClosure) UpdateLineRoutingFields(_ uint, _, _, _ strin
 func (m *mockDemandRepoForClosure) UpdateBoundProfileSnapshot(_ uint, _ string) error {
 	return nil
 }
+func (m *mockDemandRepoForClosure) BulkUpdateCustomerProfileID(_, _ uint) error { return nil }
 
 // ── mock carrier mapping repo ──
 

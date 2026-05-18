@@ -127,3 +127,11 @@ type WaveRoutingStatsDTO struct {
 	ExcludedRevokedCount   int `json:"excludedRevokedCount"`
 	PendingIntakeCount     int `json:"pendingIntakeCount"`
 }
+
+type ImportDemandTemplateInput struct {
+	IntegrationProfileID uint                `json:"integrationProfileId"`
+	DocumentType         string              `json:"documentType"`
+	SourceDocumentNo     string              `json:"sourceDocumentNo"`
+	SourceCustomerRef    string              `json:"sourceCustomerRef"`
+	Rows                 []map[string]string `json:"rows"`
+}

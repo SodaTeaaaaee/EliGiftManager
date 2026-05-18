@@ -125,6 +125,17 @@ type ProductUseCase interface {
 	ListProductsByWave(waveID uint) ([]dto.ProductDTO, error)
 }
 
+// AddressManagementUseCase handles CustomerAddress CRUD, binding, and derivation.
+type AddressManagementUseCase interface {
+	CreateAddress(input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error)
+	UpdateAddress(input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error)
+	DeleteAddress(id uint) error
+	GetAddress(id uint) (*dto.CustomerAddressDTO, error)
+	ListAddressesByProfile(profileID uint) ([]dto.CustomerAddressDTO, error)
+	BindAddressToLine(input dto.BindAddressInput) (*dto.CustomerAddressDTO, error)
+	UnbindAddressFromLine(fulfillmentLineID uint) error
+}
+
 // ProfileManagementUseCase handles IntegrationProfile CRUD and seeding.
 type ProfileManagementUseCase interface {
 	CreateProfile(input dto.CreateProfileInput) (*dto.IntegrationProfileDTO, error)
@@ -133,6 +144,12 @@ type ProfileManagementUseCase interface {
 	GetProfile(id uint) (*dto.IntegrationProfileDTO, error)
 	ListProfiles() ([]dto.IntegrationProfileDTO, error)
 	SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error)
+}
+
+// ProfileMergeUseCase handles merging a source profile into a target profile,
+// migrating all identities, addresses, and references.
+type ProfileMergeUseCase interface {
+	MergeProfiles(input dto.MergeProfilesInput) (*dto.MergeProfilesResult, error)
 }
 
 // EntitlementRoutingUseCase handles demand line routing disposition and input state management.

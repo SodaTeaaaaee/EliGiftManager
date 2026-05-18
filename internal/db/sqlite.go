@@ -55,6 +55,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	if err := db.AutoMigrate(
 		&persistence.CustomerProfile{},
 		&persistence.CustomerIdentity{},
+		&persistence.CustomerAddress{},
 		&persistence.DemandDocument{},
 		&persistence.DemandLine{},
 		&persistence.Wave{},

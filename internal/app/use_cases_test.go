@@ -145,6 +145,17 @@ func (m *mockDemandRepo) UpdateBoundProfileSnapshot(_ uint, _ string) error {
 	return nil
 }
 
+func (m *mockDemandRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, d := range m.docs {
+		if d.CustomerProfileID != nil && *d.CustomerProfileID == oldPID {
+			d.CustomerProfileID = &newPID
+		}
+	}
+	return nil
+}
+
 // ── mock wave repo ──
 
 type mockWaveRepo struct {
@@ -225,6 +236,38 @@ func (m *mockWaveRepo) DeleteParticipantsByWave(waveID uint) error {
 		}
 	}
 	m.participants = kept
+	return nil
+}
+
+func (m *mockWaveRepo) ListParticipantsByProfile(profileID uint) ([]domain.WaveParticipantSnapshot, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.WaveParticipantSnapshot
+	for _, p := range m.participants {
+		if p.CustomerProfileID == profileID {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+func (m *mockWaveRepo) UpdateLifecycle(waveID uint, stage string, _ string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if w, ok := m.waves[waveID]; ok {
+		w.LifecycleStage = stage
+	}
+	return nil
+}
+
+func (m *mockWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.participants {
+		if m.participants[i].CustomerProfileID == oldPID {
+			m.participants[i].CustomerProfileID = newPID
+		}
+	}
 	return nil
 }
 
@@ -311,6 +354,26 @@ func (m *mockFulfillRepo) DeleteByWave(waveID uint) error {
 }
 
 func (m *mockFulfillRepo) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
+
+func (m *mockFulfillRepo) Update(line *domain.FulfillmentLine) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.lines[line.ID]; ok {
+		*existing = *line
+	}
+	return nil
+}
+
+func (m *mockFulfillRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, l := range m.lines {
+		if l.CustomerProfileID != nil && *l.CustomerProfileID == oldPID {
+			l.CustomerProfileID = &newPID
+		}
+	}
+	return nil
+}
 
 // ── mock rule repo ──
 
@@ -700,7 +763,7 @@ func TestMapDemandToFulfillmentDemandDriven(t *testing.T) {
 		t.Fatalf("setup assignment Create failed: %v", err)
 	}
 
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 	dmResult, err := dmUC.MapDemandToFulfillment(1)
 	if err != nil {
 		t.Fatalf("MapDemandToFulfillment failed: %v", err)
@@ -779,7 +842,7 @@ func TestMapDemandToFulfillmentFailsOnPartialSnapshotMissing(t *testing.T) {
 		}
 	}
 
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 	_, err := dmUC.MapDemandToFulfillment(1)
 	if err == nil {
 		t.Fatal("expected MapDemandToFulfillment to fail when some retail docs lack participant snapshot, but got nil")
@@ -819,7 +882,7 @@ func TestMapDemandToFulfillmentFailsOnMissingCustomerProfileID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 	_, err := dmUC.MapDemandToFulfillment(1)
 	if err == nil {
 		t.Fatal("expected MapDemandToFulfillment to fail when retail doc has no CustomerProfileID, but got nil")
@@ -940,7 +1003,7 @@ func TestFullVerticalSlice(t *testing.T) {
 	})
 
 	// Step 3: Apply Allocation Rules
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 	dmResult, err := dmUC.MapDemandToFulfillment(wave.ID)
 	if err != nil {
 		t.Fatalf("Step 3 MapDemandToFulfillment failed: %v", err)
@@ -1053,7 +1116,7 @@ func TestMapDemandToFulfillmentIsIdempotentForSameWave(t *testing.T) {
 		t.Fatalf("setup assignment failed: %v", err)
 	}
 
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 
 	// Run allocation first time
 	lines1, err := dmUC.MapDemandToFulfillment(1)
@@ -1183,7 +1246,7 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 		t.Fatalf("setup assignment failed: %v", err)
 	}
 
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 
 	// Apply rules — should succeed and return correct count
 	lines, err := dmUC.MapDemandToFulfillment(1)
@@ -1290,7 +1353,7 @@ func TestMapDemandToFulfillmentBlocksUnmappedProduct(t *testing.T) {
 	}
 
 	// productRepo is nil — no wave-scoped products → mapping fails
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 	result, err := dmUC.MapDemandToFulfillment(1)
 	if err != nil {
 		t.Fatalf("MapDemandToFulfillment failed: %v", err)
@@ -1342,7 +1405,7 @@ func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {	t.
 		t.Fatal(err)
 	}
 
-	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil)
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 	result, err := dmUC.MapDemandToFulfillment(1)
 	if err != nil {
 		t.Fatalf("MapDemandToFulfillment failed: %v", err)

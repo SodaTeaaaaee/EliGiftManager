@@ -72,6 +72,31 @@ func (r *waveRepository) ListParticipantsByWave(waveID uint) ([]domain.WaveParti
 	return result, nil
 }
 
+func (r *waveRepository) ListParticipantsByProfile(profileID uint) ([]domain.WaveParticipantSnapshot, error) {
+	var ps []persistence.WaveParticipantSnapshot
+	if err := r.db.Where("customer_profile_id = ?", profileID).Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.WaveParticipantSnapshot, len(ps))
+	for i, p := range ps {
+		result[i] = *persistence.FromPersistenceWaveParticipantSnapshot(&p)
+	}
+	return result, nil
+}
+
+func (r *waveRepository) UpdateLifecycle(waveID uint, stage string, progressSnapshot string) error {
+	return r.db.Model(&persistence.Wave{}).Where("id = ?", waveID).Updates(map[string]interface{}{
+		"lifecycle_stage":   stage,
+		"progress_snapshot": progressSnapshot,
+	}).Error
+}
+
+func (r *waveRepository) UpdateParticipantProfileID(oldProfileID, newProfileID uint) error {
+	return r.db.Model(&persistence.WaveParticipantSnapshot{}).
+		Where("customer_profile_id = ?", oldProfileID).
+		Update("customer_profile_id", newProfileID).Error
+}
+
 func (r *waveRepository) DeleteParticipantsByWave(waveID uint) error {
 	// WaveParticipantSnapshot has no DeletedAt (no soft-delete); this is a hard delete.
 	return r.db.Where("wave_id = ?", waveID).Delete(&persistence.WaveParticipantSnapshot{}).Error

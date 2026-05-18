@@ -150,6 +150,8 @@ func (m *mockFulfillRepoForAdjustment) DeleteByWave(waveID uint) error {
 	panic("not implemented")
 }
 func (m *mockFulfillRepoForAdjustment) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
+func (m *mockFulfillRepoForAdjustment) Update(line *domain.FulfillmentLine) error { panic("not implemented") }
+func (m *mockFulfillRepoForAdjustment) BulkUpdateCustomerProfileID(_, _ uint) error { return nil }
 
 
 // ── mock WaveRepository (adjustment tests) ──
@@ -192,6 +194,26 @@ func (m *mockWaveRepoForAdjustment) ListParticipantsByWave(waveID uint) ([]domai
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.participants[waveID], nil
+}
+
+func (m *mockWaveRepoForAdjustment) ListParticipantsByProfile(profileID uint) ([]domain.WaveParticipantSnapshot, error) {
+	panic("not implemented")
+}
+
+func (m *mockWaveRepoForAdjustment) UpdateLifecycle(_ uint, _ string, _ string) error { return nil }
+
+func (m *mockWaveRepoForAdjustment) UpdateParticipantProfileID(oldPID, newPID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for waveID, snaps := range m.participants {
+		for i := range snaps {
+			if snaps[i].CustomerProfileID == oldPID {
+				snaps[i].CustomerProfileID = newPID
+			}
+		}
+		m.participants[waveID] = snaps
+	}
+	return nil
 }
 
 func (m *mockWaveRepoForAdjustment) DeleteParticipantsByWave(waveID uint) error {

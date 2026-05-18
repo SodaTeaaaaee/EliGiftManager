@@ -12,13 +12,15 @@ import (
 
 // DemandController exposes demand-intake Wails bindings.
 type DemandController struct {
-	intakeUC           app.DemandIntakeUseCase
-	entitlementRoutingUC app.EntitlementRoutingUseCase
-	demandRepo         domain.DemandDocumentRepository
-	profileRepo        domain.CustomerProfileRepository
-	integrationProfile domain.IntegrationProfileRepository
-	assignmentRepo     domain.WaveDemandAssignmentRepository
-	waveRepo           domain.WaveRepository
+	intakeUC              app.DemandIntakeUseCase
+	entitlementRoutingUC  app.EntitlementRoutingUseCase
+	demandRepo            domain.DemandDocumentRepository
+	profileRepo           domain.CustomerProfileRepository
+	integrationProfile    domain.IntegrationProfileRepository
+	assignmentRepo        domain.WaveDemandAssignmentRepository
+	waveRepo              domain.WaveRepository
+	identityResolution    *app.IdentityResolutionService
+	templateMapping       *app.TemplateMappingService
 }
 
 func NewDemandController() *DemandController {
@@ -28,6 +30,8 @@ func NewDemandController() *DemandController {
 	integrationProfileRepo := infra.NewIntegrationProfileRepository(gdb)
 	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
 	waveRepo := infra.NewWaveRepository(gdb)
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
 	return &DemandController{
 		intakeUC:             app.NewDemandIntakeUseCase(demandRepo),
 		entitlementRoutingUC: app.NewEntitlementRoutingUseCase(demandRepo, assignmentRepo),
@@ -36,6 +40,8 @@ func NewDemandController() *DemandController {
 		integrationProfile:   integrationProfileRepo,
 		assignmentRepo:       assignmentRepo,
 		waveRepo:             waveRepo,
+		identityResolution:   app.NewIdentityResolutionService(profileRepo),
+		templateMapping:      app.NewTemplateMappingService(templateRepo, bindingRepo, integrationProfileRepo),
 	}
 }
 
@@ -57,6 +63,7 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 	effectiveSourceChannel := input.SourceChannel
 	effectiveSourceSurface := input.SourceSurface
 
+	var resolvedProfileID *uint
 	if input.IntegrationProfileID != nil {
 		profile, err := c.integrationProfile.FindByID(*input.IntegrationProfileID)
 		if err != nil {
@@ -71,6 +78,21 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 		if profile.SourceSurface != "" {
 			effectiveSourceSurface = profile.SourceSurface
 		}
+
+		// Auto-resolve CustomerProfile via identity when SourceCustomerRef is provided.
+		if input.CustomerProfileID == nil && input.SourceCustomerRef != "" && effectiveSourceChannel != "" {
+			identityType := app.ResolveIdentityStrategy(profile.IdentityStrategy)
+			pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(effectiveSourceChannel, input.SourceCustomerRef, identityType)
+			if resolveErr != nil {
+				return dto.DemandDocumentDTO{}, fmt.Errorf("identity resolution failed: %w", resolveErr)
+			}
+			resolvedProfileID = &pid
+		}
+	}
+
+	effectiveCustomerProfileID := input.CustomerProfileID
+	if resolvedProfileID != nil {
+		effectiveCustomerProfileID = resolvedProfileID
 	}
 
 	doc := domain.DemandDocument{
@@ -80,7 +102,7 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 		SourceSurface:        effectiveSourceSurface,
 		SourceDocumentNo:     input.SourceDocumentNo,
 		SourceCustomerRef:    input.SourceCustomerRef,
-		CustomerProfileID:    input.CustomerProfileID,
+		CustomerProfileID:    effectiveCustomerProfileID,
 		IntegrationProfileID: input.IntegrationProfileID,
 	}
 	lines := make([]*domain.DemandLine, len(input.Lines))
@@ -106,6 +128,46 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 	}
 	return domainToDemandDTO(&doc), nil
 }
+
+	// ImportDemandFromCSV imports a demand document using a template-driven CSV pipeline.
+func (c *DemandController) ImportDemandFromCSV(input dto.ImportDemandTemplateInput) (dto.DemandDocumentDTO, error) {
+		profile, err := c.integrationProfile.FindByID(input.IntegrationProfileID)
+		if err != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d not found: %w", input.IntegrationProfileID, err)
+		}
+		docType := input.DocumentType
+		if docType == "" {
+			docType = "import_entitlement"
+		}
+		_, mappedLines, err := c.templateMapping.BuildImportPipeline(profile.ID, docType, input.Rows)
+		if err != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("template pipeline: %w", err)
+		}
+		var customerProfileID *uint
+		if input.SourceCustomerRef != "" && profile.SourceChannel != "" {
+			identityType := app.ResolveIdentityStrategy(profile.IdentityStrategy)
+			pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(profile.SourceChannel, input.SourceCustomerRef, identityType)
+			if resolveErr != nil {
+				return dto.DemandDocumentDTO{}, fmt.Errorf("identity resolution: %w", resolveErr)
+			}
+			customerProfileID = &pid
+		}
+		doc := domain.DemandDocument{
+			Kind:                 profile.DemandKind,
+			CaptureMode:          "document_import",
+			SourceChannel:        profile.SourceChannel,
+			SourceSurface:        profile.SourceSurface,
+			SourceDocumentNo:     input.SourceDocumentNo,
+			SourceCustomerRef:    input.SourceCustomerRef,
+			CustomerProfileID:    customerProfileID,
+			IntegrationProfileID: &profile.ID,
+		}
+		if err := c.intakeUC.ImportDemand(&doc, mappedLines); err != nil {
+			return dto.DemandDocumentDTO{}, err
+		}
+		return domainToDemandDTO(&doc), nil
+	}
+
 
 // ListDemandDocuments lists all demand documents.
 func (c *DemandController) ListDemandDocuments() ([]dto.DemandDocumentDTO, error) {

@@ -509,6 +509,15 @@ func (m *mockFulfillRepoForShipment) DeleteByWave(waveID uint) error {
 	panic("not implemented")
 }
 func (m *mockFulfillRepoForShipment) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
+func (m *mockFulfillRepoForShipment) BulkUpdateCustomerProfileID(_, _ uint) error { return nil }
+func (m *mockFulfillRepoForShipment) Update(line *domain.FulfillmentLine) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.lines[line.ID]; ok {
+		*existing = *line
+	}
+	return nil
+}
 
 
 // ── validation tests ──

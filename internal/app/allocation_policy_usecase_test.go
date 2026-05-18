@@ -87,6 +87,26 @@ func (m *policyWaveRepo) ListParticipantsByWave(waveID uint) ([]domain.WaveParti
 	return out, nil
 }
 
+func (m *policyWaveRepo) ListParticipantsByProfile(profileID uint) ([]domain.WaveParticipantSnapshot, error) {
+	panic("not implemented")
+}
+
+func (m *policyWaveRepo) UpdateLifecycle(_ uint, _ string, _ string) error { return nil }
+
+func (m *policyWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for waveID, snaps := range m.participants {
+		for i := range snaps {
+			if snaps[i].CustomerProfileID == oldPID {
+				snaps[i].CustomerProfileID = newPID
+			}
+		}
+		m.participants[waveID] = snaps
+	}
+	return nil
+}
+
 func (m *policyWaveRepo) DeleteParticipantsByWave(waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

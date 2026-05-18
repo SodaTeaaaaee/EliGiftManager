@@ -64,7 +64,7 @@ func NewChannelSyncController() *ChannelSyncController {
 		channelSyncUC:       channelSyncUC,
 		channelSyncRepo:     channelSyncRepo,
 		closureUC:           app.NewChannelClosureUseCase(profileRepo, shipmentRepo, fulfillRepo, demandRepo, channelSyncUC, carrierMappingRepo),
-		executeSyncUC:       app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, executorProvider),
+		executeSyncUC:       app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, executorProvider, nil),
 		recordDecisionUC:    app.NewRecordClosureDecisionUseCase(decisionRepo, fulfillRepo, profileRepo, demandRepo),
 		retrySyncUC:         app.NewRetrySyncUseCase(channelSyncRepo, profileRepo, executorProvider),
 		profileRepo:         profileRepo,
@@ -250,7 +250,7 @@ func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSy
 		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
 		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
 
-		executeSyncUC := app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, buildExecutorProvider())
+		executeSyncUC := app.NewExecuteSyncUseCase(channelSyncRepo, profileRepo, buildExecutorProvider(), nil)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, decisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
@@ -532,9 +532,11 @@ func buildExecutorProvider() app.ExecutorProvider {
 		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
 	}
 	docExportExec := app.NewDocumentExportExecutor(exportsDir)
+		csvExportExec := app.NewCSVExportExecutor(exportsDir)
 	registry := map[string]map[string]app.ChannelSyncExecutor{
 		"document_export": {
 			"eli.local_export": docExportExec,
+				"eli.csv_export":   csvExportExec,
 		},
 	}
 	return app.NewRuntimeExecutorProviderWith(registry)

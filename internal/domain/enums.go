@@ -168,6 +168,15 @@ const (
 	AddressStateInvalid AddressState = "invalid"
 )
 
+// CustomerAddress: ValidationStatus
+type AddressValidationStatus string
+
+const (
+	AddressValidationStatusUnvalidated AddressValidationStatus = "unvalidated"
+	AddressValidationStatusValid       AddressValidationStatus = "valid"
+	AddressValidationStatusInvalid     AddressValidationStatus = "invalid"
+)
+
 // FulfillmentLine: SupplierState
 type SupplierState string
 

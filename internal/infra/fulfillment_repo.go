@@ -31,6 +31,12 @@ func (r *fulfillmentRepository) FindByID(id uint) (*domain.FulfillmentLine, erro
 	return persistence.FromPersistenceFulfillmentLine(&p), nil
 }
 
+func (r *fulfillmentRepository) Update(line *domain.FulfillmentLine) error {
+	p := persistence.ToPersistenceFulfillmentLine(line)
+	p.ID = line.ID
+	return r.db.Save(p).Error
+}
+
 func (r *fulfillmentRepository) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
 	var ps []persistence.FulfillmentLine
 	if err := r.db.Where("wave_id = ?", waveID).Find(&ps).Error; err != nil {
@@ -49,6 +55,12 @@ func (r *fulfillmentRepository) DeleteByWaveAndGeneratedBy(waveID uint, generate
 
 func (r *fulfillmentRepository) DeleteByWave(waveID uint) error {
 	return r.db.Unscoped().Where("wave_id = ?", waveID).Delete(&persistence.FulfillmentLine{}).Error
+}
+
+func (r *fulfillmentRepository) BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) error {
+	return r.db.Model(&persistence.FulfillmentLine{}).
+		Where("customer_profile_id = ?", oldProfileID).
+		Update("customer_profile_id", newProfileID).Error
 }
 
 func (r *fulfillmentRepository) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error {
