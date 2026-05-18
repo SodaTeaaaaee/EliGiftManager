@@ -24,7 +24,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { NMenu, NIcon, type MenuOption } from "naive-ui";
-import { GridOutline, DownloadOutline, LayersOutline, CubeOutline, SettingsOutline, TicketOutline } from "@vicons/ionicons5";
+import { GridOutline, DownloadOutline, LayersOutline, CubeOutline, SettingsOutline, TicketOutline, LocationOutline, GitMergeOutline } from "@vicons/ionicons5";
 import { h } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "@/shared/i18n";
@@ -58,6 +58,16 @@ const menuOptions = computed<MenuOption[]>(() => [
     label: t("nav.products"),
     key: "products",
     icon: () => h(NIcon, null, { default: () => h(CubeOutline) }),
+  },
+  {
+    label: t("nav.addresses"),
+    key: "addresses",
+    icon: () => h(NIcon, null, { default: () => h(LocationOutline) }),
+  },
+  {
+    label: t("nav.merge"),
+    key: "merge",
+    icon: () => h(NIcon, null, { default: () => h(GitMergeOutline) }),
   },
 ]);
 

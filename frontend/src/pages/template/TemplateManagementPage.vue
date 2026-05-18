@@ -7,6 +7,9 @@
         <n-button type="primary" @click="openCreateDrawer">
           {{ t("template.create") }}
         </n-button>
+        <n-button @click="goCsvImport">
+          {{ t("csvImport.title") }}
+        </n-button>
       </n-space>
 
       <n-alert v-if="error" type="error" :title="error" closable @close="error = ''" />
@@ -84,6 +87,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from "vue";
+import { useRouter } from "vue-router";
 import {
   NButton,
   NDataTable,
@@ -105,6 +109,8 @@ import { dto } from "@/../wailsjs/go/models";
 import { useI18n } from "@/shared/i18n";
 
 const { t } = useI18n();
+const router = useRouter();
+function goCsvImport() { router.push({ name: "template-csv-import" }); }
 
 // ── Options ──
 

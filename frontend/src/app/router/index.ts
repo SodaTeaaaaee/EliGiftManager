@@ -108,6 +108,21 @@ const router = createRouter({
           name: "template-bindings",
           component: () => import("@/pages/template/ProfileTemplateBindingPage.vue"),
         },
+        {
+          path: "templates/csv-import",
+          name: "template-csv-import",
+          component: () => import("@/pages/template/TemplateCsvImportPage.vue"),
+        },
+        {
+          path: "addresses",
+          name: "addresses",
+          component: () => import("@/pages/address/AddressManagementPage.vue"),
+        },
+        {
+          path: "merge",
+          name: "merge",
+          component: () => import("@/pages/profile/ProfileMergePage.vue"),
+        },
         // Legacy wave-overview route — redirect to dashboard (consolidated into workspace wizard)
         {
           path: "wave-overview",

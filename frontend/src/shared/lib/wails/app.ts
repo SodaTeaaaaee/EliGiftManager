@@ -741,6 +741,19 @@ export async function getDefaultTemplateForProfile(profileId: number, docType: s
   return GetDefaultTemplateForProfile(profileId, docType)
 }
 
+// ── DemandController (CSV import) ──
+
+export async function importDemandFromCSV(input: {
+  integrationProfileId: number
+  documentType: string
+  sourceDocumentNo: string
+  sourceCustomerRef: string
+  rows: Record<string, string>[]
+}): Promise<dto.DemandDocumentDTO> {
+  assertWailsRuntime()
+  return (window as any).go.main.DemandController.ImportDemandFromCSV(input)
+}
+
 // ── DemandController (routing management) ──
 
 export async function updateDemandLineRouting(input: {
