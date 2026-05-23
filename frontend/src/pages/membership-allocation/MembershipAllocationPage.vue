@@ -35,6 +35,12 @@ const platformFilter = ref<string | null>(null);
 
 const filteredParticipants = computed(() => {
   return participants.value.filter((p) => {
+    // If route.params.demandKind is set, ensure participant has that demand kind
+    const demandKindParam = route.params.demandKind as string;
+    if (demandKindParam && (!p.demandKinds || !p.demandKinds.includes(demandKindParam))) {
+      return false;
+    }
+
     const matchesKeyword = !searchKeyword.value || 
       p.displayName.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
       p.identityValue.toLowerCase().includes(searchKeyword.value.toLowerCase());

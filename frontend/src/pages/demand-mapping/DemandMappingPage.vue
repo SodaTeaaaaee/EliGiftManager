@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref, reactive } from "vue";
+import { computed, h, onMounted, ref, reactive, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NAlert, NButton, NCard, NDataTable, NEmpty, NTag, NSpace, NInput, NSelect, NModal, NForm, NFormItem, useMessage } from "naive-ui";
+import { NAlert, NButton, NCard, NDataTable, NEmpty, NTag, NSpace, NInput, NSelect, NModal, NForm, NFormItem, useMessage, NIcon } from "naive-ui";
+import { ListOutline, CheckmarkCircleOutline, DocumentTextOutline } from "@vicons/ionicons5";
 import type { DataTableColumns } from "naive-ui";
 import { 
   generateParticipants, 
@@ -15,6 +16,9 @@ import {
 } from "@/shared/lib/wails/app";
 import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
+import PageHeader from "@/shared/ui/PageHeader.vue";
+import GlassCard from "@/shared/ui/GlassCard.vue";
+import SplitPane from "@/shared/ui/SplitPane.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -26,14 +30,17 @@ const docs = ref<dto.DemandDocumentDTO[]>([]);
 const loading = ref(false);
 const applying = ref(false);
 const participantsGenerated = ref(false);
-const lineCache = ref<Record<number, dto.DemandLineDTO[]>>({});
-const expandedKeys = ref<number[]>([]);
 const blockedSummary = ref<string>("");
 
 // Search, Filter and Stats state
 const searchKeyword = ref("");
 const channelFilter = ref<string | null>(null);
 const routingStats = ref<any | null>(null);
+
+// SplitPane selection state
+const selectedDocId = ref<number | null>(null);
+const selectedDocLines = ref<dto.DemandLineDTO[]>([]);
+const linesLoading = ref(false);
 
 // Inline Address Editor State
 const addressModalVisible = ref(false);
@@ -61,6 +68,12 @@ const channelOptions = computed(() => {
 
 const filteredDocs = computed(() => {
   return docs.value.filter((doc) => {
+    // If route.params.demandKind is set, filter by kind
+    const demandKindParam = route.params.demandKind as string;
+    if (demandKindParam && doc.kind !== demandKindParam) {
+      return false;
+    }
+
     const matchesKeyword = !searchKeyword.value || 
       doc.sourceDocumentNo.toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
       (doc.sourceCustomerRef && doc.sourceCustomerRef.toLowerCase().includes(searchKeyword.value.toLowerCase()));
@@ -69,20 +82,12 @@ const filteredDocs = computed(() => {
   });
 });
 
+const selectedDoc = computed(() => docs.value.find(d => d.id === selectedDocId.value));
+
 const columns = computed<DataTableColumns<dto.DemandDocumentDTO>>(() => [
-  { type: "expand", renderExpand: (row) => renderExpand(row) },
   { title: "ID", key: "id", width: 65 },
-  { title: "Kind", key: "kind", width: 140 },
-  { title: "Source Document No", key: "sourceDocumentNo", width: 180 },
-  { title: "Customer Ref", key: "sourceCustomerRef", width: 160 },
-  { 
-    title: "Profile", 
-    key: "customerProfileId", 
-    width: 100,
-    render: (row) => row.customerProfileId ? h(NTag, { size: "small", bordered: false }, { default: () => `Profile #${row.customerProfileId}` }) : "—"
-  },
-  { title: "Channel", key: "sourceChannel", width: 110 },
-  { title: "Capture Mode", key: "captureMode", width: 120 },
+  { title: "Source No", key: "sourceDocumentNo" },
+  { title: "Channel", key: "sourceChannel", width: 100 },
 ]);
 
 const lineColumns = computed<DataTableColumns<dto.DemandLineDTO>>(() => [
@@ -92,7 +97,7 @@ const lineColumns = computed<DataTableColumns<dto.DemandLineDTO>>(() => [
   { 
     title: t("mapping.columns.disposition"), 
     key: "routingDisposition", 
-    width: 140,
+    width: 120,
     render(row) {
       const type = row.routingDisposition === "blocked" ? "error" : row.routingDisposition === "deferred" ? "warning" : "success";
       return h(NTag, { type, size: "small", round: true, bordered: false }, { default: () => row.routingDisposition });
@@ -101,17 +106,17 @@ const lineColumns = computed<DataTableColumns<dto.DemandLineDTO>>(() => [
   { 
     title: t("mapping.columns.input"), 
     key: "recipientInputState", 
-    width: 160,
+    width: 140,
     render(row) {
       const type = row.recipientInputState === "address_unavailable" || row.recipientInputState === "address_invalid" ? "warning" : "default";
       return h(NTag, { type, size: "small", bordered: false }, { default: () => row.recipientInputState || "none" });
     }
   },
-  { title: t("mapping.columns.qty"), key: "requestedQuantity", width: 85 },
+  { title: t("mapping.columns.qty"), key: "requestedQuantity", width: 65 },
   {
     title: "Actions",
     key: "actions",
-    width: 120,
+    width: 110,
     render(row) {
       const needsFix = row.recipientInputState === "address_unavailable" || row.recipientInputState === "address_invalid";
       if (needsFix) {
@@ -122,9 +127,8 @@ const lineColumns = computed<DataTableColumns<dto.DemandLineDTO>>(() => [
             type: "warning",
             secondary: true,
             onClick: () => {
-              const doc = docs.value.find(d => d.id === row.demandDocumentId);
-              if (doc && doc.customerProfileId) {
-                openAddressFixer(doc.customerProfileId);
+              if (selectedDoc.value && selectedDoc.value.customerProfileId) {
+                openAddressFixer(selectedDoc.value.customerProfileId);
               } else {
                 message.error("Cannot resolve address: No profile associated with this document.");
               }
@@ -152,20 +156,33 @@ async function loadDocs() {
   }
 }
 
-async function loadLines(docId: number) {
-  if (lineCache.value[docId]) return;
-  lineCache.value[docId] = await listDemandLines(docId);
+async function loadLinesForSelection() {
+  if (!selectedDocId.value) {
+    selectedDocLines.value = [];
+    return;
+  }
+  linesLoading.value = true;
+  try {
+    selectedDocLines.value = await listDemandLines(selectedDocId.value);
+  } catch (e: unknown) {
+    message.error(e instanceof Error ? e.message : String(e));
+  } finally {
+    linesLoading.value = false;
+  }
 }
 
-function renderExpand(row: dto.DemandDocumentDTO) {
-  const lines = lineCache.value[row.id] || [];
-  return h(NDataTable, {
-    columns: lineColumns.value,
-    data: lines,
-    size: "small",
-    bordered: false,
-    pagination: false,
-  });
+watch(selectedDocId, loadLinesForSelection);
+
+function selectRow(row: dto.DemandDocumentDTO) {
+  selectedDocId.value = row.id;
+}
+
+function rowProps(row: dto.DemandDocumentDTO) {
+  return {
+    style: 'cursor: pointer;',
+    class: selectedDocId.value === row.id ? 'bg-blue-50 dark:bg-blue-900/20' : '',
+    onClick: () => selectRow(row)
+  };
 }
 
 async function handleGenerateParticipants() {
@@ -191,6 +208,7 @@ async function handleMap() {
     }
     message.success(t("mapping.mapDemandOk"));
     await loadDocs();
+    if (selectedDocId.value) await loadLinesForSelection();
   } catch (e: unknown) {
     message.error(e instanceof Error ? e.message : String(e));
   } finally {
@@ -281,110 +299,103 @@ onMounted(loadDocs);
 </script>
 
 <template>
-  <div class="demand-mapping-page flex flex-col gap-5">
-    <div class="mb-2">
-      <div class="app-kicker">{{ t("wave.mapping") }}</div>
-      <h2 class="app-title mt-2">{{ t("mapping.title") }}</h2>
-      <p class="app-copy mt-2">{{ t("mapping.subtitle") }}</p>
-    </div>
+  <div class="demand-mapping-page flex flex-col h-full">
+    <PageHeader 
+      :title="t('mapping.title')" 
+      :description="t('mapping.subtitle')" 
+    >
+      <template #actions>
+        <NButton secondary @click="handleGenerateParticipants">
+          {{ t("mapping.generateParticipants") }}
+        </NButton>
+        <NButton type="primary" :loading="applying" @click="handleMap" icon-placement="left">
+          <template #icon><NIcon><CheckmarkCircleOutline /></NIcon></template>
+          {{ t("mapping.mapDemand") }}
+        </NButton>
+      </template>
+    </PageHeader>
 
-    <!-- Mapping Pipeline Funnel Banner -->
-    <NCard class="glow-card" v-if="routingStats">
-      <div class="flex items-center justify-around gap-6 py-2">
-        <div class="flex flex-col items-center">
-          <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Total Lines</span>
-          <span class="text-2xl font-bold mt-1">{{ routingStats.totalLines }}</span>
-        </div>
-        <div class="h-10 w-px bg-slate-700/10 dark:bg-slate-700/30"></div>
-        <div class="flex flex-col items-center">
-          <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Accepted & Ready</span>
-          <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-            {{ routingStats.acceptedReadyCount }}
-          </span>
-        </div>
-        <div class="h-10 w-px bg-slate-700/10 dark:bg-slate-700/30"></div>
-        <div class="flex flex-col items-center">
-          <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Waiting Input</span>
-          <span class="text-2xl font-bold text-amber-500 mt-1">
-            {{ routingStats.acceptedWaitingCount }}
-          </span>
-        </div>
-        <div class="h-10 w-px bg-slate-700/10 dark:bg-slate-700/30"></div>
-        <div class="flex flex-col items-center">
-          <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Deferred</span>
-          <span class="text-2xl font-bold text-slate-400 mt-1">{{ routingStats.deferredCount }}</span>
-        </div>
-        <div class="h-10 w-px bg-slate-700/10 dark:bg-slate-700/30"></div>
-        <div class="flex flex-col items-center">
-          <span class="text-xs text-slate-400 font-bold uppercase tracking-wider">Excluded</span>
-          <span class="text-2xl font-bold text-red-500 mt-1">
-            {{ routingStats.excludedManualCount + routingStats.excludedDuplicateCount + routingStats.excludedRevokedCount }}
-          </span>
-        </div>
-      </div>
-    </NCard>
-
-    <NAlert v-if="blockedSummary" type="warning">
+    <NAlert v-if="blockedSummary" type="warning" class="mb-4">
       Some lines are blocked due to incomplete data: {{ blockedSummary }}
     </NAlert>
 
-    <!-- Main Assigned Demands Table -->
-    <NCard :title="t('mapping.assigned')" class="glow-card">
-      <template #header-extra>
-        <NSpace align="center" :size="12">
-          <NInput 
-            v-model:value="searchKeyword" 
-            placeholder="Search document no..." 
-            clearable 
-            size="small" 
-            style="width: 200px" 
-          />
-          <NSelect
-            v-model:value="channelFilter"
-            :options="channelOptions"
-            placeholder="Filter Channel"
-            clearable
-            size="small"
-            style="width: 150px"
-          />
-          <NButton size="small" secondary @click="handleGenerateParticipants">
-            {{ t("mapping.generateParticipants") }}
-          </NButton>
-          <NButton
-            size="small"
-            type="primary"
-            :loading="applying"
-            @click="handleMap"
-          >
-            {{ t("mapping.mapDemand") }}
-          </NButton>
-        </NSpace>
-      </template>
-
-      <NEmpty v-if="!loading && docs.length === 0" :description="t('common.empty')" />
-      <NDataTable
-        v-else
-        :columns="columns"
-        :data="filteredDocs"
-        :loading="loading"
-        :pagination="{ page: 1, pageSize: 10 }"
-        size="small"
-        :expanded-row-keys="expandedKeys"
-        @update:expanded-row-keys="(keys) => {
-          expandedKeys = keys as number[]
-          for (const key of keys as number[]) {
-            void loadLines(key)
-          }
-        }"
-      />
-    </NCard>
-
-    <div class="flex justify-between mt-4">
-      <NButton @click="router.push(`/waves/${waveId}/allocation`)">{{ t("wave.prevStep") }}</NButton>
-      <NSpace>
-        <NButton secondary @click="router.push(`/waves/${waveId}`)">{{ t("wave.backToOverview") }}</NButton>
-        <NButton type="primary" @click="router.push(`/waves/${waveId}/adjustment-review`)">{{ t("wave.nextStep") }}</NButton>
-      </NSpace>
+    <div class="flex-1 min-h-0 relative -mx-8 -mb-6 mt-2 border-t border-slate-700/10 dark:border-slate-700/30">
+      <SplitPane :initial-split="35" :min-left="25" :min-right="35">
+        <template #left>
+          <div class="h-full flex flex-col bg-slate-50/50 dark:bg-slate-900/20 border-r border-slate-700/10 dark:border-slate-700/30">
+            <div class="p-4 border-b border-slate-700/10 dark:border-slate-700/30 flex flex-col gap-3 shrink-0">
+              <div class="font-semibold text-slate-800 dark:text-slate-200">{{ t('mapping.assigned') }} ({{ filteredDocs.length }})</div>
+              <NSpace align="center" :size="8" wrap>
+                <NInput 
+                  v-model:value="searchKeyword" 
+                  placeholder="Search No..." 
+                  clearable 
+                  size="small" 
+                  style="width: 140px" 
+                />
+                <NSelect
+                  v-model:value="channelFilter"
+                  :options="channelOptions"
+                  placeholder="Channel"
+                  clearable
+                  size="small"
+                  style="width: 120px"
+                />
+              </NSpace>
+            </div>
+            <div class="flex-1 overflow-auto p-4">
+              <NEmpty v-if="!loading && docs.length === 0" :description="t('common.empty')" />
+              <NDataTable
+                v-else
+                :columns="columns"
+                :data="filteredDocs"
+                :loading="loading"
+                :pagination="false"
+                :row-props="rowProps"
+                size="small"
+                :bordered="false"
+              />
+            </div>
+          </div>
+        </template>
+        
+        <template #right>
+          <div class="h-full flex flex-col bg-white dark:bg-[#1e293b]">
+            <div v-if="!selectedDocId" class="flex-1 flex flex-col items-center justify-center text-slate-400">
+              <NIcon size="64" class="mb-4 opacity-50"><DocumentTextOutline /></NIcon>
+              <p>Select a demand document from the left to view its lines.</p>
+            </div>
+            <template v-else>
+              <div class="p-5 border-b border-slate-700/10 dark:border-slate-700/30 shrink-0">
+                <div class="flex justify-between items-start mb-2">
+                  <div>
+                    <div class="app-kicker">{{ selectedDoc?.sourceChannel }}</div>
+                    <h3 class="text-xl font-bold mt-1 text-slate-800 dark:text-slate-100">{{ selectedDoc?.sourceDocumentNo }}</h3>
+                  </div>
+                  <NTag v-if="selectedDoc?.customerProfileId" size="small" type="info">Profile #{{ selectedDoc.customerProfileId }}</NTag>
+                </div>
+                <div class="text-sm text-slate-500 mt-2">
+                  Customer Ref: {{ selectedDoc?.sourceCustomerRef || 'N/A' }} | Capture Mode: {{ selectedDoc?.captureMode }}
+                </div>
+              </div>
+              
+              <div class="flex-1 overflow-auto p-5">
+                <h4 class="font-semibold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+                  <NIcon><ListOutline /></NIcon> Demand Lines
+                </h4>
+                <NDataTable
+                  :columns="lineColumns"
+                  :data="selectedDocLines"
+                  :loading="linesLoading"
+                  size="small"
+                  :bordered="true"
+                  :pagination="false"
+                />
+              </div>
+            </template>
+          </div>
+        </template>
+      </SplitPane>
     </div>
 
     <!-- Inline Address Corrector Modal -->
@@ -396,30 +407,22 @@ onMounted(loadDocs);
         <NFormItem label="Phone Number" required>
           <NInput v-model:value="addressForm.phone" />
         </NFormItem>
-        <NGrid :cols="2" :x-gap="12">
-          <NGridItem>
-            <NFormItem label="Province / State" required>
-              <NInput v-model:value="addressForm.province" placeholder="e.g. Guangdong" />
-            </NFormItem>
-          </NGridItem>
-          <NGridItem>
-            <NFormItem label="City" required>
-              <NInput v-model:value="addressForm.city" placeholder="e.g. Shenzhen" />
-            </NFormItem>
-          </NGridItem>
-        </NGrid>
-        <NGrid :cols="2" :x-gap="12">
-          <NGridItem>
-            <NFormItem label="District" required>
-              <NInput v-model:value="addressForm.district" placeholder="e.g. Nanshan" />
-            </NFormItem>
-          </NGridItem>
-          <NGridItem>
-            <NFormItem label="Postal Code">
-              <NInput v-model:value="addressForm.postalCode" />
-            </NFormItem>
-          </NGridItem>
-        </NGrid>
+        <div class="grid grid-cols-2 gap-3">
+          <NFormItem label="Province / State" required>
+            <NInput v-model:value="addressForm.province" placeholder="e.g. Guangdong" />
+          </NFormItem>
+          <NFormItem label="City" required>
+            <NInput v-model:value="addressForm.city" placeholder="e.g. Shenzhen" />
+          </NFormItem>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <NFormItem label="District" required>
+            <NInput v-model:value="addressForm.district" placeholder="e.g. Nanshan" />
+          </NFormItem>
+          <NFormItem label="Postal Code">
+            <NInput v-model:value="addressForm.postalCode" />
+          </NFormItem>
+        </div>
         <NFormItem label="Address Line 1" required>
           <NInput v-model:value="addressForm.addressLine1" placeholder="Street, Building, Room" />
         </NFormItem>
@@ -439,15 +442,3 @@ onMounted(loadDocs);
   </div>
 </template>
 
-<style scoped>
-.glow-card {
-  border-radius: 12px;
-  border: 1px solid rgba(148, 163, 184, 0.12);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
-}
-
-:root[data-theme='dark'] .glow-card {
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: #111827;
-}
-</style>

@@ -34,13 +34,19 @@ const router = createRouter({
                 import("@/pages/wave-workspace/WaveOverviewStep.vue"),
             },
             {
-              path: "demand-mapping",
+              path: "intake",
+              name: "wave-intake",
+              component: () =>
+                import("@/pages/wave-workspace/WaveIntakeStep.vue"),
+            },
+            {
+              path: "demand-mapping/:demandKind?",
               name: "wave-demand-mapping",
               component: () =>
                 import("@/pages/demand-mapping/DemandMappingPage.vue"),
             },
             {
-              path: "allocation",
+              path: "allocation/:demandKind?",
               name: "wave-allocation",
               component: () =>
                 import(

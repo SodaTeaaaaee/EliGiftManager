@@ -103,7 +103,11 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		excludedRevokedCount    int
 		mappingBlockedCount     int
 	)
+	demandKindSet := make(map[string]bool)
 	for _, doc := range docs {
+		if doc.Kind != "" {
+			demandKindSet[doc.Kind] = true
+		}
 		lines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
 		if err != nil {
 			return dto.WaveOverviewDTO{}, err
@@ -230,8 +234,14 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 	// Blocking issues
 	blockingIssues := buildBlockingIssues(addressMissingCount, false, false, mappingBlockedCount, true)
 
+	demandKinds := make([]string, 0, len(demandKindSet))
+	for k := range demandKindSet {
+		demandKinds = append(demandKinds, k)
+	}
+
 	return dto.WaveOverviewDTO{
 		Wave:                       toWaveDTO(w),
+		DemandKinds:                demandKinds,
 		DemandCount:                demandCount,
 		FulfillmentCount:           len(fulfillLines),
 		SupplierOrderCount:         len(supplierOrders),
@@ -524,18 +534,43 @@ func (uc *waveOverviewQueryUseCase) ListWaveParticipantRows(waveID uint) ([]dto.
 
 	lineCounts := make(map[uint]int)
 	readyCounts := make(map[uint]int)
+	docCache := make(map[uint]*domain.DemandDocument)
+	participantKinds := make(map[uint]map[string]bool)
 	for _, line := range lines {
 		if line.WaveParticipantSnapshotID == nil {
 			continue
 		}
-		lineCounts[*line.WaveParticipantSnapshotID]++
+		pID := *line.WaveParticipantSnapshotID
+		lineCounts[pID]++
 		if line.AllocationState == "ready" {
-			readyCounts[*line.WaveParticipantSnapshotID]++
+			readyCounts[pID]++
+		}
+		if line.DemandDocumentID != nil {
+			docID := *line.DemandDocumentID
+			doc, ok := docCache[docID]
+			if !ok {
+				doc, err = uc.demandRepo.FindByID(docID)
+				if err == nil && doc != nil {
+					docCache[docID] = doc
+				}
+			}
+			if doc != nil && doc.Kind != "" {
+				if participantKinds[pID] == nil {
+					participantKinds[pID] = make(map[string]bool)
+				}
+				participantKinds[pID][doc.Kind] = true
+			}
 		}
 	}
 
 	rows := make([]dto.WaveParticipantRowDTO, 0, len(participants))
 	for _, p := range participants {
+		var demandKinds []string
+		if m, ok := participantKinds[p.ID]; ok {
+			for k := range m {
+				demandKinds = append(demandKinds, k)
+			}
+		}
 		rows = append(rows, dto.WaveParticipantRowDTO{
 			WaveParticipantSnapshotID: p.ID,
 			WaveID:                    p.WaveID,
@@ -546,6 +581,7 @@ func (uc *waveOverviewQueryUseCase) ListWaveParticipantRows(waveID uint) ([]dto.
 			IdentityValue:             p.IdentityValue,
 			GiftLevel:                 p.GiftLevel,
 			SourceSummary:             p.SourceDocumentRefs,
+			DemandKinds:               demandKinds,
 			FulfillmentLineCount:      lineCounts[p.ID],
 			ReadyFulfillmentCount:     readyCounts[p.ID],
 		})

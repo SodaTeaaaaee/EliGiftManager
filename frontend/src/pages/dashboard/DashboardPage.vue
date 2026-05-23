@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { NAlert, NButton, NCard, NDataTable, NEmpty, NGrid, NGridItem, NStatistic, NTag } from "naive-ui";
+import { NAlert, NButton, NDataTable, NEmpty, NGrid, NGridItem, NTag, NIcon } from "naive-ui";
 import type { DataTableColumns } from "naive-ui";
+import { DocumentTextOutline, WarningOutline, SyncOutline, TimeOutline } from "@vicons/ionicons5";
 import { createWave, listWaveDashboardRows } from "@/shared/lib/wails/app";
 import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
+
+import PageHeader from "@/shared/ui/PageHeader.vue";
+import GlassCard from "@/shared/ui/GlassCard.vue";
 
 const router = useRouter();
 const { t, locale } = useI18n();
@@ -50,6 +54,7 @@ const columns = computed<DataTableColumns<dto.WaveDashboardRowDTO>>(() => [
           type: stageTagType[row.projectedLifecycleStage] || "default",
           size: "small",
           round: true,
+          bordered: false,
         },
         { default: () => row.projectedLifecycleStage },
       );
@@ -95,72 +100,100 @@ onMounted(loadRows);
 </script>
 
 <template>
-  <div class="dashboard-page">
-    <div class="dashboard-hero">
-      <div>
-        <div class="app-kicker">{{ t("nav.dashboard") }}</div>
-        <h1 class="app-title mt-2">{{ t("dashboard.title") }}</h1>
-        <p class="app-copy mt-3">{{ t("dashboard.subtitle") }}</p>
-      </div>
-      <div class="flex items-center gap-3">
-        <NButton secondary @click="router.push('/waves')">
+  <div class="dashboard-page pb-12">
+    <PageHeader 
+      :title="t('dashboard.title')" 
+      :description="t('dashboard.subtitle')" 
+      :kicker="t('nav.dashboard')"
+    >
+      <template #actions>
+        <NButton secondary @click="router.push('/waves')" size="large" round>
           {{ t("dashboard.openWaves") }}
         </NButton>
-        <NButton type="primary" :loading="creating" @click="handleCreateWave">
+        <NButton type="primary" :loading="creating" @click="handleCreateWave" size="large" round>
           {{ t("dashboard.createWave") }}
         </NButton>
-      </div>
-    </div>
+      </template>
+    </PageHeader>
 
-    <NAlert v-if="error" type="error" :title="error" class="mb-4" />
+    <NAlert v-if="error" type="error" :title="error" class="mb-6 rounded-lg" />
 
-    <NGrid :cols="4" :x-gap="16" :y-gap="16" class="mb-5">
+    <NGrid :cols="4" :x-gap="20" :y-gap="20" class="mb-8">
       <NGridItem>
-        <NCard>
-          <NStatistic :label="t('dashboard.activeWaves')" :value="activeCount" />
-        </NCard>
+        <GlassCard hoverable>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+              <NIcon size="24"><DocumentTextOutline /></NIcon>
+            </div>
+            <div>
+              <div class="text-3xl font-bold text-slate-800 dark:text-slate-100">{{ activeCount }}</div>
+              <div class="text-sm font-medium text-slate-500 mt-1">{{ t('dashboard.activeWaves') }}</div>
+            </div>
+          </div>
+        </GlassCard>
       </NGridItem>
       <NGridItem>
-        <NCard>
-          <NStatistic :label="t('dashboard.awaitingClosure')" :value="closureCount" />
-        </NCard>
+        <GlassCard hoverable>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-500">
+              <NIcon size="24"><WarningOutline /></NIcon>
+            </div>
+            <div>
+              <div class="text-3xl font-bold text-slate-800 dark:text-slate-100">{{ closureCount }}</div>
+              <div class="text-sm font-medium text-slate-500 mt-1">{{ t('dashboard.awaitingClosure') }}</div>
+            </div>
+          </div>
+        </GlassCard>
       </NGridItem>
       <NGridItem>
-        <NCard>
-          <NStatistic :label="t('dashboard.driftedBasis')" :value="driftCount" />
-        </NCard>
+        <GlassCard hoverable>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+              <NIcon size="24"><SyncOutline /></NIcon>
+            </div>
+            <div>
+              <div class="text-3xl font-bold text-slate-800 dark:text-slate-100">{{ driftCount }}</div>
+              <div class="text-sm font-medium text-slate-500 mt-1">{{ t('dashboard.driftedBasis') }}</div>
+            </div>
+          </div>
+        </GlassCard>
       </NGridItem>
       <NGridItem>
-        <NCard>
-          <NStatistic :label="t('dashboard.recentChanges')" :value="recentChangeCount" />
-        </NCard>
+        <GlassCard hoverable>
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500">
+              <NIcon size="24"><TimeOutline /></NIcon>
+            </div>
+            <div>
+              <div class="text-3xl font-bold text-slate-800 dark:text-slate-100">{{ recentChangeCount }}</div>
+              <div class="text-sm font-medium text-slate-500 mt-1">{{ t('dashboard.recentChanges') }}</div>
+            </div>
+          </div>
+        </GlassCard>
       </NGridItem>
     </NGrid>
 
-    <NCard :title="t('dashboard.waveQueue')">
-      <NEmpty v-if="!loading && rows.length === 0" :description="t('dashboard.noWaves')" />
+    <GlassCard>
+      <div class="mb-4 flex items-center justify-between">
+        <h2 class="app-heading-md">{{ t('dashboard.waveQueue') }}</h2>
+      </div>
+      <NEmpty v-if="!loading && rows.length === 0" :description="t('dashboard.noWaves')" class="my-12" />
       <NDataTable
         v-else
         :columns="columns"
         :data="rows.slice(0, 6)"
         :loading="loading"
         :pagination="false"
-        size="small"
+        size="large"
         :row-props="(row: dto.WaveDashboardRowDTO) => ({
           style: 'cursor:pointer',
           onClick: () => router.push(`/waves/${row.id}`),
         })"
       />
-    </NCard>
+    </GlassCard>
   </div>
 </template>
 
 <style scoped>
-.dashboard-hero {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
-}
+/* Scoped styles can be minimized thanks to utility classes and shared components */
 </style>

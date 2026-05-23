@@ -2472,6 +2472,7 @@ export namespace dto {
 	}
 	export class WaveOverviewDTO {
 	    wave: WaveDTO;
+	    demandKinds: string[];
 	    demandCount: number;
 	    fulfillmentCount: number;
 	    supplierOrderCount: number;
@@ -2526,6 +2527,7 @@ export namespace dto {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.wave = this.convertValues(source["wave"], WaveDTO);
+	        this.demandKinds = source["demandKinds"];
 	        this.demandCount = source["demandCount"];
 	        this.fulfillmentCount = source["fulfillmentCount"];
 	        this.supplierOrderCount = source["supplierOrderCount"];
@@ -2602,6 +2604,7 @@ export namespace dto {
 	    identityValue: string;
 	    giftLevel: string;
 	    sourceSummary: string;
+	    demandKinds: string[];
 	    fulfillmentLineCount: number;
 	    readyFulfillmentCount: number;
 	
@@ -2620,6 +2623,7 @@ export namespace dto {
 	        this.identityValue = source["identityValue"];
 	        this.giftLevel = source["giftLevel"];
 	        this.sourceSummary = source["sourceSummary"];
+	        this.demandKinds = source["demandKinds"];
 	        this.fulfillmentLineCount = source["fulfillmentLineCount"];
 	        this.readyFulfillmentCount = source["readyFulfillmentCount"];
 	    }

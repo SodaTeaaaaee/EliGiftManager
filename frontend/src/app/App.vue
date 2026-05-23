@@ -20,15 +20,20 @@ import { useI18n } from "@/shared/i18n";
 
 const lightThemeOverrides: GlobalThemeOverrides = {
   common: {
-    primaryColor: '#2563eb',
-    primaryColorHover: '#3b82f6',
-    primaryColorPressed: '#1d4ed8',
+    primaryColor: '#3b82f6',
+    primaryColorHover: '#60a5fa',
+    primaryColorPressed: '#2563eb',
     primaryColorSuppl: '#3b82f6',
-    infoColor: '#2563eb',
-    successColor: '#16a34a',
-    warningColor: '#d97706',
-    errorColor: '#dc2626',
-    fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif",
+    infoColor: '#0ea5e9',
+    successColor: '#10b981',
+    warningColor: '#f59e0b',
+    errorColor: '#ef4444',
+    fontFamily: "'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+    borderRadius: '8px',
+    borderRadiusSmall: '6px',
+    boxShadow1: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+    boxShadow2: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+    boxShadow3: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
   },
 }
 
@@ -38,11 +43,16 @@ const darkThemeOverrides: GlobalThemeOverrides = {
     primaryColorHover: '#93c5fd',
     primaryColorPressed: '#3b82f6',
     primaryColorSuppl: '#60a5fa',
-    infoColor: '#60a5fa',
-    successColor: '#4ade80',
+    infoColor: '#38bdf8',
+    successColor: '#34d399',
     warningColor: '#fbbf24',
     errorColor: '#f87171',
-    fontFamily: "'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', 'Hiragino Sans GB', sans-serif",
+    fontFamily: "'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+    borderRadius: '8px',
+    borderRadiusSmall: '6px',
+    boxShadow1: '0 1px 2px 0 rgba(0, 0, 0, 0.5)',
+    boxShadow2: '0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -1px rgba(0, 0, 0, 0.4)',
+    boxShadow3: '0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.4)',
   },
 }
 

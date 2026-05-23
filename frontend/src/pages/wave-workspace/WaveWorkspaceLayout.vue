@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, provide, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, NAlert, NButton, NTag, NDrawer, NDrawerContent } from 'naive-ui'
-import WaveStepWizard from '@/shared/ui/WaveStepWizard.vue'
+import { useMessage, NAlert, NButton, NTag, NDrawer, NDrawerContent, NLayout, NLayoutSider, NLayoutContent, NIcon } from 'naive-ui'
+import { ArrowBackOutline } from '@vicons/ionicons5'
+import WaveWorkspaceSidebar from '@/shared/ui/WaveWorkspaceSidebar.vue'
 import { useUndoRedo } from '@/shared/composables/useUndoRedo'
 import { getWaveWorkspaceSnapshot } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
@@ -83,72 +84,105 @@ const stageTagType = computed(() => {
 </script>
 
 <template>
-  <div class="wave-workspace">
-    <div class="wave-shell-header">
-      <div class="wave-shell-header__main">
-        <div class="app-kicker">{{ workspaceSnapshot?.wave?.waveNo || t('wave.overview') }}</div>
-        <h1 class="app-title mt-2">{{ workspaceSnapshot?.wave?.name || t('wave.overview') }}</h1>
+  <n-layout has-sider class="wave-workspace-layout">
+    <n-layout-sider bordered :width="260" content-style="background: transparent;" style="background: transparent;">
+      <div class="sidebar-wrapper">
+        <div class="sidebar-top-actions">
+          <NButton text class="back-btn" @click="router.push('/waves')">
+            <template #icon>
+              <NIcon><ArrowBackOutline /></NIcon>
+            </template>
+            {{ t('wave.returnToQueue') }}
+          </NButton>
+        </div>
+        <WaveWorkspaceSidebar :snapshot="workspaceSnapshot" />
       </div>
-      <div class="wave-shell-header__actions">
-        <NTag v-if="workspaceSnapshot?.projectedLifecycleStage" :type="stageTagType as any" size="small" round>
-          {{ workspaceSnapshot?.projectedLifecycleStage }}
-        </NTag>
-        <NTag
-          v-if="workspaceSnapshot?.basisSummary?.hasRequiredReview"
-          type="error"
-          size="small"
-          round
-        >
-          {{ t('wave.reviewRequired') }}
-        </NTag>
-        <NTag
-          v-else-if="workspaceSnapshot?.basisSummary?.hasDriftedBasis"
-          type="warning"
-          size="small"
-          round
-        >
-          {{ t('wave.drifted') }}
-        </NTag>
-        <NButton secondary size="small" @click="historyDrawerOpen = true">
-          {{ t('wave.historyMeta.historyPanel') }}
-        </NButton>
-        <NButton secondary size="small" @click="router.push('/waves')">{{ t('wave.returnToQueue') }}</NButton>
+    </n-layout-sider>
+    
+    <n-layout-content content-style="background: transparent;">
+      <div class="wave-content-wrapper">
+        <div class="wave-content-header mb-4 flex justify-between items-center">
+          <div class="flex items-center gap-3">
+            <NTag v-if="workspaceSnapshot?.projectedLifecycleStage" :type="stageTagType as any" size="small" round>
+              {{ workspaceSnapshot?.projectedLifecycleStage }}
+            </NTag>
+            <NTag
+              v-if="workspaceSnapshot?.basisSummary?.hasRequiredReview"
+              type="error"
+              size="small"
+              round
+            >
+              {{ t('wave.reviewRequired') }}
+            </NTag>
+            <NTag
+              v-else-if="workspaceSnapshot?.basisSummary?.hasDriftedBasis"
+              type="warning"
+              size="small"
+              round
+            >
+              {{ t('wave.drifted') }}
+            </NTag>
+          </div>
+          <NButton secondary size="small" @click="historyDrawerOpen = true">
+            {{ t('wave.historyMeta.historyPanel') }}
+          </NButton>
+        </div>
+        
+        <NAlert v-if="error" type="error" class="mb-4" :title="error" />
+        
+        <div class="wave-shell-content">
+          <router-view :key="refreshKey" />
+        </div>
       </div>
-    </div>
-    <NAlert v-if="error" type="error" class="mb-4" :title="error" />
-    <WaveStepWizard :snapshot="workspaceSnapshot" />
-    <div class="wave-shell-content">
-      <router-view :key="refreshKey" />
-    </div>
+    </n-layout-content>
 
     <NDrawer v-model:show="historyDrawerOpen" :width="360" placement="right">
       <NDrawerContent :title="t('wave.historyMeta.historyPanel')" :native-scrollbar="false" closable>
         <WaveHistoryPanel :wave-id="waveId" @close="historyDrawerOpen = false" />
       </NDrawerContent>
     </NDrawer>
-  </div>
+  </n-layout>
 </template>
 
 <style scoped>
-.wave-workspace {
+.wave-workspace-layout {
+  height: 100%;
+  background: transparent;
+}
+
+.sidebar-wrapper {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
 }
 
-.wave-shell-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 18px;
+.sidebar-top-actions {
+  padding: 12px 20px;
+  background: var(--surface-strong);
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
 }
 
-.wave-shell-header__actions {
+:root[data-theme='dark'] .sidebar-top-actions {
+  background: rgba(15, 23, 42, 0.6);
+  border-right-color: rgba(255, 255, 255, 0.05);
+}
+
+.back-btn {
+  font-size: 13px;
+  color: var(--muted);
+  transition: color 0.2s ease;
+}
+
+.back-btn:hover {
+  color: var(--text);
+}
+
+.wave-content-wrapper {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px 32px;
+  overflow-y: auto;
 }
 
 .wave-shell-content {

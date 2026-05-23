@@ -1,6 +1,6 @@
 <template>
   <n-layout has-sider class="app-viewport">
-    <n-layout-sider bordered :width="248" content-style="background: var(--surface-strong);">
+    <n-layout-sider bordered :width="248" content-style="background: transparent;" style="background: transparent;">
       <AppSidebar />
     </n-layout-sider>
     <n-layout-content content-style="background: transparent;">

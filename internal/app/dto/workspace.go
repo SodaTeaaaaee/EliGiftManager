@@ -60,17 +60,18 @@ type WaveFulfillmentRowDTO struct {
 }
 
 type WaveParticipantRowDTO struct {
-	WaveParticipantSnapshotID uint   `json:"waveParticipantSnapshotId"`
-	WaveID                    uint   `json:"waveId"`
-	CustomerProfileID         uint   `json:"customerProfileId"`
-	SnapshotType              string `json:"snapshotType"`
-	DisplayName               string `json:"displayName"`
-	IdentityPlatform          string `json:"identityPlatform"`
-	IdentityValue             string `json:"identityValue"`
-	GiftLevel                 string `json:"giftLevel"`
-	SourceSummary             string `json:"sourceSummary"`
-	FulfillmentLineCount      int    `json:"fulfillmentLineCount"`
-	ReadyFulfillmentCount     int    `json:"readyFulfillmentCount"`
+	WaveParticipantSnapshotID uint     `json:"waveParticipantSnapshotId"`
+	WaveID                    uint     `json:"waveId"`
+	CustomerProfileID         uint     `json:"customerProfileId"`
+	SnapshotType              string   `json:"snapshotType"`
+	DisplayName               string   `json:"displayName"`
+	IdentityPlatform          string   `json:"identityPlatform"`
+	IdentityValue             string   `json:"identityValue"`
+	GiftLevel                 string   `json:"giftLevel"`
+	SourceSummary             string   `json:"sourceSummary"`
+	DemandKinds               []string `json:"demandKinds"`
+	FulfillmentLineCount      int      `json:"fulfillmentLineCount"`
+	ReadyFulfillmentCount     int      `json:"readyFulfillmentCount"`
 }
 
 type ListDemandInboxInput struct {

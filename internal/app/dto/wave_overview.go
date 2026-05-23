@@ -1,12 +1,13 @@
 package dto
 
 type WaveOverviewDTO struct {
-	Wave                    WaveDTO `json:"wave"`
-	DemandCount             int     `json:"demandCount"`
-	FulfillmentCount        int     `json:"fulfillmentCount"`
-	SupplierOrderCount      int     `json:"supplierOrderCount"`
-	ShipmentCount           int     `json:"shipmentCount"`
-	TrackedFulfillmentCount int     `json:"trackedFulfillmentCount"`
+	Wave                    WaveDTO  `json:"wave"`
+	DemandKinds             []string `json:"demandKinds"`
+	DemandCount             int      `json:"demandCount"`
+	FulfillmentCount        int      `json:"fulfillmentCount"`
+	SupplierOrderCount      int      `json:"supplierOrderCount"`
+	ShipmentCount           int      `json:"shipmentCount"`
+	TrackedFulfillmentCount int      `json:"trackedFulfillmentCount"`
 
 	// Demand-line intake buckets — answers "what should the user do next?"
 	AcceptedReadyOrNotRequired int `json:"acceptedReadyOrNotRequired"`

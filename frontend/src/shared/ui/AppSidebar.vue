@@ -106,32 +106,42 @@ function onFooterSelect(key: string) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 20px 14px 16px;
-  gap: 18px;
-  background:
-    radial-gradient(circle at top right, rgba(37, 99, 235, 0.16), transparent 32%),
-    linear-gradient(180deg, var(--surface-strong) 0%, var(--surface-muted) 100%);
+  padding: 24px 16px 20px;
+  gap: 24px;
+  background: var(--surface-strong);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+:root[data-theme='dark'] .app-sidebar {
+  background: rgba(24, 24, 27, 0.6);
+  border-right: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .sidebar-header {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 6px 10px 10px;
+  padding: 0 8px;
 }
 
 .sidebar-brand {
   color: var(--text);
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 1.125rem;
+  font-weight: 800;
   letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--text) 0%, var(--muted) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .sidebar-subtitle {
-  color: var(--text-muted, rgba(255,255,255,0.5));
+  color: var(--muted);
   font-size: 0.75rem;
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 .sidebar-footer {
