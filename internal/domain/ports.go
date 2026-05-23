@@ -12,6 +12,7 @@ type CustomerProfileRepository interface {
 	UpdateIdentityProfileID(identityID uint, newProfileID uint) error
 	BulkUpdateIdentityProfileID(identityIDs []uint, newProfileID uint) error
 	SoftDelete(id uint) error
+	DeleteIdentity(id uint) error
 }
 
 // CustomerAddressRepository defines persistence operations for CustomerAddress.

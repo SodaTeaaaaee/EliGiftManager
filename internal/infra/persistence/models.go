@@ -487,3 +487,15 @@ type CarrierMapping struct {
 }
 
 func (CarrierMapping) TableName() string { return "carrier_mappings" }
+
+// ---- MergeSuggestion ----
+
+type MergeSuggestion struct {
+	gorm.Model
+	SourceProfileID uint   `gorm:"not null"`
+	TargetProfileID uint   `gorm:"not null"`
+	Reason          string `gorm:"not null"`
+	Status          string `gorm:"not null;default:'pending'"` // pending, dismissed, merged
+}
+
+func (MergeSuggestion) TableName() string { return "merge_suggestions" }

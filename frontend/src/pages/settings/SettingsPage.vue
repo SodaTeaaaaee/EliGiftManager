@@ -1,16 +1,52 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { NCard, NSelect, NSpace } from "naive-ui";
+import { ref, reactive, onMounted, computed } from "vue";
+import { NCard, NSelect, NSpace, NSwitch, NCheckbox, useMessage } from "naive-ui";
 import { storeToRefs } from "pinia";
 import { useI18n } from "@/shared/i18n";
 import { useThemeStore, themePreferenceOptions } from "@/shared/model/theme";
 import { localeOptions, useLocaleStore } from "@/shared/model/locale";
+import { getSettings, saveSettings } from "@/shared/lib/wails/app";
 
 const { t } = useI18n();
 const themeStore = useThemeStore();
 const localeStore = useLocaleStore();
 const { preference } = storeToRefs(themeStore);
 const { locale } = storeToRefs(localeStore);
+const message = useMessage();
+
+const mergeSettings = reactive({
+  autoMergeCrossPlatform: false,
+  autoMergeByEmail: false,
+  autoMergeByPhone: false,
+});
+
+async function loadMergeSettings() {
+  try {
+    const res = await getSettings();
+    mergeSettings.autoMergeCrossPlatform = res.autoMergeCrossPlatform;
+    mergeSettings.autoMergeByEmail = res.autoMergeByEmail;
+    mergeSettings.autoMergeByPhone = res.autoMergeByPhone;
+  } catch (e: any) {
+    message.error(e?.message ?? String(e));
+  }
+}
+
+async function handleSaveSettings() {
+  try {
+    await saveSettings({
+      autoMergeCrossPlatform: mergeSettings.autoMergeCrossPlatform,
+      autoMergeByEmail: mergeSettings.autoMergeByEmail,
+      autoMergeByPhone: mergeSettings.autoMergeByPhone,
+    });
+    message.success(t("settings.saveSettingsSuccess"));
+  } catch (e: any) {
+    message.error(e?.message ?? String(e));
+  }
+}
+
+onMounted(() => {
+  loadMergeSettings();
+});
 
 const localizedThemeOptions = computed(() =>
   themePreferenceOptions.map((item) => ({
@@ -62,6 +98,30 @@ const localizedLocaleOptions = computed(() =>
           />
         </NSpace>
       </NCard>
+
+      <NCard>
+        <NSpace vertical :size="16">
+          <div class="app-heading-sm">{{ t("settings.autoMergeTitle") }}</div>
+          <NSpace vertical :size="12">
+            <NSpace align="center" justify="space-between" style="width: 100%">
+              <span class="text-sm">{{ t("settings.autoMergeCrossPlatform") }}</span>
+              <NSwitch v-model:value="mergeSettings.autoMergeCrossPlatform" @update:value="handleSaveSettings" />
+            </NSpace>
+            
+            <div v-if="mergeSettings.autoMergeCrossPlatform" style="padding-left: 24px; border-left: 2px solid var(--accent-surface); margin-top: 4px;">
+              <NSpace vertical :size="12">
+                <NCheckbox v-model:checked="mergeSettings.autoMergeByEmail" @update:checked="handleSaveSettings">
+                  {{ t("settings.autoMergeByEmail") }}
+                </NCheckbox>
+                <NCheckbox v-model:checked="mergeSettings.autoMergeByPhone" @update:checked="handleSaveSettings">
+                  {{ t("settings.autoMergeByPhone") }}
+                </NCheckbox>
+              </NSpace>
+            </div>
+          </NSpace>
+        </NSpace>
+      </NCard>
     </NSpace>
   </div>
 </template>
+

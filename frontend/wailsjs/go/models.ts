@@ -531,6 +531,44 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class CreateCustomerIdentityInput {
+	    customerProfileId: number;
+	    identityPlatform: string;
+	    identityValue: string;
+	    identityType: string;
+	    isPrimary: boolean;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateCustomerIdentityInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.customerProfileId = source["customerProfileId"];
+	        this.identityPlatform = source["identityPlatform"];
+	        this.identityValue = source["identityValue"];
+	        this.identityType = source["identityType"];
+	        this.isPrimary = source["isPrimary"];
+	        this.extraData = source["extraData"];
+	    }
+	}
+	export class CreateCustomerProfileInput {
+	    displayName: string;
+	    profileType: string;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CreateCustomerProfileInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.displayName = source["displayName"];
+	        this.profileType = source["profileType"];
+	        this.extraData = source["extraData"];
+	    }
+	}
 	export class CreateDemandLineInput {
 	    lineType: string;
 	    obligationTriggerKind: string;
@@ -832,6 +870,80 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
+	}
+	export class CustomerIdentityDTO {
+	    id: number;
+	    customerProfileId: number;
+	    identityPlatform: string;
+	    identityValue: string;
+	    identityType: string;
+	    isPrimary: boolean;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerIdentityDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.identityPlatform = source["identityPlatform"];
+	        this.identityValue = source["identityValue"];
+	        this.identityType = source["identityType"];
+	        this.isPrimary = source["isPrimary"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class CustomerProfileDTO {
+	    id: number;
+	    displayName: string;
+	    profileType: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	    identities: CustomerIdentityDTO[];
+	    addresses: CustomerAddressDTO[];
+	    activeAddressCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerProfileDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.displayName = source["displayName"];
+	        this.profileType = source["profileType"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.identities = this.convertValues(source["identities"], CustomerIdentityDTO);
+	        this.addresses = this.convertValues(source["addresses"], CustomerAddressDTO);
+	        this.activeAddressCount = source["activeAddressCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class DemandDocumentDTO {
 	    id: number;
@@ -1624,6 +1736,48 @@ export namespace dto {
 	        this.updatedFulfillmentLines = source["updatedFulfillmentLines"];
 	    }
 	}
+	export class MergeSuggestionDTO {
+	    id: number;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    reason: string;
+	    status: string;
+	    sourceProfile: CustomerProfileDTO;
+	    targetProfile: CustomerProfileDTO;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeSuggestionDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.reason = source["reason"];
+	        this.status = source["status"];
+	        this.sourceProfile = this.convertValues(source["sourceProfile"], CustomerProfileDTO);
+	        this.targetProfile = this.convertValues(source["targetProfile"], CustomerProfileDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class PaginationInput {
 	    page: number;
 	    pageSize: number;
@@ -2009,6 +2163,22 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class SystemSettingsDTO {
+	    autoMergeCrossPlatform: boolean;
+	    autoMergeByEmail: boolean;
+	    autoMergeByPhone: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SystemSettingsDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.autoMergeCrossPlatform = source["autoMergeCrossPlatform"];
+	        this.autoMergeByEmail = source["autoMergeByEmail"];
+	        this.autoMergeByPhone = source["autoMergeByPhone"];
+	    }
+	}
 	export class UpdateAddressInput {
 	    id: number;
 	    customerProfileId: number;
@@ -2096,6 +2266,24 @@ export namespace dto {
 		    }
 		    return a;
 		}
+	}
+	export class UpdateCustomerProfileInput {
+	    id: number;
+	    displayName: string;
+	    profileType: string;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateCustomerProfileInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.displayName = source["displayName"];
+	        this.profileType = source["profileType"];
+	        this.extraData = source["extraData"];
+	    }
 	}
 	
 	export class UpdateProductMasterInput {

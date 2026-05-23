@@ -83,6 +83,19 @@ import {
   PickZIPFile,
   SaveZoom,
 } from "../../../../wailsjs/go/main/App";
+import {
+  ListCustomerProfiles,
+  GetCustomerProfile,
+  CreateCustomerProfile,
+  UpdateCustomerProfile,
+  DeleteCustomerProfile,
+  AddCustomerIdentity,
+  DeleteCustomerIdentity,
+  GetMergeSuggestions,
+  DismissMergeSuggestion,
+  SaveSettings,
+  GetSettings,
+} from "../../../../wailsjs/go/main/CustomerProfileController";
 import { dto } from "../../../../wailsjs/go/models";
 
 // ── Guards ──
@@ -940,6 +953,89 @@ export async function mergeProfiles(input: {
 }): Promise<MergeProfilesResult> {
   assertWailsRuntime()
   return _MergeProfiles(input as any) as Promise<MergeProfilesResult>
+}
+
+// ── CustomerProfileController ──
+
+export async function listCustomerProfiles(keyword: string = "", platform: string = "", missingAddressOnly: boolean = false): Promise<dto.CustomerProfileDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListCustomerProfiles(keyword, platform, missingAddressOnly)
+}
+
+export async function getCustomerProfile(id: number): Promise<dto.CustomerProfileDTO> {
+  assertWailsRuntime()
+  return GetCustomerProfile(id)
+}
+
+export async function createCustomerProfile(input: {
+  displayName: string
+  profileType: string
+  extraData: string
+}): Promise<dto.CustomerProfileDTO> {
+  assertWailsRuntime()
+  return CreateCustomerProfile(dto.CreateCustomerProfileInput.createFrom(input))
+}
+
+export async function updateCustomerProfile(input: {
+  id: number
+  displayName: string
+  profileType: string
+  extraData: string
+}): Promise<dto.CustomerProfileDTO> {
+  assertWailsRuntime()
+  return UpdateCustomerProfile(dto.UpdateCustomerProfileInput.createFrom(input))
+}
+
+export async function deleteCustomerProfile(id: number): Promise<void> {
+  assertWailsRuntime()
+  return DeleteCustomerProfile(id)
+}
+
+export async function addCustomerIdentity(input: {
+  customerProfileId: number
+  identityPlatform: string
+  identityValue: string
+  identityType: string
+  isPrimary: boolean
+  extraData: string
+}): Promise<dto.CustomerIdentityDTO> {
+  assertWailsRuntime()
+  return AddCustomerIdentity(dto.CreateCustomerIdentityInput.createFrom(input))
+}
+
+export async function deleteCustomerIdentity(id: number): Promise<void> {
+  assertWailsRuntime()
+  return DeleteCustomerIdentity(id)
+}
+
+export async function getMergeSuggestions(): Promise<dto.MergeSuggestionDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return GetMergeSuggestions()
+}
+
+export async function dismissMergeSuggestion(id: number): Promise<void> {
+  assertWailsRuntime()
+  return DismissMergeSuggestion(id)
+}
+
+export async function saveSettings(settings: {
+  autoMergeCrossPlatform: boolean
+  autoMergeByEmail: boolean
+  autoMergeByPhone: boolean
+}): Promise<void> {
+  assertWailsRuntime()
+  return SaveSettings(dto.SystemSettingsDTO.createFrom(settings))
+}
+
+export async function getSettings(): Promise<dto.SystemSettingsDTO> {
+  if (!isWailsRuntimeAvailable()) {
+    return dto.SystemSettingsDTO.createFrom({
+      autoMergeCrossPlatform: false,
+      autoMergeByEmail: false,
+      autoMergeByPhone: false,
+    })
+  }
+  return GetSettings()
 }
 
 export { isWailsRuntimeAvailable, assertWailsRuntime };

@@ -99,6 +99,13 @@ func (m *mockProfileRepoForIdentity) SoftDelete(id uint) error {
 	return nil
 }
 
+func (m *mockProfileRepoForIdentity) DeleteIdentity(id uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.identities, id)
+	return nil
+}
+
 func TestResolveOrCreateNewProfile(t *testing.T) {
 	t.Parallel()
 	repo := newMockProfileRepoForIdentity()

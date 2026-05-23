@@ -86,3 +86,7 @@ func (r *profileRepository) BulkUpdateIdentityProfileID(identityIDs []uint, newP
 func (r *profileRepository) SoftDelete(id uint) error {
 	return r.db.Delete(&persistence.CustomerProfile{}, id).Error
 }
+
+func (r *profileRepository) DeleteIdentity(id uint) error {
+	return r.db.Unscoped().Delete(&persistence.CustomerIdentity{}, id).Error
+}

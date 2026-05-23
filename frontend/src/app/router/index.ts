@@ -92,6 +92,14 @@ const router = createRouter({
             import("@/pages/profile/ProfileManagementPage.vue"),
         },
 
+        // ── Customers (客户档案 CRM) ──
+        {
+          path: "customers",
+          name: "customers",
+          component: () =>
+            import("@/pages/customer/CustomerManagementPage.vue"),
+        },
+
         // ── Products (商品库) ──
         {
           path: "products",
@@ -127,11 +135,11 @@ const router = createRouter({
         },
         {
           path: "addresses",
-          redirect: "/profiles",
+          redirect: "/customers",
         },
         {
           path: "merge",
-          redirect: "/profiles",
+          redirect: "/customers",
         },
       ],
     },

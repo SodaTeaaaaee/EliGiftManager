@@ -75,6 +75,7 @@ func main() {
 			NewProfileController(),
 				NewAddressController(),
 				NewMergeController(),
+				NewCustomerProfileController(),
 			},
 	})
 	if err != nil {

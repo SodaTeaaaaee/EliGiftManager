@@ -24,19 +24,9 @@
         <ProfileTemplateBindingPanel />
       </n-tab-pane>
 
-      <!-- Tab 4: Address Book -->
-      <n-tab-pane name="addresses" :tab="t('profile.tabAddresses')">
-        <AddressManagementPanel />
-      </n-tab-pane>
-
       <!-- Tab 5: CSV Import -->
       <n-tab-pane name="csv-import" :tab="t('profile.tabCsvImport')">
         <TemplateCsvImportPanel />
-      </n-tab-pane>
-
-      <!-- Tab 6: Profile Merge -->
-      <n-tab-pane name="merge" :tab="t('profile.tabMerge')">
-        <ProfileMergePanel />
       </n-tab-pane>
     </n-tabs>
   </div>
@@ -51,9 +41,7 @@ import { useI18n } from "@/shared/i18n";
 import ProfileListPanel from "./ProfileListPanel.vue";
 import TemplateManagementPanel from "@/pages/template/TemplateManagementPage.vue";
 import ProfileTemplateBindingPanel from "@/pages/template/ProfileTemplateBindingPage.vue";
-import AddressManagementPanel from "@/pages/address/AddressManagementPage.vue";
 import TemplateCsvImportPanel from "@/pages/template/TemplateCsvImportPage.vue";
-import ProfileMergePanel from "@/pages/profile/ProfileMergePage.vue";
 
 const { t } = useI18n();
 const activeTab = ref("profiles");

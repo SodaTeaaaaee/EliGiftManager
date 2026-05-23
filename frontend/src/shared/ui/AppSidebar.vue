@@ -31,6 +31,7 @@ import {
   CubeOutline,
   SettingsOutline,
   TicketOutline,
+  PeopleOutline,
 } from "@vicons/ionicons5";
 import { h } from "vue";
 import { useRouter, useRoute } from "vue-router";
@@ -60,6 +61,11 @@ const menuOptions = computed<MenuOption[]>(() => [
     label: t("nav.profiles"),
     key: "profiles",
     icon: () => h(NIcon, null, { default: () => h(LayersOutline) }),
+  },
+  {
+    label: t("nav.customers"),
+    key: "customers",
+    icon: () => h(NIcon, null, { default: () => h(PeopleOutline) }),
   },
   {
     label: t("nav.products"),
