@@ -1,8 +1,8 @@
 <template>
   <div class="app-sidebar">
     <div class="sidebar-header">
-      <div class="app-kicker">{{ t("app.workspace") }}</div>
-      <div class="sidebar-title">{{ t("app.name") }}</div>
+      <div class="sidebar-brand">EliGiftManager</div>
+      <div class="sidebar-subtitle">Gift Ops Console</div>
     </div>
 
     <n-menu
@@ -24,7 +24,14 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { NMenu, NIcon, type MenuOption } from "naive-ui";
-import { GridOutline, DownloadOutline, LayersOutline, CubeOutline, SettingsOutline, TicketOutline, LocationOutline, GitMergeOutline } from "@vicons/ionicons5";
+import {
+  GridOutline,
+  DownloadOutline,
+  LayersOutline,
+  CubeOutline,
+  SettingsOutline,
+  TicketOutline,
+} from "@vicons/ionicons5";
 import { h } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { useI18n } from "@/shared/i18n";
@@ -58,16 +65,6 @@ const menuOptions = computed<MenuOption[]>(() => [
     label: t("nav.products"),
     key: "products",
     icon: () => h(NIcon, null, { default: () => h(CubeOutline) }),
-  },
-  {
-    label: t("nav.addresses"),
-    key: "addresses",
-    icon: () => h(NIcon, null, { default: () => h(LocationOutline) }),
-  },
-  {
-    label: t("nav.merge"),
-    key: "merge",
-    icon: () => h(NIcon, null, { default: () => h(GitMergeOutline) }),
   },
 ]);
 
@@ -113,15 +110,22 @@ function onFooterSelect(key: string) {
 .sidebar-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   padding: 6px 10px 10px;
 }
 
-.sidebar-title {
+.sidebar-brand {
   color: var(--text);
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.02em;
+}
+
+.sidebar-subtitle {
+  color: var(--text-muted, rgba(255,255,255,0.5));
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
 }
 
 .sidebar-footer {

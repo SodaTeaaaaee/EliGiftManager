@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, inject } from "vue";
 import { useRouter } from "vue-router";
-import { NAlert, NButton, NCard, NEmpty, NGrid, NGridItem, NList, NListItem, NStatistic, NSpace, NTag, NTimeline, NTimelineItem } from "naive-ui";
+import { NAlert, NButton, NCard, NEmpty, NGrid, NGridItem, NList, NListItem, NStatistic, NSpace, NTag, NTimeline, NTimelineItem, NProgress } from "naive-ui";
 import { dto } from "@/../wailsjs/go/models";
 import { useI18n } from "@/shared/i18n";
 
@@ -29,6 +29,18 @@ function lifecycleText(key: string) {
   };
   return map[key] || key;
 }
+
+// Map technical keys to localization keys.
+const stepKeyDisplayMap: Record<string, string> = {
+  demand_intake: t("wave.overview"),
+  membership_allocation: t("wave.allocation"),
+  demand_mapping: t("wave.mapping"),
+  wave_overview: t("wave.overview"),
+  adjustment_review: t("wave.adjustment"),
+  supplier_execution: t("wave.execution"),
+  shipment_intake: t("wave.shipment"),
+  channel_sync: t("wave.sync"),
+};
 
 function summaryText(key: string) {
   const map: Record<string, string> = {
@@ -70,17 +82,6 @@ function historyCommandText(key: string) {
   return map[key] || key;
 }
 
-const stepKeyDisplayMap: Record<string, string> = {
-  demand_intake: "demand_intake",
-  membership_allocation: "membership_allocation",
-  demand_mapping: "demand_mapping",
-  wave_overview: "wave_overview",
-  adjustment_review: "adjustment_review",
-  supplier_execution: "supplier_execution",
-  shipment_intake: "shipment_intake",
-  channel_sync: "channel_sync",
-};
-
 function nextStepReasonText(reason: string): string {
   const map: Record<string, string> = {
     no_demands_assigned: t("wave.overviewDetail.noDemandsAssigned"),
@@ -118,6 +119,27 @@ function goTo(stepKey: string) {
   };
   router.push(targetMap[stepKey] || `/waves/${waveId}`);
 }
+
+// Compute percentage for address readiness
+const addressTotal = computed(() => {
+  if (!overview.value) return 0;
+  return (overview.value.addressReadyCount || 0) + (overview.value.addressMissingCount || 0) + (overview.value.addressInvalidCount || 0);
+});
+
+const addressReadyPct = computed(() => {
+  if (addressTotal.value === 0) return 0;
+  return Math.round(((overview.value?.addressReadyCount || 0) / addressTotal.value) * 100);
+});
+
+// Compute percentage for allocation state
+const allocationTotal = computed(() => {
+  return overview.value?.fulfillmentCount || 0;
+});
+
+const allocationReadyPct = computed(() => {
+  if (allocationTotal.value === 0) return 0;
+  return Math.round(((overview.value?.fulfillmentReadyCount || 0) / allocationTotal.value) * 100);
+});
 </script>
 
 <template>
@@ -125,210 +147,309 @@ function goTo(stepKey: string) {
     <NEmpty v-if="!snapshot" :description="t('common.loading')" />
 
     <template v-else>
-      <!-- Next Step Guidance card -->
-      <NCard v-if="suggestedNextStep && suggestedNextStep !== 'wave_overview'" class="mb-4" style="border-left: 4px solid var(--n-color-target, #18a058);">
-        <div class="flex items-center justify-between gap-4">
-          <div>
-            <div class="app-kicker">{{ t("wave.overviewDetail.suggestedNext") }}</div>
-            <div class="app-heading-sm mt-1">{{ stepKeyDisplayMap[suggestedNextStep] ?? suggestedNextStep }}</div>
-            <p v-if="nextStepReasonText(nextStepReason)" class="app-copy mt-1" style="opacity:0.75;">
-              {{ nextStepReasonText(nextStepReason) }}
-            </p>
-          </div>
-          <NButton type="primary" size="small" @click="goTo(suggestedNextStep)">
-            {{ t("wave.overviewDetail.goToStep", { step: stepKeyDisplayMap[suggestedNextStep] ?? suggestedNextStep }) }}
-          </NButton>
-        </div>
-      </NCard>
+      <!-- Top Grid: Suggested Step + Stage -->
+      <NGrid :cols="24" :x-gap="16" :y-gap="16" class="mb-5">
+        <!-- Next Step Card -->
+        <NGridItem :span="suggestedNextStep && suggestedNextStep !== 'wave_overview' ? 16 : 24">
+          <NCard 
+            class="glow-card h-full"
+            style="border-left: 5px solid var(--accent); background: linear-gradient(135deg, var(--surface-strong) 0%, var(--surface-muted) 100%);"
+          >
+            <div class="flex items-start justify-between gap-6">
+              <div>
+                <div class="app-kicker">{{ t("wave.overviewDetail.suggestedNext") }}</div>
+                <h2 class="app-title mt-2">
+                  {{ stepKeyDisplayMap[suggestedNextStep] ?? suggestedNextStep }}
+                </h2>
+                <p v-if="nextStepReasonText(nextStepReason)" class="app-copy mt-2">
+                  {{ nextStepReasonText(nextStepReason) }}
+                </p>
+                <p v-else class="app-copy mt-2">{{ t("wave.previewDescription") }}</p>
+              </div>
+              <NSpace align="center">
+                <NButton 
+                  v-if="suggestedNextStep && suggestedNextStep !== 'wave_overview'" 
+                  type="primary" 
+                  @click="goTo(suggestedNextStep)"
+                >
+                  {{ t("wave.overviewDetail.goToStep", { step: stepKeyDisplayMap[suggestedNextStep] ?? suggestedNextStep }) }}
+                </NButton>
+                <NButton secondary @click="goTo('adjustment_review')">
+                  {{ t("wave.adjustment") }}
+                </NButton>
+              </NSpace>
+            </div>
+          </NCard>
+        </NGridItem>
 
-      <!-- Blocking Issues alert -->
-      <NAlert v-if="blockingIssues.length" type="warning" class="mb-4" :title="t('wave.overviewDetail.blockingIssues')">
-        <ul style="margin: 4px 0; padding-left: 1.2em;">
-          <li v-for="issue in blockingIssues" :key="issue">{{ blockingIssueText(issue) }}</li>
-        </ul>
+        <!-- Current Lifecycle Stage Card -->
+        <NGridItem :span="8" v-if="suggestedNextStep && suggestedNextStep !== 'wave_overview'">
+          <NCard class="glow-card h-full flex flex-col justify-between">
+            <div>
+              <div class="app-kicker">Current Stage</div>
+              <h3 class="app-heading-md mt-2" style="font-size: 20px;">
+                {{ lifecycleText(snapshot.projectedLifecycleStage) }}
+              </h3>
+            </div>
+            <div class="mt-4">
+              <NProgress
+                type="line"
+                status="success"
+                :percentage="allocationReadyPct"
+                :show-indicator="true"
+                processing
+              />
+              <div class="text-xs text-slate-400 mt-1">
+                Fulfillment lines ready: {{ overview?.fulfillmentReadyCount ?? 0 }} / {{ overview?.fulfillmentCount ?? 0 }}
+              </div>
+            </div>
+          </NCard>
+        </NGridItem>
+      </NGrid>
+
+      <!-- Blocking Issues and Guidance Alerts -->
+      <NAlert v-if="blockingIssues.length" type="error" class="mb-4" :title="t('wave.overviewDetail.blockingIssues')">
+        <NSpace vertical :size="8">
+          <ul style="margin: 4px 0; padding-left: 1.2em; line-height: 1.6;">
+            <li v-for="issue in blockingIssues" :key="issue">
+              <strong>{{ blockingIssueText(issue) }}</strong> — Requires attention before final export.
+            </li>
+          </ul>
+          <NButton size="tiny" secondary type="error" @click="goTo('adjustment_review')" style="margin-top: 4px;">
+            Go to Adjustment Review
+          </NButton>
+        </NSpace>
       </NAlert>
 
-      <NCard class="mb-4">
-        <div class="flex items-start justify-between gap-6">
-          <div>
-            <div class="app-kicker">{{ lifecycleText(snapshot.projectedLifecycleStage) }}</div>
-            <h2 class="app-title mt-2">{{ t("wave.previewDecision") }}</h2>
-            <p class="app-copy mt-3">{{ t("wave.previewDescription") }}</p>
-          </div>
-          <NSpace vertical>
-            <NButton type="primary" @click="goTo('supplier_execution')">
-              {{ t("wave.continueToExecution") }}
-            </NButton>
-            <NButton secondary @click="goTo('adjustment_review')">
-              {{ t("wave.adjustment") }}
-            </NButton>
-          </NSpace>
-        </div>
-      </NCard>
-
-      <NAlert v-if="guidance.length" type="warning" class="mb-4">
+      <NAlert v-if="guidance.length" type="warning" class="mb-4" :title="t('wave.nextAction')">
         <NSpace vertical :size="10">
-          <div class="app-heading-sm">{{ t("wave.nextAction") }}</div>
           <div
             v-for="item in guidance"
             :key="item.code"
-            class="flex items-center justify-between gap-4"
+            class="flex items-center justify-between gap-4 border-b border-dashed border-slate-700/20 pb-2"
           >
-            <span>{{ t(`wave.guidance.${item.code}`) || item.code }} ({{ item.count }})</span>
-            <NButton size="small" @click="goTo(item.targetStepKey)">
-              {{ item.targetStepKey }}
+            <span class="text-sm font-medium text-amber-700 dark:text-amber-300">
+              {{ t(`wave.guidance.${item.code}`) || item.code }} ({{ item.count }})
+            </span>
+            <NButton size="small" type="warning" secondary @click="goTo(item.targetStepKey)">
+              Resolve in {{ stepKeyDisplayMap[item.targetStepKey] ?? item.targetStepKey }}
             </NButton>
           </div>
         </NSpace>
       </NAlert>
 
-      <NGrid :cols="3" :x-gap="16" :y-gap="16" class="mb-5">
-        <NGridItem>
-          <NCard :title="t('wave.exceptionsGroup')">
-            <NSpace vertical :size="10">
-              <div class="flex items-center justify-between gap-4">
-                <span>{{ t("wave.allocation") }}</span>
-                <NButton size="small" @click="goTo('membership_allocation')">
-                  {{ t("wave.allocation") }}
-                </NButton>
-              </div>
-              <div class="flex items-center justify-between gap-4">
-                <span>{{ t("wave.mapping") }}</span>
-                <NButton size="small" @click="goTo('demand_mapping')">
-                  {{ t("wave.mapping") }}
-                </NButton>
-              </div>
-              <div class="flex items-center justify-between gap-4">
-                <span>{{ t("wave.adjustment") }}</span>
-                <NButton size="small" @click="goTo('adjustment_review')">
-                  {{ t("wave.adjustment") }}
-                </NButton>
-              </div>
-            </NSpace>
-          </NCard>
-        </NGridItem>
-
-        <NGridItem>
-          <NCard :title="t('wave.routingGroup')">
-            <NList bordered>
-              <NListItem>{{ summaryText("ready") }}: {{ overview?.acceptedReadyOrNotRequired ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("waiting_for_input") }}: {{ overview?.acceptedWaitingForInput ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("deferred") }}: {{ overview?.deferredCount ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("excluded") }}: {{ (overview?.excludedManualCount ?? 0) + (overview?.excludedDuplicateCount ?? 0) + (overview?.excludedRevokedCount ?? 0) }}</NListItem>
-            </NList>
-          </NCard>
-        </NGridItem>
-
-        <NGridItem>
-          <NCard :title="t('wave.executionGroup')">
-            <NList bordered>
-              <NListItem>{{ summaryText("supplier_orders") }}: {{ overview?.supplierOrderCount ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("shipments") }}: {{ overview?.shipmentCount ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("pending_sync") }}: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("manual_closure_candidates") }}: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
-            </NList>
-          </NCard>
-        </NGridItem>
-      </NGrid>
-
+      <!-- Core Statistics Cards Grid -->
       <NGrid :cols="4" :x-gap="16" :y-gap="16" class="mb-5">
-        <NGridItem><NCard><NStatistic :label="summaryText('demand')" :value="overview?.demandCount ?? 0" /></NCard></NGridItem>
-        <NGridItem><NCard><NStatistic :label="summaryText('fulfillment')" :value="overview?.fulfillmentCount ?? 0" /></NCard></NGridItem>
-        <NGridItem><NCard><NStatistic :label="summaryText('supplier_orders')" :value="overview?.supplierOrderCount ?? 0" /></NCard></NGridItem>
-        <NGridItem><NCard><NStatistic :label="summaryText('shipments')" :value="overview?.shipmentCount ?? 0" /></NCard></NGridItem>
+        <NGridItem>
+          <NCard class="glow-card compact-card">
+            <NStatistic :label="summaryText('demand')" :value="overview?.demandCount ?? 0" />
+            <div class="text-xs text-slate-400 mt-2">Incoming raw demands</div>
+          </NCard>
+        </NGridItem>
+        <NGridItem>
+          <NCard class="glow-card compact-card">
+            <NStatistic :label="summaryText('fulfillment')" :value="overview?.fulfillmentCount ?? 0" />
+            <div class="text-xs text-slate-400 mt-2">Fulfillment items mapped</div>
+          </NCard>
+        </NGridItem>
+        <NGridItem>
+          <NCard class="glow-card compact-card">
+            <NStatistic :label="summaryText('supplier_orders')" :value="overview?.supplierOrderCount ?? 0" />
+            <div class="text-xs text-slate-400 mt-2">Factory orders created</div>
+          </NCard>
+        </NGridItem>
+        <NGridItem>
+          <NCard class="glow-card compact-card">
+            <NStatistic :label="summaryText('shipments')" :value="overview?.shipmentCount ?? 0" />
+            <div class="text-xs text-slate-400 mt-2">Tracking records loaded</div>
+          </NCard>
+        </NGridItem>
       </NGrid>
 
-      <!-- Fulfillment Breakdown -->
-      <NCard :title="t('wave.overviewDetail.fulfillmentBreakdown')" class="mb-5">
-        <NGrid :cols="3" :x-gap="16" :y-gap="16">
-          <NGridItem>
-            <NSpace vertical :size="8">
-              <div class="app-kicker">Allocation</div>
-              <NGrid :cols="2" :x-gap="12">
-                <NGridItem><NStatistic label="Draft" :value="overview?.fulfillmentDraftCount ?? 0" /></NGridItem>
-                <NGridItem><NStatistic label="Ready" :value="overview?.fulfillmentReadyCount ?? 0" /></NGridItem>
-              </NGrid>
-            </NSpace>
+      <!-- Diagnosis breakdown card -->
+      <NCard :title="t('wave.overviewDetail.fulfillmentBreakdown')" class="mb-5 glow-card">
+        <NGrid :cols="3" :x-gap="20" :y-gap="20">
+          <!-- Allocation State Column -->
+          <NGridItem class="border-r border-slate-700/10 dark:border-slate-700/30 pr-5">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-bold tracking-wide uppercase text-slate-500">Allocation Status</span>
+              <NTag size="small" type="primary" :bordered="false">{{ allocationReadyPct }}% Ready</NTag>
+            </div>
+            <NProgress
+              type="line"
+              status="info"
+              :percentage="allocationReadyPct"
+              class="mb-4"
+              processing
+            />
+            <NList size="small" :bordered="false">
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Draft</span>
+                <span class="font-bold">{{ overview?.fulfillmentDraftCount ?? 0 }}</span>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Ready</span>
+                <span class="font-bold text-emerald-600 dark:text-emerald-400">
+                  {{ overview?.fulfillmentReadyCount ?? 0 }}
+                </span>
+              </NListItem>
+            </NList>
           </NGridItem>
-          <NGridItem>
-            <NSpace vertical :size="8">
-              <div class="app-kicker">Address</div>
-              <NGrid :cols="3" :x-gap="8">
-                <NGridItem>
-                  <NStatistic label="Missing" :value="overview?.addressMissingCount ?? 0">
-                    <template v-if="(overview?.addressMissingCount ?? 0) > 0" #prefix>
-                      <NTag size="tiny" type="warning" :bordered="false" style="margin-right:4px;">!</NTag>
-                    </template>
-                  </NStatistic>
-                </NGridItem>
-                <NGridItem><NStatistic label="Ready" :value="overview?.addressReadyCount ?? 0" /></NGridItem>
-                <NGridItem>
-                  <NStatistic label="Invalid" :value="overview?.addressInvalidCount ?? 0">
-                    <template v-if="(overview?.addressInvalidCount ?? 0) > 0" #prefix>
-                      <NTag size="tiny" type="error" :bordered="false" style="margin-right:4px;">!</NTag>
-                    </template>
-                  </NStatistic>
-                </NGridItem>
-              </NGrid>
-            </NSpace>
+
+          <!-- Address Validation Column -->
+          <NGridItem class="border-r border-slate-700/10 dark:border-slate-700/30 pr-5">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-bold tracking-wide uppercase text-slate-500">Address Validation</span>
+              <NTag size="small" :type="overview?.addressMissingCount || overview?.addressInvalidCount ? 'warning' : 'success'" :bordered="false">
+                {{ addressReadyPct }}% Valid
+              </NTag>
+            </div>
+            <NProgress
+              type="line"
+              :status="overview?.addressMissingCount || overview?.addressInvalidCount ? 'warning' : 'success'"
+              :percentage="addressReadyPct"
+              class="mb-4"
+            />
+            <NList size="small" :bordered="false">
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Missing Address</span>
+                <span :class="['font-bold', (overview?.addressMissingCount ?? 0) > 0 ? 'text-amber-500' : '']">
+                  {{ overview?.addressMissingCount ?? 0 }}
+                </span>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Invalid / Unverified</span>
+                <span :class="['font-bold', (overview?.addressInvalidCount ?? 0) > 0 ? 'text-red-500' : '']">
+                  {{ overview?.addressInvalidCount ?? 0 }}
+                </span>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Ready & Verified</span>
+                <span class="font-bold text-emerald-500">{{ overview?.addressReadyCount ?? 0 }}</span>
+              </NListItem>
+            </NList>
           </NGridItem>
+
+          <!-- Factory Submission Column -->
           <NGridItem>
-            <NSpace vertical :size="8">
-              <div class="app-kicker">Supplier</div>
-              <NGrid :cols="3" :x-gap="8">
-                <NGridItem><NStatistic label="Pending" :value="overview?.supplierNotSubmittedCount ?? 0" /></NGridItem>
-                <NGridItem><NStatistic label="Submitted" :value="overview?.supplierSubmittedCount ?? 0" /></NGridItem>
-                <NGridItem><NStatistic label="Shipped" :value="overview?.supplierShippedCount ?? 0" /></NGridItem>
-              </NGrid>
-            </NSpace>
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-sm font-bold tracking-wide uppercase text-slate-500">Supplier Execution</span>
+              <NTag size="small" :type="overview?.supplierShippedCount ? 'success' : 'default'" :bordered="false">
+                {{ overview?.supplierShippedCount ?? 0 }} Shipped
+              </NTag>
+            </div>
+            <NList size="small" :bordered="false">
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Unsubmitted Lines</span>
+                <span class="font-bold text-amber-500">{{ overview?.supplierNotSubmittedCount ?? 0 }}</span>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Submitted to Factory</span>
+                <span class="font-bold text-blue-500">{{ overview?.supplierSubmittedCount ?? 0 }}</span>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-slate-400">Shipped by Factory</span>
+                <span class="font-bold text-emerald-500">{{ overview?.supplierShippedCount ?? 0 }}</span>
+              </NListItem>
+            </NList>
           </NGridItem>
         </NGrid>
       </NCard>
 
-      <!-- Adjustments Summary -->
-      <NCard :title="t('wave.overviewDetail.adjustmentSummary')" class="mb-5">
-        <NGrid :cols="5" :x-gap="16">
-          <NGridItem><NStatistic label="Total" :value="overview?.adjustmentCount ?? 0" /></NGridItem>
-          <NGridItem><NStatistic :label="t('adjustment.add')" :value="overview?.adjustmentAddCount ?? 0" /></NGridItem>
-          <NGridItem><NStatistic :label="t('adjustment.reduce')" :value="overview?.adjustmentReduceCount ?? 0" /></NGridItem>
-          <NGridItem><NStatistic :label="t('adjustment.replace')" :value="overview?.adjustmentReplaceCount ?? 0" /></NGridItem>
-          <NGridItem><NStatistic :label="t('adjustment.remove')" :value="overview?.adjustmentRemoveCount ?? 0" /></NGridItem>
-        </NGrid>
-      </NCard>
-
-      <NGrid :cols="2" :x-gap="16" :y-gap="16">
-        <NGridItem>
-          <NCard :title="t('wave.executionGroup')">
-            <NList bordered>
-              <NListItem>{{ summaryText("channel_sync_jobs") }}: {{ overview?.channelSyncJobCount ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("pending_sync") }}: {{ overview?.channelSyncPendingCount ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("failed_sync") }}: {{ overview?.channelSyncFailedCount ?? 0 }}</NListItem>
-              <NListItem>{{ summaryText("manual_closure_candidates") }}: {{ overview?.manualClosureCandidateCount ?? 0 }}</NListItem>
+      <!-- Wave Details, Adjustments, and Sync status -->
+      <NGrid :cols="24" :x-gap="16" :y-gap="16" class="mb-5">
+        <!-- Routing summary -->
+        <NGridItem :span="8">
+          <NCard :title="t('wave.routingGroup')" class="glow-card h-full">
+            <NList size="small">
+              <NListItem class="flex justify-between">
+                <span>{{ summaryText("ready") }}</span>
+                <NTag size="small" type="success" :bordered="false">{{ overview?.acceptedReadyOrNotRequired ?? 0 }}</NTag>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span>{{ summaryText("waiting_for_input") }}</span>
+                <NTag size="small" type="warning" :bordered="false">{{ overview?.acceptedWaitingForInput ?? 0 }}</NTag>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span>{{ summaryText("deferred") }}</span>
+                <NTag size="small" :bordered="false">{{ overview?.deferredCount ?? 0 }}</NTag>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span>{{ summaryText("excluded") }}</span>
+                <NTag size="small" type="error" :bordered="false">
+                  {{ (overview?.excludedManualCount ?? 0) + (overview?.excludedDuplicateCount ?? 0) + (overview?.excludedRevokedCount ?? 0) }}
+                </NTag>
+              </NListItem>
             </NList>
           </NCard>
         </NGridItem>
 
-        <NGridItem>
-          <NCard :title="t('wave.basis')">
-            <NSpace vertical :size="12">
-              <div class="flex items-center gap-2">
+        <!-- Adjustments summary -->
+        <NGridItem :span="8">
+          <NCard :title="t('wave.overviewDetail.adjustmentSummary')" class="glow-card h-full">
+            <NList size="small">
+              <NListItem class="flex justify-between">
+                <span>Total Adjustments</span>
+                <span class="font-bold">{{ overview?.adjustmentCount ?? 0 }}</span>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-emerald-600 dark:text-emerald-400">{{ t('adjustment.add') }}</span>
+                <NTag size="small" type="success" :bordered="false">+{{ overview?.adjustmentAddCount ?? 0 }}</NTag>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-rose-600 dark:text-rose-400">{{ t('adjustment.reduce') }}</span>
+                <NTag size="small" type="error" :bordered="false">-{{ overview?.adjustmentReduceCount ?? 0 }}</NTag>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-blue-600 dark:text-blue-400">{{ t('adjustment.replace') }}</span>
+                <NTag size="small" type="info" :bordered="false">{{ overview?.adjustmentReplaceCount ?? 0 }}</NTag>
+              </NListItem>
+              <NListItem class="flex justify-between">
+                <span class="text-slate-500">{{ t('adjustment.remove') }}</span>
+                <NTag size="small" :bordered="false">{{ overview?.adjustmentRemoveCount ?? 0 }}</NTag>
+              </NListItem>
+            </NList>
+          </NCard>
+        </NGridItem>
+
+        <!-- Basis and Sync State -->
+        <NGridItem :span="8">
+          <NCard :title="t('wave.basis')" class="glow-card h-full">
+            <NSpace vertical :size="12" class="mb-4">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">{{ t("wave.drifted") }}</span>
                 <NTag size="small" :type="snapshot.basisSummary.hasDriftedBasis ? 'warning' : 'default'">
-                  {{ t("wave.drifted") }}
+                  {{ snapshot.basisSummary.driftedCount }} drifted
                 </NTag>
-                <span>{{ snapshot.basisSummary.driftedCount }}</span>
               </div>
-              <div class="flex items-center gap-2">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">{{ t("wave.reviewRequired") }}</span>
                 <NTag size="small" :type="snapshot.basisSummary.hasRequiredReview ? 'error' : 'default'">
-                  {{ t("wave.reviewRequired") }}
+                  {{ snapshot.basisSummary.requiredReviewCount }} required
                 </NTag>
-                <span>{{ snapshot.basisSummary.requiredReviewCount }}</span>
               </div>
             </NSpace>
+            <div class="border-t border-slate-700/10 dark:border-slate-700/30 pt-3">
+              <div class="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Channel Sync Progress</div>
+              <NList size="small">
+                <NListItem class="flex justify-between py-1">
+                  <span class="text-slate-400 text-xs">Sync Jobs</span>
+                  <span class="font-bold text-xs">{{ overview?.channelSyncJobCount ?? 0 }}</span>
+                </NListItem>
+                <NListItem class="flex justify-between py-1">
+                  <span class="text-slate-400 text-xs">Failed Sync</span>
+                  <span :class="['font-bold', 'text-xs', (overview?.channelSyncFailedCount ?? 0) > 0 ? 'text-red-500' : '']">
+                    {{ overview?.channelSyncFailedCount ?? 0 }}
+                  </span>
+                </NListItem>
+              </NList>
+            </div>
           </NCard>
         </NGridItem>
       </NGrid>
 
-      <NCard class="mt-5" :title="t('wave.history')">
+      <!-- History Feed -->
+      <NCard :title="t('wave.history')" class="glow-card">
         <template #header-extra>
           <NSpace align="center" :size="8">
             <NTag size="small" round :type="snapshot.historyHeadNodeId ? 'info' : 'default'">
@@ -343,22 +464,49 @@ function goTo(stepKey: string) {
           {{ t("wave.historyMeta.currentHead") }}：{{ recentHistory[0].commandSummary }}
         </NAlert>
         <NEmpty v-if="recentHistory.length === 0" :description="t('common.empty')" />
-        <NTimeline v-else>
+        <NTimeline v-else horizontal>
           <NTimelineItem
-            v-for="node in recentHistory"
+            v-for="(node, index) in recentHistory.slice(0, 5)"
             :key="node.id"
+            :type="index === 0 ? 'info' : 'default'"
             :title="node.commandSummary"
-            :time="node.createdAt"
+            :time="node.createdAt.split('T')[1]?.slice(0, 8) || node.createdAt"
           >
-            <NSpace align="center" :size="8">
+            <div class="mt-1">
               <NTag size="tiny" :bordered="false">{{ historyCommandText(node.commandKind) }}</NTag>
-              <span v-if="node.parentNodeId">{{ t("wave.historyMeta.parent") }} #{{ node.parentNodeId }}</span>
-              <span v-if="node.preferredRedoChildId">{{ t("wave.historyMeta.redo") }} #{{ node.preferredRedoChildId }}</span>
-              <span v-if="node.checkpointHint">{{ t("wave.historyMeta.checkpoint") }}</span>
-            </NSpace>
+            </div>
           </NTimelineItem>
         </NTimeline>
       </NCard>
     </template>
   </div>
 </template>
+
+<style scoped>
+.wave-overview-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.glow-card {
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+:root[data-theme='dark'] .glow-card {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: #111827;
+}
+
+.glow-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.04);
+}
+
+.compact-card :deep(.n-card__content) {
+  padding: 16px 20px;
+}
+</style>

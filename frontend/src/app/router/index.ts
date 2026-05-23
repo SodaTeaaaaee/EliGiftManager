@@ -13,20 +13,15 @@ const router = createRouter({
           name: "dashboard",
           component: () => import("@/pages/dashboard/DashboardPage.vue"),
         },
+
+        // ── Waves (波次列表) ──
         {
           path: "waves",
           name: "waves",
           component: () => import("@/pages/waves/WavesPage.vue"),
         },
-        {
-          path: "demand-intake",
-          name: "demand-intake",
-          component: () =>
-            import("@/pages/demand-intake/DemandIntakePage.vue"),
-        },
-        // Wave workspace — nested layout with step wizard.
-        // Defined before the legacy flat routes so the wizard is always shown
-        // for /waves/:waveId/* paths.
+
+        // ── Wave Workspace (波次工作区 — 7步向导) ──
         {
           path: "waves/:waveId",
           component: () =>
@@ -80,55 +75,64 @@ const router = createRouter({
             },
           ],
         },
+
+        // ── Demand Intake (需求录入) ──
+        {
+          path: "demand-intake",
+          name: "demand-intake",
+          component: () =>
+            import("@/pages/demand-intake/DemandIntakePage.vue"),
+        },
+
+        // ── Profiles (集成配置 — 整合 Template / Address / Merge) ──
         {
           path: "profiles",
           name: "profiles",
           component: () =>
             import("@/pages/profile/ProfileManagementPage.vue"),
         },
+
+        // ── Products (商品库) ──
         {
           path: "products",
           name: "products",
           component: () =>
             import("@/pages/product/ProductManagementPage.vue"),
         },
+
+        // ── Settings (设置) ──
         {
           path: "settings",
           name: "settings",
           component: () =>
             import("@/pages/settings/SettingsPage.vue"),
         },
-        {
-          path: "templates",
-          name: "templates",
-          component: () => import("@/pages/template/TemplateManagementPage.vue"),
-        },
-        {
-          path: "templates/bindings",
-          name: "template-bindings",
-          component: () => import("@/pages/template/ProfileTemplateBindingPage.vue"),
-        },
-        {
-          path: "templates/csv-import",
-          name: "template-csv-import",
-          component: () => import("@/pages/template/TemplateCsvImportPage.vue"),
-        },
-        {
-          path: "addresses",
-          name: "addresses",
-          component: () => import("@/pages/address/AddressManagementPage.vue"),
-        },
-        {
-          path: "merge",
-          name: "merge",
-          component: () => import("@/pages/profile/ProfileMergePage.vue"),
-        },
-        // Legacy wave-overview route — redirect to dashboard (consolidated into workspace wizard)
+
+        // Legacy redirects — keep old routes functional
         {
           path: "wave-overview",
           redirect: "/dashboard",
         },
-
+        {
+          path: "templates",
+          redirect: "/profiles",
+        },
+        {
+          path: "templates/bindings",
+          redirect: "/profiles",
+        },
+        {
+          path: "templates/csv-import",
+          redirect: "/profiles",
+        },
+        {
+          path: "addresses",
+          redirect: "/profiles",
+        },
+        {
+          path: "merge",
+          redirect: "/profiles",
+        },
       ],
     },
   ],

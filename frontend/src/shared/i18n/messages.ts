@@ -453,6 +453,16 @@ export const zhCN = {
     cancel: "取消",
     retry: "重试",
   },
+  profile: {
+    hubTitle: "集成配置管理",
+    hubSubtitle: "统一管理集成配置、文档模板、绑定关系、客户地址和档案合并。",
+    tabProfiles: "集成配置",
+    tabTemplates: "文档模板",
+    tabBindings: "模板绑定",
+    tabAddresses: "地址库",
+    tabCsvImport: "CSV 导入",
+    tabMerge: "档案合并",
+  },
   template: {
     title: "模板管理",
     create: "创建模板",
@@ -984,6 +994,16 @@ export const enUS = {
     save: "Save",
     cancel: "Cancel",
     retry: "Retry",
+  },
+  profile: {
+    hubTitle: "Integration Profile Management",
+    hubSubtitle: "Manage integration profiles, document templates, bindings, customer addresses, and profile merging in one place.",
+    tabProfiles: "Profiles",
+    tabTemplates: "Templates",
+    tabBindings: "Bindings",
+    tabAddresses: "Addresses",
+    tabCsvImport: "CSV Import",
+    tabMerge: "Merge",
   },
   template: {
     title: "Template Management",
