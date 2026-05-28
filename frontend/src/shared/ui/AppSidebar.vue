@@ -41,36 +41,61 @@ const router = useRouter();
 const route = useRoute();
 const { t } = useI18n();
 
+// 顶层导航分段（按 V2 文档：行动中心 / 履约工作流 / 主数据）
 const menuOptions = computed<MenuOption[]>(() => [
+  // ── 行动中心 ──
   {
-    label: t("nav.dashboard"),
-    key: "dashboard",
-    icon: () => h(NIcon, null, { default: () => h(GridOutline) }),
+    type: "group",
+    label: t("nav.sectionActionCenter"),
+    key: "section-action-center",
+    children: [
+      {
+        label: t("nav.dashboard"),
+        key: "dashboard",
+        icon: () => h(NIcon, null, { default: () => h(GridOutline) }),
+      },
+    ],
   },
+  // ── 履约工作流 ──
   {
-    label: t("nav.waves"),
-    key: "waves",
-    icon: () => h(NIcon, null, { default: () => h(TicketOutline) }),
+    type: "group",
+    label: t("nav.sectionFulfillment"),
+    key: "section-fulfillment",
+    children: [
+      {
+        label: t("nav.waves"),
+        key: "waves",
+        icon: () => h(NIcon, null, { default: () => h(TicketOutline) }),
+      },
+      {
+        label: t("nav.demandInbox"),
+        key: "demand-inbox",
+        icon: () => h(NIcon, null, { default: () => h(DownloadOutline) }),
+      },
+    ],
   },
+  // ── 主数据 ──
   {
-    label: t("nav.demandIntake"),
-    key: "demand-intake",
-    icon: () => h(NIcon, null, { default: () => h(DownloadOutline) }),
-  },
-  {
-    label: t("nav.profiles"),
-    key: "profiles",
-    icon: () => h(NIcon, null, { default: () => h(LayersOutline) }),
-  },
-  {
-    label: t("nav.customers"),
-    key: "customers",
-    icon: () => h(NIcon, null, { default: () => h(PeopleOutline) }),
-  },
-  {
-    label: t("nav.products"),
-    key: "products",
-    icon: () => h(NIcon, null, { default: () => h(CubeOutline) }),
+    type: "group",
+    label: t("nav.sectionMasterData"),
+    key: "section-master-data",
+    children: [
+      {
+        label: t("nav.customers"),
+        key: "customers",
+        icon: () => h(NIcon, null, { default: () => h(PeopleOutline) }),
+      },
+      {
+        label: t("nav.products"),
+        key: "products",
+        icon: () => h(NIcon, null, { default: () => h(CubeOutline) }),
+      },
+      {
+        label: t("nav.profiles"),
+        key: "profiles",
+        icon: () => h(NIcon, null, { default: () => h(LayersOutline) }),
+      },
+    ],
   },
 ]);
 
@@ -86,6 +111,8 @@ const activeKey = computed(() => {
   const name = route.name;
   if (typeof name !== "string") return null;
   if (name.startsWith("wave-")) return "waves";
+  if (name === "customer-detail") return "customers";
+  if (name === "profile-detail") return "profiles";
   if (name === "settings") return null;
   return name;
 });
@@ -107,7 +134,7 @@ function onFooterSelect(key: string) {
   flex-direction: column;
   height: 100%;
   padding: 24px 16px 20px;
-  gap: 24px;
+  gap: 16px;
   background: var(--surface-strong);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);

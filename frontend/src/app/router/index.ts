@@ -8,6 +8,8 @@ const router = createRouter({
       component: () => import("@/app/AppLayout.vue"),
       children: [
         { path: "", redirect: "/dashboard" },
+
+        // ── Action Center ──
         {
           path: "dashboard",
           name: "dashboard",
@@ -21,7 +23,7 @@ const router = createRouter({
           component: () => import("@/pages/waves/WavesPage.vue"),
         },
 
-        // ── Wave Workspace (波次工作区 — 7步向导) ──
+        // ── Wave Workspace (波次工作区) ──
         {
           path: "waves/:waveId",
           component: () =>
@@ -39,19 +41,35 @@ const router = createRouter({
               component: () =>
                 import("@/pages/wave-workspace/WaveIntakeStep.vue"),
             },
+            // Initial Allocation 折叠分组：两个独立子项
             {
-              path: "demand-mapping/:demandKind?",
-              name: "wave-demand-mapping",
-              component: () =>
-                import("@/pages/demand-mapping/DemandMappingPage.vue"),
-            },
-            {
-              path: "allocation/:demandKind?",
-              name: "wave-allocation",
+              path: "allocation/membership",
+              name: "wave-membership-allocation",
               component: () =>
                 import(
                   "@/pages/membership-allocation/MembershipAllocationPage.vue"
                 ),
+            },
+            {
+              path: "allocation/demand",
+              name: "wave-demand-mapping",
+              component: () =>
+                import("@/pages/demand-mapping/DemandMappingPage.vue"),
+            },
+            // Legacy compatibility — 旧 demandKind 参数路径
+            {
+              path: "allocation/:demandKind?",
+              name: "wave-allocation-legacy",
+              component: () =>
+                import(
+                  "@/pages/membership-allocation/MembershipAllocationPage.vue"
+                ),
+            },
+            {
+              path: "demand-mapping/:demandKind?",
+              name: "wave-demand-mapping-legacy",
+              component: () =>
+                import("@/pages/demand-mapping/DemandMappingPage.vue"),
             },
             {
               path: "adjustment-review",
@@ -60,6 +78,12 @@ const router = createRouter({
                 import(
                   "@/pages/adjustment-review/AdjustmentReviewPage.vue"
                 ),
+            },
+            {
+              path: "readiness",
+              name: "wave-readiness",
+              component: () =>
+                import("@/pages/wave-workspace/WaveReadinessStep.vue"),
             },
             {
               path: "export",
@@ -79,23 +103,35 @@ const router = createRouter({
               component: () =>
                 import("@/pages/wave-workspace/WaveChannelSyncStep.vue"),
             },
+            {
+              path: "history",
+              name: "wave-history",
+              component: () =>
+                import("@/pages/wave-workspace/WaveHistoryPage.vue"),
+            },
           ],
         },
 
-        // ── Demand Intake (需求录入) ──
+        // ── Demand Inbox (全局需求收件箱) ──
         {
-          path: "demand-intake",
-          name: "demand-intake",
+          path: "demand-inbox",
+          name: "demand-inbox",
           component: () =>
-            import("@/pages/demand-intake/DemandIntakePage.vue"),
+            import("@/pages/demand-inbox/DemandInboxPage.vue"),
         },
 
-        // ── Profiles (集成配置 — 整合 Template / Address / Merge) ──
+        // ── Profiles (集成配置 master-detail) ──
         {
           path: "profiles",
           name: "profiles",
           component: () =>
             import("@/pages/profile/ProfileManagementPage.vue"),
+        },
+        {
+          path: "profiles/:id",
+          name: "profile-detail",
+          component: () =>
+            import("@/pages/profile/ProfileDetailPage.vue"),
         },
 
         // ── Customers (客户档案 CRM) ──
@@ -104,6 +140,12 @@ const router = createRouter({
           name: "customers",
           component: () =>
             import("@/pages/customer/CustomerManagementPage.vue"),
+        },
+        {
+          path: "customers/:id",
+          name: "customer-detail",
+          component: () =>
+            import("@/pages/customer/CustomerDetailPage.vue"),
         },
 
         // ── Products (商品库) ──
@@ -123,6 +165,10 @@ const router = createRouter({
         },
 
         // Legacy redirects — keep old routes functional
+        {
+          path: "demand-intake",
+          redirect: "/demand-inbox",
+        },
         {
           path: "wave-overview",
           redirect: "/dashboard",

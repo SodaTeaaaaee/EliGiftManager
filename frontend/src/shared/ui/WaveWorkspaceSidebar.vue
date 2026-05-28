@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, h } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { NTag, NIcon, NMenu } from "naive-ui";
-import { 
+import { NTag, NIcon, NMenu, type MenuOption } from "naive-ui";
+import {
   GridOutline,
   PeopleOutline,
   ListOutline,
@@ -10,21 +10,33 @@ import {
   CloudUploadOutline,
   AirplaneOutline,
   SyncOutline,
-  LockClosedOutline
+  LockClosedOutline,
+  ShieldCheckmarkOutline,
+  GitNetworkOutline,
+  CheckmarkDoneOutline,
 } from "@vicons/ionicons5";
 import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
 
 const props = defineProps<{
-  snapshot?: dto.WaveWorkspaceSnapshotDTO | null
-}>()
+  snapshot?: dto.WaveWorkspaceSnapshotDTO | null;
+}>();
 
 const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
 
 const waveId = computed(() => route.params.waveId as string | undefined);
-const demandKinds = computed(() => props.snapshot?.overview?.demandKinds || []);
+
+const demandKinds = computed(
+  () => props.snapshot?.overview?.demandKinds || [],
+);
+
+const isMembership = computed(() =>
+  demandKinds.value.includes("membership_entitlement"),
+);
+const isRetail = computed(() => demandKinds.value.includes("retail_order"));
+const isMixed = computed(() => isMembership.value && isRetail.value);
 
 const stepStateMap = computed(() => {
   const map = new Map<string, dto.WaveStepStateDTO>();
@@ -34,159 +46,391 @@ const stepStateMap = computed(() => {
   return map;
 });
 
-function getStepStatus(key: string): 'current' | 'available' | 'active' | 'idle' {
-  if (key === 'demand_intake') return 'available'; 
+function getStepStatus(
+  key: string,
+): "current" | "available" | "active" | "idle" {
   const state = stepStateMap.value.get(key);
-  return (state?.status as any) || 'idle';
+  return ((state?.status as any) || "idle") as
+    | "current"
+    | "available"
+    | "active"
+    | "idle";
 }
 
 function renderIcon(icon: any, status: string) {
-  if (status === 'idle') {
+  if (status === "idle") {
     return () => h(NIcon, null, { default: () => h(LockClosedOutline) });
   }
   return () => h(NIcon, null, { default: () => h(icon) });
 }
 
-function renderLabel(label: string, count?: number) {
-  if (count !== undefined && count > 0) {
-    return () => h('div', { class: 'flex justify-between items-center w-full pr-2' }, [
-      h('span', null, label),
-      h(NTag, { size: 'tiny', round: true, type: 'info', bordered: false }, { default: () => count })
-    ]);
-  }
-  return () => h('span', null, label);
+function renderLabelWithCount(
+  label: string,
+  count?: number,
+  badge?: string,
+) {
+  return () =>
+    h(
+      "div",
+      {
+        style:
+          "display: flex; justify-content: space-between; align-items: center; width: 100%; padding-right: 8px; gap: 6px;",
+      },
+      [
+        h("span", { style: "flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" }, label),
+        ...(badge
+          ? [
+              h(
+                NTag,
+                {
+                  size: "tiny",
+                  round: true,
+                  bordered: false,
+                  type: "default",
+                },
+                { default: () => badge },
+              ),
+            ]
+          : []),
+        ...(count !== undefined && count > 0
+          ? [
+              h(
+                NTag,
+                {
+                  size: "tiny",
+                  round: true,
+                  bordered: false,
+                  type: "info",
+                },
+                { default: () => count },
+              ),
+            ]
+          : []),
+      ],
+    );
 }
 
-const menuOptions = computed(() => {
-  const options: any[] = [
-    {
-      label: renderLabel(t("wave.overview")),
-      key: "wave_overview",
-      icon: renderIcon(GridOutline, "available"),
-      path: ""
-    },
-    {
-      label: renderLabel("Intake Demands"),
-      key: "demand_intake",
-      icon: renderIcon(CloudUploadOutline, "available"),
-      path: "intake"
-    }
-  ];
-
-  // Allocation with children based on demandKinds
-  const allocStatus = getStepStatus("membership_allocation");
-  const allocChildren = demandKinds.value.length > 0 
-    ? demandKinds.value.map(k => ({
-        label: renderLabel(k.charAt(0).toUpperCase() + k.slice(1).replace('_', ' ')),
-        key: `alloc_${k}`,
-        path: `allocation/${k}`
-      }))
-    : undefined;
-
-  options.push({
-    label: renderLabel(t("wave.allocation"), stepStateMap.value.get("membership_allocation")?.primaryCount),
-    key: "membership_allocation",
-    icon: renderIcon(PeopleOutline, allocStatus),
-    path: allocChildren ? undefined : "allocation",
-    children: allocChildren,
-    disabled: allocStatus === 'idle'
-  });
-
-  // Demand Mapping with children based on demandKinds
-  const mapStatus = getStepStatus("demand_mapping");
-  const mapChildren = demandKinds.value.length > 0 
-    ? demandKinds.value.map(k => ({
-        label: renderLabel(k.charAt(0).toUpperCase() + k.slice(1).replace('_', ' ')),
-        key: `map_${k}`,
-        path: `demand-mapping/${k}`
-      }))
-    : undefined;
-
-  options.push({
-    label: renderLabel(t("wave.mapping"), stepStateMap.value.get("demand_mapping")?.primaryCount),
-    key: "demand_mapping",
-    icon: renderIcon(ListOutline, mapStatus),
-    path: mapChildren ? undefined : "demand-mapping",
-    children: mapChildren,
-    disabled: mapStatus === 'idle'
-  });
-
-  // The rest
-  options.push({
-    label: renderLabel(t("wave.adjustment"), stepStateMap.value.get("adjustment_review")?.primaryCount),
-    key: "adjustment_review",
-    icon: renderIcon(CheckmarkCircleOutline, getStepStatus("adjustment_review")),
-    path: "adjustment-review",
-    disabled: getStepStatus("adjustment_review") === 'idle'
-  });
-
-  options.push({
-    label: renderLabel(t("wave.execution"), stepStateMap.value.get("supplier_execution")?.primaryCount),
-    key: "supplier_execution",
-    icon: renderIcon(CloudUploadOutline, getStepStatus("supplier_execution")),
-    path: "export",
-    disabled: getStepStatus("supplier_execution") === 'idle'
-  });
-
-  options.push({
-    label: renderLabel(t("wave.shipment"), stepStateMap.value.get("shipment_intake")?.primaryCount),
-    key: "shipment_intake",
-    icon: renderIcon(AirplaneOutline, getStepStatus("shipment_intake")),
-    path: "shipment",
-    disabled: getStepStatus("shipment_intake") === 'idle'
-  });
-
-  options.push({
-    label: renderLabel(t("wave.sync"), stepStateMap.value.get("channel_sync")?.primaryCount),
-    key: "channel_sync",
-    icon: renderIcon(SyncOutline, getStepStatus("channel_sync")),
-    path: "channel-sync",
-    disabled: getStepStatus("channel_sync") === 'idle'
-  });
-
-  return options;
+const allocationBadge = computed(() => {
+  if (isMixed.value) return t("waveSidebar.mixedBadge");
+  if (isMembership.value) return t("waveSidebar.membersOnly");
+  if (isRetail.value) return t("waveSidebar.retailOnly");
+  return undefined;
 });
 
+const menuOptions = computed<MenuOption[]>(() => {
+  const opts: MenuOption[] = [];
+
+  // ── 总览 ──
+  opts.push({
+    label: renderLabelWithCount(t("waveSidebar.overview")),
+    key: "wave_overview",
+    icon: renderIcon(GridOutline, "available"),
+  } as any);
+
+  // ── ① Demand Intake (波次内只读视图) ──
+  opts.push({
+    type: "group",
+    label: t("waveSidebar.sectionDemandIntake"),
+    key: "section_intake",
+    children: [
+      {
+        label: renderLabelWithCount(
+          t("waveSidebar.intakeView"),
+          stepStateMap.value.get("demand_intake")?.primaryCount,
+        ),
+        key: "demand_intake",
+        icon: renderIcon(CloudUploadOutline, "available"),
+      },
+    ],
+  } as any);
+
+  // ── ② Initial Allocation (折叠分组) ──
+  const allocChildren: MenuOption[] = [];
+  if (isMembership.value || !isRetail.value) {
+    // 纯会员或混合 → 显示 Membership Allocation
+    allocChildren.push({
+      label: renderLabelWithCount(
+        t("waveSidebar.membershipAllocation"),
+        stepStateMap.value.get("membership_allocation")?.primaryCount,
+      ),
+      key: "membership_allocation",
+      icon: renderIcon(PeopleOutline, getStepStatus("membership_allocation")),
+    } as any);
+  }
+  if (isRetail.value || !isMembership.value) {
+    // 纯零售或混合 → 显示 Demand Mapping
+    allocChildren.push({
+      label: renderLabelWithCount(
+        t("waveSidebar.demandMapping"),
+        stepStateMap.value.get("demand_mapping")?.primaryCount,
+      ),
+      key: "demand_mapping",
+      icon: renderIcon(ListOutline, getStepStatus("demand_mapping")),
+    } as any);
+  }
+  // 默认（纯会员）若 demandKinds 为空，仍要给一个入口
+  if (allocChildren.length === 0) {
+    allocChildren.push({
+      label: renderLabelWithCount(t("waveSidebar.membershipAllocation")),
+      key: "membership_allocation",
+      icon: renderIcon(PeopleOutline, "available"),
+    } as any);
+  }
+
+  opts.push({
+    type: "group",
+    label: () =>
+      h(
+        "div",
+        { style: "display: flex; align-items: center; gap: 6px;" },
+        [
+          h("span", null, t("waveSidebar.sectionInitialAllocation")),
+          ...(allocationBadge.value
+            ? [
+                h(
+                  NTag,
+                  {
+                    size: "tiny",
+                    round: true,
+                    bordered: false,
+                    type: "default",
+                  },
+                  { default: () => allocationBadge.value },
+                ),
+              ]
+            : []),
+        ],
+      ),
+    key: "section_allocation",
+    children: allocChildren,
+  } as any);
+
+  // ── ③ Adjustment Review ──
+  opts.push({
+    type: "group",
+    label: t("waveSidebar.sectionAdjustment"),
+    key: "section_adjustment",
+    children: [
+      {
+        label: renderLabelWithCount(
+          t("waveSidebar.adjustmentReview"),
+          stepStateMap.value.get("adjustment_review")?.primaryCount,
+        ),
+        key: "adjustment_review",
+        icon: renderIcon(
+          CheckmarkCircleOutline,
+          getStepStatus("adjustment_review"),
+        ),
+      },
+    ],
+  } as any);
+
+  // ── ④ Execution Readiness ──
+  opts.push({
+    type: "group",
+    label: t("waveSidebar.sectionReadiness"),
+    key: "section_readiness",
+    children: [
+      {
+        label: renderLabelWithCount(
+          t("waveSidebar.readiness"),
+          stepStateMap.value.get("execution_readiness")?.primaryCount,
+        ),
+        key: "execution_readiness",
+        icon: renderIcon(
+          ShieldCheckmarkOutline,
+          getStepStatus("execution_readiness") === "idle"
+            ? "available"
+            : getStepStatus("execution_readiness"),
+        ),
+      },
+    ],
+  } as any);
+
+  // ── ⑤ Supplier Execution ──
+  opts.push({
+    type: "group",
+    label: t("waveSidebar.sectionSupplierExecution"),
+    key: "section_execution",
+    children: [
+      {
+        label: renderLabelWithCount(
+          t("waveSidebar.exportNow"),
+          stepStateMap.value.get("supplier_execution")?.primaryCount,
+        ),
+        key: "supplier_execution",
+        icon: renderIcon(
+          CloudUploadOutline,
+          getStepStatus("supplier_execution"),
+        ),
+      },
+    ],
+  } as any);
+
+  // ── ⑥ Shipment Intake ──
+  opts.push({
+    type: "group",
+    label: t("waveSidebar.sectionShipmentIntake"),
+    key: "section_shipment",
+    children: [
+      {
+        label: renderLabelWithCount(
+          t("waveSidebar.shipmentIntake"),
+          stepStateMap.value.get("shipment_intake")?.primaryCount,
+        ),
+        key: "shipment_intake",
+        icon: renderIcon(AirplaneOutline, getStepStatus("shipment_intake")),
+      },
+    ],
+  } as any);
+
+  // ── ⑦ Channel Sync / Closure ──
+  opts.push({
+    type: "group",
+    label: t("waveSidebar.sectionChannelSync"),
+    key: "section_sync",
+    children: [
+      {
+        label: renderLabelWithCount(
+          t("waveSidebar.channelSync"),
+          stepStateMap.value.get("channel_sync")?.primaryCount,
+        ),
+        key: "channel_sync",
+        icon: renderIcon(SyncOutline, getStepStatus("channel_sync")),
+      },
+    ],
+  } as any);
+
+  // ── 高级 ──
+  opts.push({
+    type: "divider",
+    key: "divider_advanced",
+  } as any);
+
+  opts.push({
+    label: renderLabelWithCount(t("waveSidebar.historyTree")),
+    key: "history_tree",
+    icon: renderIcon(GitNetworkOutline, "available"),
+  } as any);
+
+  return opts;
+});
+
+// 当前激活 menu key
 const currentMenuKey = computed(() => {
   const name = route.name as string;
-  const kind = route.params.demandKind as string;
   if (name === "wave-overview-step") return "wave_overview";
   if (name === "wave-intake") return "demand_intake";
-  if (name === "wave-allocation") return kind ? `alloc_${kind}` : "membership_allocation";
-  if (name === "wave-demand-mapping") return kind ? `map_${kind}` : "demand_mapping";
+  if (
+    name === "wave-membership-allocation" ||
+    name === "wave-allocation-legacy"
+  )
+    return "membership_allocation";
+  if (
+    name === "wave-demand-mapping" ||
+    name === "wave-demand-mapping-legacy"
+  )
+    return "demand_mapping";
   if (name === "wave-adjustment-review") return "adjustment_review";
+  if (name === "wave-readiness") return "execution_readiness";
   if (name === "wave-export") return "supplier_execution";
   if (name === "wave-shipment") return "shipment_intake";
   if (name === "wave-channel-sync") return "channel_sync";
+  if (name === "wave-history") return "history_tree";
   return "wave_overview";
 });
 
-const expandedKeys = computed(() => {
-  return ["membership_allocation", "demand_mapping"];
-});
+// 默认全部展开（视觉上 group 不需要展开/收起，但 NMenu 的 group 类型本身就是常展开的）
+const expandedKeys = computed<string[]>(() => [
+  "section_intake",
+  "section_allocation",
+  "section_adjustment",
+  "section_readiness",
+  "section_execution",
+  "section_shipment",
+  "section_sync",
+]);
 
-function handleMenuUpdateValue(key: string, item: any) {
+// menu key → route path
+const KEY_TO_PATH: Record<string, string> = {
+  wave_overview: "",
+  demand_intake: "intake",
+  membership_allocation: "allocation/membership",
+  demand_mapping: "allocation/demand",
+  adjustment_review: "adjustment-review",
+  execution_readiness: "readiness",
+  supplier_execution: "export",
+  shipment_intake: "shipment",
+  channel_sync: "channel-sync",
+  history_tree: "history",
+};
+
+function handleMenuUpdateValue(key: string) {
   if (!waveId.value) return;
-  
-  if (item.path !== undefined) {
-    const base = `/waves/${waveId.value}`;
-    router.push(item.path ? `${base}/${item.path}` : base);
-  } else if (item.children && item.children.length > 0) {
-    // Navigate to first child
-    const base = `/waves/${waveId.value}`;
-    router.push(`${base}/${item.children[0].path}`);
-  }
+  const path = KEY_TO_PATH[key];
+  if (path === undefined) return;
+  const base = `/waves/${waveId.value}`;
+  router.push(path ? `${base}/${path}` : base);
 }
+
+const stageTagType = computed(() => {
+  switch (props.snapshot?.projectedLifecycleStage) {
+    case "awaiting_manual_closure":
+      return "error" as const;
+    case "syncing_back":
+      return "warning" as const;
+    case "closed":
+      return "success" as const;
+    case "execution":
+      return "info" as const;
+    default:
+      return "default" as const;
+  }
+});
 </script>
 
 <template>
   <div class="wave-workspace-sidebar">
     <div class="wave-sidebar-header">
       <div class="app-kicker">Wave Workspace</div>
-      <div class="wave-title" :title="snapshot?.wave?.name">{{ snapshot?.wave?.name || 'Loading...' }}</div>
-      <div class="wave-number">{{ snapshot?.wave?.waveNo }}</div>
+      <div class="wave-title" :title="snapshot?.wave?.name">
+        {{ snapshot?.wave?.name || "Loading..." }}
+      </div>
+      <div class="wave-meta">
+        <span class="wave-number">{{ snapshot?.wave?.waveNo }}</span>
+        <NTag
+          v-if="snapshot?.projectedLifecycleStage"
+          :type="stageTagType"
+          size="tiny"
+          round
+          :bordered="false"
+        >
+          {{ snapshot.projectedLifecycleStage }}
+        </NTag>
+        <NTag
+          v-if="snapshot?.basisSummary?.hasRequiredReview"
+          type="error"
+          size="tiny"
+          round
+          :bordered="false"
+        >
+          <NIcon size="10" style="margin-right: 2px;">
+            <CheckmarkDoneOutline />
+          </NIcon>
+          review
+        </NTag>
+        <NTag
+          v-else-if="snapshot?.basisSummary?.hasDriftedBasis"
+          type="warning"
+          size="tiny"
+          round
+          :bordered="false"
+        >
+          drift
+        </NTag>
+      </div>
     </div>
-    
+
     <div class="wave-menu-container">
       <NMenu
         :options="menuOptions"
@@ -194,7 +438,7 @@ function handleMenuUpdateValue(key: string, item: any) {
         :default-expanded-keys="expandedKeys"
         @update:value="handleMenuUpdateValue"
         class="wave-sidebar-menu"
-        :indent="24"
+        :indent="20"
       />
     </div>
   </div>
@@ -217,30 +461,47 @@ function handleMenuUpdateValue(key: string, item: any) {
 }
 
 .wave-sidebar-header {
-  padding: 0 20px 24px;
+  padding: 0 20px 16px;
   border-bottom: 1px solid rgba(148, 163, 184, 0.12);
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 :root[data-theme='dark'] .wave-sidebar-header {
   border-bottom-color: rgba(255, 255, 255, 0.05);
 }
 
+.app-kicker {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .wave-title {
   font-size: 16px;
   font-weight: 700;
   color: var(--text);
-  margin-top: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.wave-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+
 .wave-number {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   font-family: monospace;
-  margin-top: 2px;
 }
 
 .wave-menu-container {
@@ -249,15 +510,23 @@ function handleMenuUpdateValue(key: string, item: any) {
   padding: 0 8px;
 }
 
-/* Customizing NMenu to fit our aesthetics */
 :deep(.n-menu-item-content) {
   border-radius: 8px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 :deep(.n-menu-item-content.n-menu-item-content--selected) {
   background: var(--accent-surface);
   color: var(--accent);
   font-weight: 600;
+}
+
+:deep(.n-menu-item-group-title) {
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em;
+  color: var(--muted) !important;
+  text-transform: uppercase;
+  padding-top: 12px;
 }
 </style>

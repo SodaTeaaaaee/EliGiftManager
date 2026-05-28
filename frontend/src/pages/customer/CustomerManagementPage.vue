@@ -484,6 +484,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, h } from "vue";
+import { useRouter } from "vue-router";
 import {
   NTabs,
   NTabPane,
@@ -529,6 +530,7 @@ import { dto } from "@/../wailsjs/go/models";
 const { t } = useI18n();
 const message = useMessage();
 const dialog = useDialog();
+const router = useRouter();
 
 // ── Tabs State ──
 const activeTab = ref("list");
@@ -705,25 +707,39 @@ const columns: DataTableColumns<dto.CustomerProfileDTO> = [
   {
     title: "操作",
     key: "actions",
-    width: 90,
+    width: 160,
     render(row) {
-      return h(
-        NPopconfirm,
-        {
-          onPositiveClick: () => confirmDeleteProfile(row.id),
-          positiveText: "删除",
-          negativeText: "取消",
-        },
-        {
-          trigger: () =>
-            h(
-              NButton,
-              { size: "tiny", type: "error", secondary: true, onClick: (e) => e.stopPropagation() },
-              () => "删除"
-            ),
-          default: () => "删除该客户档案将清除其关联数据。确认删除？",
-        }
-      );
+      return h(NSpace, { size: 4 }, () => [
+        h(
+          NButton,
+          {
+            size: "tiny",
+            secondary: true,
+            onClick: (e: MouseEvent) => {
+              e.stopPropagation();
+              router.push(`/customers/${row.id}`);
+            },
+          },
+          () => "详情"
+        ),
+        h(
+          NPopconfirm,
+          {
+            onPositiveClick: () => confirmDeleteProfile(row.id),
+            positiveText: "删除",
+            negativeText: "取消",
+          },
+          {
+            trigger: () =>
+              h(
+                NButton,
+                { size: "tiny", type: "error", secondary: true, onClick: (e: MouseEvent) => e.stopPropagation() },
+                () => "删除"
+              ),
+            default: () => "删除该客户档案将清除其关联数据。确认删除？",
+          }
+        ),
+      ]);
     },
   },
 ];
