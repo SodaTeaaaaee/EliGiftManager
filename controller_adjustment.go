@@ -76,14 +76,18 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 			return patchErr
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(adj.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, historyErr := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 adj.WaveID,
-			CommandKind:            domain.CmdRecordAdjustment,
-			CommandSummary:         fmt.Sprintf("record adjustment %d (%s) for wave %d", adj.ID, adj.AdjustmentKind, adj.WaveID),
-			PatchPayload:           patchPayload,
-			InversePatchPayload:    fmt.Sprintf(`{"op":"delete_adjustment","adjustment_id":%d}`, adj.ID),
+			WaveID:                  adj.WaveID,
+			CommandKind:             domain.CmdRecordAdjustment,
+			CommandSummary:          fmt.Sprintf("record adjustment %d (%s) for wave %d", adj.ID, adj.AdjustmentKind, adj.WaveID),
+			PatchPayload:            patchPayload,
+			InversePatchPayload:     fmt.Sprintf(`{"op":"delete_adjustment","adjustment_id":%d}`, adj.ID),
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(adj.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return historyErr
 	})

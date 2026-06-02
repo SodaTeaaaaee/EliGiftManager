@@ -5,25 +5,40 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"gorm.io/gorm"
 )
 
 type MergeController struct {
-	mergeUC app.ProfileMergeUseCase
+	gdb *gorm.DB
 }
 
 func NewMergeController() *MergeController {
-	gdb := database.GetDB()
-	return &MergeController{
-		mergeUC: app.NewProfileMergeUseCase(
-			infra.NewProfileRepository(gdb),
-			infra.NewAddressRepository(gdb),
-			infra.NewDemandRepository(gdb),
-			infra.NewWaveRepository(gdb),
-			infra.NewFulfillmentRepository(gdb),
-		),
-	}
+	return &MergeController{gdb: database.GetDB()}
 }
 
+// MergeProfiles merges the source profile into the target profile. The whole
+// operation (identity/address/demand/participant/fulfillment migration plus the
+// source soft-delete) runs in a single transaction so a partial failure rolls
+// back cleanly instead of leaving data half-migrated.
 func (c *MergeController) MergeProfiles(input dto.MergeProfilesInput) (*dto.MergeProfilesResult, error) {
-	return c.mergeUC.MergeProfiles(input)
+	var result *dto.MergeProfilesResult
+	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		mergeUC := app.NewProfileMergeUseCase(
+			infra.NewProfileRepository(tx),
+			infra.NewAddressRepository(tx),
+			infra.NewDemandRepository(tx),
+			infra.NewWaveRepository(tx),
+			infra.NewFulfillmentRepository(tx),
+		)
+		r, mergeErr := mergeUC.MergeProfiles(input)
+		if mergeErr != nil {
+			return mergeErr
+		}
+		result = r
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }

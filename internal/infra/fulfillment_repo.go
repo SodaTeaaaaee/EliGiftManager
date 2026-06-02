@@ -57,10 +57,11 @@ func (r *fulfillmentRepository) DeleteByWave(waveID uint) error {
 	return r.db.Unscoped().Where("wave_id = ?", waveID).Delete(&persistence.FulfillmentLine{}).Error
 }
 
-func (r *fulfillmentRepository) BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) error {
-	return r.db.Model(&persistence.FulfillmentLine{}).
+func (r *fulfillmentRepository) BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) (int64, error) {
+	res := r.db.Model(&persistence.FulfillmentLine{}).
 		Where("customer_profile_id = ?", oldProfileID).
-		Update("customer_profile_id", newProfileID).Error
+		Update("customer_profile_id", newProfileID)
+	return res.RowsAffected, res.Error
 }
 
 func (r *fulfillmentRepository) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error {

@@ -70,6 +70,11 @@ func (m *policyWaveRepo) List() ([]domain.Wave, error) {
 	return out, nil
 }
 
+func (m *policyWaveRepo) ListPaginated(_, _ int) ([]domain.Wave, int64, error) {
+	all, err := m.List()
+	return all, int64(len(all)), err
+}
+
 func (m *policyWaveRepo) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -93,18 +98,20 @@ func (m *policyWaveRepo) ListParticipantsByProfile(profileID uint) ([]domain.Wav
 
 func (m *policyWaveRepo) UpdateLifecycle(_ uint, _ string, _ string) error { return nil }
 
-func (m *policyWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) error {
+func (m *policyWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	var n int64
 	for waveID, snaps := range m.participants {
 		for i := range snaps {
 			if snaps[i].CustomerProfileID == oldPID {
 				snaps[i].CustomerProfileID = newPID
+				n++
 			}
 		}
 		m.participants[waveID] = snaps
 	}
-	return nil
+	return n, nil
 }
 
 func (m *policyWaveRepo) DeleteParticipantsByWave(waveID uint) error {

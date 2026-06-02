@@ -14,6 +14,7 @@ type DemandIntakeUseCase interface {
 type WaveUseCase interface {
 	CreateWave(wave *domain.Wave) error
 	ListWaves() ([]domain.Wave, error)
+	ListWavesPaginated(offset, limit int) ([]domain.Wave, int64, error)
 	GetWave(id uint) (*domain.Wave, error)
 	GenerateParticipants(waveID uint) (int, error)
 }

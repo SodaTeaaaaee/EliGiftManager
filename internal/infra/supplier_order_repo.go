@@ -107,7 +107,8 @@ func (r *supplierOrderRepository) DeleteDraftsByWave(waveID uint) error {
 
 func (r *supplierOrderRepository) Update(order *domain.SupplierOrder) error {
 	po := persistence.ToPersistenceSupplierOrder(order)
-	return r.db.Save(&po).Error
+	po.ID = order.ID
+	return r.db.Save(po).Error
 }
 
 func (r *supplierOrderRepository) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {

@@ -21,7 +21,6 @@ type WaveController struct {
 	demandRepo          domain.DemandDocumentRepository
 	gdb                 *gorm.DB
 	nodeRepo            domain.HistoryNodeRepository
-	undoRedoUC          app.UndoRedoUseCase
 	historyRecordingSvc *app.HistoryRecordingService
 	projHashSvc         *app.ProjectionHashService
 	snapshotSvc         *app.WaveSnapshotService
@@ -66,7 +65,6 @@ func NewWaveController() *WaveController {
 		demandRepo:          demandRepo,
 		nodeRepo:            historyNodeRepo,
 		gdb:                 gormDB,
-		undoRedoUC:          app.NewUndoRedoUseCase(historyScopeRepo, historyNodeRepo, app.NewPatchExecutor(gormDB, snapshotSvc)),
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
@@ -200,6 +198,10 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 			}
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, err := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdAssignDemand,
@@ -207,7 +209,7 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 			PatchPayload:            fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
 			InversePatchPayload:     fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, demandDocumentID),
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHash,
 		})
 		if err != nil {
 			return err
@@ -256,6 +258,10 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 			return snapErr
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdGenerateParticipants,
@@ -264,7 +270,7 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 			InversePatchPayload:     fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
 			CheckpointHint:          true,
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -318,6 +324,10 @@ func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, 
 		totalLines := len(result.CreatedLines) + len(result.BlockedLines)
 		summary := fmt.Sprintf("map demand lines for wave %d (%d created, %d blocked)", waveID, len(result.CreatedLines), len(result.BlockedLines))
 		_ = totalLines
+		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdMapDemandLines,
@@ -326,7 +336,7 @@ func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, 
 			InversePatchPayload:     fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
 			CheckpointHint:          true,
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -396,16 +406,50 @@ func (c *WaveController) ListAssignedDemandsByWave(waveID uint) ([]dto.DemandDoc
 	return result, nil
 }
 
+// buildUndoRedoUC constructs an UndoRedoUseCase whose patch executor and history
+// repositories are all bound to the given transaction, so the inverse-patch
+// application and the head-pointer update commit (or roll back) atomically.
+func (c *WaveController) buildUndoRedoUC(tx *gorm.DB) app.UndoRedoUseCase {
+	ruleRepo := infra.NewRuleRepository(tx)
+	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+	waveRepo := infra.NewWaveRepository(tx)
+	fulfillRepo := infra.NewFulfillmentRepository(tx)
+	closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
+	scopeRepo := infra.NewHistoryScopeRepository(tx)
+	nodeRepo := infra.NewHistoryNodeRepository(tx)
+	snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
+	return app.NewUndoRedoUseCase(scopeRepo, nodeRepo, app.NewPatchExecutor(tx, snapshotSvc))
+}
+
 // UndoWaveAction undoes the last action for the given wave.
 func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
 	defer c.persistLifecycle(waveID)
-	return c.undoRedoUC.Undo(waveID)
+	var summary string
+	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		s, undoErr := c.buildUndoRedoUC(tx).Undo(waveID)
+		summary = s
+		return undoErr
+	})
+	if err != nil {
+		return "", err
+	}
+	return summary, nil
 }
 
 // RedoWaveAction redoes the last undone action for the given wave.
 func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
 	defer c.persistLifecycle(waveID)
-	return c.undoRedoUC.Redo(waveID)
+	var summary string
+	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		s, redoErr := c.buildUndoRedoUC(tx).Redo(waveID)
+		summary = s
+		return redoErr
+	})
+	if err != nil {
+		return "", err
+	}
+	return summary, nil
 }
 
 // ListRecentHistory returns the most recent history nodes for a wave.
@@ -430,25 +474,16 @@ func (c *WaveController) RunHistoryGC(waveID uint) (int, error) {
 // ListWavesPaginated returns a paginated list of waves.
 func (c *WaveController) ListWavesPaginated(input dto.PaginationInput) (map[string]any, error) {
 	input = dto.NormalizePagination(input)
-	waves, err := c.waveUC.ListWaves()
+	offset := (input.Page - 1) * input.PageSize
+	waves, total, err := c.waveUC.ListWavesPaginated(offset, input.PageSize)
 	if err != nil {
 		return nil, err
 	}
-	total := len(waves)
-	result := dto.PaginationResult{Page: input.Page, PageSize: input.PageSize, TotalCount: total}
+	result := dto.PaginationResult{Page: input.Page, PageSize: input.PageSize, TotalCount: int(total)}
 	result.ComputePages()
 
-	start := (input.Page - 1) * input.PageSize
-	if start >= total {
-		return map[string]any{"items": []dto.WaveDTO{}, "pagination": result}, nil
-	}
-	end := start + input.PageSize
-	if end > total {
-		end = total
-	}
-	pageWaves := waves[start:end]
-	dtos := make([]dto.WaveDTO, len(pageWaves))
-	for i, w := range pageWaves {
+	dtos := make([]dto.WaveDTO, len(waves))
+	for i, w := range waves {
 		dtos[i] = domainToWaveDTO(&w)
 	}
 	return map[string]any{"items": dtos, "pagination": result}, nil
@@ -473,4 +508,3 @@ func (c *WaveController) ValidateStepAccess(waveID uint, stepKey string) error {
 	}
 	return nil
 }
-

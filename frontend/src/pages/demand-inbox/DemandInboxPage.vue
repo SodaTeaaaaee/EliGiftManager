@@ -386,10 +386,12 @@ async function applyBulkRouting() {
   if (!bulkRoutingValue.value || checkedLineIds.value.length === 0) return;
   try {
     await batchUpdateDemandLineRouting({
-      demandLineIds: checkedLineIds.value as number[],
-      routingDisposition: bulkRoutingValue.value,
-      recipientInputState: "",
-      routingReasonCode: "",
+      updates: (checkedLineIds.value as number[]).map((demandLineId) => ({
+        demandLineId,
+        routingDisposition: bulkRoutingValue.value as string,
+        recipientInputState: "",
+        routingReasonCode: "",
+      })),
     });
     message.success(t("demandInbox.routingUpdateSuccess"));
     if (selectedDocId.value != null) {

@@ -22,8 +22,8 @@ func (CustomerProfile) TableName() string { return "customer_profiles" }
 type CustomerIdentity struct {
 	gorm.Model
 	CustomerProfileID uint         `gorm:"index;not null"`
-	IdentityPlatform  string       `gorm:"not null"`
-	IdentityValue     string       `gorm:"not null"`
+	IdentityPlatform  string       `gorm:"not null;index:idx_identity_platform_value,priority:1"`
+	IdentityValue     string       `gorm:"not null;index:idx_identity_platform_value,priority:2"`
 	IdentityType      IdentityType `gorm:"type:text;not null"`
 	IsPrimary         bool         `gorm:"not null;default:false"`
 	ExtraData         string       `gorm:"type:text"` // JSON
@@ -35,7 +35,7 @@ func (CustomerIdentity) TableName() string { return "customer_identities" }
 
 type CustomerAddress struct {
 	gorm.Model
-	CustomerProfileID uint   `gorm:"index;not null"`
+	CustomerProfileID uint `gorm:"index;not null"`
 	Label             string
 	RecipientName     string
 	Phone             string
@@ -46,8 +46,8 @@ type CustomerAddress struct {
 	AddressLine1      string
 	AddressLine2      string
 	PostalCode        string
-	IsDefault         bool `gorm:"not null;default:false"`
-	IsTest            bool `gorm:"not null;default:false"`
+	IsDefault         bool                    `gorm:"not null;default:false"`
+	IsTest            bool                    `gorm:"not null;default:false"`
 	ValidationStatus  AddressValidationStatus `gorm:"type:text;not null;default:'unvalidated'"`
 	ValidationDetail  string                  `gorm:"type:text"` // JSON
 	ExtraData         string                  `gorm:"type:text"` // JSON
@@ -254,7 +254,7 @@ func (Shipment) TableName() string { return "shipments" }
 type ShipmentLine struct {
 	ID                  uint `gorm:"primaryKey;autoIncrement"`
 	ShipmentID          uint `gorm:"index;not null"`
-	SupplierOrderLineID uint
+	SupplierOrderLineID uint `gorm:"index"`
 	FulfillmentLineID   uint
 	Quantity            int `gorm:"not null;default:0"`
 	CreatedAt           time.Time
@@ -266,16 +266,16 @@ func (ShipmentLine) TableName() string { return "shipment_lines" }
 
 type ChannelSyncJob struct {
 	gorm.Model
-	WaveID               uint                `gorm:"index;not null"`
-	IntegrationProfileID uint                `gorm:"index"`
+	WaveID               uint                 `gorm:"index;not null"`
+	IntegrationProfileID uint                 `gorm:"index"`
 	Direction            ChannelSyncDirection `gorm:"type:text;not null;default:'push_tracking'"`
 	Status               ChannelSyncJobStatus `gorm:"type:text;not null;default:'pending'"`
 	BasisHistoryNodeID   string
 	BasisProjectionHash  string
-	BasisPayloadSnapshot string              `gorm:"type:text"`
-	RequestPayload       string              `gorm:"type:text"`
-	ResponsePayload      string              `gorm:"type:text"`
-	ErrorMessage         string              `gorm:"type:text"`
+	BasisPayloadSnapshot string `gorm:"type:text"`
+	RequestPayload       string `gorm:"type:text"`
+	ResponsePayload      string `gorm:"type:text"`
+	ErrorMessage         string `gorm:"type:text"`
 	StartedAt            *time.Time
 	FinishedAt           *time.Time
 }
@@ -285,10 +285,10 @@ func (ChannelSyncJob) TableName() string { return "channel_sync_jobs" }
 // ---- ChannelSyncItem ----
 
 type ChannelSyncItem struct {
-	ID                 uint                 `gorm:"primaryKey;autoIncrement"`
-	ChannelSyncJobID   uint                 `gorm:"index;not null"`
-	FulfillmentLineID  uint                 `gorm:"index"`
-	ShipmentID         uint                 `gorm:"index"`
+	ID                 uint `gorm:"primaryKey;autoIncrement"`
+	ChannelSyncJobID   uint `gorm:"index;not null"`
+	FulfillmentLineID  uint `gorm:"index"`
+	ShipmentID         uint `gorm:"index"`
 	ExternalDocumentNo string
 	ExternalLineNo     string
 	TrackingNo         string
@@ -305,12 +305,12 @@ func (ChannelSyncItem) TableName() string { return "channel_sync_items" }
 
 type IntegrationProfile struct {
 	gorm.Model
-	ProfileKey                string                   `gorm:"uniqueIndex;not null"`
+	ProfileKey                string `gorm:"uniqueIndex;not null"`
 	SourceChannel             string
 	SourceSurface             string
-	DemandKind                ProfileDemandKind        `gorm:"type:text;not null;default:'membership_entitlement'"`
+	DemandKind                ProfileDemandKind         `gorm:"type:text;not null;default:'membership_entitlement'"`
 	InitialAllocationStrategy InitialAllocationStrategy `gorm:"type:text;not null;default:'policy_driven'"`
-	IdentityStrategy          IdentityStrategy         `gorm:"type:text;not null;default:'platform_uid'"`
+	IdentityStrategy          IdentityStrategy          `gorm:"type:text;not null;default:'platform_uid'"`
 	EntitlementAuthorityMode  EntitlementAuthorityMode  `gorm:"type:text;not null;default:'local_policy'"`
 	RecipientInputMode        RecipientInputMode        `gorm:"type:text;not null;default:'none'"`
 	ReferenceStrategy         ReferenceStrategy         `gorm:"type:text;not null;default:'member_level'"`
@@ -334,12 +334,12 @@ func (IntegrationProfile) TableName() string { return "integration_profiles" }
 
 type ChannelClosureDecisionRecord struct {
 	gorm.Model
-	WaveID               uint                        `gorm:"index;not null"`
-	IntegrationProfileID uint                        `gorm:"index;not null"`
-	FulfillmentLineID    uint                        `gorm:"index;not null"`
+	WaveID               uint                       `gorm:"index;not null"`
+	IntegrationProfileID uint                       `gorm:"index;not null"`
+	FulfillmentLineID    uint                       `gorm:"index;not null"`
 	DecisionKind         ChannelClosureDecisionKind `gorm:"type:text;not null"`
 	ReasonCode           string
-	Note                 string                       `gorm:"type:text"`
+	Note                 string `gorm:"type:text"`
 	EvidenceRef          string
 	OperatorID           string
 }

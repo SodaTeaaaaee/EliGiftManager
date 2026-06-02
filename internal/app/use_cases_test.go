@@ -145,15 +145,17 @@ func (m *mockDemandRepo) UpdateBoundProfileSnapshot(_ uint, _ string) error {
 	return nil
 }
 
-func (m *mockDemandRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) error {
+func (m *mockDemandRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	var n int64
 	for _, d := range m.docs {
 		if d.CustomerProfileID != nil && *d.CustomerProfileID == oldPID {
 			d.CustomerProfileID = &newPID
+			n++
 		}
 	}
-	return nil
+	return n, nil
 }
 
 // ── mock wave repo ──
@@ -213,6 +215,11 @@ func (m *mockWaveRepo) List() ([]domain.Wave, error) {
 	return out, nil
 }
 
+func (m *mockWaveRepo) ListPaginated(_, _ int) ([]domain.Wave, int64, error) {
+	all, err := m.List()
+	return all, int64(len(all)), err
+}
+
 func (m *mockWaveRepo) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -260,15 +267,17 @@ func (m *mockWaveRepo) UpdateLifecycle(waveID uint, stage string, _ string) erro
 	return nil
 }
 
-func (m *mockWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) error {
+func (m *mockWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	var n int64
 	for i := range m.participants {
 		if m.participants[i].CustomerProfileID == oldPID {
 			m.participants[i].CustomerProfileID = newPID
+			n++
 		}
 	}
-	return nil
+	return n, nil
 }
 
 func (m *mockWaveRepo) SetParticipants(snaps []domain.WaveParticipantSnapshot) {
@@ -364,15 +373,17 @@ func (m *mockFulfillRepo) Update(line *domain.FulfillmentLine) error {
 	return nil
 }
 
-func (m *mockFulfillRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) error {
+func (m *mockFulfillRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	var n int64
 	for _, l := range m.lines {
 		if l.CustomerProfileID != nil && *l.CustomerProfileID == oldPID {
 			l.CustomerProfileID = &newPID
+			n++
 		}
 	}
-	return nil
+	return n, nil
 }
 
 // ── mock rule repo ──

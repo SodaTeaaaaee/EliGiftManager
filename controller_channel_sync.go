@@ -118,6 +118,10 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 		items = createdItems
 		projectChannelSyncPendingWithRepo(fulfillRepo, items)
 
+		projHash, hashErr := projHashSvc.ComputeHash(input.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  input.WaveID,
 			CommandKind:             domain.CmdCreateChannelSyncJob,
@@ -125,7 +129,7 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -205,6 +209,10 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 				}
 			}
 			projectChannelSyncPendingWithRepo(fulfillRepo, items)
+			projHash, hashErr := projHashSvc.ComputeHash(input.WaveID)
+			if hashErr != nil {
+				return hashErr
+			}
 			_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 				WaveID:                  input.WaveID,
 				CommandKind:             domain.CmdCreateChannelSyncJob,
@@ -212,7 +220,7 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 				PatchPayload:            "",
 				InversePatchPayload:     "",
 				BaselineSnapshotPayload: preSnapshot,
-				ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+				ProjectionHash:          projHash,
 			})
 			return recordErr
 		}
@@ -256,11 +264,17 @@ func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSy
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
 
 		executed, execErr := executeSyncUC.ExecuteChannelSyncJob(jobID)
-		projectChannelSyncStatesWithRepo(channelSyncRepo, fulfillRepo, jobID)
 		if execErr != nil {
 			return execErr
 		}
+		if projErr := projectChannelSyncStatesWithRepo(channelSyncRepo, fulfillRepo, jobID); projErr != nil {
+			return projErr
+		}
 		result = executed
+		projHash, hashErr := projHashSvc.ComputeHash(job.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  job.WaveID,
 			CommandKind:             domain.CmdExecuteChannelSyncJob,
@@ -268,7 +282,7 @@ func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSy
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(job.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -284,10 +298,10 @@ func (c *ChannelSyncController) projectChannelSyncStates(jobID uint) {
 	projectChannelSyncStatesWithRepo(c.channelSyncRepo, c.fulfillRepo, jobID)
 }
 
-func projectChannelSyncStatesWithRepo(channelSyncRepo domain.ChannelSyncRepository, fulfillRepo domain.FulfillmentLineRepository, jobID uint) {
+func projectChannelSyncStatesWithRepo(channelSyncRepo domain.ChannelSyncRepository, fulfillRepo domain.FulfillmentLineRepository, jobID uint) error {
 	items, err := channelSyncRepo.ListItemsByJob(jobID)
 	if err != nil {
-		return
+		return err
 	}
 	var updates []domain.FulfillmentLineStateUpdate
 	for _, it := range items {
@@ -306,8 +320,9 @@ func projectChannelSyncStatesWithRepo(channelSyncRepo domain.ChannelSyncReposito
 		})
 	}
 	if len(updates) > 0 {
-		_ = fulfillRepo.BulkUpdateStates(updates)
+		return fulfillRepo.BulkUpdateStates(updates)
 	}
+	return nil
 }
 
 // RecordChannelClosureDecision persists manual closure decisions and projects
@@ -343,8 +358,14 @@ func (c *ChannelSyncController) RecordChannelClosureDecision(input dto.RecordClo
 			return recordErr
 		}
 		records = recorded
-		projectManualClosureStatesWithRepo(fulfillRepo, input.Entries)
+		if projErr := projectManualClosureStatesWithRepo(fulfillRepo, input.Entries); projErr != nil {
+			return projErr
+		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(input.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, historyErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  input.WaveID,
 			CommandKind:             domain.CmdRecordClosureDecision,
@@ -352,7 +373,7 @@ func (c *ChannelSyncController) RecordChannelClosureDecision(input dto.RecordClo
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return historyErr
 	})
@@ -364,8 +385,8 @@ func (c *ChannelSyncController) RecordChannelClosureDecision(input dto.RecordClo
 
 // decisionKindToChannelSyncState maps manual closure decision kinds to FulfillmentLine.ChannelSyncState.
 var decisionKindToChannelSyncState = map[string]string{
-	"mark_sync_unsupported":       "unsupported",
-	"mark_sync_skipped":           "skipped",
+	"mark_sync_unsupported":        "unsupported",
+	"mark_sync_skipped":            "skipped",
 	"mark_sync_completed_manually": "manual_confirmed",
 }
 
@@ -373,7 +394,7 @@ func (c *ChannelSyncController) projectManualClosureStates(entries []dto.RecordC
 	projectManualClosureStatesWithRepo(c.fulfillRepo, entries)
 }
 
-func projectManualClosureStatesWithRepo(repo domain.FulfillmentLineRepository, entries []dto.RecordClosureDecisionEntry) {
+func projectManualClosureStatesWithRepo(repo domain.FulfillmentLineRepository, entries []dto.RecordClosureDecisionEntry) error {
 	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(entries))
 	for _, e := range entries {
 		csState, ok := decisionKindToChannelSyncState[e.DecisionKind]
@@ -386,8 +407,9 @@ func projectManualClosureStatesWithRepo(repo domain.FulfillmentLineRepository, e
 		})
 	}
 	if len(updates) > 0 {
-		_ = repo.BulkUpdateStates(updates)
+		return repo.BulkUpdateStates(updates)
 	}
+	return nil
 }
 
 // RetryChannelSyncJob retries failed items in a ChannelSyncJob.
@@ -422,11 +444,17 @@ func (c *ChannelSyncController) RetryChannelSyncJob(jobID uint) (dto.ExecuteSync
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
 
 		retried, retryErr := retrySyncUC.RetryChannelSyncJob(jobID)
-		projectChannelSyncStatesWithRepo(channelSyncRepo, fulfillRepo, jobID)
 		if retryErr != nil {
 			return retryErr
 		}
+		if projErr := projectChannelSyncStatesWithRepo(channelSyncRepo, fulfillRepo, jobID); projErr != nil {
+			return projErr
+		}
 		result = retried
+		projHash, hashErr := projHashSvc.ComputeHash(job.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  job.WaveID,
 			CommandKind:             domain.CmdRetryChannelSyncJob,
@@ -434,7 +462,7 @@ func (c *ChannelSyncController) RetryChannelSyncJob(jobID uint) (dto.ExecuteSync
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(job.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -532,11 +560,11 @@ func buildExecutorProvider() app.ExecutorProvider {
 		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
 	}
 	docExportExec := app.NewDocumentExportExecutor(exportsDir)
-		csvExportExec := app.NewCSVExportExecutor(exportsDir)
+	csvExportExec := app.NewCSVExportExecutor(exportsDir)
 	registry := map[string]map[string]app.ChannelSyncExecutor{
 		"document_export": {
 			"eli.local_export": docExportExec,
-				"eli.csv_export":   csvExportExec,
+			"eli.csv_export":   csvExportExec,
 		},
 	}
 	return app.NewRuntimeExecutorProviderWith(registry)

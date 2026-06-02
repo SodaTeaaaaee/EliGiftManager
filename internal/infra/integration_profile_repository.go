@@ -53,6 +53,7 @@ func (r *integrationProfileRepository) List() ([]domain.IntegrationProfile, erro
 
 func (r *integrationProfileRepository) Update(profile *domain.IntegrationProfile) error {
 	p := persistence.ToPersistenceIntegrationProfile(profile)
+	p.ID = profile.ID
 	return r.db.Save(p).Error
 }
 

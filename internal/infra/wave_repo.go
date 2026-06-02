@@ -51,6 +51,22 @@ func (r *waveRepository) List() ([]domain.Wave, error) {
 	return result, nil
 }
 
+func (r *waveRepository) ListPaginated(offset, limit int) ([]domain.Wave, int64, error) {
+	var total int64
+	if err := r.db.Model(&persistence.Wave{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var ps []persistence.Wave
+	if err := r.db.Order("id").Offset(offset).Limit(limit).Find(&ps).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]domain.Wave, len(ps))
+	for i, p := range ps {
+		result[i] = *persistence.FromPersistenceWave(&p)
+	}
+	return result, total, nil
+}
+
 func (r *waveRepository) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
 	p := persistence.ToPersistenceWaveParticipantSnapshot(snap)
 	if err := r.db.Create(p).Error; err != nil {
@@ -91,10 +107,11 @@ func (r *waveRepository) UpdateLifecycle(waveID uint, stage string, progressSnap
 	}).Error
 }
 
-func (r *waveRepository) UpdateParticipantProfileID(oldProfileID, newProfileID uint) error {
-	return r.db.Model(&persistence.WaveParticipantSnapshot{}).
+func (r *waveRepository) UpdateParticipantProfileID(oldProfileID, newProfileID uint) (int64, error) {
+	res := r.db.Model(&persistence.WaveParticipantSnapshot{}).
 		Where("customer_profile_id = ?", oldProfileID).
-		Update("customer_profile_id", newProfileID).Error
+		Update("customer_profile_id", newProfileID)
+	return res.RowsAffected, res.Error
 }
 
 func (r *waveRepository) DeleteParticipantsByWave(waveID uint) error {

@@ -89,7 +89,9 @@ func (s *stubDemandDocumentRepo) UpdateLineRoutingFields(_ uint, _, _, _ string)
 	return nil
 }
 func (s *stubDemandDocumentRepo) UpdateBoundProfileSnapshot(_ uint, _ string) error { return nil }
-func (s *stubDemandDocumentRepo) BulkUpdateCustomerProfileID(_, _ uint) error { return nil }
+func (s *stubDemandDocumentRepo) BulkUpdateCustomerProfileID(_, _ uint) (int64, error) {
+	return 0, nil
+}
 
 type stubChannelSyncRepo struct {
 	CountJobsByProfileIDFn func(profileID uint) (int64, error)

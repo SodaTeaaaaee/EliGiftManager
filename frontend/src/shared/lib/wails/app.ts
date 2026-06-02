@@ -4,10 +4,14 @@
 import {
   GetDemandDocument,
   ImportDemandDocument,
+  ImportDemandFromCSV,
   ListDemandInboxRows,
   ListDemandDocuments,
   ListDemandLines,
   ListUnassignedDemandDocuments,
+  UpdateDemandLineRouting,
+  BatchUpdateDemandLineRouting,
+  GetWaveRoutingStats,
 } from "../../../../wailsjs/go/main/DemandController";
 import {
   CreateWave,
@@ -25,6 +29,10 @@ import {
   UndoWaveAction,
   RedoWaveAction,
   ListRecentHistory,
+  GetHistoryGraph,
+  RunHistoryGC,
+  ListWavesPaginated,
+  ValidateStepAccess,
 } from "../../../../wailsjs/go/main/WaveController";
 import {
   ExportSupplierOrder,
@@ -38,17 +46,17 @@ import {
 } from "../../../../wailsjs/go/main/AdjustmentController";
 import {
   CreateShipment,
+  ImportShipments,
   ListShipmentsByWave,
 } from "../../../../wailsjs/go/main/ShipmentController";
-
-// ImportShipments is not yet in the generated binding; call via runtime bridge directly.
-function _ImportShipments(req: unknown): Promise<unknown> {
-  return (window as any).go.main.ShipmentController.ImportShipments(req);
-}
 import {
   CreateChannelSyncJob,
+  CreateCarrierMapping,
+  DeleteCarrierMapping,
   ExecuteChannelSyncJob,
+  ListCarrierMappings,
   ListChannelSyncJobsByWave,
+  ListConnectorCapabilities,
   ListIntegrationProfiles,
   PlanChannelClosure,
   RecordChannelClosureDecision,
@@ -324,6 +332,7 @@ export interface ImportShipmentEntry {
 export interface ImportShipmentsInput {
   waveId: number
   integrationProfileId: number
+  importMode: string
   entries: ImportShipmentEntry[]
 }
 
@@ -337,7 +346,7 @@ export interface ImportShipmentsResult {
 
 export async function importShipments(input: ImportShipmentsInput): Promise<ImportShipmentsResult> {
   assertWailsRuntime()
-  return _ImportShipments(input) as Promise<ImportShipmentsResult>
+  return ImportShipments(dto.ImportShipmentInput.createFrom(input)) as unknown as Promise<ImportShipmentsResult>
 }
 
 // ── ChannelSyncController ──
@@ -418,24 +427,24 @@ export async function createCarrierMapping(input: {
   externalCarrierCode: string
   externalCarrierName: string
   isDefault: boolean
-}): Promise<any> {
+}): Promise<dto.CarrierMappingDTO> {
   assertWailsRuntime()
-  return (window as any).go.main.ChannelSyncController.CreateCarrierMapping(input)
+  return CreateCarrierMapping(dto.CreateCarrierMappingInput.createFrom(input))
 }
 
-export async function listCarrierMappings(profileId: number): Promise<any[]> {
+export async function listCarrierMappings(profileId: number): Promise<dto.CarrierMappingDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
-  return (window as any).go.main.ChannelSyncController.ListCarrierMappings(profileId)
+  return ListCarrierMappings(profileId)
 }
 
 export async function deleteCarrierMapping(id: number): Promise<void> {
   assertWailsRuntime()
-  return (window as any).go.main.ChannelSyncController.DeleteCarrierMapping(id)
+  return DeleteCarrierMapping(id)
 }
 
 export async function listConnectorCapabilities(): Promise<Record<string, any>> {
   if (!isWailsRuntimeAvailable()) return {}
-  return (window as any).go.main.ChannelSyncController.ListConnectorCapabilities()
+  return ListConnectorCapabilities()
 }
 
 // ── ProfileController ──
@@ -678,12 +687,12 @@ export interface HistoryGraphDTO {
 
 export async function getHistoryGraph(waveId: number): Promise<HistoryGraphDTO> {
   assertWailsRuntime()
-  return (window as any).go.main.WaveController.GetHistoryGraph(waveId)
+  return GetHistoryGraph(waveId) as unknown as Promise<HistoryGraphDTO>
 }
 
 export async function runHistoryGC(waveId: number): Promise<number> {
   assertWailsRuntime()
-  return (window as any).go.main.WaveController.RunHistoryGC(waveId)
+  return RunHistoryGC(waveId)
 }
 
 export async function recordAdjustment(
@@ -764,7 +773,7 @@ export async function importDemandFromCSV(input: {
   rows: Record<string, string>[]
 }): Promise<dto.DemandDocumentDTO> {
   assertWailsRuntime()
-  return (window as any).go.main.DemandController.ImportDemandFromCSV(input)
+  return ImportDemandFromCSV(dto.ImportDemandTemplateInput.createFrom(input))
 }
 
 // ── DemandController (routing management) ──
@@ -776,7 +785,7 @@ export async function updateDemandLineRouting(input: {
   routingReasonCode: string
 }): Promise<void> {
   assertWailsRuntime()
-  return (window as any).go.main.DemandController.UpdateDemandLineRouting(input)
+  return UpdateDemandLineRouting(dto.UpdateDemandLineRoutingInput.createFrom(input))
 }
 
 export async function batchUpdateDemandLineRouting(input: {
@@ -791,7 +800,10 @@ export async function batchUpdateDemandLineRouting(input: {
   errors: Array<{ demandLineId: number; reason: string }>
 }> {
   assertWailsRuntime()
-  return (window as any).go.main.DemandController.BatchUpdateDemandLineRouting(input)
+  return BatchUpdateDemandLineRouting(dto.BatchUpdateDemandLineRoutingInput.createFrom(input)) as unknown as Promise<{
+    updatedCount: number
+    errors: Array<{ demandLineId: number; reason: string }>
+  }>
 }
 
 export async function getWaveRoutingStats(waveId: number): Promise<{
@@ -806,7 +818,17 @@ export async function getWaveRoutingStats(waveId: number): Promise<{
   pendingIntakeCount: number
 }> {
   assertWailsRuntime()
-  return (window as any).go.main.DemandController.GetWaveRoutingStats(waveId)
+  return GetWaveRoutingStats(waveId) as unknown as Promise<{
+    totalLines: number
+    acceptedReadyCount: number
+    acceptedWaitingCount: number
+    acceptedPartialCount: number
+    deferredCount: number
+    excludedManualCount: number
+    excludedDuplicateCount: number
+    excludedRevokedCount: number
+    pendingIntakeCount: number
+  }>
 }
 
 // ── App (utility) ──
@@ -925,12 +947,15 @@ export async function listWavesPaginated(input: PaginationInput): Promise<{
   pagination: PaginationResult
 }> {
   if (!isWailsRuntimeAvailable()) return { items: [], pagination: { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 } }
-  return (window as any).go.main.WaveController.ListWavesPaginated(input)
+  return ListWavesPaginated(dto.PaginationInput.createFrom(input)) as unknown as Promise<{
+    items: dto.WaveDTO[]
+    pagination: PaginationResult
+  }>
 }
 
 export async function validateStepAccess(waveId: number, stepKey: string): Promise<void> {
   assertWailsRuntime()
-  return (window as any).go.main.WaveController.ValidateStepAccess(waveId, stepKey)
+  return ValidateStepAccess(waveId, stepKey)
 }
 
 // ── MergeController ──

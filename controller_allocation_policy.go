@@ -84,15 +84,19 @@ func (c *AllocationPolicyController) ReconcileWave(waveID uint) (*dto.ReconcileR
 			return snapErr
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 waveID,
-			CommandKind:            domain.CmdReconcileWave,
-			CommandSummary:         fmt.Sprintf("reconcile wave %d (%d created, %d deleted)", waveID, result.Created, result.Deleted),
-			PatchPayload:           fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
-			InversePatchPayload:    fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
-			CheckpointHint:         true,
+			WaveID:                  waveID,
+			CommandKind:             domain.CmdReconcileWave,
+			CommandSummary:          fmt.Sprintf("reconcile wave %d (%d created, %d deleted)", waveID, result.Created, result.Deleted),
+			PatchPayload:            fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, postSnapshot),
+			InversePatchPayload:     fmt.Sprintf(`{"op":"restore_checkpoint","data":%q}`, preSnapshot),
+			CheckpointHint:          true,
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -144,14 +148,18 @@ func (c *AllocationPolicyController) CreateAllocationPolicyRule(input dto.Create
 			return patchErr
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(input.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 input.WaveID,
-			CommandKind:            domain.CmdCreateRule,
-			CommandSummary:         fmt.Sprintf("create allocation rule %d for wave %d", createdRule.ID, input.WaveID),
-			PatchPayload:           patchPayload,
-			InversePatchPayload:    fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, createdRule.ID),
+			WaveID:                  input.WaveID,
+			CommandKind:             domain.CmdCreateRule,
+			CommandSummary:          fmt.Sprintf("create allocation rule %d for wave %d", createdRule.ID, input.WaveID),
+			PatchPayload:            patchPayload,
+			InversePatchPayload:     fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, createdRule.ID),
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(input.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -213,14 +221,18 @@ func (c *AllocationPolicyController) UpdateAllocationPolicyRule(input dto.Update
 			return patchErr
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(updatedRule.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 updatedRule.WaveID,
-			CommandKind:            domain.CmdUpdateRule,
-			CommandSummary:         fmt.Sprintf("update allocation rule %d for wave %d", updatedRule.ID, updatedRule.WaveID),
-			PatchPayload:           newPayload,
-			InversePatchPayload:    oldPayload,
+			WaveID:                  updatedRule.WaveID,
+			CommandKind:             domain.CmdUpdateRule,
+			CommandSummary:          fmt.Sprintf("update allocation rule %d for wave %d", updatedRule.ID, updatedRule.WaveID),
+			PatchPayload:            newPayload,
+			InversePatchPayload:     oldPayload,
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(updatedRule.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -270,14 +282,18 @@ func (c *AllocationPolicyController) DeleteAllocationPolicyRule(ruleID uint) err
 			return deleteErr
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(rule.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
-			WaveID:                 rule.WaveID,
-			CommandKind:            domain.CmdDeleteRule,
-			CommandSummary:         fmt.Sprintf("delete allocation rule %d from wave %d", ruleID, rule.WaveID),
-			PatchPayload:           fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, ruleID),
-			InversePatchPayload:    inversePayload,
+			WaveID:                  rule.WaveID,
+			CommandKind:             domain.CmdDeleteRule,
+			CommandSummary:          fmt.Sprintf("delete allocation rule %d from wave %d", ruleID, rule.WaveID),
+			PatchPayload:            fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, ruleID),
+			InversePatchPayload:     inversePayload,
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:         projHashSvc.ComputeHash(rule.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})

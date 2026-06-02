@@ -97,6 +97,10 @@ func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrder
 		if len(orders) > 0 {
 			firstID = orders[0].ID
 		}
+		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdExportSupplierOrder,
@@ -104,7 +108,7 @@ func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrder
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(waveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})

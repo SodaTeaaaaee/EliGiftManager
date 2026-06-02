@@ -57,11 +57,14 @@ func ptrVal(p *uint) uint {
 // ComputeHash returns a stable SHA-256 digest of the wave's semantic projection
 // state.  IDs are excluded from the hash inputs because they change after a
 // restore-snapshot cycle; instead rows are sorted by stable semantic keys.
-func (s *ProjectionHashService) ComputeHash(waveID uint) string {
+func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 	h := sha256.New()
 
 	// Rules — sort by (ProductID, RuleKind, Priority) — stable regardless of row ID.
-	rules, _ := s.ruleRepo.ListByWave(waveID)
+	rules, err := s.ruleRepo.ListByWave(waveID)
+	if err != nil {
+		return "", err
+	}
 	sort.Slice(rules, func(i, j int) bool {
 		if rules[i].ProductID != rules[j].ProductID {
 			return rules[i].ProductID < rules[j].ProductID
@@ -78,7 +81,10 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 	}
 
 	// Fulfillment lines — sort by (WaveParticipantSnapshotID, ProductID, DemandLineID).
-	lines, _ := s.fulfillRepo.ListByWave(waveID)
+	lines, err := s.fulfillRepo.ListByWave(waveID)
+	if err != nil {
+		return "", err
+	}
 	sort.Slice(lines, func(i, j int) bool {
 		pi := ptrVal(lines[i].WaveParticipantSnapshotID)
 		pj := ptrVal(lines[j].WaveParticipantSnapshotID)
@@ -99,7 +105,10 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 	}
 
 	// Adjustments — sort by (AdjustmentKind, QuantityDelta, FulfillmentLineID).
-	adjs, _ := s.adjRepo.ListByWave(waveID)
+	adjs, err := s.adjRepo.ListByWave(waveID)
+	if err != nil {
+		return "", err
+	}
 	sort.Slice(adjs, func(i, j int) bool {
 		if adjs[i].AdjustmentKind != adjs[j].AdjustmentKind {
 			return adjs[i].AdjustmentKind < adjs[j].AdjustmentKind
@@ -116,7 +125,10 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 
 	// Demand assignments — sort by DemandDocumentID.
 	if s.assignmentRepo != nil {
-		assignments, _ := s.assignmentRepo.ListByWave(waveID)
+		assignments, err := s.assignmentRepo.ListByWave(waveID)
+		if err != nil {
+			return "", err
+		}
 		sort.Slice(assignments, func(i, j int) bool {
 			return assignments[i].DemandDocumentID < assignments[j].DemandDocumentID
 		})
@@ -127,7 +139,10 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 
 	// Wave participant snapshots — sort by (CustomerProfileID, SnapshotType, IdentityPlatform, IdentityValue).
 	if s.waveRepo != nil {
-		participants, _ := s.waveRepo.ListParticipantsByWave(waveID)
+		participants, err := s.waveRepo.ListParticipantsByWave(waveID)
+		if err != nil {
+			return "", err
+		}
 		sort.Slice(participants, func(i, j int) bool {
 			if participants[i].CustomerProfileID != participants[j].CustomerProfileID {
 				return participants[i].CustomerProfileID < participants[j].CustomerProfileID
@@ -148,7 +163,10 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 
 	// Wave-scoped product snapshots — sort by (SupplierPlatform, FactorySKU).
 	if s.productRepo != nil {
-		products, _ := s.productRepo.ListByWave(waveID)
+		products, err := s.productRepo.ListByWave(waveID)
+		if err != nil {
+			return "", err
+		}
 		sort.Slice(products, func(i, j int) bool {
 			if products[i].SupplierPlatform != products[j].SupplierPlatform {
 				return products[i].SupplierPlatform < products[j].SupplierPlatform
@@ -163,7 +181,10 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 
 	// Manual closure decisions — sort by (FulfillmentLineID, DecisionKind, IntegrationProfileID).
 	if s.closureRepo != nil {
-		decisions, _ := s.closureRepo.ListByWave(waveID)
+		decisions, err := s.closureRepo.ListByWave(waveID)
+		if err != nil {
+			return "", err
+		}
 		sort.Slice(decisions, func(i, j int) bool {
 			if decisions[i].FulfillmentLineID != decisions[j].FulfillmentLineID {
 				return decisions[i].FulfillmentLineID < decisions[j].FulfillmentLineID
@@ -179,5 +200,5 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) string {
 		}
 	}
 
-	return hex.EncodeToString(h.Sum(nil))
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

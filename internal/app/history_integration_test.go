@@ -573,7 +573,10 @@ func TestIntegration_ProjectionHash_StableAcrossRestore(t *testing.T) {
 	}
 
 	// 2. Compute hash H1 before any restore cycle.
-	h1 := f.projHash.ComputeHash(waveID)
+	h1, err := f.projHash.ComputeHash(waveID)
+	if err != nil {
+		t.Fatalf("compute hash H1: %v", err)
+	}
 	if h1 == "" {
 		t.Fatal("H1 must not be empty")
 	}
@@ -601,7 +604,10 @@ func TestIntegration_ProjectionHash_StableAcrossRestore(t *testing.T) {
 	}
 
 	// 6. Compute hash H2.
-	h2 := f.projHash.ComputeHash(waveID)
+	h2, err := f.projHash.ComputeHash(waveID)
+	if err != nil {
+		t.Fatalf("compute hash H2: %v", err)
+	}
 
 	// 7. H1 must equal H2 — semantic state is identical and IDs are preserved.
 	if h1 != h2 {

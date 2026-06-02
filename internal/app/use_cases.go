@@ -61,37 +61,65 @@ func NewWaveUseCase(waveRepo domain.WaveRepository, demandRepo domain.DemandDocu
 }
 
 func (uc *waveUseCase) CreateWave(wave *domain.Wave) error {
-	// [V2-STUB] generate WaveNo (WAVE-YYYYMMDD-NNN), set defaults, persist
+	// generate WaveNo (WAVE-YYYYMMDD-NNN), set defaults, persist.
 	datePrefix := time.Now().Format("20060102")
-	existing, err := uc.waveRepo.List()
-	if err != nil {
-		return err
-	}
-
-	count := 0
 	prefix := "WAVE-" + datePrefix + "-"
-	for _, w := range existing {
-		if strings.HasPrefix(w.WaveNo, prefix) {
-			count++
-		}
-	}
-	wave.WaveNo = fmt.Sprintf("WAVE-%s-%03d", datePrefix, count+1)
 
 	if wave.LifecycleStage == "" {
 		wave.LifecycleStage = "intake"
 	}
-
 	now := time.Now().Format(time.RFC3339)
 	if wave.CreatedAt == "" {
 		wave.CreatedAt = now
 	}
 	wave.UpdatedAt = now
 
-	return uc.waveRepo.Create(wave)
+	// The WaveNo column has a UNIQUE index. Counting existing rows then inserting
+	// is a read-then-write race: two concurrent creates can derive the same
+	// number. We treat the unique index as the source of truth and retry on a
+	// collision (recomputing the count) so the caller gets a unique WaveNo
+	// instead of a hard failure.
+	const maxAttempts = 5
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		existing, err := uc.waveRepo.List()
+		if err != nil {
+			return err
+		}
+		count := 0
+		for _, w := range existing {
+			if strings.HasPrefix(w.WaveNo, prefix) {
+				count++
+			}
+		}
+		wave.WaveNo = fmt.Sprintf("WAVE-%s-%03d", datePrefix, count+1)
+
+		err = uc.waveRepo.Create(wave)
+		if err == nil {
+			return nil
+		}
+		if !isUniqueConstraintErr(err) {
+			return err
+		}
+	}
+	return fmt.Errorf("could not allocate a unique WaveNo for %s after %d attempts", prefix, maxAttempts)
+}
+
+// isUniqueConstraintErr reports whether err is a SQLite UNIQUE constraint
+// violation. GORM's typed ErrDuplicatedKey requires error translation to be
+// enabled, so we match on the driver message, consistent with the infra layer.
+func isUniqueConstraintErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "UNIQUE constraint")
 }
 
 func (uc *waveUseCase) ListWaves() ([]domain.Wave, error) {
 	return uc.waveRepo.List()
+}
+
+func (uc *waveUseCase) ListWavesPaginated(offset, limit int) ([]domain.Wave, int64, error) {
+	return uc.waveRepo.ListPaginated(offset, limit)
 }
 
 func (uc *waveUseCase) GetWave(id uint) (*domain.Wave, error) {
@@ -326,20 +354,19 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 				}
 			}
 
-
-				// Address readiness gate: when addressRepo is wired, block lines whose
-				// profile has no valid addresses.
-				if uc.addressRepo != nil && doc.CustomerProfileID != nil {
-					addrs, addrErr := uc.addressRepo.ListByProfile(*doc.CustomerProfileID)
-					if addrErr == nil && len(addrs) == 0 {
-						blockedLines = append(blockedLines, dto.DemandMappingBlockedLine{
-							DemandLineID:    dl.ID,
-							DemandLineTitle: dl.ExternalTitle,
-							Reason:          "address_unavailable",
-						})
-						continue
-					}
+			// Address readiness gate: when addressRepo is wired, block lines whose
+			// profile has no valid addresses.
+			if uc.addressRepo != nil && doc.CustomerProfileID != nil {
+				addrs, addrErr := uc.addressRepo.ListByProfile(*doc.CustomerProfileID)
+				if addrErr == nil && len(addrs) == 0 {
+					blockedLines = append(blockedLines, dto.DemandMappingBlockedLine{
+						DemandLineID:    dl.ID,
+						DemandLineTitle: dl.ExternalTitle,
+						Reason:          "address_unavailable",
+					})
+					continue
 				}
+			}
 			docID := doc.ID
 			lineID := dl.ID
 			fl := domain.FulfillmentLine{

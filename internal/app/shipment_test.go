@@ -509,7 +509,9 @@ func (m *mockFulfillRepoForShipment) DeleteByWave(waveID uint) error {
 	panic("not implemented")
 }
 func (m *mockFulfillRepoForShipment) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
-func (m *mockFulfillRepoForShipment) BulkUpdateCustomerProfileID(_, _ uint) error { return nil }
+func (m *mockFulfillRepoForShipment) BulkUpdateCustomerProfileID(_, _ uint) (int64, error) {
+	return 0, nil
+}
 func (m *mockFulfillRepoForShipment) Update(line *domain.FulfillmentLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

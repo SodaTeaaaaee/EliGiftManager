@@ -67,27 +67,37 @@ func (uc *profileMergeUseCase) MergeProfiles(input dto.MergeProfilesInput) (*dto
 		result.MigratedIdentityCount = len(identityIDs)
 	}
 
-	// 2. Migrate addresses
+	// 2. Migrate addresses — count source addresses before migration so the
+	// result reflects only the rows actually moved (not pre-existing target rows).
+	srcAddrs, err := uc.addressRepo.ListByProfile(src.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list source addresses: %w", err)
+	}
 	if err := uc.addressRepo.BulkUpdateProfileID(src.ID, input.TargetProfileID); err != nil {
 		return nil, fmt.Errorf("migrate addresses: %w", err)
 	}
-	addrs, _ := uc.addressRepo.ListByProfile(input.TargetProfileID)
-	result.MigratedAddressCount = len(addrs)
+	result.MigratedAddressCount = len(srcAddrs)
 
 	// 3. Reassign demand documents
-	if err := uc.demandRepo.BulkUpdateCustomerProfileID(src.ID, input.TargetProfileID); err != nil {
+	demandCount, err := uc.demandRepo.BulkUpdateCustomerProfileID(src.ID, input.TargetProfileID)
+	if err != nil {
 		return nil, fmt.Errorf("reassign demand documents: %w", err)
 	}
+	result.UpdatedDemandDocs = int(demandCount)
 
 	// 4. Reassign wave participant snapshots
-	if err := uc.waveRepo.UpdateParticipantProfileID(src.ID, input.TargetProfileID); err != nil {
+	participantCount, err := uc.waveRepo.UpdateParticipantProfileID(src.ID, input.TargetProfileID)
+	if err != nil {
 		return nil, fmt.Errorf("reassign participants: %w", err)
 	}
+	result.UpdatedParticipants = int(participantCount)
 
 	// 5. Reassign fulfillment lines
-	if err := uc.fulfillmentRepo.BulkUpdateCustomerProfileID(src.ID, input.TargetProfileID); err != nil {
+	fulfillCount, err := uc.fulfillmentRepo.BulkUpdateCustomerProfileID(src.ID, input.TargetProfileID)
+	if err != nil {
 		return nil, fmt.Errorf("reassign fulfillment lines: %w", err)
 	}
+	result.UpdatedFulfillmentLines = int(fulfillCount)
 
 	// 6. Soft-delete the source profile
 	if err := uc.profileRepo.SoftDelete(src.ID); err != nil {

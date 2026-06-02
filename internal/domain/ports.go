@@ -39,7 +39,8 @@ type DemandDocumentRepository interface {
 	UpdateBoundProfileSnapshot(docID uint, snapshot string) error
 
 	// BulkUpdateCustomerProfileID reassigns all demand documents from oldProfileID to newProfileID.
-	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) error
+	// Returns the number of rows updated.
+	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) (int64, error)
 
 	CreateLine(line *DemandLine) error
 	FindLineByID(id uint) (*DemandLine, error)
@@ -54,12 +55,15 @@ type WaveRepository interface {
 	FindByID(id uint) (*Wave, error)
 	FindByWaveNo(waveNo string) (*Wave, error)
 	List() ([]Wave, error)
+	// ListPaginated returns a page of waves (ordered by id) plus the total count,
+	// pushing LIMIT/OFFSET down to SQL instead of slicing in memory.
+	ListPaginated(offset, limit int) ([]Wave, int64, error)
 	UpdateLifecycle(waveID uint, stage string, progressSnapshot string) error
 
 	AddParticipant(snap *WaveParticipantSnapshot) error
 	ListParticipantsByWave(waveID uint) ([]WaveParticipantSnapshot, error)
 	ListParticipantsByProfile(profileID uint) ([]WaveParticipantSnapshot, error)
-	UpdateParticipantProfileID(oldProfileID, newProfileID uint) error
+	UpdateParticipantProfileID(oldProfileID, newProfileID uint) (int64, error)
 	DeleteParticipantsByWave(waveID uint) error
 }
 
@@ -79,7 +83,7 @@ type FulfillmentLineRepository interface {
 	DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error
 	ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []FulfillmentLine) error
 	BulkUpdateStates(updates []FulfillmentLineStateUpdate) error
-	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) error
+	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) (int64, error)
 }
 
 // SupplierOrderRepository defines persistence operations for SupplierOrder and SupplierOrderLine.

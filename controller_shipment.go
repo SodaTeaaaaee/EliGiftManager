@@ -96,6 +96,10 @@ func (c *ShipmentController) CreateShipment(input dto.CreateShipmentInput) (dto.
 			return findErr
 		}
 
+		projHash, hashErr := projHashSvc.ComputeHash(supplierOrder.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  supplierOrder.WaveID,
 			CommandKind:             domain.CmdCreateShipment,
@@ -103,7 +107,7 @@ func (c *ShipmentController) CreateShipment(input dto.CreateShipmentInput) (dto.
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(supplierOrder.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
@@ -204,6 +208,10 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 		}
 		importResult = res
 
+		projHash, hashErr := projHashSvc.ComputeHash(input.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
 		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
 			WaveID:                  input.WaveID,
 			CommandKind:             domain.CmdCreateShipment,
@@ -211,7 +219,7 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,
-			ProjectionHash:          projHashSvc.ComputeHash(input.WaveID),
+			ProjectionHash:          projHash,
 		})
 		return recordErr
 	})
