@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"encoding/json"
+	"log"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -14,7 +15,11 @@ func parseTime(s string) time.Time {
 	if s == "" {
 		return time.Time{}
 	}
-	t, _ := time.Parse(time.RFC3339, s)
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		log.Printf("WARNING: failed to parse time %q: %v", s, err)
+		return time.Time{}
+	}
 	return t
 }
 
@@ -29,7 +34,11 @@ func parseTimePtr(s string) *time.Time {
 	if s == "" {
 		return nil
 	}
-	t, _ := time.Parse(time.RFC3339, s)
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		log.Printf("WARNING: failed to parse time %q: %v", s, err)
+		return nil
+	}
 	return &t
 }
 
@@ -713,8 +722,8 @@ func FulfillmentAdjustmentToDomain(p *FulfillmentAdjustment) *domain.Fulfillment
 		OperatorID:                p.OperatorID,
 		Note:                      p.Note,
 		EvidenceRef:               p.EvidenceRef,
-		CreatedAt:                 p.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:                 p.UpdatedAt.Format(time.RFC3339),
+		CreatedAt:                 formatTime(p.CreatedAt),
+		UpdatedAt:                 formatTime(p.UpdatedAt),
 	}
 }
 
@@ -746,8 +755,8 @@ func DocumentTemplateToDomain(p *DocumentTemplate) *domain.DocumentTemplate {
 		Format:       p.Format,
 		MappingRules: p.MappingRules,
 		ExtraData:    p.ExtraData,
-		CreatedAt:    p.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    p.UpdatedAt.Format(time.RFC3339),
+		CreatedAt:    formatTime(p.CreatedAt),
+		UpdatedAt:    formatTime(p.UpdatedAt),
 	}
 }
 
@@ -771,7 +780,7 @@ func ProfileTemplateBindingToDomain(p *IntegrationProfileTemplateBinding) *domai
 		DocumentType:         p.DocumentType,
 		TemplateID:           p.TemplateID,
 		IsDefault:            p.IsDefault,
-		CreatedAt:            p.CreatedAt.Format(time.RFC3339),
+		CreatedAt:            formatTime(p.CreatedAt),
 	}
 }
 
@@ -793,8 +802,8 @@ func HistoryScopeToDomain(p *HistoryScope) *domain.HistoryScope {
 		ScopeType:         p.ScopeType,
 		ScopeKey:          p.ScopeKey,
 		CurrentHeadNodeID: p.CurrentHeadNodeID,
-		CreatedAt:         p.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:         p.UpdatedAt.Format(time.RFC3339),
+		CreatedAt:         formatTime(p.CreatedAt),
+		UpdatedAt:         formatTime(p.UpdatedAt),
 	}
 }
 
@@ -822,7 +831,7 @@ func HistoryNodeToDomain(p *HistoryNode) *domain.HistoryNode {
 		CheckpointHint:       p.CheckpointHint,
 		ProjectionHash:       p.ProjectionHash,
 		CreatedBy:            p.CreatedBy,
-		CreatedAt:            p.CreatedAt.Format(time.RFC3339),
+		CreatedAt:            formatTime(p.CreatedAt),
 	}
 }
 
@@ -851,7 +860,7 @@ func HistoryCheckpointToDomain(p *HistoryCheckpoint) *domain.HistoryCheckpoint {
 		HistoryNodeID:   p.HistoryNodeID,
 		SnapshotPayload: p.SnapshotPayload,
 		SchemaVersion:   p.SchemaVersion,
-		CreatedAt:       p.CreatedAt.Format(time.RFC3339),
+		CreatedAt:       formatTime(p.CreatedAt),
 	}
 }
 
@@ -874,7 +883,7 @@ func HistoryPinToDomain(p *HistoryPin) *domain.HistoryPin {
 		PinKind:       p.PinKind,
 		RefType:       p.RefType,
 		RefID:         p.RefID,
-		CreatedAt:     p.CreatedAt.Format(time.RFC3339),
+		CreatedAt:     formatTime(p.CreatedAt),
 	}
 }
 

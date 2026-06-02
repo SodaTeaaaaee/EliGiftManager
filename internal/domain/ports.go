@@ -3,6 +3,7 @@ package domain
 // CustomerProfileRepository defines persistence operations for CustomerProfile and CustomerIdentity.
 type CustomerProfileRepository interface {
 	Create(profile *CustomerProfile) error
+	Update(profile *CustomerProfile) error
 	FindByID(id uint) (*CustomerProfile, error)
 	List() ([]CustomerProfile, error)
 
@@ -32,7 +33,7 @@ type DemandDocumentRepository interface {
 	FindByID(id uint) (*DemandDocument, error)
 	List() ([]DemandDocument, error)
 	ListUnassigned() ([]DemandDocument, error)
-	CountByProfileID(profileID uint) (int64, error)
+	CountByIntegrationProfileID(profileID uint) (int64, error)
 
 	// UpdateBoundProfileSnapshot persists only the BoundProfileSnapshot field for the given document ID.
 	// Used at wave assignment time and during explicit profile refresh.
@@ -65,6 +66,7 @@ type WaveRepository interface {
 	ListParticipantsByProfile(profileID uint) ([]WaveParticipantSnapshot, error)
 	UpdateParticipantProfileID(oldProfileID, newProfileID uint) (int64, error)
 	DeleteParticipantsByWave(waveID uint) error
+	CountByDatePrefix(prefix string) (int, error)
 }
 
 // FulfillmentLineRepository defines persistence operations for FulfillmentLine.
@@ -268,4 +270,30 @@ type CarrierMappingRepository interface {
 	ListByProfile(profileID uint) ([]CarrierMapping, error)
 	FindByProfileAndInternal(profileID uint, internalCode string) (*CarrierMapping, error)
 	Delete(id uint) error
+}
+
+// MergeSuggestion represents a suggestion to merge two customer profiles.
+type MergeSuggestion struct {
+	ID              uint
+	SourceProfileID uint
+	TargetProfileID uint
+	Reason          string
+	Status          string
+}
+
+// DuplicateGroup holds a grouping key and the comma-separated profile IDs
+// that share that key, used by merge-suggestion detection queries.
+type DuplicateGroup struct {
+	Key        string
+	ProfileIDs string
+}
+
+// MergeSuggestionRepository defines persistence operations for MergeSuggestion.
+type MergeSuggestionRepository interface {
+	ListPending() ([]MergeSuggestion, error)
+	Dismiss(id uint) error
+	CountBySourceAndTarget(sourceID, targetID uint) (int64, error)
+	Create(suggestion *MergeSuggestion) error
+	FindEmailDuplicates() ([]DuplicateGroup, error)
+	FindPhoneDuplicates() ([]DuplicateGroup, error)
 }

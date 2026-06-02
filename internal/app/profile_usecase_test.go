@@ -62,7 +62,7 @@ func (s *stubIntegrationProfileRepo) Delete(id uint) error {
 }
 
 type stubDemandDocumentRepo struct {
-	CountByProfileIDFn func(profileID uint) (int64, error)
+	CountByIntegrationProfileIDFn func(profileID uint) (int64, error)
 }
 
 func (s *stubDemandDocumentRepo) Create(_ *domain.DemandDocument) error { return nil }
@@ -71,9 +71,9 @@ func (s *stubDemandDocumentRepo) FindByID(_ uint) (*domain.DemandDocument, error
 }
 func (s *stubDemandDocumentRepo) List() ([]domain.DemandDocument, error)           { return nil, nil }
 func (s *stubDemandDocumentRepo) ListUnassigned() ([]domain.DemandDocument, error) { return nil, nil }
-func (s *stubDemandDocumentRepo) CountByProfileID(profileID uint) (int64, error) {
-	if s.CountByProfileIDFn != nil {
-		return s.CountByProfileIDFn(profileID)
+func (s *stubDemandDocumentRepo) CountByIntegrationProfileID(profileID uint) (int64, error) {
+	if s.CountByIntegrationProfileIDFn != nil {
+		return s.CountByIntegrationProfileIDFn(profileID)
 	}
 	return 0, nil
 }
@@ -475,7 +475,7 @@ func TestDeleteProfileClosureDecisionGating(t *testing.T) {
 					},
 				},
 				&stubDemandDocumentRepo{
-					CountByProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
+				CountByIntegrationProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
 				},
 				&stubChannelSyncRepo{
 					CountJobsByProfileIDFn: func(_ uint) (int64, error) { return 0, nil },

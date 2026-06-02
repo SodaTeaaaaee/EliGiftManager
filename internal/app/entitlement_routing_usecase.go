@@ -9,22 +9,22 @@ import (
 
 // validRoutingDispositions is the canonical set of allowed routing_disposition values.
 var validRoutingDispositions = map[string]bool{
-	"pending_intake":      true,
-	"accepted":            true,
-	"deferred":            true,
-	"excluded_manual":     true,
-	"excluded_duplicate":  true,
-	"excluded_revoked":    true,
+	string(domain.RoutingDispositionPendingIntake):     true,
+	string(domain.RoutingDispositionAccepted):          true,
+	string(domain.RoutingDispositionDeferred):          true,
+	string(domain.RoutingDispositionExcludedManual):    true,
+	string(domain.RoutingDispositionExcludedDuplicate): true,
+	string(domain.RoutingDispositionExcludedRevoked):   true,
 }
 
 // validRecipientInputStates is the canonical set of allowed recipient_input_state values.
 var validRecipientInputStates = map[string]bool{
-	"not_required":        true,
-	"waiting_for_input":   true,
-	"partially_collected": true,
-	"ready":               true,
-	"waived":              true,
-	"expired":             true,
+	string(domain.RecipientInputStateNotRequired):        true,
+	string(domain.RecipientInputStateWaitingForInput):    true,
+	string(domain.RecipientInputStatePartiallyCollected): true,
+	string(domain.RecipientInputStateReady):              true,
+	string(domain.RecipientInputStateWaived):             true,
+	string(domain.RecipientInputStateExpired):            true,
 }
 
 type entitlementRoutingUseCase struct {

@@ -192,16 +192,16 @@ const columns = computed<DataTableColumns<dto.ProfileTemplateBindingDTO>>(() => 
 async function loadProfiles() {
   try {
     profiles.value = await listProfiles();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   }
 }
 
 async function loadAllTemplates() {
   try {
     allTemplates.value = await listDocumentTemplates();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   }
 }
 
@@ -209,8 +209,8 @@ async function loadBindings(profileId: number) {
   loading.value = true;
   try {
     bindings.value = await listBindingsByProfile(profileId);
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
   }
@@ -248,8 +248,8 @@ async function submitBind() {
     successMsg.value = "Template bound";
     drawerVisible.value = false;
     await loadBindings(selectedProfileId.value);
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     submitting.value = false;
   }

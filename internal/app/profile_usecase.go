@@ -236,7 +236,7 @@ func (uc *profileManagementUseCase) UpdateProfile(input dto.UpdateProfileInput) 
 }
 
 func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
-	count, err := uc.demandRepo.CountByProfileID(id)
+	count, err := uc.demandRepo.CountByIntegrationProfileID(id)
 	if err != nil {
 		return fmt.Errorf("failed to check profile references: %w", err)
 	}

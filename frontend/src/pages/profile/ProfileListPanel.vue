@@ -350,8 +350,8 @@ async function loadProfiles() {
   loading.value = true;
   try {
     profiles.value = await listProfiles();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
   }
@@ -409,8 +409,8 @@ async function submitForm() {
     }
     drawerVisible.value = false;
     await loadProfiles();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     submitting.value = false;
   }
@@ -427,8 +427,8 @@ function confirmDelete(row: dto.IntegrationProfileDTO) {
         await deleteProfile(row.id);
         successMsg.value = `Profile "${row.profileKey}" 已删除`;
         await loadProfiles();
-      } catch (e: any) {
-        error.value = e?.message ?? String(e);
+      } catch (e: unknown) {
+        error.value = e instanceof Error ? e.message : String(e);
       }
     },
   });
@@ -441,8 +441,8 @@ async function seedDefaults() {
     await seedDefaultProfiles();
     successMsg.value = "默认配置已初始化";
     await loadProfiles();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     seeding.value = false;
   }

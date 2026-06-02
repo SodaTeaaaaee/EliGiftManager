@@ -137,16 +137,19 @@ function reloadPage() {
   window.location.reload()
 }
 
+const onChunkError = () => {
+  chunkError.value = true
+}
+
 onMounted(() => {
   document.addEventListener('contextmenu', onGlobalContextMenu)
   baseDPR = window.devicePixelRatio
-  window.addEventListener('router-chunk-error', () => {
-    chunkError.value = true
-  })
+  window.addEventListener('router-chunk-error', onChunkError)
 })
 
 onUnmounted(() => {
   document.removeEventListener('contextmenu', onGlobalContextMenu)
+  window.removeEventListener('router-chunk-error', onChunkError)
   persistZoom()
 })
 </script>

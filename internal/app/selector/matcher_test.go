@@ -19,7 +19,10 @@ func TestMatchSelector_WaveAll(t *testing.T) {
 	participants := makeParticipants()
 	payload := domain.SelectorPayload{Type: "wave_all"}
 
-	result := MatchSelector(payload, participants)
+	result, err := MatchSelector(payload, participants)
+	if err != nil {
+		t.Fatalf("MatchSelector failed: %v", err)
+	}
 
 	if len(result) != len(participants) {
 		t.Errorf("wave_all: expected %d participants, got %d", len(participants), len(result))
@@ -30,7 +33,10 @@ func TestMatchSelector_PlatformAll(t *testing.T) {
 	participants := makeParticipants()
 	payload := domain.SelectorPayload{Type: "platform_all", Platform: "bilibili"}
 
-	result := MatchSelector(payload, participants)
+	result, err := MatchSelector(payload, participants)
+	if err != nil {
+		t.Fatalf("MatchSelector failed: %v", err)
+	}
 
 	if len(result) != 2 {
 		t.Errorf("platform_all: expected 2 participants, got %d", len(result))
@@ -46,7 +52,10 @@ func TestMatchSelector_IdentityLevel(t *testing.T) {
 	participants := makeParticipants()
 	payload := domain.SelectorPayload{Type: "identity_level", Platform: "bilibili", Level: "gold"}
 
-	result := MatchSelector(payload, participants)
+	result, err := MatchSelector(payload, participants)
+	if err != nil {
+		t.Fatalf("MatchSelector failed: %v", err)
+	}
 
 	if len(result) != 1 {
 		t.Errorf("identity_level: expected 1 participant, got %d", len(result))
@@ -60,7 +69,10 @@ func TestMatchSelector_ExplicitOverride(t *testing.T) {
 	participants := makeParticipants()
 	payload := domain.SelectorPayload{Type: "explicit_override", ParticipantIDs: []uint{2, 4}}
 
-	result := MatchSelector(payload, participants)
+	result, err := MatchSelector(payload, participants)
+	if err != nil {
+		t.Fatalf("MatchSelector failed: %v", err)
+	}
 
 	if len(result) != 2 {
 		t.Errorf("explicit_override: expected 2 participants, got %d", len(result))
@@ -77,7 +89,10 @@ func TestMatchSelector_ExplicitOverride(t *testing.T) {
 func TestMatchSelector_EmptyParticipants(t *testing.T) {
 	payload := domain.SelectorPayload{Type: "wave_all"}
 
-	result := MatchSelector(payload, nil)
+	result, err := MatchSelector(payload, nil)
+	if err != nil {
+		t.Fatalf("MatchSelector failed: %v", err)
+	}
 
 	if result != nil {
 		t.Errorf("empty participants with wave_all: expected nil, got %v", result)
@@ -88,9 +103,11 @@ func TestMatchSelector_UnknownType(t *testing.T) {
 	participants := makeParticipants()
 	payload := domain.SelectorPayload{Type: "nonexistent_type"}
 
-	result := MatchSelector(payload, participants)
-
-	if len(result) != 0 {
-		t.Errorf("unknown type: expected 0 participants, got %d", len(result))
+	result, err := MatchSelector(payload, participants)
+	if err == nil {
+		t.Fatal("expected error for unknown type, got nil")
+	}
+	if result != nil {
+		t.Errorf("unknown type: expected nil result, got %v", result)
 	}
 }

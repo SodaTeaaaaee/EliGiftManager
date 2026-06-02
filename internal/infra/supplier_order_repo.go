@@ -89,20 +89,17 @@ func (r *supplierOrderRepository) DeleteLinesByOrder(orderID uint) error {
 }
 
 func (r *supplierOrderRepository) DeleteDraftsByWave(waveID uint) error {
-	// Find all draft orders for this wave
-	var orders []persistence.SupplierOrder
-	if err := r.db.Where("wave_id = ? AND status = ?", waveID, "draft").Find(&orders).Error; err != nil {
-		return err
-	}
-	for _, o := range orders {
-		if err := r.db.Where("supplier_order_id = ?", o.ID).Delete(&persistence.SupplierOrderLine{}).Error; err != nil {
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		// Delete lines belonging to draft orders for this wave in one batch
+		if err := tx.Where("supplier_order_id IN (?)", tx.Model(&persistence.SupplierOrder{}).Select("id").Where("wave_id = ? AND status = ?", waveID, "draft")).Delete(&persistence.SupplierOrderLine{}).Error; err != nil {
 			return err
 		}
-	}
-	if err := r.db.Where("wave_id = ? AND status = ?", waveID, "draft").Delete(&persistence.SupplierOrder{}).Error; err != nil {
-		return err
-	}
-	return nil
+		// Delete the draft orders themselves
+		if err := tx.Where("wave_id = ? AND status = ?", waveID, "draft").Delete(&persistence.SupplierOrder{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (r *supplierOrderRepository) Update(order *domain.SupplierOrder) error {

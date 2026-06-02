@@ -1,6 +1,10 @@
 package selector
 
-import "github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+import (
+	"fmt"
+
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+)
 
 // strategyMap dispatches selector matching by SelectorPayload.Type.
 var strategyMap = map[string]func(domain.SelectorPayload, []domain.WaveParticipantSnapshot) []domain.WaveParticipantSnapshot{
@@ -11,13 +15,13 @@ var strategyMap = map[string]func(domain.SelectorPayload, []domain.WaveParticipa
 }
 
 // MatchSelector filters participants according to the selector payload.
-// Unknown selector types return an empty slice.
-func MatchSelector(payload domain.SelectorPayload, participants []domain.WaveParticipantSnapshot) []domain.WaveParticipantSnapshot {
+// Unknown selector types return an error.
+func MatchSelector(payload domain.SelectorPayload, participants []domain.WaveParticipantSnapshot) ([]domain.WaveParticipantSnapshot, error) {
 	fn, ok := strategyMap[payload.Type]
 	if !ok {
-		return []domain.WaveParticipantSnapshot{}
+		return nil, fmt.Errorf("unknown selector type: %s", payload.Type)
 	}
-	return fn(payload, participants)
+	return fn(payload, participants), nil
 }
 
 func matchWaveAll(_ domain.SelectorPayload, participants []domain.WaveParticipantSnapshot) []domain.WaveParticipantSnapshot {

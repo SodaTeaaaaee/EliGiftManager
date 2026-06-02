@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref, watch } from "vue";
+import { computed, h, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   NAlert,
@@ -255,9 +255,6 @@ watch(
   { immediate: true },
 );
 
-onMounted(() => {
-  if (waveId.value) void loadInbox();
-});
 </script>
 
 <template>

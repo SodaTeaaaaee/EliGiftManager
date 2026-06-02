@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -141,12 +142,16 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 			})
 		}
 		if len(stateUpdates) > 0 {
-			_ = uc.fulfillRepo.BulkUpdateStates(stateUpdates)
+			if err := uc.fulfillRepo.BulkUpdateStates(stateUpdates); err != nil {
+				log.Printf("WARNING: supplier order status projection failed: %v", err)
+			}
 		}
 	}
 
 	// 8. Project SupplierOrder status based on cumulative shipped quantities across all SOLs.
-	_ = uc.projectSupplierOrderStatus(supplierOrder.ID)
+	if err := uc.projectSupplierOrderStatus(supplierOrder.ID); err != nil {
+		log.Printf("WARNING: supplier order status projection failed: %v", err)
+	}
 
 	// 9. Return domain objects
 	domainLines := make([]domain.ShipmentLine, len(lines))

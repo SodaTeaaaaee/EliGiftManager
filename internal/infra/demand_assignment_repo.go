@@ -1,8 +1,8 @@
 package infra
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
@@ -31,7 +31,7 @@ func (r *waveDemandAssignmentRepository) Create(assignment *domain.WaveDemandAss
 
 	p := persistence.ToPersistenceWaveDemandAssignment(assignment)
 	if err := r.db.Create(p).Error; err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "idx_wave_demand") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			return fmt.Errorf("demand document %d is already assigned to wave %d", assignment.DemandDocumentID, assignment.WaveID)
 		}
 		return err
@@ -79,7 +79,7 @@ func (r *waveDemandAssignmentRepository) ListDemandDocumentsByWave(waveID uint) 
 		return nil, err
 	}
 	if len(assignments) == 0 {
-		return nil, nil
+		return []domain.DemandDocument{}, nil
 	}
 
 	ids := make([]uint, len(assignments))

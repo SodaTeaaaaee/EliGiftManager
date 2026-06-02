@@ -644,51 +644,19 @@ export async function listAdjustmentsByWave(
 
 // ── History ──
 
-export interface HistoryNodeDTO {
-  id: number
-  parentNodeId: number
-  preferredRedoChildId: number
-  commandKind: string
-  commandSummary: string
-  projectionHash: string
-  checkpointHint: boolean
-  createdAt: string
-  createdBy: string
-}
-
 export async function listRecentHistory(
   waveId: number,
   limit: number = 10,
-): Promise<HistoryNodeDTO[]> {
+): Promise<dto.HistoryNodeDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
-  return ListRecentHistory(waveId, limit) as Promise<HistoryNodeDTO[]>
+  return ListRecentHistory(waveId, limit) as Promise<dto.HistoryNodeDTO[]>
 }
 
-export interface HistoryGraphNodeDTO {
-  id: number
-  parentNodeId: number
-  preferredRedoChildId: number
-  commandKind: string
-  commandSummary: string
-  projectionHash: string
-  checkpointHint: boolean
-  createdAt: string
-  createdBy: string
-  isCurrentHead: boolean
-  isPinned: boolean
-  childCount: number
-}
-
-export interface HistoryGraphDTO {
-  scopeId: number
-  currentHeadId: number
-  nodes: HistoryGraphNodeDTO[]
-}
-
-export async function getHistoryGraph(waveId: number): Promise<HistoryGraphDTO> {
+export async function getHistoryGraph(waveId: number): Promise<dto.HistoryGraphDTO> {
   assertWailsRuntime()
-  return GetHistoryGraph(waveId) as unknown as Promise<HistoryGraphDTO>
+  return GetHistoryGraph(waveId) as unknown as Promise<dto.HistoryGraphDTO>
 }
+
 
 export async function runHistoryGC(waveId: number): Promise<number> {
   assertWailsRuntime()

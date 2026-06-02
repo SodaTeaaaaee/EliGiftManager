@@ -3,11 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	goruntime "runtime"
-	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
@@ -72,61 +69,3 @@ func (a *App) SaveZoom(zoomPercent float64) error {
 	return os.WriteFile(cfgPath, fmt.Appendf(nil, "%.2f", zoomPercent), 0o644)
 }
 
-// ---- Tool functions ----
-
-func normalizePagination(page, pageSize int) (int, int) {
-	if page < 1 {
-		page = 1
-	}
-	if pageSize < 1 {
-		pageSize = 20
-	}
-	if pageSize > 200 {
-		pageSize = 200
-	}
-	return page, pageSize
-}
-
-func copyFile(source, target string) error {
-	sameFile, err := sameFilePath(source, target)
-	if err != nil {
-		return err
-	}
-	if sameFile {
-		return fmt.Errorf("source and target must be different files")
-	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return err
-	}
-	in, err := os.Open(source)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.Create(target)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Sync()
-}
-
-func sameFilePath(left, right string) (bool, error) {
-	leftPath, err := filepath.Abs(left)
-	if err != nil {
-		return false, err
-	}
-	rightPath, err := filepath.Abs(right)
-	if err != nil {
-		return false, err
-	}
-	cleanLeft := filepath.Clean(leftPath)
-	cleanRight := filepath.Clean(rightPath)
-	if goruntime.GOOS == "windows" {
-		return strings.EqualFold(cleanLeft, cleanRight), nil
-	}
-	return cleanLeft == cleanRight, nil
-}

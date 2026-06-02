@@ -759,8 +759,9 @@ async function loadCustomers() {
   loading.value = true;
   try {
     customers.value = (await listCustomerProfiles(filters.keyword, filters.platform, filters.missingOnly)) || [];
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   } finally {
     loading.value = false;
   }
@@ -784,8 +785,9 @@ async function confirmDeleteProfile(id: number) {
     await deleteCustomerProfile(id);
     message.success("删除成功");
     await loadCustomers();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -797,8 +799,9 @@ async function openDrawer(row: dto.CustomerProfileDTO) {
   try {
     selectedCustomer.value = await getCustomerProfile(row.id);
     drawerVisible.value = true;
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -819,8 +822,9 @@ async function saveProfileDetails() {
     });
     message.success("档案信息已更新");
     await loadCustomers();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -860,8 +864,9 @@ async function submitAddIdentity() {
     // Reload details
     selectedCustomer.value = await getCustomerProfile(selectedCustomer.value.id);
     await loadCustomers();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -874,8 +879,9 @@ async function removeIdentity(id: number) {
     // Reload details
     selectedCustomer.value = await getCustomerProfile(selectedCustomer.value.id);
     await loadCustomers();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -981,8 +987,9 @@ async function submitAddress() {
     // Reload details
     selectedCustomer.value = await getCustomerProfile(selectedCustomer.value.id);
     await loadCustomers();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -995,8 +1002,9 @@ async function removeAddress(id: number) {
     // Reload details
     selectedCustomer.value = await getCustomerProfile(selectedCustomer.value.id);
     await loadCustomers();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -1029,8 +1037,9 @@ async function setAddressAsDefault(addr: dto.CustomerAddressDTO) {
     // Reload details
     selectedCustomer.value = await getCustomerProfile(selectedCustomer.value.id);
     await loadCustomers();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -1061,8 +1070,9 @@ async function submitCreateProfile() {
     await loadCustomers();
     // Automatically open drawer for the newly created profile
     openDrawer(created);
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -1080,8 +1090,9 @@ async function dismissSuggestion(id: number) {
     await dismissMergeSuggestion(id);
     message.info(t("suggestedMerges.successDismiss"));
     await loadSuggestions();
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -1102,8 +1113,9 @@ async function executeSuggestionMerge(s: dto.MergeSuggestionDTO) {
         );
         await loadSuggestions();
         await loadCustomers();
-      } catch (e: any) {
-        message.error(e?.message ?? String(e));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(msg);
       }
     },
   });
@@ -1148,8 +1160,9 @@ async function confirmManualMerge() {
         manualMergeData.targetProfileId = null;
         await loadCustomers();
         await loadSuggestions();
-      } catch (e: any) {
-        message.error(e?.message ?? String(e));
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(msg);
       }
     },
   });

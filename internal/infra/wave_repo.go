@@ -118,3 +118,9 @@ func (r *waveRepository) DeleteParticipantsByWave(waveID uint) error {
 	// WaveParticipantSnapshot has no DeletedAt (no soft-delete); this is a hard delete.
 	return r.db.Where("wave_id = ?", waveID).Delete(&persistence.WaveParticipantSnapshot{}).Error
 }
+
+func (r *waveRepository) CountByDatePrefix(prefix string) (int, error) {
+	var count int64
+	err := r.db.Model(&persistence.Wave{}).Where("wave_no LIKE ?", prefix+"%").Count(&count).Error
+	return int(count), err
+}

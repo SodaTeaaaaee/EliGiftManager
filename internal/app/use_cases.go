@@ -21,7 +21,11 @@ func NewDemandIntakeUseCase(demandRepo domain.DemandDocumentRepository) DemandIn
 }
 
 func (uc *demandIntakeUseCase) ImportDemand(doc *domain.DemandDocument, lines []*domain.DemandLine) error {
-	// [V2-STUB] demand-driven: create DemandDocument then all DemandLines
+	// NOTE: This operation is not fully transactional — the DemandDocumentRepository
+	// does not expose a Delete method, so if a line creation fails after the document
+	// is persisted, an orphaned document may remain. Callers that need atomicity
+	// (e.g. ImportDemandDocument in the controller) should wrap this call in a
+	// gorm.DB.Transaction to get full rollback semantics.
 	now := time.Now().Format(time.RFC3339)
 	if doc.CreatedAt == "" {
 		doc.CreatedAt = now
@@ -81,15 +85,9 @@ func (uc *waveUseCase) CreateWave(wave *domain.Wave) error {
 	// instead of a hard failure.
 	const maxAttempts = 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		existing, err := uc.waveRepo.List()
+		count, err := uc.waveRepo.CountByDatePrefix(prefix)
 		if err != nil {
 			return err
-		}
-		count := 0
-		for _, w := range existing {
-			if strings.HasPrefix(w.WaveNo, prefix) {
-				count++
-			}
 		}
 		wave.WaveNo = fmt.Sprintf("WAVE-%s-%03d", datePrefix, count+1)
 
@@ -245,6 +243,9 @@ func isEligibleForFulfillment(dl *domain.DemandLine) bool {
 }
 
 func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.DemandMappingResult, error) {
+	// NOTE: This method deletes then re-creates fulfillment lines. The controller
+	// (MapDemandLines) already wraps this call in gorm.DB.Transaction for atomicity.
+	// If called outside a transaction, a failure mid-loop leaves partial data.
 	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
 	if err != nil {
 		return nil, err
@@ -594,7 +595,9 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrd
 			return nil, err
 		}
 
-		uc.projectSupplierStateFromOrder(order, lines)
+		if err := uc.projectSupplierStateFromOrder(order, lines); err != nil {
+			return nil, err
+		}
 		results = append(results, order)
 	}
 
@@ -652,10 +655,10 @@ func (uc *exportUseCase) resolveGroupKey(
 
 // projectSupplierStateFromOrder maps a SupplierOrder.Status to the corresponding
 // SupplierState and bulk-updates the referenced FulfillmentLines.
-func (uc *exportUseCase) projectSupplierStateFromOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine) {
+func (uc *exportUseCase) projectSupplierStateFromOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine) error {
 	projected := supplierOrderStatusToState(order.Status)
 	if projected == "" {
-		return
+		return nil
 	}
 	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(lines))
 	for _, l := range lines {
@@ -665,8 +668,11 @@ func (uc *exportUseCase) projectSupplierStateFromOrder(order *domain.SupplierOrd
 		})
 	}
 	if len(updates) > 0 {
-		_ = uc.fulfillRepo.BulkUpdateStates(updates)
+		if err := uc.fulfillRepo.BulkUpdateStates(updates); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // supplierOrderStatusToState maps SupplierOrder.Status → FulfillmentLine.SupplierState.

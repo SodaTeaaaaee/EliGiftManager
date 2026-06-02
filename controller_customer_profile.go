@@ -16,9 +16,10 @@ func NewCustomerProfileController() *CustomerProfileController {
 	gdb := database.GetDB()
 	profileRepo := infra.NewProfileRepository(gdb)
 	addressRepo := infra.NewAddressRepository(gdb)
+	suggestionRepo := infra.NewMergeSuggestionRepository(gdb)
 	settingsSvc := service.NewSettingsService()
 	return &CustomerProfileController{
-		uc: app.NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, gdb),
+		uc: app.NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, suggestionRepo),
 	}
 }
 

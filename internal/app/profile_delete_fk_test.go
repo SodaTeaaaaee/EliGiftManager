@@ -83,7 +83,7 @@ func TestDeleteProfileFKBlocking(t *testing.T) {
 					},
 				},
 				&stubDemandDocumentRepo{
-					CountByProfileIDFn: func(_ uint) (int64, error) { return tc.demandCount, nil },
+					CountByIntegrationProfileIDFn: func(_ uint) (int64, error) { return tc.demandCount, nil },
 				},
 				&stubChannelSyncRepo{
 					CountJobsByProfileIDFn: func(_ uint) (int64, error) { return tc.syncCount, nil },
@@ -123,7 +123,7 @@ func TestDeleteProfileDemandErrorPropagates(t *testing.T) {
 	uc := NewProfileManagementUseCase(
 		&stubIntegrationProfileRepo{},
 		&stubDemandDocumentRepo{
-			CountByProfileIDFn: func(_ uint) (int64, error) {
+			CountByIntegrationProfileIDFn: func(_ uint) (int64, error) {
 				return 0, errMockRepoFailure
 			},
 		},
@@ -147,7 +147,7 @@ func TestDeleteProfileSyncErrorPropagates(t *testing.T) {
 	uc := NewProfileManagementUseCase(
 		&stubIntegrationProfileRepo{},
 		&stubDemandDocumentRepo{
-			CountByProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
+			CountByIntegrationProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
 		},
 		&stubChannelSyncRepo{
 			CountJobsByProfileIDFn: func(_ uint) (int64, error) {
@@ -173,7 +173,7 @@ func TestDeleteProfileBindingErrorPropagates(t *testing.T) {
 	uc := NewProfileManagementUseCase(
 		&stubIntegrationProfileRepo{},
 		&stubDemandDocumentRepo{
-			CountByProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
+			CountByIntegrationProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
 		},
 		&stubChannelSyncRepo{
 			CountJobsByProfileIDFn: func(_ uint) (int64, error) { return 0, nil },

@@ -176,8 +176,8 @@ async function openSnapshotModal(row: any) {
       label: `${w.waveNo} — ${w.name}`,
       value: w.id,
     }))
-  } catch (e: any) {
-    snapshotErr.value = e?.message ?? String(e)
+  } catch (e: unknown) {
+    snapshotErr.value = e instanceof Error ? e.message : String(e)
   } finally {
     snapshotWavesLoading.value = false
   }
@@ -191,8 +191,8 @@ async function doSnapshot() {
   try {
     await snapshotProductsForWave({ waveId: snapshotWaveId.value, masterIds: [snapshotTargetMaster.value.id] })
     snapshotMsg.value = `已快照到波次`
-  } catch (e: any) {
-    snapshotErr.value = e?.message ?? String(e)
+  } catch (e: unknown) {
+    snapshotErr.value = e instanceof Error ? e.message : String(e)
   } finally {
     snapshotting.value = false
   }
@@ -245,8 +245,8 @@ async function loadProducts() {
   loading.value = true;
   try {
     products.value = await listProductMasters();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
   }
@@ -288,8 +288,8 @@ async function submitForm() {
     }
     drawerVisible.value = false;
     await loadProducts();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     submitting.value = false;
   }

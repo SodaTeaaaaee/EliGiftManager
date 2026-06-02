@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -134,7 +135,10 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 		if !rule.Active {
 			continue
 		}
-		matched := selector.MatchSelector(rule.SelectorPayload, participants)
+		matched, err := selector.MatchSelector(rule.SelectorPayload, participants)
+		if err != nil {
+			return nil, fmt.Errorf("match selector for rule %d: %w", rule.ID, err)
+		}
 		for _, p := range matched {
 			key := contribKey{participantIdx: findParticipantIdx(participants, p.ID), productID: rule.ProductID}
 			contributionMap[key] += rule.ContributionQuantity
@@ -294,10 +298,16 @@ func (uc *allocationPolicyUseCase) CreateRule(input dto.CreateAllocationPolicyRu
 	}
 
 	now := time.Now().Format(time.RFC3339)
+	var selectorPayload domain.SelectorPayload
+	if len(input.SelectorPayload) > 0 {
+		if err := json.Unmarshal(input.SelectorPayload, &selectorPayload); err != nil {
+			return nil, fmt.Errorf("invalid selector_payload: %w", err)
+		}
+	}
 	rule := &domain.AllocationPolicyRule{
 		WaveID:               input.WaveID,
 		ProductID:            input.ProductID,
-		SelectorPayload:      input.SelectorPayload,
+		SelectorPayload:      selectorPayload,
 		ProductTargetRef:     input.ProductTargetRef,
 		ContributionQuantity: input.ContributionQuantity,
 		RuleKind:             input.RuleKind,
@@ -329,7 +339,11 @@ func (uc *allocationPolicyUseCase) UpdateRule(input dto.UpdateAllocationPolicyRu
 		rule.ProductID = *input.ProductID
 	}
 	if input.SelectorPayload != nil {
-		rule.SelectorPayload = *input.SelectorPayload
+		var sp domain.SelectorPayload
+		if err := json.Unmarshal(*input.SelectorPayload, &sp); err != nil {
+			return nil, fmt.Errorf("invalid selector_payload: %w", err)
+		}
+		rule.SelectorPayload = sp
 	}
 	if input.ProductTargetRef != nil {
 		rule.ProductTargetRef = *input.ProductTargetRef
@@ -374,11 +388,12 @@ func (uc *allocationPolicyUseCase) ListRulesByWave(waveID uint) ([]dto.Allocatio
 // ---- helpers ----
 
 func ruleToDTO(r *domain.AllocationPolicyRule) dto.AllocationPolicyRuleDTO {
+	selectorJSON, _ := json.Marshal(r.SelectorPayload)
 	return dto.AllocationPolicyRuleDTO{
 		ID:                   r.ID,
 		WaveID:               r.WaveID,
 		ProductID:            r.ProductID,
-		SelectorPayload:      r.SelectorPayload,
+		SelectorPayload:      selectorJSON,
 		ProductTargetRef:     r.ProductTargetRef,
 		ContributionQuantity: r.ContributionQuantity,
 		RuleKind:             r.RuleKind,

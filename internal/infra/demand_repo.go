@@ -45,7 +45,7 @@ func (r *demandRepository) List() ([]domain.DemandDocument, error) {
 	return result, nil
 }
 
-func (r *demandRepository) CountByProfileID(profileID uint) (int64, error) {
+func (r *demandRepository) CountByIntegrationProfileID(profileID uint) (int64, error) {
 	var count int64
 	if err := r.db.Model(&persistence.DemandDocument{}).Where("integration_profile_id = ?", profileID).Count(&count).Error; err != nil {
 		return 0, err

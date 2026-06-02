@@ -61,7 +61,7 @@ func (m *mockDemandRepo) ListUnassigned() ([]domain.DemandDocument, error) {
 	return m.List()
 }
 
-func (m *mockDemandRepo) CountByProfileID(profileID uint) (int64, error) {
+func (m *mockDemandRepo) CountByIntegrationProfileID(profileID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var count int64
@@ -284,6 +284,18 @@ func (m *mockWaveRepo) SetParticipants(snaps []domain.WaveParticipantSnapshot) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.participants = snaps
+}
+
+func (m *mockWaveRepo) CountByDatePrefix(prefix string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, w := range m.waves {
+		if len(w.WaveNo) >= len(prefix) && w.WaveNo[:len(prefix)] == prefix {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // ── mock fulfill repo ──

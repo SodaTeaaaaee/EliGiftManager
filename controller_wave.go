@@ -83,10 +83,20 @@ func (c *WaveController) persistLifecycle(waveID uint) {
 
 // CreateWave creates a new wave.
 func (c *WaveController) CreateWave(input dto.CreateWaveInput) (dto.WaveDTO, error) {
-	wave := domain.Wave{
-		Name: input.Name,
-	}
-	if err := c.waveUC.CreateWave(&wave); err != nil {
+	var wave domain.Wave
+	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		waveRepo := infra.NewWaveRepository(tx)
+		demandRepo := infra.NewDemandRepository(tx)
+		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		waveUC := app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
+		w := domain.Wave{Name: input.Name}
+		if err := waveUC.CreateWave(&w); err != nil {
+			return err
+		}
+		wave = w
+		return nil
+	})
+	if err != nil {
 		return dto.WaveDTO{}, err
 	}
 	return domainToWaveDTO(&wave), nil
@@ -170,10 +180,8 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		productRepo := infra.NewProductRepository(tx)
 		demandRepoTx := infra.NewDemandRepository(tx)
 		integrationProfileRepoTx := infra.NewIntegrationProfileRepository(tx)
-		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo)
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
-		snapshotSvc = app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc = app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
 		now := time.Now().Format(time.RFC3339)
@@ -321,9 +329,7 @@ func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, 
 			return snapErr
 		}
 
-		totalLines := len(result.CreatedLines) + len(result.BlockedLines)
 		summary := fmt.Sprintf("map demand lines for wave %d (%d created, %d blocked)", waveID, len(result.CreatedLines), len(result.BlockedLines))
-		_ = totalLines
 		projHash, hashErr := projHashSvc.ComputeHash(waveID)
 		if hashErr != nil {
 			return hashErr
@@ -505,6 +511,7 @@ func (c *WaveController) ValidateStepAccess(waveID uint, stepKey string) error {
 		return c.workspaceGuard.GuardShipmentRequiresSupplierOrder(waveID)
 	case "sync":
 		return c.workspaceGuard.GuardSyncRequiresShipment(waveID)
+	default:
+		return fmt.Errorf("unknown step key: %s", stepKey)
 	}
-	return nil
 }

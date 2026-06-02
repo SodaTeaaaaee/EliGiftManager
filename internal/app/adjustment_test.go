@@ -231,6 +231,10 @@ func (m *mockWaveRepoForAdjustment) DeleteParticipantsByWave(waveID uint) error 
 	return nil
 }
 
+func (m *mockWaveRepoForAdjustment) CountByDatePrefix(_ string) (int, error) {
+	return 0, nil
+}
+
 // ── helpers ──
 
 type adjustmentTestSetup struct {

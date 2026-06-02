@@ -26,8 +26,9 @@ async function loadMergeSettings() {
     mergeSettings.autoMergeCrossPlatform = res.autoMergeCrossPlatform;
     mergeSettings.autoMergeByEmail = res.autoMergeByEmail;
     mergeSettings.autoMergeByPhone = res.autoMergeByPhone;
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 
@@ -39,8 +40,9 @@ async function handleSaveSettings() {
       autoMergeByPhone: mergeSettings.autoMergeByPhone,
     });
     message.success(t("settings.saveSettingsSuccess"));
-  } catch (e: any) {
-    message.error(e?.message ?? String(e));
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 

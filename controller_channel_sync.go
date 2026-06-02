@@ -548,6 +548,7 @@ func buildExecutorRegistry() *app.ExecutorRegistry {
 	}
 	registry := app.NewExecutorRegistry()
 	registry.Register(app.NewDocumentExportExecutor(exportsDir))
+	registry.Register(app.NewCSVExportExecutor(exportsDir))
 	return registry
 }
 

@@ -75,7 +75,10 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 		return rules[i].Priority < rules[j].Priority
 	})
 	for _, r := range rules {
-		selectorJSON, _ := json.Marshal(r.SelectorPayload)
+		selectorJSON, err := json.Marshal(r.SelectorPayload)
+		if err != nil {
+			return "", fmt.Errorf("marshal selector payload for rule %d: %w", r.ID, err)
+		}
 		fmt.Fprintf(h, "R:%d:%d:%s:%d:%t:%s;",
 			r.ProductID, r.ContributionQuantity, r.RuleKind, r.Priority, r.Active, selectorJSON)
 	}

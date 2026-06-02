@@ -51,12 +51,14 @@ func (r *channelSyncRepository) SaveJob(job *domain.ChannelSyncJob) error {
 	existing.BasisPayloadSnapshot = job.BasisPayloadSnapshot
 
 	if job.StartedAt != "" {
-		t, _ := time.Parse(time.RFC3339, job.StartedAt)
-		existing.StartedAt = &t
+		if t, err := time.Parse(time.RFC3339, job.StartedAt); err == nil {
+			existing.StartedAt = &t
+		}
 	}
 	if job.FinishedAt != "" {
-		t, _ := time.Parse(time.RFC3339, job.FinishedAt)
-		existing.FinishedAt = &t
+		if t, err := time.Parse(time.RFC3339, job.FinishedAt); err == nil {
+			existing.FinishedAt = &t
+		}
 	}
 
 	if err := r.db.Save(&existing).Error; err != nil {

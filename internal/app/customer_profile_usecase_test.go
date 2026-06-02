@@ -59,7 +59,8 @@ func setupUsecase(t *testing.T, db *gorm.DB) (*CustomerProfileUseCase, ProfileMe
 
 	settingsSvc := service.NewSettingsService()
 
-	cpUseCase := NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, db)
+	suggestionRepo := infra.NewMergeSuggestionRepository(db)
+	cpUseCase := NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, suggestionRepo)
 	mergeUseCase := NewProfileMergeUseCase(profileRepo, addressRepo, demandRepo, waveRepo, fulfillmentRepo)
 
 	return cpUseCase, mergeUseCase

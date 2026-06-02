@@ -31,7 +31,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	}
 
 	db, err := gorm.Open(sqlite.Open(cleanedPath), &gorm.Config{
-		DisableForeignKeyConstraintWhenMigrating: true,
+		DisableForeignKeyConstraintWhenMigrating: false,
 		Logger:                                   logger.Default.LogMode(logger.Error),
 	})
 	if err != nil {
@@ -45,6 +45,10 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: ping failed: %w", err)
 	}
+
+	// SQLite single-writer model: limit to 1 connection.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
 
 	// Performance and integrity PRAGMAs.
 	db.Exec("PRAGMA journal_mode = WAL;")

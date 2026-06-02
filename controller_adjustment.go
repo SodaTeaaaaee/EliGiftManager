@@ -95,6 +95,10 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 		return dto.FulfillmentAdjustmentDTO{}, err
 	}
 
+	return domainToFulfillmentAdjustmentDTO(*adj), nil
+}
+
+func domainToFulfillmentAdjustmentDTO(adj domain.FulfillmentAdjustment) dto.FulfillmentAdjustmentDTO {
 	return dto.FulfillmentAdjustmentDTO{
 		ID:                        adj.ID,
 		WaveID:                    adj.WaveID,
@@ -111,7 +115,7 @@ func (c *AdjustmentController) RecordAdjustment(input dto.RecordAdjustmentInput)
 		EvidenceRef:               adj.EvidenceRef,
 		CreatedAt:                 adj.CreatedAt,
 		UpdatedAt:                 adj.UpdatedAt,
-	}, nil
+	}
 }
 
 func (c *AdjustmentController) ListAdjustmentsByWave(waveID uint) ([]dto.FulfillmentAdjustmentDTO, error) {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, provide, onMounted, watch } from 'vue'
+import { computed, ref, provide, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   useMessage,
@@ -83,9 +83,6 @@ watch(
   { immediate: true },
 )
 
-onMounted(() => {
-  void loadWorkspaceSnapshot()
-})
 
 const stageTagType = computed(() => {
   switch (workspaceSnapshot.value?.projectedLifecycleStage) {

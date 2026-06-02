@@ -106,6 +106,13 @@ func (m *mockProfileRepoForIdentity) DeleteIdentity(id uint) error {
 	return nil
 }
 
+func (m *mockProfileRepoForIdentity) Update(p *domain.CustomerProfile) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.profiles[p.ID] = p
+	return nil
+}
+
 func TestResolveOrCreateNewProfile(t *testing.T) {
 	t.Parallel()
 	repo := newMockProfileRepoForIdentity()

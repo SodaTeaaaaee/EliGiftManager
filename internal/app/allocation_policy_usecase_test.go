@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -119,6 +120,18 @@ func (m *policyWaveRepo) DeleteParticipantsByWave(waveID uint) error {
 	defer m.mu.Unlock()
 	delete(m.participants, waveID)
 	return nil
+}
+
+func (m *policyWaveRepo) CountByDatePrefix(prefix string) (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	count := 0
+	for _, w := range m.waves {
+		if len(w.WaveNo) >= len(prefix) && w.WaveNo[:len(prefix)] == prefix {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // policyRuleRepo is a mock AllocationPolicyRuleRepository with full CRUD.
@@ -571,10 +584,11 @@ func TestCreateRule_And_ListRulesByWave(t *testing.T) {
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
+	selectorJSON, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
 	input := dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
-		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		SelectorPayload:      selectorJSON,
 		ProductTargetRef:     "product:10",
 		ContributionQuantity: 5,
 		RuleKind:             "entitlement",
@@ -623,10 +637,11 @@ func TestUpdateRule(t *testing.T) {
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
 	// Create a rule first
+	selectorJSON2, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
 	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
-		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		SelectorPayload:      selectorJSON2,
 		ContributionQuantity: 5,
 		RuleKind:             "entitlement",
 		Priority:             1,
@@ -664,10 +679,11 @@ func TestDeleteRule(t *testing.T) {
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
+	selectorJSON3, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
 	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
-		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		SelectorPayload:      selectorJSON3,
 		ContributionQuantity: 5,
 		RuleKind:             "entitlement",
 		Priority:             1,
@@ -700,10 +716,11 @@ func TestCreateRuleRejectsProductFromDifferentWave(t *testing.T) {
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
+	selectorJSON4, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
 	_, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
-		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		SelectorPayload:      selectorJSON4,
 		ContributionQuantity: 1,
 		RuleKind:             "entitlement",
 		Priority:             1,
@@ -727,10 +744,11 @@ func TestUpdateRuleRejectsProductFromDifferentWave(t *testing.T) {
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
+	selectorJSON5, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
 	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
-		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
+		SelectorPayload:      selectorJSON5,
 		ContributionQuantity: 1,
 		RuleKind:             "entitlement",
 		Priority:             1,

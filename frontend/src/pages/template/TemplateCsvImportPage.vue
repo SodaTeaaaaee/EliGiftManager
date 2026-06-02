@@ -104,8 +104,9 @@ async function doImport() {
     });
     lastResult.value = result;
     message.success(t("csvImport.importSuccess"));
-  } catch (e: any) {
-    message.error(e?.toString() ?? "Import failed");
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    message.error(msg);
   }
 }
 

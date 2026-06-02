@@ -184,8 +184,8 @@ async function loadTemplates() {
   loading.value = true;
   try {
     templates.value = await listDocumentTemplates();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
   }
@@ -209,8 +209,8 @@ async function submitForm() {
     successMsg.value = "Template created";
     drawerVisible.value = false;
     await loadTemplates();
-  } catch (e: any) {
-    error.value = e?.message ?? String(e);
+  } catch (e: unknown) {
+    error.value = e instanceof Error ? e.message : String(e);
   } finally {
     submitting.value = false;
   }

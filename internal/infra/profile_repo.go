@@ -23,6 +23,12 @@ func (r *profileRepository) Create(profile *domain.CustomerProfile) error {
 	return nil
 }
 
+func (r *profileRepository) Update(profile *domain.CustomerProfile) error {
+	p := persistence.ToPersistenceCustomerProfile(profile)
+	p.ID = profile.ID
+	return r.db.Save(p).Error
+}
+
 func (r *profileRepository) FindByID(id uint) (*domain.CustomerProfile, error) {
 	var p persistence.CustomerProfile
 	if err := r.db.First(&p, id).Error; err != nil {
