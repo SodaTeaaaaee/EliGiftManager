@@ -20,6 +20,7 @@ import { dto } from "@/../wailsjs/go/models";
 
 const props = defineProps<{
   snapshot?: dto.WaveWorkspaceSnapshotDTO | null;
+  collapsed?: boolean;
 }>();
 
 const route = useRoute();
@@ -390,8 +391,8 @@ const stageTagType = computed(() => {
 </script>
 
 <template>
-  <div class="wave-workspace-sidebar">
-    <div class="wave-sidebar-header">
+  <div class="wave-workspace-sidebar" :class="{ 'is-collapsed': props.collapsed }">
+    <div v-if="!props.collapsed" class="wave-sidebar-header">
       <div class="app-kicker">Wave Workspace</div>
       <div class="wave-title" :title="snapshot?.wave?.name">
         {{ snapshot?.wave?.name || "Loading..." }}
@@ -436,9 +437,12 @@ const stageTagType = computed(() => {
         :options="menuOptions"
         :value="currentMenuKey"
         :default-expanded-keys="expandedKeys"
+        :collapsed="props.collapsed"
+        :collapsed-width="64"
+        :collapsed-icon-size="20"
         @update:value="handleMenuUpdateValue"
         class="wave-sidebar-menu"
-        :indent="20"
+        :indent="props.collapsed ? 0 : 20"
       />
     </div>
   </div>
@@ -448,7 +452,8 @@ const stageTagType = computed(() => {
 .wave-workspace-sidebar {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
   background: var(--surface-strong);
   border-right: 1px solid rgba(148, 163, 184, 0.12);
   padding: 16px 0;
@@ -510,15 +515,32 @@ const stageTagType = computed(() => {
   padding: 0 8px;
 }
 
+.wave-workspace-sidebar.is-collapsed .wave-menu-container {
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* Naive UI does not hide group titles when collapsed — suppress them so the
+   64px rail shows icons only (otherwise the labels wrap / overflow). */
+:deep(.n-menu--collapsed .n-menu-item-group-title) {
+  display: none;
+}
+
 :deep(.n-menu-item-content) {
   border-radius: 8px;
   margin-bottom: 2px;
 }
 
 :deep(.n-menu-item-content.n-menu-item-content--selected) {
-  background: var(--accent-surface);
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Recolor Naive UI's own inset selection pill instead of stacking a second,
+   full-width background on the content element (which produced two
+   differently-sized selection layers). */
+:deep(.n-menu-item-content.n-menu-item-content--selected::before) {
+  background-color: var(--accent-surface) !important;
 }
 
 :deep(.n-menu-item-group-title) {

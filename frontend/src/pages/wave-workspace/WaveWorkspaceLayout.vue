@@ -20,12 +20,14 @@ import { useUndoRedo } from '@/shared/composables/useUndoRedo'
 import { getWaveWorkspaceSnapshot } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
 import { useI18n } from '@/shared/i18n'
+import { useSidebarStore } from '@/shared/model/sidebar'
 import WaveHistoryPanel from './WaveHistoryPanel.vue'
 
 const route = useRoute()
 const router = useRouter()
 const message = useMessage()
 const { t } = useI18n()
+const sidebar = useSidebarStore()
 
 const waveId = computed(() => {
   const id = Number(route.params.waveId)
@@ -109,20 +111,25 @@ function openHistoryTreeSubpage() {
   <n-layout has-sider class="wave-workspace-layout">
     <n-layout-sider
       bordered
+      collapse-mode="width"
       :width="280"
+      :collapsed-width="64"
+      :collapsed="sidebar.waveCollapsed"
+      show-trigger="arrow-circle"
       content-style="background: transparent;"
       style="background: transparent;"
+      @update:collapsed="sidebar.setWaveCollapsed"
     >
       <div class="sidebar-wrapper">
-        <div class="sidebar-top-actions">
+        <div class="sidebar-top-actions" :class="{ 'is-collapsed': sidebar.waveCollapsed }">
           <NButton text class="back-btn" @click="router.push('/waves')">
             <template #icon>
               <NIcon><ArrowBackOutline /></NIcon>
             </template>
-            {{ t('wave.returnToQueue') }}
+            <span v-if="!sidebar.waveCollapsed">{{ t('wave.returnToQueue') }}</span>
           </NButton>
         </div>
-        <WaveWorkspaceSidebar :snapshot="workspaceSnapshot" />
+        <WaveWorkspaceSidebar :snapshot="workspaceSnapshot" :collapsed="sidebar.waveCollapsed" />
       </div>
     </n-layout-sider>
 
@@ -206,9 +213,16 @@ function openHistoryTreeSubpage() {
 }
 
 .sidebar-top-actions {
+  flex-shrink: 0;
   padding: 12px 20px;
   background: var(--surface-strong);
   border-right: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.sidebar-top-actions.is-collapsed {
+  padding: 12px 0;
+  display: flex;
+  justify-content: center;
 }
 
 :root[data-theme='dark'] .sidebar-top-actions {
