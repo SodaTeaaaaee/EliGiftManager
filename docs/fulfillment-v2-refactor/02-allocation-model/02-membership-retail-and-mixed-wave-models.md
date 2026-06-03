@@ -1,152 +1,35 @@
 # 会员、零售与混合波次模型
 
-本文件定义三类波次在统一工作流中的不同入口方式，重点说明为什么会员与零售不能共享同一种初始分配方式。
+> 三类波次在统一工作流中的不同入口方式。
 
-### 7.0 分配工作流的统一结构
+## 统一三层结构
 
-无论来源是会员权益还是零售订单，V2 都建议把“生成最终履约结果”的过程拆成三层。
+| 层 | 会员权益型 | 零售订单型 |
+|----|-----------|-----------|
+| 初始分配层 | `policy_driven`（规则推导） | `demand_driven`（需求行直入） |
+| 调整层 | 人工协商/赠送/补发/减送 | 同左 |
+| 最终履约层 | `FulfillmentLine` | 同左 |
 
-1. 初始分配层
+两者可进入同一波次，但不应被强迫使用同一种初始分配引擎。
 
-回答：
+### 边界
 
-- “第一版履约结果从哪里来？”
+1. 动态集合规则属于 `Membership Allocation`，不属于共享调整层
+2. 有符号数量可存在于规则贡献和调整 delta，但最终执行结果不为负
 
-会员权益型需求：
+## 会员权益型波次
 
-- 主要来自规则推导
+导入权益数据 → `DemandDocument/DemandLine` → 判断 `EntitlementAuthority` + `ObligationTriggerKind` → 采集 `RecipientInputState` → 记录 `RoutingDisposition` → 生成 `WaveParticipantSnapshot` → 导入商品 → 配置 `AllocationPolicyRule` → `ReconcileWave` 生成 `FulfillmentLine` → `Wave Overview` → `Adjustment Review` → 地址校验 → 导出 `SupplierOrder` → 导入 `Shipment` → `ChannelSyncJob`/人工闭环 → 关闭
 
-零售订单型需求：
+`excluded_manual` = 本系统不接手 ≠ 系统拥有外部履约完成真相。
 
-- 主要来自上游需求行直入
+## 零售订单型波次
 
-2. 调整层
+导入订单 → `DemandDocument/DemandLine` → 记录 `eligibility_context_ref`（如有） → `RoutingDisposition` → 归并 `CustomerProfile` → `Demand Mapping` 生成 `FulfillmentLine` → `Wave Overview` → `Adjustment Review` → 地址校验 → 导出 → 发货回传 → 渠道回填 → 关闭
 
-回答：
+## 混合波次
 
-- “在第一版履约结果之上，还做了哪些修正？”
-
-这层负责承接：
-
-- 人工协商
-- 赠送
-- 补发
-- 减送
-- 替换
-
-3. 最终履约层
-
-回答：
-
-- “最终到底发什么？”
-
-这层统一收敛到 `FulfillmentLine`。
-
-### 7.0.1 会员与零售不应该共用同一种初始分配方式
-
-V2 的目标是“最终收敛”，不是“前置步骤强统一”。
-
-因此：
-
-- 会员权益型需求主要走 `policy_driven`
-- 零售订单型需求主要走 `demand_driven`
-
-两者都可以进入同一波次，也都可以进入同一套最终履约真相，但不应被强迫使用同一种初始分配引擎。
-
-这里还要再补两条当前已经明确的边界：
-
-1. 动态集合规则属于 `Membership Allocation`
-
-- 如果某个动作想表达“某类身份以后都一起变化”
-- 它属于规则层
-- 不属于共享调整层
-
-2. 有符号数量不应直接混入最终执行真相
-
-- 规则贡献可以是正负
-- 共享调整 delta 也可以是正负
-- 但最终进入执行链的履约结果不应保留负数
-
-### 7.1 会员权益型波次
-
-目标链路：
-
-1. 导入权益来源数据，生成 `DemandDocument/DemandLine`
-2. 判断 `EntitlementAuthority`
-3. 判断 `ObligationTriggerKind`
-4. 采集或等待 `RecipientInputState`
-5. 记录 `RoutingDisposition`
-6. 对 `accepted` 的项生成 `WaveParticipantSnapshot`
-7. 导入商品
-8. 在规则编辑器中配置 `AllocationPolicyRule`
-9. 仅对已具备执行条件的项，通过 `ReconcileWave` 生成第一版 `FulfillmentLine`
-10. 进入 `Wave Overview` 统一查看聚合结果、阻塞项与分流建议
-11. 如有必要，返回规则编辑器修正默认生成逻辑
-12. 如有必要，进入共享调整层做当前波次最终履约例外修正
-13. 如无需进一步编辑，可直接进入后续执行准备阶段
-14. 绑定地址或补全最终执行参数
-15. 生成并导出 `SupplierOrder`
-16. 导入工厂发货回传，生成 `Shipment`
-17. 将 `Shipment` 转换为来源渠道回填任务
-18. 按来源渠道能力决定是否执行 `ChannelSyncJob`
-19. 波次关闭
-
-这里需要特别强调：
-
-- `excluded_manual` 表示本系统这次不接手处理
-- 不表示本系统拥有系统外履约完成真相
-
-### 7.2 零售订单型波次
-
-目标链路：
-
-1. 导入零售订单
-2. 生成 `DemandDocument/DemandLine`
-3. 如有会员限定购买，记录 `eligibility_context_ref`
-4. 判断 `ObligationTriggerKind`
-5. 记录 `RoutingDisposition`
-6. 对 `accepted` 的项进入本系统流程
-7. 归并买家资料到 `CustomerProfile/Identity`
-8. 生成 `WaveParticipantSnapshot`
-9. 从 `DemandLine` 直接或半自动生成第一版 `FulfillmentLine`
-10. 进入 `Wave Overview` 统一查看聚合结果、阻塞项与分流建议
-11. 如有必要，返回映射页修正默认生成逻辑
-12. 如有必要，进入共享调整层做当前波次最终履约例外修正
-13. 如无需进一步编辑，可直接进入后续执行准备阶段
-14. 地址校验
-15. 生成并导出 `SupplierOrder`
-16. 导入工厂发货回传，生成 `Shipment`
-17. 转换并回填来源渠道
-18. 波次关闭
-
-### 7.3 混合波次
-
-系统应允许同一个波次同时承接：
-
-- 会员权益履约行
-- 零售订单履约行
-
-同时系统也应允许同一次导入或同一份需求快照里存在：
-
-- 已进入本系统的项
-- 暂缓进入本系统的项
-- 明确不由本系统处理的项
-
-混合波次的推荐收敛顺序是：
-
-1. 会员需求先经过 `Membership Allocation`
-2. 零售需求先经过 `Demand Mapping`
-3. 再进入共享的 `Wave Overview` 统一看问题应该回哪一页
-4. 只有当前波次最终履约例外，才进入共享调整层
-5. 无需进一步编辑时，直接进入后续执行准备阶段
-
-但必须在行级保持来源可追踪：
-
-- 哪条履约行来自哪类上游需求
-- 哪条履约行是否需要回填来源渠道
-- 哪条履约行来自同一来源渠道的哪个业务面
-
-而在履约行之外，还应有单独统计说明：
-
-- 哪些需求未纳入本系统处理
-- 这些未纳入项是 `deferred`、`excluded_manual`、`excluded_duplicate` 还是 `excluded_revoked`
+- `Membership Allocation` 与 `Demand Mapping` 分别开放，写入同一套 `FulfillmentLine`
+- 共享 `Wave Overview` → `Adjustment Review` → 后续执行链路
+- 行级保持来源可追踪（哪条来自哪类需求、是否需要回填）
+- 单独统计未纳入项（`deferred`/`excluded_manual`/`excluded_duplicate`/`excluded_revoked`）

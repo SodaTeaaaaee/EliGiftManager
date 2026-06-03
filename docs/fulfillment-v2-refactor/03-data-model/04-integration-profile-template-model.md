@@ -1,200 +1,27 @@
 # 集成配置、Profile 与模板模型
 
-本文件整理配置与集成层的数据结构，解释为什么 `IntegrationProfile` 是后续模板系统升级的宿主。
+> 配置与集成层数据结构。
 
-### 5.9 配置与集成层
+## IntegrationProfile
 
-这一层是 V2 相比当前系统新增的重要抽象，用来承接“来源渠道 / 业务面 / 能力 / 模板绑定”的配置。
+来源业务面的统一配置入口。`profile_key` = `<source_channel>.<source_surface>`。
 
-#### IntegrationProfile
+核心字段分三层：
 
-建议新增。
+1. **语义策略**：`demand_kind`、`initial_allocation_strategy`、`identity_strategy`、`entitlement_authority_mode`、`recipient_input_mode`、`reference_strategy`、`tracking_sync_mode`、`closure_policy`
+2. **正交能力**：`supports_partial_shipment`、`supports_api_import`、`supports_api_export`、`requires_carrier_mapping`、`requires_external_order_no`、`allows_manual_closure`
+3. **外部实现**：`connector_key`、`IntegrationProfileTemplateBinding`
 
-它是当前模板系统的上位概念，不是模板本身。
+其他：`profile_key`、`source_channel`、`source_surface`、`supported_locales`、`default_locale`、`extra_data`、时间戳。
 
-建议字段：
+不保留匿名 `capabilities` blob。复杂平台差异下沉到 connector/service 层。
 
-- `id`
-- `profile_key`
-  - 例如 `patreon.membership`
-  - 例如 `patreon.shop_purchase`
-  - 例如 `gumroad.one_time_order`
-  - 例如 `fanbox.support_plan`
-  - 例如 `fanbox.supporter_only_purchase`
-  - 例如 `bilibili.live_support`
-  - 例如 `bilibili.creator_commerce`
-- `source_channel`
-- `source_surface`
-- `demand_kind`
-  - `membership_entitlement`
-  - `retail_order`
-- `initial_allocation_strategy`
-  - `policy_driven`
-  - `demand_driven`
-- `identity_strategy`
-  - `platform_uid`
-  - `email`
-  - `external_buyer_id`
-- `entitlement_authority_mode`
-  - `local_policy`
-  - `upstream_platform`
-  - `manual_grant_only`
-- `recipient_input_mode`
-  - `none`
-  - `platform_claim`
-  - `external_form`
-  - `manual_collection`
-- `reference_strategy`
-  - `member_level`
-  - `order_level`
-  - `order_line_level`
-- `tracking_sync_mode`
-  - `api_push`
-  - `document_export`
-  - `manual_confirmation`
-  - `unsupported`
-- `closure_policy`
-  - `close_after_sync`
-  - `close_after_manual_confirmation`
-  - `close_after_shipment`
-- `supports_partial_shipment`
-- `supports_api_import`
-- `supports_api_export`
-- `requires_carrier_mapping`
-- `requires_external_order_no`
-- `allows_manual_closure`
-- `connector_key`
-- `supported_locales`
-- `default_locale`
-- `extra_data`
-- `created_at`
-- `updated_at`
+## DocumentTemplate
 
-说明：
+文档字段映射配置。字段：`id`、`template_key`、`document_type`（`import_entitlement`/`import_sales_order`/`import_product_catalog`/`export_supplier_order`/`import_supplier_shipment`/`export_source_tracking_update`）、`format`（`csv`/`xlsx`/`json`/`api_payload`）、`mapping_rules`、`extra_data`、时间戳。
 
-- `IntegrationProfile` 回答的是“这个来源业务面整体怎么工作”
-- 它不是某一个导入 CSV 的字段映射
-- 同一个 `source_channel` 可以挂多个 `IntegrationProfile`
-- `profile_key` 是系统内部稳定业务语言，不要求照抄平台官方命名，但必须与官方业务面语义一致
-- `tracking_sync_mode` 和 `closure_policy` 用来避免系统继续靠平台印象推断闭环逻辑
-- `entitlement_authority_mode` 用来约束本系统是否应自行判定权益成立
-- `recipient_input_mode` 用来说明该业务面通常通过什么方式补齐领取参数
-- `initial_allocation_strategy` 用来说明该业务面默认走规则推导还是需求直入
-- `supports_* / requires_* / allows_*` 只应用于不与 strategy 字段重复的正交能力
-- `connector_key` 用来把 profile 绑定到真实的连接器/适配器实现
-- `supported_locales` 和 `default_locale` 用来描述该业务面在 UI / 模板 / 导出展示上支持哪些语言
-- 这些语言字段不应影响核心业务 code 的稳定性
+## IntegrationProfileTemplateBinding
 
-### 5.9.1 Profile 收敛原则
+一个 Profile 可绑定多个不同用途的模板（需求导入、工厂导出、发货回传、物流回填）。
 
-从设计模式角度看，`IntegrationProfile` 更适合被收敛成三层信息：
-
-1. 语义策略字段
-
-- `demand_kind`
-- `initial_allocation_strategy`
-- `entitlement_authority_mode`
-- `recipient_input_mode`
-- `tracking_sync_mode`
-- `closure_policy`
-- `reference_strategy`
-
-2. 正交能力标记
-
-- `supports_partial_shipment`
-- `supports_api_import`
-- `supports_api_export`
-- `requires_carrier_mapping`
-- `requires_external_order_no`
-- `allows_manual_closure`
-
-3. 外部实现绑定
-
-- `connector_key`
-- `IntegrationProfileTemplateBinding`
-
-这意味着：
-
-- 不再保留一个语义不清的通用 `capabilities` blob
-- 不再同时保留会重复表达 strategy 的布尔字段
-- 复杂平台差异优先下沉到 connector / service 层，而不是继续堆到 Profile
-
-### 5.9.2 收敛后可能损失的表达力与补偿方案
-
-Profile 收敛后，最容易让人担心的是“会不会表达不了复杂平台差异”。
-
-当前更稳妥的补偿方式，不是把 `capabilities` 再塞回来，而是补以下模式化结构：
-
-1. `Connector`
-
-- 负责真实导入、导出、回填协议差异
-- 负责 API / CSV / 手工上传的具体执行
-- 负责复杂失败处理、重试和平台特殊校验
-
-2. `CarrierMappingProfile`
-
-- 当某业务面需要复杂承运商映射时
-- 不应把大量 carrier 规则压回 `IntegrationProfile`
-- 更适合单独作为连接器依赖的映射对象或模板子对象
-
-3. `ProfileCapabilityExtension`
-
-- 如果未来确实出现少量、稳定、不可下沉到 connector 的额外能力声明
-- 更适合增加命名清晰的新字段
-- 或增加一张结构化扩展表
-- 不建议重新回到匿名 `capabilities` blob
-
-#### DocumentTemplate
-
-建议作为 `TemplateConfig` 的未来语义方向保留。
-
-建议字段：
-
-- `id`
-- `template_key`
-- `document_type`
-  - `import_entitlement`
-  - `import_sales_order`
-  - `import_product_catalog`
-  - `export_supplier_order`
-  - `import_supplier_shipment`
-  - `export_source_tracking_update`
-- `format`
-  - `csv`
-  - `xlsx`
-  - `json`
-  - `api_payload`
-- `mapping_rules`
-- `extra_data`
-- `created_at`
-- `updated_at`
-
-说明：
-
-- `DocumentTemplate` 只负责文档字段结构
-- 它不负责决定需求类型、业务面和平台能力
-- 如果同一业务面需要中英两套模板，推荐通过不同 `locale` 版本或不同 `template_key` 表达，而不是把翻译文本塞进业务判断
-
-#### IntegrationProfileTemplateBinding
-
-建议新增。
-
-建议字段：
-
-- `id`
-- `integration_profile_id`
-- `document_type`
-- `template_id`
-- `is_default`
-- `created_at`
-
-说明：
-
-- 一个 `IntegrationProfile` 应允许绑定多个不同用途的模板
-- 例如同一个 profile 同时绑定：
-  - 需求导入模板
-  - 工厂导出模板
-  - 工厂发货回传模板
-  - 来源渠道物流回填模板
-
----
+字段：`id`、`integration_profile_id`、`document_type`、`template_id`、`is_default`、`created_at`。

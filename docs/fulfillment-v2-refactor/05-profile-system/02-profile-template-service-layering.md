@@ -1,141 +1,32 @@
 # Profile、模板与 Service 的分层
 
-本文件定义 profile、模板、service 三层分工，以及为什么 profile 应作为模板系统的上层。
+## 三层分工
 
-### 9.3 Profile、模板、Service 的三层分工
+| 层 | 职责 | 模式 |
+|----|------|------|
+| `IntegrationProfile` | 来源业务面定义、需求类型、策略、能力、闭环策略、连接器绑定 | Strategy Selection + Capability Declaration |
+| `DocumentTemplate` | 文档字段映射、列顺序、CSV/Excel/JSON 结构 | Document Schema / Mapping |
+| Service/Handler | 真实业务逻辑、导入/导出/回填/重试/异常 | Adapter + Process Logic |
 
-V2 推荐明确三层结构：
+## Profile 是模板的上层
 
-1. `IntegrationProfile`
+同一业务面需要多个模板（需求导入、工厂导出、发货回传、物流回填）。一个 Profile 绑定多个 Template。
 
-- 定义来源业务面
-- 定义需求类型
-- 定义默认初始履约策略
-- 定义义务触发方式
-- 定义权益判定权威
-- 定义领取/表单/协商输入模式
-- 定义少量正交能力边界
-- 定义闭环策略
-- 绑定连接器实现
-- 选择应绑定的模板集合
+V2 首版直接升级为 profile-centric 入口，不长期并行旧模板入口。
 
-2. `DocumentTemplate`
+## 模板与连接器分离
 
-- 定义具体文档字段映射
-- 定义列顺序
-- 定义 CSV / Excel / JSON 结构
+- 模板：字段映射、列顺序、CSV/Excel 结构
+- 连接器：平台真实交互、API/CSV/手工上传差异、失败处理
 
-3. `Service / Handler`
+Profile 声明"支持什么"，不承担"具体怎么做"。
 
-- 执行真实业务逻辑
-- 处理导入、导出、回填、重试、异常分支
+## Profile 与模板编辑接入统一历史
 
-这三层的关系应当是：
+全应用共用 history 基础设施，优先做稳 `wave` scope。Profile 编辑有自己的 `HistoryScope(scope_type = template)`。
 
-- Profile 决定“怎么理解这个来源”
-- Template 决定“怎么读写这个来源的文档”
-- Service 决定“实际怎么执行这套流程”
+## Profile 版本演进策略
 
-从模式角度看，更准确地说：
-
-- Profile 更接近 `Strategy Selection + Capability Declaration`
-- Template 更接近 `Document Schema / Mapping`
-- Connector / Service 更接近 `Adapter + Process Logic`
-
-### 9.4 为什么 Profile 是模板系统的上层
-
-同一个来源业务面往往不只需要一个模板。
-
-例如：
-
-- 一个 `bilibili.creator_commerce` profile 可能需要：
-  - 订单导入模板
-  - 工厂导出模板
-  - 工厂发货回传模板
-  - 物流回填模板
-
-这意味着：
-
-- 模板是文档级对象
-- Profile 是来源业务面级对象
-
-因此更合理的结构是：
-
-- 一个 Profile 绑定多个 Template
-- 而不是让一个 Template 自己承担全部业务职责
-
-这里还要补一个当前阶段的产品决策：
-
-- V2 首版不计划继续保留“旧模板入口”和“新 profile 入口”长期并行
-- 更推荐直接把入口升级成 profile-centric 的配置方式
-- 模板仍然存在，但它退回到 profile 下面的文档结构子层
-
-### 9.5 模板与连接器分离
-
-后续架构里必须明确：
-
-- 模板：
-  - 负责字段映射
-  - 负责列顺序
-  - 负责 CSV/Excel 结构解释
-- 连接器：
-  - 负责平台真实交互实现
-  - 负责导入导出方式
-  - 负责 API / CSV / 手工上传差异
-  - 负责复杂平台特例与协议级失败处理
-
-这里还应补一条边界：
-
-- Profile 可以声明“支持什么”
-- 但不应承担“具体怎么做”
-- 否则会重新长成万能低代码系统
-
-### 9.5.1 Profile 与模板编辑也应接入统一工作区历史
-
-当前已经确认：
-
-- 全应用最终应共用同一套工作区 history 基础设施
-- 但接入优先级应先做稳 `wave`
-
-这意味着 Profile / 模板编辑页在目标架构里也不应继续依赖纯前端临时状态。
-
-更稳妥的方向是：
-
-- Profile 编辑页拥有自己的 `HistoryScope(scope_type = template)` 或等价 scope
-- 模板字段映射编辑也通过 `HistoryNode` 记录“用户意图级操作”
-- 默认交互仍保持轻量
-- 但底层可复用同一套树状分支、checkpoint、pin 语义
-
-这里还要再补一条边界：
-
-- Profile 配置的修改，不应自动伪装成已经回滚了历史波次的外部执行结果
-- 已存在的 `SupplierOrder / Shipment / ChannelSyncJob` 仍然依赖它们各自创建时的 basis
-- Profile 变更更适合影响未来导入导出解释，或在用户显式重算当前工作区时生效
-
-### 9.5.2 Profile 版本演进策略
-
-当 `IntegrationProfile` 的 strategy/capability 需要变更时：
-
-1. **已关闭波次不受影响**
-
-- 已关闭的波次保留创建时的 profile 语义快照
-- 通过 `DemandDocument.integration_profile_id` + 当时的 `raw_payload` 保留解释依据
-- Profile 变更不回溯影响已关闭波次的任何数据
-
-2. **活跃波次使用绑定版本**
-
-- 活跃波次继续使用创建时绑定的 profile 行为
-- 直到用户显式触发"刷新 profile"操作
-- 刷新操作本身作为一个 `HistoryNode`，可撤销
-
-3. **首版不引入显式版本号**
-
-- 不引入 `profile_version` 或 `profile_snapshot_at` 字段
-- 通过 `DemandDocument` 上已有的 `integration_profile_id` + `raw_payload` 保留当时的解释依据
-- 如果未来 profile 变更频繁且需要精确追溯，再考虑引入显式版本号
-
-理由：
-
-- 过早引入显式版本号会增加用户的认知负担
-- 当前阶段 profile 变更频率低，不需要精确版本追溯
-- `raw_payload` 已经足够保留当时的解释上下文
+- **已关闭波次**：不受 profile 变更影响
+- **活跃波次**：使用创建时绑定的 profile，直到用户显式刷新（刷新作为 `HistoryNode`，可撤销）
+- **首版不引入版本号**：通过 `DemandDocument.integration_profile_id` + `raw_payload` 保留解释依据

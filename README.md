@@ -63,6 +63,9 @@ Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths
 | `ProfileController`         | Integration profile configuration                           |
 | `TemplateController`        | Document template and binding management                    |
 | `AllocationPolicyController`| Policy-driven allocation rules                              |
+| `AddressController`         | Customer address management                                 |
+| `CustomerProfileController` | Customer profile CRUD                                       |
+| `MergeController`           | Customer profile merge suggestions                          |
 
 ## Core Workflow
 
@@ -111,4 +114,7 @@ cd frontend && deno task preview      # preview production build
 
 ## Documentation
 
-Detailed V2 design documentation is in `docs/fulfillment-v2-refactor/`.
+- [`docs/PROJECT-STRUCTURE.md`](docs/PROJECT-STRUCTURE.md) — Code structure, layering, architecture principles
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — Dev commands, code style, testing
+- [`docs/PRODUCT-DOMAIN-AND-PAIN-POINTS.md`](docs/PRODUCT-DOMAIN-AND-PAIN-POINTS.md) — Business domain, demand types, platform model, pain points
+- [`docs/fulfillment-v2-refactor/`](docs/fulfillment-v2-refactor/) — Fulfillment redesign docs (boundaries, data model, workflows, profile system, non-functional foundations)

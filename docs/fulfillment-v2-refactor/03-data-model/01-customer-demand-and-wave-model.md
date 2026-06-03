@@ -1,478 +1,75 @@
 # 客户、需求与波次模型
 
-本文件覆盖全局客户层、上游需求层、波次层，以及分配与规则语义层，是 V2 数据模型的前半部分。
-
-### 5.1 全局层
-
-#### CustomerProfile
-
-建议字段：
-
-- `id`
-- `display_name`
-- `profile_type`
-  - `member`
-  - `buyer`
-  - `mixed`
-  - `manual`
-- `extra_data`
-- `created_at`
-- `updated_at`
-
-说明：
-
-- 当前 `Member` 仅可作为存储层桥接实现；如果相关代码可以一次到位，就应直接使用目标语义
-- 不再把“会员”视为唯一客体
-
-#### CustomerIdentity
-
-建议字段：
+> V2 数据模型前半部分：全局客户层、上游需求层、波次层、分配语义层。
+> 当前实现见 `internal/domain/models.go`。
 
-- `id`
-- `customer_profile_id`
-- `identity_platform`
-- `identity_value`
-- `identity_type`
-  - `platform_uid`
-  - `email`
-  - `username`
-  - `external_buyer_id`
-- `is_primary`
-- `extra_data`
-- `created_at`
-- `updated_at`
-
-说明：
-
-- 这是对当前 `(platform, platform_uid)` 单一身份结构的泛化
-- 一个客户可能同时有多个身份来源
-
-#### CustomerAddress
-
-可在当前 `MemberAddress` 基础上扩展，建议继续保留：
-
-- 历史
-- 默认地址
-- 测试地址
-- 软删除
-- 标签化备注
-
-未来可新增：
-
-- `normalized_region`
-- `postal_code`
-- `country_code`
-- `validation_status`
-
-### 5.2 上游需求层
-
-#### DemandDocument
-
-建议字段：
-
-- `id`
-- `kind`
-  - `membership_entitlement`
-  - `retail_order`
-- `capture_mode`
-  - `document_import`
-  - `api_ingest`
-  - `manual_entry`
-- `source_channel`
-- `source_surface`
-- `integration_profile_id`
-- `source_document_no`
-- `source_customer_ref`
-- `customer_profile_id`
-- `source_created_at`
-- `source_paid_at`
-- `currency`
-- `authority_snapshot_at`
-- `raw_payload`
-- `extra_data`
-- `created_at`
-- `updated_at`
-
-说明：
-
-- 会员导入没有订单号时，`source_document_no` 可为空
-- 零售渠道订单导入时，`source_document_no` 通常应有值
-- 同一个 `source_channel` 下应允许通过 `source_surface` 区分会员业务面、商城业务面等不同来源语义
-- “手工录入”不应再作为第三种顶层 `kind`
-- 如果是手工授予的权益，仍应以 `membership_entitlement + capture_mode = manual_entry` 表达
-- 如果是手工录入的线下订单，仍应以 `retail_order + capture_mode = manual_entry` 表达
-- `integration_profile_id` 表示这条需求是按哪个来源业务面合同被解释进系统的
-
-这里还要补一条当前阶段的定位：
-
-- 在当前 V2 阶段，`DemandDocument` 更接近“一次性被接手处理的上游需求单元”
-- 这意味着它通常更像：
-  - 一张零售订单
-  - 或某个会员/权益来源在某次履约中被接手的一份权益单元
-
-当前默认不要求：
-
-- 同一 `DemandDocument` 被拆到多个 wave 分别处理
-
-更准确地说：
-
-- 现阶段更稳妥的工作假设是：
-  - 一份 `DemandDocument`
-  - 在同一时间只属于一个活跃的接手关系
-  - 不主动支持跨波次拆分
-
-但这不等于：
-
-- 把接手关系直接塞回 `DemandDocument` 本体
-
-原因是：
-
-- `DemandDocument` 回答的是“上游为什么产生了这份需求”
-- “这份需求这次被哪个 wave 接手”属于独立关系语义
-
-#### DemandLine
-
-建议字段：
-
-- `id`
-- `demand_document_id`
-- `source_line_no`
-- `line_type`
-  - `entitlement_rule`
-  - `sku_order`
-  - `manual_entry`
-- `obligation_trigger_kind`
-  - `periodic_membership`
-  - `loyalty_membership`
-  - `supporter_only_purchase`
-  - `member_only_discount_purchase`
-  - `campaign_reward`
-  - `manual_compensation`
-- `entitlement_authority`
-  - `local_policy`
-  - `upstream_platform`
-  - `manual_grant`
-- `recipient_input_state`
-  - `not_required`
-  - `waiting_for_input`
-  - `partially_collected`
-  - `ready`
-  - `waived`
-  - `expired`
-- `routing_disposition`
-  - `pending_intake`
-  - `accepted`
-  - `deferred`
-  - `excluded_manual`
-  - `excluded_duplicate`
-  - `excluded_revoked`
-- `routing_reason_code`
-- `eligibility_context_ref`
-- `product_master_id`
-- `external_title`
-- `requested_quantity`
-- `entitlement_code`
-- `gift_level_snapshot`
-- `recipient_input_payload`
-- `raw_payload`
-- `extra_data`
-- `created_at`
-- `updated_at`
-
-说明：
+## 全局层
 
-- 会员场景里，这一层用于记录“本次应得权益”
-- 零售场景里，这一层用于记录“用户下单了什么”
-- `routing_disposition` 记录的是本系统是否接手处理
-- 它不应被误用为系统外履约完成状态
-- 对会员限定购买一类零售订单，应使用 `eligibility_context_ref` 保留其资格来源，而不是把它改判成 `membership_entitlement`
+### CustomerProfile
 
-### 5.2.1 会员权益的判定、输入采集与路由
+字段：`id`、`display_name`、`profile_type`（`member`/`buyer`/`mixed`/`manual`）、`extra_data`、时间戳。
 
-对 `membership_entitlement` 而言，建议明确拆开三件事：
+不再只代表"会员"，同时覆盖买家和手工补录。
 
-1. 权益成立的判定权威
+### CustomerIdentity
 
-- 回答：
-  - “谁说这条权益现在真的成立了？”
-- 由 `entitlement_authority` 表达
+字段：`id`、`customer_profile_id`、`identity_platform`、`identity_value`、`identity_type`（`platform_uid`/`email`/`username`/`external_buyer_id`）、`is_primary`、`extra_data`、时间戳。
 
-2. 收货对象输入是否收齐
+一个客户可有多个身份来源。
 
-- 回答：
-  - “这条权益现在能不能真的转成待执行履约？”
-- 由 `recipient_input_state` 表达
-- 这里的输入可能包括地址、尺码、款式、颜色、组合、领取确认等
-
-3. 本系统是否接手
-
-- 回答：
-  - “这条权益这次是否进入 EliGiftManager 的处理范围？”
-- 由 `routing_disposition` 表达
-
-这三件事不能混成一个状态字段。
-
-### 5.3 波次层
-
-#### Wave
-
-建议保留现有表，并新增/演进：
-
-- `wave_type`
-  - `membership`
-  - `retail`
-  - `mixed`
-- `lifecycle_stage`
-- `progress_snapshot`
-- `notes`
+### CustomerAddress
 
-在 greenfield 重建后，不应再保留旧 `status` 作为实施前提。
+保留历史/默认/测试地址/软删除/标签化备注。扩展 `normalized_region`、`postal_code`、`country_code`、`validation_status`。
 
-更准确地说：
+## 上游需求层
 
-- 旧 `status` 只作为历史参考字段理解
-- 新实现应直接以 `lifecycle_stage` / `progress_snapshot` 作为主语义
+### DemandDocument
 
-这里还要补一条模式边界：
+字段：`id`、`kind`（`membership_entitlement`/`retail_order`）、`capture_mode`（`document_import`/`api_ingest`/`manual_entry`）、`source_channel`、`source_surface`、`integration_profile_id`、`source_document_no`、`customer_profile_id`、时间与元数据字段。
 
-- 混合波次不应再通过单一持久字段 `allocation_mode` 表达
-- 更稳妥的做法是：
-  - 让不同 demand/profile 路径各自声明自己的 `InitialAllocationStrategy`
-  - 再由只读投影层汇总出该波次当前是 `policy-only`、`demand-only` 还是 `mixed-strategy`
+- 手工录入不是第三种 `kind`，通过 `capture_mode` 区分
+- `integration_profile_id` 表示按哪个业务面合同解释进系统
+- 当前阶段默认不支持跨波次拆分
 
-#### WaveDemandAssignment
+### DemandLine
 
-建议新增。
+字段：`id`、`demand_document_id`、`source_line_no`、`line_type`（`entitlement_rule`/`sku_order`/`manual_entry`）、`obligation_trigger_kind`、`entitlement_authority`、`recipient_input_state`、`routing_disposition`、`product_master_id`、`requested_quantity`、`gift_level_snapshot`、元数据字段。
 
-建议字段：
+关键三件事拆开：
+- **权益判定权威**（`entitlement_authority`）：谁说权益成立了
+- **输入采集状态**（`recipient_input_state`）：能不能转成待执行履约
+- **路由处置**（`routing_disposition`）：本系统是否接手
 
-- `id`
-- `wave_id`
-- `demand_document_id`
-- `accepted_at`
-- `accepted_by`
-- `extra_data`
-- `created_at`
-- `updated_at`
+## 波次层
 
-说明：
+### Wave
 
-- 这层回答的是：
-  - “这份 demand 这次由哪个 wave 接手处理？”
-- 它不回答：
-  - “这份 demand 上游是什么”
-- 也不回答：
-  - “最终发什么”
+保留现有表，新增 `wave_type`（`membership`/`retail`/`mixed`）、`lifecycle_stage`、`progress_snapshot`。混合波次不通过单一 `allocation_mode` 字段表达，由不同 demand/profile 路径各自声明策略，投影层汇总。
 
-当前保留 `WaveDemandAssignment` 的原因，不是因为现阶段已经要做跨波次拆分，
-而是因为它更符合当前已采用的设计模式边界：
+### WaveDemandAssignment
 
-- `DemandDocument`
-  - 来源真相
-- `WaveDemandAssignment`
-  - 接手关系
-- `FulfillmentLine`
-  - 最终执行真相
+回答"这份 demand 这次由哪个 wave 接手"。三层职责分开：`DemandDocument`（来源真相）→ `WaveDemandAssignment`（接手关系）→ `FulfillmentLine`（执行真相）。
 
-这比：
+### WaveParticipantSnapshot
 
-- 直接把 `accepted_wave_id` 塞回 `DemandDocument`
+基于 `WaveMember` 泛化。字段：`id`、`wave_id`、`customer_profile_id`、`snapshot_type`、`identity_platform`、`identity_value`、`display_name`、`gift_level`、`source_document_refs`、`source_profile_refs`、`extra_data`。
 
-更不容易让职责混淆。
+只有 `routing_disposition = accepted` 的需求才进入波次处理。
 
-当前阶段的更稳妥约束是：
+## 分配与调整语义层
 
-- 默认不支持同一 `DemandDocument` 跨多个活跃 wave 拆分处理
-- 但仍然保留显式关系对象，以避免把“来源真相”和“接手关系”压成一个字段
+| 层 | 说明 |
+|----|------|
+| `Base Allocation Source` | `policy_driven` 或 `demand_driven` |
+| `Allocation Contribution` | 规则贡献，可正可负 |
+| `Base Allocation Result` | 非负基础结果 |
+| `Adjustment Layer` | 显式修正，delta 可正可负 |
+| `Final Fulfillment Result` | `FulfillmentLine`，`max(base + delta, 0)` |
 
-#### WaveParticipantSnapshot
+非破坏性编辑：`Membership Allocation`、`Demand Mapping`、`Wave Overview`、`Adjustment Review` 是同一波次数据的不同视角，页面切换不破坏数据。
 
-建议基于当前 `WaveMember` 扩展或替换。
+### AllocationPolicyRule
 
-建议字段：
+`policy_driven` 分配模式下的规则对象。字段：`selector_payload`、`product_target_ref`、`contribution_quantity`（可正负）、`rule_kind`、`priority`、`active`。
 
-- `id`
-- `wave_id`
-- `customer_profile_id`
-- `snapshot_type`
-  - `member`
-  - `buyer`
-  - `mixed`
-- `identity_platform`
-- `identity_value`
-- `display_name`
-- `gift_level`
-- `source_document_refs`
-- `source_profile_refs`
-- `extra_data`
-- `created_at`
-
-说明：
-
-- 当前 `WaveMember` 不应该继续被理解为“只有会员”
-- 它应该变成波次内参与方快照
-- 只有 `routing_disposition = accepted` 的需求，才应稳定进入后续波次处理语义
-- `WaveParticipantSnapshot` 不应再以单值 `source_channel / source_surface` 承担来源归因
-- 更细的来源可追踪性应继续留在 `DemandLine` / `FulfillmentLine`
-- 如果 UI 需要展示“这个参与者涉及哪些来源业务面”，更适合通过 `source_profile_refs` 或只读聚合投影给出
-
-### 5.3.1 分配与调整语义层
-
-V2 的目标不是让所有需求都经过同一种分配引擎，而是让不同来源在不同层级被正确处理后再收敛。
-
-建议明确以下三层：
-
-1. `Base Allocation Source`
-
-表示“初始履约结果从哪里来”。
-
-可能来源：
-
-- `policy_driven`
-- `demand_driven`
-- 手工录入的上游事实按其语义分别进入前两者，而不是额外长出第三套调整语义
-
-2. `Allocation Contribution`
-
-表示“规则层对某个候选对象贡献了多少数量”。
-
-它更接近：
-
-- selector 命中的规则贡献
-- 商品级分配增减
-- 身份规则、平台规则、用户覆盖的有符号数量
-
-重要约束：
-
-- 这一层可以出现负数
-- 但它不是最终履约真相
-
-3. `Base Allocation Result`
-
-表示“初始分配层结算完成后，第一版基础履约结果是什么”。
-
-重要约束：
-
-- 这一层应当收敛为非负结果
-- 如果贡献求和后小于等于 0，更合理的解释是“不产生基础履约行”
-- 而不是把负数直接落成最终执行对象
-
-4. `Adjustment Layer`
-
-表示“在初始履约结果之上的修正”。
-
-可能动作：
-
-- 加送
-- 减送
-- 替换
-- 补发
-- 取消
-
-重要约束：
-
-- 这一层可以表达正负 delta
-- 但它应面向具体对象例外
-- 不应直接承担动态 selector 规则语义
-
-5. `Final Fulfillment Result`
-
-表示最终需要执行的履约真相。
-
-这一层最终统一落到 `FulfillmentLine`。
-
-更准确地说：
-
-- 最终执行结果更适合被理解为：
-  - `resolved = max(base_result + adjustment_delta, 0)`
-- 因此负数可以出现在“贡献”或“delta”语义里
-- 但不应作为最终履约行数量长期存在
-
-### 5.3.1.1 非破坏性编辑与多视角共享真相
-
-波次编辑不应被建模成一串彼此覆盖的页面结果。
-
-更合理的原则是：
-
-- `Membership Allocation`
-- `Demand Mapping`
-- `Wave Overview`
-- `Adjustment Review`
-
-本质上都是同一波次数据的不同视角。
-
-因此数据结构应尽量满足：
-
-- 上游需求真相层保持可追踪
-- 初始分配层保持可重建
-- 调整层保持显式记录
-- 最终履约层保持稳定输出
-
-同时还应明确：
-
-- `Membership Allocation`
-- `Demand Mapping`
-- `Wave Overview`
-- `Adjustment Review`
-
-这些页面都只是同一组领域能力的不同入口或投影。
-
-- selector、规则贡献、动态集合语义应属于规则层对象与 service
-- demand 到商品的映射语义应属于映射 service
-- 波次内最终履约例外应属于调整 service
-- 页面本身不应成为语义所有权的最终落点
-
-这样用户在步骤间往返时：
-
-- 不会因为切换页面而隐式丢失已有结果
-- 不会因为重新观察某个视图而覆盖其他视图已确认的编辑
-- 可以把“改需求真相”“改初始分配”“改最终履约”区分落到不同层
-
-### 5.3.2 AllocationPolicyRule
-
-建议将当前 `ProductTag` 明确定位为：
-
-- `policy_driven` 分配模式下的规则对象
-
-当前 `ProductTag` 不应被要求承担：
-
-- 零售订单原始行真相
-- 外部订单义务真相
-- 所有来源需求的统一表达
-
-而应主要承担：
-
-- 身份规则
-- 波次级批量赠送规则
-- 规则驱动分配中的用户例外覆盖
-
-未来更稳妥的规则对象，至少应能表达：
-
-- `selector_payload`
-  - 命中哪些参与者
-- `product_target_ref`
-  - 作用到哪些商品或商品组
-- `contribution_quantity`
-  - 该规则贡献多少数量，可为正负
-- `rule_kind`
-  - 身份规则、平台规则、显式用户覆盖等
-- `priority / order`
-  - 当未来规则层需要更清晰的重建顺序时可使用
-- `active`
-  - 规则是否生效
-
-当前阶段还应再明确两条边界：
-
-1. 动态 selector 语义属于 `Membership Allocation`
-
-- 如果未来真有“交集 / 子集 / 多条件 selector”的需求
-- 也应优先扩展这一层
-- 不应转嫁到 `Adjustment Review`
-
-2. 首版不需要把 selector 语言做得过重
-
-- 当前真实需求仍以简单身份选择为主
-- 内部结构可以预留未来扩展位
-- 但首版不必直接引入复杂布尔 DSL
-
-如果实现与接线已经定型，应直接收敛到新的规则对象；`ProductTag` 只可作为短期桥接实现，而不是长期主语义。
+首版不引入复杂布尔 DSL。`ProductTag` 作短期桥接，长期收敛到新规则对象。

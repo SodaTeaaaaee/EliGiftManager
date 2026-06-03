@@ -1,179 +1,56 @@
 # 平台维度与 Profile 定位
 
-本文件专门整理平台相关讨论，包括是否需要分平台、真正应该分的维度，以及 `IntegrationProfile` 的未来定位。
+> 平台相关讨论：应该分的维度、`IntegrationProfile` 的定位。
 
-### 4.2 统一平台词汇
+## 平台维度
 
-V2 必须把“平台”拆开说，禁止继续在关键领域对象里只写一个含糊的 `platform`。
+V2 区分 5 个平台维度（见 `02-ubiquitous-language.md` § 4.2）：
 
-推荐至少区分：
+- `identity_platform` — 用户身份来源
+- `source_channel` — 平台供应商
+- `source_surface` — 业务面
+- `supplier_platform` — 工厂/供应商
+- `carrier_code` — 物流承运商
 
-- `identity_platform`
-  - 用户身份来源平台
-- `source_channel`
-  - 平台供应商或来源渠道供应商
-- `source_surface`
-  - 该供应商下的具体业务面
-- `supplier_platform`
-  - 工厂/供应商平台
-- `carrier_code`
-  - 物流承运商编码体系
+## 分平台的必要性
 
-这里最重要的不是“平台名”，而是“平台供应商”和“业务面”必须拆开。
+- **边界层**：非常必要（`source_channel` + `source_surface` 必须拆开）
+- **核心履约层**：不应让平台差异无限渗透
 
-例如，官方资料已经足以说明：
+### 波次内共性很强
 
-- Patreon 不能被简单等同于“会员平台”
-- Gumroad 不能被简单等同于“零售平台”
-- pixivFANBOX 不能被简单等同于“零售订单平台”
-- Bilibili 不能被简单等同于某一个单一业务面
+`FulfillmentLine` 不应按平台拆成多套模型，`Wave` 也不因来源不同裂变。
 
-因此文档中的平台例子都应先落到“供应商 + 业务面”这一层。详见
-[04-source-backed-platform-example-notes.md](./04-source-backed-platform-example-notes.md)。
+### 波次前后两端差异很大
 
-### 4.2.1 分平台的必要性到底有多大
+差异在：需求导入、外部编号、身份识别、规则推导、物流回填方式。封装在需求导入层、`IntegrationProfile`/连接器层、回填层。
 
-这个问题的答案不是简单的“要”或“不要”。
+### 真正该分的维度
 
-更准确的说法是：
+1. `source_channel` — 哪个平台供应商
+2. `source_surface` — 哪个业务面
+3. `demand_kind` — 产生什么语义的需求
+4. `identity_strategy` — 如何识别履约对象
+5. `strategy fields + capability flags + connector binding` — 默认策略、正交能力、连接器
 
-- 在边界层，分平台供应商和业务面非常必要
-- 在核心履约层，不应该让平台差异无限渗透
+## `IntegrationProfile` 定位
 
-#### A. 在单个波次内部，共性很强
+某来源渠道供应商的某业务面的统一配置入口。`profile_key` 格式：`<source_channel>.<source_surface>`。
 
-一旦进入履约核心层，会员权益型需求和零售订单型需求通常都会收敛成：
+回答的问题：
+- 这个来源是哪个业务面
+- 归类为哪种需求语义
+- 义务由资格还是订单成立
+- 如何识别履约对象
+- 权益判定权威来源
+- 是否支持物流回填
+- 绑定哪些文档模板与连接器
 
-- 给谁发
-- 发什么
-- 发多少
-- 地址是什么
-- 提交给哪个工厂
-- 是否已发货
-- 是否已完成来源渠道同步或人工闭环确认
+比模板更高一层：模板回答"CSV 长什么样"，Profile 回答"这个来源到底是什么"。
 
-这说明：
+### Profile 结构收敛
 
-- `FulfillmentLine` 不应按平台供应商拆成多套模型
-- `Wave` 也不应因为来源不同而裂变成完全不同的容器
-
-#### B. 在波次前后两端，差异很大
-
-真正的差异主要发生在：
-
-- 上游需求导入
-- 外部编号体系
-- 身份识别方式
-- 是否需要规则推导
-- 物流回填或人工闭环方式
-- 平台能力与失败处理
-
-因此平台差异最应该被封装在：
-
-- 需求导入层
-- `IntegrationProfile` / 连接器层
-- 回填与闭环层
-
-而不是直接压进核心履约真相表里。
-
-#### C. 真正该分的不是“会员平台 / 零售平台”二元类别
-
-更应该区分的是：
-
-1. `source_channel`
-   - 这次需求来自哪个平台供应商
-2. `source_surface`
-   - 这次需求来自该平台供应商的哪个业务面
-3. `demand_kind`
-   - 这个业务面在本系统里产生什么语义的需求
-4. `identity_strategy`
-   - 该业务面用什么方式识别履约对象
-5. `strategy fields + capability flags + connector binding`
-   - 该业务面默认采用什么初始履约策略
-   - 该业务面有哪些正交能力标记
-   - 该业务面由哪个连接器/适配器负责真实导入导出与回填
-
-也就是说，分平台的必要性很大，但应该分在正确维度上。
-
-这里还要补一条当前阶段的收敛原则：
-
-- 不再让 Profile 同时保留一组通用 `capabilities` blob、若干 `supports_*` 布尔值、以及重复表达同一件事的 strategy 字段
-- 更稳妥的结构是：
-  - strategy 字段表达主流程语义
-  - capability flag 表达不与 strategy 重复的正交能力
-  - connector binding 表达外部交互实现入口
-
-### 4.2.2 平台差异应该落在哪一层
-
-V2 推荐这样处理平台差异：
-
-1. 核心履约层尽量平台无关
-
-- `Wave`
-- `WaveParticipantSnapshot`
-- `FulfillmentLine`
-- `SupplierOrder`
-- `Shipment`
-
-这些对象应优先表达履约事实，而不是优先表达平台差异。
-
-2. 平台差异优先落在配置与边界层
-
-- `DemandDocument/DemandLine`
-- `IntegrationProfile`
-- `DocumentTemplate`
-- `ChannelSyncJob`
-
-这些层更适合承接：
-
-- 编号规则
-- 字段映射
-- 业务面能力
-- 回填协议
-- 闭环策略
-
-3. Service 层负责把“平台差异”翻译成“统一履约动作”
-
-也就是说：
-
-- 平台差异需要被保留
-- 但不应直接污染核心履约模型
-
-### 4.2.3 `IntegrationProfile` 的定位
-
-本次讨论里提到的 `source_profile`，在 V2 中更准确地说就是：
-
-- 某个来源渠道供应商的某个业务面的统一配置入口
-
-示例 `profile_key` 可以写成：
-
-- `patreon.membership`
-- `patreon.shop_purchase`
-- `gumroad.membership`
-- `gumroad.one_time_order`
-- `fanbox.support_plan`
-- `fanbox.supporter_only_purchase`
-- `bilibili.live_support`
-- `bilibili.creator_commerce`
-
-这里的 key 是系统内部语言，不要求与平台官方命名完全一致，但必须与该平台官方业务面语义相匹配。
-
-`IntegrationProfile` 回答的问题不是：
-
-- “这个 CSV 长什么样”
-
-而是：
-
-- “这个来源到底是哪一个业务面”
-- “这个业务面在本系统里应归类为哪种需求语义”
-- “这个业务面的义务是由资格成立，还是由订单成立”
-- “它怎么识别履约对象”
-- “它的会员权益判定权威来自哪里”
-- “它的领取/选项/表单输入通常如何补齐”
-- “它是否支持物流回填”
-- “它是自动闭环、文档闭环，还是人工确认闭环”
-- “它应绑定哪些文档模板与连接器能力”
-
-因此它比模板更高一层。
-
----
+- strategy 字段表达主流程语义
+- capability flag 表达不与 strategy 重复的正交能力
+- connector binding 表达外部交互实现入口
+- 不再同时保留通用 capabilities blob + 重复的 supports_* 布尔值 + strategy 字段

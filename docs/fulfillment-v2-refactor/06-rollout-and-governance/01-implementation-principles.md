@@ -1,322 +1,57 @@
 # 实施原则
 
-本文件整理重构实施时必须遵守的原则，包括 greenfield 优先、语义优先、先领域后 UI、先保真后自动化。
+## 10.1 Greenfield 优先
 
-## 10. 实施原则
+旧业务代码被清理，V2 以 greenfield 方式重建。保留文档、备份分支、仓库历史和必要工程壳子，不保留旧业务实现的连续演进义务。
 
-### 10.1 Greenfield 优先，旧业务代码不再作为连续演进基座
+## 10.2 命名尽早收敛
 
-当前已明确决定：
+新语义从第一天用新名（文档、service、DTO、页面、测试、API）。旧名只在历史文档和备份分支中存在。
 
-- 旧业务代码将被清理
-- V2 以 greenfield 方式重建
+### 一次到位清单
 
-因此更准确的原则是：
+| V1 | V2 |
+|----|-----|
+| `Member` | `CustomerProfile` |
+| `MemberNickname` | `CustomerIdentity` |
+| `MemberAddress` | `CustomerAddress` |
+| `WaveMember` | `WaveParticipantSnapshot` |
+| `ProductTag` | `AllocationPolicyRule` |
+| `DispatchRecord` | `FulfillmentLine` |
+| `TemplateConfig` | `IntegrationProfile` + `DocumentTemplate` |
 
-1. 保留文档与考古材料，不保留旧业务实现的连续演进义务
+新增：`DemandDocument`、`DemandLine`、`SupplierOrder`、`Shipment`、`ChannelSyncJob`、`FulfillmentAdjustment`、`HistoryScope`/`HistoryNode`/`HistoryCheckpoint`/`HistoryPin`。
 
-- `docs/`
-- 备份分支
-- 仓库历史
+## 10.3 先领域后 UI
 
-应继续保留。
+优先级：领域语言 → 数据结构 → 状态投影 → 导入导出服务 → 页面 UI。
 
-但旧业务代码本身不再作为：
+## 10.4 先保真后自动化
 
-- 新模型的容器
-- 新流程的适配层
-- 新命名的妥协来源
+优先保证准确落库、准确追踪来源、准确追踪物流与回填。API 自动化和异步 worker 后续补。
 
-2. 保留必要工程壳子，但不让旧业务结构反向定义新架构
+## 10.5 语义边界先定，视图排布可反馈驱动
 
-例如：
+必须先定清：编辑权归属、调整层边界、重算保留策略、跨步骤跳转行为、basis 偏离提示。分组命名、导航样式、计数位置可反馈迭代。
 
-- 桌面应用壳
-- 构建配置
-- 开发工具链
-- 数据目录约定
+## 10.6 模式收敛优先于字段堆叠
 
-这些可以保留。
+如果一个对象同时承担领域语义、页面入口、流程状态、偏离提示、外部差异，说明已偏离正确边界。
 
-但：
+## 10.7 树状历史以"用户意图"为节点
 
-- controller/service/model 的旧分层
-- 旧状态字段
-- 旧流程入口
+一个 history node 代表一次用户意图。重算、副作用、overview 刷新不应各自生成独立撤销节点。
 
-不应继续约束新版本设计。
+## 10.8 本地历史与外部 basis 分离
 
-3. 当前阶段不再追求旧代码读写路径的平滑迁移
+- 本地 undo/redo 只修改 `HistoryScope` 当前 head
+- `SupplierOrder`/`Shipment`/`ChannelSyncJob` 保留自己的 basis 引用
+- 偏离进入 `basis_drift_status` + `review_requirement` 双轴提示
 
-- 没有生产兼容负担时
-- 比起“平滑迁移”
-- 更重要的是“语义与模式一次到位”
+## 10.9 快捷键不劫持文本输入
 
-### 10.2 命名应尽早收敛，旧名只保留在历史文档与备份分支
+普通工作区上下文 → `Ctrl+Z` 作用于 HistoryScope。input/textarea 焦点内 → 优先尊重原生撤销。
 
-当前没有历史包袱时，命名不应继续拖延。
+## 10.10 历史持久化但不用每步完整快照
 
-更准确的原则是：
-
-1. 新语义尽量从第一天就用新名
-
-- 文档
-- service
-- DTO
-- 页面
-- 测试名
-- 新增 API
-
-都应尽量直接使用目标业务语言。
-
-2. 旧名不应再进入新代码主体
-
-- 旧名可以继续存在于：
-  - 历史文档
-  - 备份分支
-  - 必要的考古说明
-- 但不应继续作为新设计的主命名
-- greenfield 实施下，也不应再为新代码制造“兼容层别名”
-
-3. 新版本中的物理命名也应尽量一次到位
-
-- 如果旧代码会被整体清理
-- 那么新数据库表名、新 DTO、新 service、新页面名都应直接使用目标语义
-
-例如：
-
-- 新版本不应再新建 `Member`
-- 应直接使用 `CustomerProfile` / `CustomerIdentity`
-
-这和“不要为了兼容旧数据背包袱”是完全一致的：
-
-- 没有历史包袱时，最容易一次统一
-- 越早统一，越不容易让新版本重新长出双重语义
-
-补充说明：
-
-- 如果某个对象、字段、页面、服务从设计上已经定型，而且没有真实生产旧包袱，就应该一次到位
-- 所谓“分阶段”，只指实现优先级，不指新旧代码长期并存
-
-### 10.2.1 一次到位清单
-
-以下内容如果已经在 V2 中被完整定义，就应优先一次到位，不再长期保留旧名作为主语义：
-
-1. 核心业务对象
-
-- `Member` -> `CustomerProfile`
-- `MemberNickname` -> `CustomerIdentity` / 昵称历史辅助表
-- `MemberAddress` -> `CustomerAddress`
-- `WaveMember` -> `WaveParticipantSnapshot`
-- `ProductTag` -> `AllocationPolicyRule` / `AllocationContribution`
-- `DispatchRecord` -> `FulfillmentLine`
-- `TemplateConfig` -> `IntegrationProfile` / `DocumentTemplate`
-
-2. 新增执行对象
-
-- `SupplierOrder`
-- `SupplierOrderLine`
-- `Shipment`
-- `ShipmentLine`
-- `ChannelSyncJob`
-- `ChannelSyncItem`
-
-3. 新增规则与状态对象
-
-- `DemandDocument`
-- `DemandLine`
-- `FulfillmentAdjustment`
-- `WaveAllocationStep`
-- `HistoryScope`
-- `HistoryNode`
-- `HistoryCheckpoint`
-- `HistoryPin`
-
-4. 新增配置对象
-
-- `IntegrationProfile`
-- `DocumentTemplate`
-- `IntegrationProfileTemplateBinding`
-
-实施要求：
-
-- 这些对象的名称、字段、DTO、service、页面文案、测试名应尽量同步使用目标语义
-- 只要没有真实生产旧包袱，就不应为这些对象人为制造长期双名并存
-- 若某一层接线需要分批完成，也只是实现顺序分批，不是语义名分批
-
-### 10.3 先重构领域，再重构 UI
-
-优先级顺序应是：
-
-1. 领域语言
-2. 数据结构
-3. 状态投影
-4. 导入导出服务
-5. 页面 UI
-
-不应反过来先修页面进度条，再回头推翻状态模型。
-
-### 10.4 先保真，再自动化
-
-优先保证：
-
-- 能准确落库
-- 能准确追踪来源
-- 能准确追踪物流与回填结果
-
-API 自动化、批量任务优化、异步 worker 可以在后续阶段再补。
-
-### 10.5 区分“必须前置定清”的问题和“可以反馈迭代”的问题
-
-并不是所有未完善项都适合直接交给反馈循环。
-
-必须先定清的，是会改变数据语义和重算行为的问题，例如：
-
-- 哪一层拥有哪一类编辑权
-- `Adjustment Review` 允许什么、不允许什么
-- 前置页面重算后，如何保留共享调整层例外
-- 跨步骤跳转时，哪些对象可被重建，哪些对象必须稳定保留
-- 导出/回传对象与当前工作区结果脱节时，系统如何提示而不形成伪历史锁定
-- 页面只是入口，哪些语义真正属于领域 service / projection，而不是属于某个 screen
-
-这些问题如果不先定清，越早做 UI，越容易在后面整体返工。
-
-更适合用反馈循环迭代的，是信息呈现和交互细节问题，例如：
-
-- `Wave Overview` 首版分组是否还需要微调
-- 阶段导航在视觉上采用流程图、标签栏还是其他样式
-- 某些统计指标是否值得保留在首屏
-- 某个异常桶的命名是否够直观
-
-换句话说：
-
-- 语义边界、所有权边界、重算边界要先定
-- 视图排布、文案、排序和二级筛选可以反馈驱动
-
-### 10.6 反馈循环可以改视图，但不能替代语义定界
-
-反馈循环适合解决的是“看起来怎么更顺手”，不适合替代“这个信号到底是什么意思”。
-
-更适合交给反馈循环的内容包括：
-
-- `Wave Overview` 首版聚合分组是否还需要微调
-- 阶段导航采用流程图、标签栏还是其他视觉样式
-- 某些计数是否值得放在首屏
-- 提示文案是否更直观
-
-必须先定清的问题包括：
-
-- 当前工作区与最近一次导出、物流回传、渠道回填基础之间的偏离，是否需要被显式建模
-- 偏离后是弱提示、强提示，还是进入复核
-- 前置层重算后，共享调整层例外如何判定失配
-- 哪些修改属于上游真相、默认生成逻辑、最终履约例外
-- 哪些内容应建模成 state，哪些只应建模成 signal
-
-### 10.6.1 模式收敛优先于字段堆叠
-
-如果某个对象同时开始承担：
-
-- 领域语义
-- 页面入口语义
-- 流程状态
-- 偏离提示
-- 外部实现差异
-
-那么通常意味着它已经偏离了正确的模式边界。
-
-当前 V2 应坚持：
-
-- 上游真相、初始分配、共享调整、最终执行分层
-- state 与 signal 分层
-- profile 声明与 connector 实现分层
-- 页面入口与领域所有权分层
-
-### 10.7 树状历史必须以“用户意图”为节点，而不是以系统副作用为节点
-
-如果未来要做持久化树状 undo/redo，最危险的错误之一就是：
-
-- 把用户一次操作拆成很多个内部节点
-- 再把重算、副作用、状态刷新也都混进历史树
-
-更稳妥的原则是：
-
-- 一个 history node 应优先代表一次用户意图
-- `ReconcileWave`、状态重算、overview 刷新这类派生副作用不应各自再生成独立撤销节点
-
-否则：
-
-- 历史图不可读
-- `Ctrl+Z` 的结果不可预期
-- 分支保留能力也会迅速失控
-
-### 10.8 本地工作区历史与外部 basis 必须分离
-
-树状 undo/redo 解决的是：
-
-- 本地工作区如何回退
-- 分支如何保留
-- 重新打开软件后如何恢复 head
-
-它不解决：
-
-- 工厂是否真的撤单
-- 渠道是否真的撤销同步
-- 外部物流状态是否真的跟着回滚
-
-因此实现时必须明确：
-
-- 本地撤销 / 重做只修改 `HistoryScope` 当前 head
-- `SupplierOrder / Shipment / ChannelSyncJob` 保留自己的 basis 引用
-- 如果当前 head 偏离外部 basis，应进入：
-  - `basis_drift_status`
-  - `review_requirement`
-  这两条独立提示轴
-
-### 10.8.1 Drift 与 Review 必须拆成两个轴
-
-当前已确认：
-
-- “发生了偏离”
-- “需要人工复核”
-
-不是同一件事。
-
-更稳妥的工程原则是：
-
-- `basis_drift_status` 表达事实
-- `review_requirement` 表达处理建议
-- UI 可以再把这两者投影成单一总结状态
-
-但底层不应直接合成一个大枚举。
-
-### 10.9 快捷键应全局统一，但不能劫持文本输入自己的撤销语义
-
-当前更稳妥的 UX 原则是：
-
-- 在普通工作区上下文里，`Ctrl+Z / Ctrl+Shift+Z` 作用于当前激活的 `HistoryScope`
-- 在 `input / textarea / contenteditable` 焦点内，优先尊重文本输入自身的原生撤销 / 重做
-
-否则：
-
-- 用户会频繁误触全局历史
-- 表单录入体验会明显变差
-
-### 10.10 历史应持久化，但不应用“每步完整快照”粗暴实现
-
-当前已经确认：
-
-- 工作区历史需要在软件关闭后继续保留
-- 但不能因此对设备存储和内存造成过大压力
-
-因此更稳妥的实现原则是：
-
-- 平时以 patch / inverse patch 为主
-- 周期性打 checkpoint
-- 对被外部 basis 引用的节点做 pin
-- 对旧的、未 pin 的分支做压缩或 GC
-
-而不是：
-
-- 每一步都持久化整工作区完整快照
-
----
+平时 patch/inverse patch，周期性 checkpoint，外部 basis 引用节点 pin，旧分支 GC。
