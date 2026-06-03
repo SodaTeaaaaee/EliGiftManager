@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -44,11 +45,11 @@ func TestBuildRuleRestorePatch_RoundTripsThroughPatchExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildRuleRestorePatch: %v", err)
 	}
-	if err := patchExec.ApplyPatch(payload); err != nil {
+	if err := patchExec.ApplyPatch(context.Background(), payload); err != nil {
 		t.Fatalf("ApplyPatch restore_rule: %v", err)
 	}
 
-	fetched, err := ruleRepo.FindByID(rule.ID)
+	fetched, err := ruleRepo.FindByID(context.Background(), rule.ID)
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestBuildRuleUpdatePatch_RoundTripsThroughPatchExecutor(t *testing.T) {
 		Priority:             4,
 		Active:               true,
 	}
-	if err := ruleRepo.Create(rule); err != nil {
+	if err := ruleRepo.Create(context.Background(), rule); err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
@@ -89,11 +90,11 @@ func TestBuildRuleUpdatePatch_RoundTripsThroughPatchExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildRuleUpdatePatch: %v", err)
 	}
-	if err := patchExec.ApplyPatch(payload); err != nil {
+	if err := patchExec.ApplyPatch(context.Background(), payload); err != nil {
 		t.Fatalf("ApplyPatch update_rule: %v", err)
 	}
 
-	fetched, err := ruleRepo.FindByID(rule.ID)
+	fetched, err := ruleRepo.FindByID(context.Background(), rule.ID)
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
@@ -104,4 +105,3 @@ func TestBuildRuleUpdatePatch_RoundTripsThroughPatchExecutor(t *testing.T) {
 		t.Fatalf("updated rule mismatch: got %+v", fetched)
 	}
 }
-

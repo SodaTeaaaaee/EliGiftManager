@@ -1,15 +1,17 @@
 package dto
 
+import "time"
+
 type CustomerIdentityDTO struct {
-	ID               uint   `json:"id"`
-	CustomerProfileID uint   `json:"customerProfileId"`
-	IdentityPlatform  string `json:"identityPlatform"`
-	IdentityValue     string `json:"identityValue"`
-	IdentityType      string `json:"identityType"` // platform_uid, email, username, external_buyer_id
-	IsPrimary         bool   `json:"isPrimary"`
-	ExtraData         string `json:"extraData"`
-	CreatedAt         string `json:"createdAt"`
-	UpdatedAt         string `json:"updatedAt"`
+	ID                uint      `json:"id"`
+	CustomerProfileID uint      `json:"customerProfileId"`
+	IdentityPlatform  string    `json:"identityPlatform"`
+	IdentityValue     string    `json:"identityValue"`
+	IdentityType      string    `json:"identityType"` // platform_uid, email, username, external_buyer_id
+	IsPrimary         bool      `json:"isPrimary"`
+	ExtraData         string    `json:"extraData"`
+	CreatedAt         time.Time `json:"createdAt" ts_type:"string"`
+	UpdatedAt         time.Time `json:"updatedAt" ts_type:"string"`
 }
 
 type CustomerProfileDTO struct {
@@ -17,8 +19,8 @@ type CustomerProfileDTO struct {
 	DisplayName        string                `json:"displayName"`
 	ProfileType        string                `json:"profileType"` // member, buyer, mixed, manual
 	ExtraData          string                `json:"extraData"`
-	CreatedAt          string                `json:"createdAt"`
-	UpdatedAt          string                `json:"updatedAt"`
+	CreatedAt          time.Time             `json:"createdAt" ts_type:"string"`
+	UpdatedAt          time.Time             `json:"updatedAt" ts_type:"string"`
 	Identities         []CustomerIdentityDTO `json:"identities"`
 	Addresses          []CustomerAddressDTO  `json:"addresses"`
 	ActiveAddressCount int                   `json:"activeAddressCount"`

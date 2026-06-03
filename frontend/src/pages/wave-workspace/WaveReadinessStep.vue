@@ -23,6 +23,7 @@ import {
 import { listWaveFulfillmentRows } from "@/shared/lib/wails/app";
 import { useI18n } from "@/shared/i18n";
 import { dto } from "@/../wailsjs/go/models";
+import { waveWorkspaceSnapshotKey } from "@/shared/model/wave-injection-keys";
 
 import PageHeader from "@/shared/ui/PageHeader.vue";
 import GlassCard from "@/shared/ui/GlassCard.vue";
@@ -31,11 +32,7 @@ const route = useRoute();
 const router = useRouter();
 const { t } = useI18n();
 const message = useMessage();
-
-const snapshot = inject(
-  "waveWorkspaceSnapshot",
-  null,
-) as { value: dto.WaveWorkspaceSnapshotDTO | null } | null;
+const snapshot = inject(waveWorkspaceSnapshotKey)
 
 const waveId = computed(() => {
   const id = Number(route.params.waveId);

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -61,23 +62,23 @@ func NewWaveOverviewQueryUseCase(
 	}
 }
 
-func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOverviewDTO, error) {
-	w, err := uc.waveRepo.FindByID(waveID)
+func (uc *waveOverviewQueryUseCase) BuildBaseOverview(ctx context.Context, waveID uint) (dto.WaveOverviewDTO, error) {
+	w, err := uc.waveRepo.FindByID(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
 
-	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
 
-	supplierOrders, err := uc.supplierRepo.ListByWave(waveID)
+	supplierOrders, err := uc.supplierRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
 
-	waveProducts, err := uc.productRepo.ListByWave(waveID)
+	waveProducts, err := uc.productRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -88,7 +89,7 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		}
 	}
 
-	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -108,7 +109,7 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		if doc.Kind != "" {
 			demandKindSet[doc.Kind] = true
 		}
-		lines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
+		lines, err := uc.demandRepo.ListLinesByDocument(ctx, doc.ID)
 		if err != nil {
 			return dto.WaveOverviewDTO{}, err
 		}
@@ -138,7 +139,7 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		}
 	}
 
-	shipments, err := uc.shipmentRepo.ListByWave(waveID)
+	shipments, err := uc.shipmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -150,7 +151,7 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		if s.TrackingNo == "" {
 			continue
 		}
-		lines, err := uc.shipmentRepo.ListLinesByShipment(s.ID)
+		lines, err := uc.shipmentRepo.ListLinesByShipment(ctx, s.ID)
 		if err != nil {
 			return dto.WaveOverviewDTO{}, err
 		}
@@ -164,14 +165,14 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 
 	// Fulfillment state breakdown — single pass over already-fetched lines
 	var (
-		fulfillDraftCount        int
-		fulfillReadyCount        int
-		addressMissingCount      int
-		addressReadyCount        int
-		addressInvalidCount      int
+		fulfillDraftCount         int
+		fulfillReadyCount         int
+		addressMissingCount       int
+		addressReadyCount         int
+		addressInvalidCount       int
 		supplierNotSubmittedCount int
-		supplierSubmittedCount   int
-		supplierShippedCount     int
+		supplierSubmittedCount    int
+		supplierShippedCount      int
 	)
 	for _, fl := range fulfillLines {
 		switch fl.AllocationState {
@@ -207,7 +208,7 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 		adjustmentRemoveCount  int
 	)
 	if uc.adjustmentRepo != nil {
-		adjustments, adjErr := uc.adjustmentRepo.ListByWave(waveID)
+		adjustments, adjErr := uc.adjustmentRepo.ListByWave(ctx, waveID)
 		if adjErr != nil {
 			return dto.WaveOverviewDTO{}, adjErr
 		}
@@ -276,18 +277,18 @@ func (uc *waveOverviewQueryUseCase) BuildBaseOverview(waveID uint) (dto.WaveOver
 	}, nil
 }
 
-func (uc *waveOverviewQueryUseCase) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, error) {
-	base, err := uc.BuildBaseOverview(waveID)
+func (uc *waveOverviewQueryUseCase) GetWaveOverview(ctx context.Context, waveID uint) (dto.WaveOverviewDTO, error) {
+	base, err := uc.BuildBaseOverview(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
-	candidates, err := uc.buildClosureCandidates(waveID)
+	candidates, err := uc.buildClosureCandidates(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
 	base.AutoClosureCandidateCount = candidates.AutoCandidateCount
 	base.ManualClosureCandidateCount = candidates.ManualCandidateCount
-	projected, err := uc.overviewProjUC.ProjectWaveOverview(base)
+	projected, err := uc.overviewProjUC.ProjectWaveOverview(ctx, base)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -307,22 +308,22 @@ func (uc *waveOverviewQueryUseCase) GetWaveOverview(waveID uint) (dto.WaveOvervi
 	return projected, nil
 }
 
-func (uc *waveOverviewQueryUseCase) GetWaveWorkspaceSnapshot(waveID uint) (dto.WaveWorkspaceSnapshotDTO, error) {
-	overview, err := uc.GetWaveOverview(waveID)
+func (uc *waveOverviewQueryUseCase) GetWaveWorkspaceSnapshot(ctx context.Context, waveID uint) (dto.WaveWorkspaceSnapshotDTO, error) {
+	overview, err := uc.GetWaveOverview(ctx, waveID)
 	if err != nil {
 		return dto.WaveWorkspaceSnapshotDTO{}, err
 	}
 
-	fulfillmentRows, err := uc.ListWaveFulfillmentRows(waveID)
+	fulfillmentRows, err := uc.ListWaveFulfillmentRows(ctx, waveID)
 	if err != nil {
 		return dto.WaveWorkspaceSnapshotDTO{}, err
 	}
 
-	recentHistory, err := uc.ListRecentHistory(waveID, 10)
+	recentHistory, err := uc.ListRecentHistory(ctx, waveID, 10)
 	if err != nil {
 		return dto.WaveWorkspaceSnapshotDTO{}, err
 	}
-	historyHeadNodeID, historyHeadProjectionHash, err := uc.resolveHistoryHead(waveID)
+	historyHeadNodeID, historyHeadProjectionHash, err := uc.resolveHistoryHead(ctx, waveID)
 	if err != nil {
 		return dto.WaveWorkspaceSnapshotDTO{}, err
 	}
@@ -354,7 +355,7 @@ func (uc *waveOverviewQueryUseCase) GetWaveWorkspaceSnapshot(waveID uint) (dto.W
 	}, nil
 }
 
-func (uc *waveOverviewQueryUseCase) ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error) {
+func (uc *waveOverviewQueryUseCase) ListRecentHistory(ctx context.Context, waveID uint, limit int) ([]dto.HistoryNodeDTO, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 10
 	}
@@ -362,7 +363,7 @@ func (uc *waveOverviewQueryUseCase) ListRecentHistory(waveID uint, limit int) ([
 		return []dto.HistoryNodeDTO{}, nil
 	}
 
-	scope, err := uc.historyScopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+	scope, err := uc.historyScopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +371,7 @@ func (uc *waveOverviewQueryUseCase) ListRecentHistory(waveID uint, limit int) ([
 		return []dto.HistoryNodeDTO{}, nil
 	}
 
-	nodes, err := uc.historyNodeRepo.ListByScopeRecent(scope.ID, limit)
+	nodes, err := uc.historyNodeRepo.ListByScopeRecent(ctx, scope.ID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -395,12 +396,12 @@ func (uc *waveOverviewQueryUseCase) ListRecentHistory(waveID uint, limit int) ([
 	return result, nil
 }
 
-func (uc *waveOverviewQueryUseCase) resolveHistoryHead(waveID uint) (uint, string, error) {
+func (uc *waveOverviewQueryUseCase) resolveHistoryHead(ctx context.Context, waveID uint) (uint, string, error) {
 	if uc.historyScopeRepo == nil || uc.historyNodeRepo == nil {
 		return 0, "", nil
 	}
 
-	scope, err := uc.historyScopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+	scope, err := uc.historyScopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return 0, "", err
 	}
@@ -408,7 +409,7 @@ func (uc *waveOverviewQueryUseCase) resolveHistoryHead(waveID uint) (uint, strin
 		return 0, "", nil
 	}
 
-	node, err := uc.historyNodeRepo.FindByID(scope.CurrentHeadNodeID)
+	node, err := uc.historyNodeRepo.FindByID(ctx, scope.CurrentHeadNodeID)
 	if err != nil {
 		return 0, "", err
 	}
@@ -418,14 +419,14 @@ func (uc *waveOverviewQueryUseCase) resolveHistoryHead(waveID uint) (uint, strin
 	return node.ID, node.ProjectionHash, nil
 }
 
-func (uc *waveOverviewQueryUseCase) ListDashboardRows() ([]dto.WaveDashboardRowDTO, error) {
-	waves, err := uc.waveRepo.List()
+func (uc *waveOverviewQueryUseCase) ListDashboardRows(ctx context.Context) ([]dto.WaveDashboardRowDTO, error) {
+	waves, err := uc.waveRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 	rows := make([]dto.WaveDashboardRowDTO, 0, len(waves))
 	for _, w := range waves {
-		projected, err := uc.GetWaveOverview(w.ID)
+		projected, err := uc.GetWaveOverview(ctx, w.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -440,20 +441,20 @@ func (uc *waveOverviewQueryUseCase) ListDashboardRows() ([]dto.WaveDashboardRowD
 	return rows, nil
 }
 
-func (uc *waveOverviewQueryUseCase) ListWaveFulfillmentRows(waveID uint) ([]dto.WaveFulfillmentRowDTO, error) {
-	lines, err := uc.fulfillRepo.ListByWave(waveID)
+func (uc *waveOverviewQueryUseCase) ListWaveFulfillmentRows(ctx context.Context, waveID uint) ([]dto.WaveFulfillmentRowDTO, error) {
+	lines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
-	participants, err := uc.waveRepo.ListParticipantsByWave(waveID)
+	participants, err := uc.waveRepo.ListParticipantsByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
-	waveProducts, err := uc.productRepo.ListByWave(waveID)
+	waveProducts, err := uc.productRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
-	overview, err := uc.GetWaveOverview(waveID)
+	overview, err := uc.GetWaveOverview(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +512,7 @@ func (uc *waveOverviewQueryUseCase) ListWaveFulfillmentRows(waveID uint) ([]dto.
 			}
 		}
 		if line.DemandDocumentID != nil {
-			doc, docErr := uc.demandRepo.FindByID(*line.DemandDocumentID)
+			doc, docErr := uc.demandRepo.FindByID(ctx, *line.DemandDocumentID)
 			if docErr == nil && doc != nil {
 				row.DemandKind = doc.Kind
 				row.DemandSourceSummary = fmt.Sprintf("%s · %s", doc.SourceChannel, doc.SourceDocumentNo)
@@ -522,12 +523,12 @@ func (uc *waveOverviewQueryUseCase) ListWaveFulfillmentRows(waveID uint) ([]dto.
 	return rows, nil
 }
 
-func (uc *waveOverviewQueryUseCase) ListWaveParticipantRows(waveID uint) ([]dto.WaveParticipantRowDTO, error) {
-	participants, err := uc.waveRepo.ListParticipantsByWave(waveID)
+func (uc *waveOverviewQueryUseCase) ListWaveParticipantRows(ctx context.Context, waveID uint) ([]dto.WaveParticipantRowDTO, error) {
+	participants, err := uc.waveRepo.ListParticipantsByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
-	lines, err := uc.fulfillRepo.ListByWave(waveID)
+	lines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -549,7 +550,7 @@ func (uc *waveOverviewQueryUseCase) ListWaveParticipantRows(waveID uint) ([]dto.
 			docID := *line.DemandDocumentID
 			doc, ok := docCache[docID]
 			if !ok {
-				doc, err = uc.demandRepo.FindByID(docID)
+				doc, err = uc.demandRepo.FindByID(ctx, docID)
 				if err == nil && doc != nil {
 					docCache[docID] = doc
 				}
@@ -589,12 +590,12 @@ func (uc *waveOverviewQueryUseCase) ListWaveParticipantRows(waveID uint) ([]dto.
 	return rows, nil
 }
 
-func (uc *waveOverviewQueryUseCase) buildClosureCandidates(waveID uint) (overviewClosureCandidates, error) {
-	shipments, err := uc.shipmentRepo.ListByWave(waveID)
+func (uc *waveOverviewQueryUseCase) buildClosureCandidates(ctx context.Context, waveID uint) (overviewClosureCandidates, error) {
+	shipments, err := uc.shipmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return overviewClosureCandidates{}, err
 	}
-	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return overviewClosureCandidates{}, err
 	}
@@ -610,7 +611,7 @@ func (uc *waveOverviewQueryUseCase) buildClosureCandidates(waveID uint) (overvie
 	seenManual := make(map[uint]struct{})
 
 	for _, s := range shipments {
-		shipLines, err := uc.shipmentRepo.ListLinesByShipment(s.ID)
+		shipLines, err := uc.shipmentRepo.ListLinesByShipment(ctx, s.ID)
 		if err != nil {
 			return overviewClosureCandidates{}, err
 		}
@@ -622,7 +623,7 @@ func (uc *waveOverviewQueryUseCase) buildClosureCandidates(waveID uint) (overvie
 			docID := *fl.DemandDocumentID
 			doc, ok := docCache[docID]
 			if !ok {
-				doc, err = uc.demandRepo.FindByID(docID)
+				doc, err = uc.demandRepo.FindByID(ctx, docID)
 				if err != nil {
 					return overviewClosureCandidates{}, err
 				}
@@ -634,7 +635,7 @@ func (uc *waveOverviewQueryUseCase) buildClosureCandidates(waveID uint) (overvie
 			profileID := *doc.IntegrationProfileID
 			profile, ok := profileCache[profileID]
 			if !ok {
-				profile, err = uc.profileRepo.FindByID(profileID)
+				profile, err = uc.profileRepo.FindByID(ctx, profileID)
 				if err != nil {
 					return overviewClosureCandidates{}, err
 				}

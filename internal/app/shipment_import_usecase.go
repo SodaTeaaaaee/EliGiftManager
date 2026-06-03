@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -38,14 +39,14 @@ func NewShipmentImportUseCase(
 //   - "skip_invalid" (default): skip failed groups, persist valid ones (partial success).
 //   - "reject_all": validate all groups first; if any error exists, return errors and
 //     persist nothing.
-func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error) {
+func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error) {
 	mode := input.ImportMode
 	if mode == "" {
 		mode = "skip_invalid"
 	}
 
 	// 1. Validate that the wave has at least one supplier order.
-	supplierOrders, err := uc.supplierRepo.ListByWave(input.WaveID)
+	supplierOrders, err := uc.supplierRepo.ListByWave(ctx, input.WaveID)
 	if err != nil {
 		return nil, fmt.Errorf("list supplier orders for wave %d: %w", input.WaveID, err)
 	}
@@ -88,7 +89,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 	var basisNodeID, basisHash string
 	var pinNodeID uint
 	if uc.basisStamp != nil {
-		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(input.WaveID)
+		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(ctx, input.WaveID)
 		if err != nil {
 			return nil, fmt.Errorf("resolve basis for wave %d: %w", input.WaveID, err)
 		}
@@ -97,7 +98,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 		}
 	}
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 
 	// validatedGroup holds the outcome of the validation pass for one group.
 	type validatedGroup struct {
@@ -126,7 +127,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			e := input.Entries[idx]
 
 			// Validate supplier order line existence.
-			sol, solErr := uc.supplierRepo.FindLineByID(e.SupplierOrderLineID)
+			sol, solErr := uc.supplierRepo.FindLineByID(ctx, e.SupplierOrderLineID)
 			if solErr != nil {
 				groupErr = append(groupErr, dto.ImportShipmentError{
 					EntryIndex: idx,
@@ -146,7 +147,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			}
 
 			// Validate fulfillment line existence.
-			fl, flErr := uc.fulfillRepo.FindByID(e.FulfillmentLineID)
+			fl, flErr := uc.fulfillRepo.FindByID(ctx, e.FulfillmentLineID)
 			if flErr != nil {
 				groupErr = append(groupErr, dto.ImportShipmentError{
 					EntryIndex: idx,
@@ -181,7 +182,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 				})
 				continue
 			}
-			alreadyShipped, sumErr := uc.shipmentRepo.SumShippedQuantityBySOL(sol.ID)
+			alreadyShipped, sumErr := uc.shipmentRepo.SumShippedQuantityBySOL(ctx, sol.ID)
 			if sumErr != nil {
 				groupErr = append(groupErr, dto.ImportShipmentError{
 					EntryIndex: idx,
@@ -202,8 +203,8 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			groupSupplierOrderID = sol.SupplierOrderID
 
 			shippedAt := e.ShippedAt
-			if shippedAt == "" {
-				shippedAt = now
+			if shippedAt == nil {
+				shippedAt = &now
 			}
 			_ = shippedAt // stored per-line via shipment header
 
@@ -269,8 +270,8 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 
 		// Build shipment domain object.
 		shippedAt := vg.firstEntry.ShippedAt
-		if shippedAt == "" {
-			shippedAt = now
+		if shippedAt == nil {
+			shippedAt = &now
 		}
 		shipmentNo := fmt.Sprintf("IMP-%d-%d", input.WaveID, vg.shipmentIndex)
 		shipment := &domain.Shipment{
@@ -298,7 +299,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 		}
 
 		// Persist atomically.
-		if createErr := uc.shipmentRepo.AtomicCreateShipment(shipment, vg.groupLines, pin); createErr != nil {
+		if createErr := uc.shipmentRepo.AtomicCreateShipment(ctx, shipment, vg.groupLines, pin); createErr != nil {
 			for _, idx := range vg.grp.indices {
 				result.Errors = append(result.Errors, dto.ImportShipmentError{
 					EntryIndex: idx,
@@ -318,7 +319,7 @@ func (uc *shipmentImportUseCase) ImportShipments(input dto.ImportShipmentInput) 
 			})
 		}
 		if len(stateUpdates) > 0 {
-			_ = uc.fulfillRepo.BulkUpdateStates(stateUpdates)
+			_ = uc.fulfillRepo.BulkUpdateStates(ctx, stateUpdates)
 		}
 
 		// Collect result DTO.

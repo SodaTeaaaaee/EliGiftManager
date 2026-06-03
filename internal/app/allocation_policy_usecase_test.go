@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -29,7 +30,7 @@ func newPolicyWaveRepo() *policyWaveRepo {
 
 func (m *policyWaveRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *policyWaveRepo) Create(wave *domain.Wave) error {
+func (m *policyWaveRepo) Create(ctx context.Context, wave *domain.Wave) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	wave.ID = m.next()
@@ -38,7 +39,7 @@ func (m *policyWaveRepo) Create(wave *domain.Wave) error {
 	return nil
 }
 
-func (m *policyWaveRepo) FindByID(id uint) (*domain.Wave, error) {
+func (m *policyWaveRepo) FindByID(ctx context.Context, id uint) (*domain.Wave, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	w, ok := m.waves[id]
@@ -49,7 +50,7 @@ func (m *policyWaveRepo) FindByID(id uint) (*domain.Wave, error) {
 	return &cp, nil
 }
 
-func (m *policyWaveRepo) FindByWaveNo(waveNo string) (*domain.Wave, error) {
+func (m *policyWaveRepo) FindByWaveNo(ctx context.Context, waveNo string) (*domain.Wave, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, w := range m.waves {
@@ -61,7 +62,7 @@ func (m *policyWaveRepo) FindByWaveNo(waveNo string) (*domain.Wave, error) {
 	return nil, fmt.Errorf("wave %q not found", waveNo)
 }
 
-func (m *policyWaveRepo) List() ([]domain.Wave, error) {
+func (m *policyWaveRepo) List(ctx context.Context) ([]domain.Wave, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]domain.Wave, 0, len(m.waves))
@@ -71,12 +72,12 @@ func (m *policyWaveRepo) List() ([]domain.Wave, error) {
 	return out, nil
 }
 
-func (m *policyWaveRepo) ListPaginated(_, _ int) ([]domain.Wave, int64, error) {
-	all, err := m.List()
+func (m *policyWaveRepo) ListPaginated(ctx context.Context, _, _ int) ([]domain.Wave, int64, error) {
+	all, err := m.List(context.Background())
 	return all, int64(len(all)), err
 }
 
-func (m *policyWaveRepo) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
+func (m *policyWaveRepo) AddParticipant(ctx context.Context, snap *domain.WaveParticipantSnapshot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	snap.ID = m.next()
@@ -84,7 +85,7 @@ func (m *policyWaveRepo) AddParticipant(snap *domain.WaveParticipantSnapshot) er
 	return nil
 }
 
-func (m *policyWaveRepo) ListParticipantsByWave(waveID uint) ([]domain.WaveParticipantSnapshot, error) {
+func (m *policyWaveRepo) ListParticipantsByWave(ctx context.Context, waveID uint) ([]domain.WaveParticipantSnapshot, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	pp := m.participants[waveID]
@@ -93,13 +94,15 @@ func (m *policyWaveRepo) ListParticipantsByWave(waveID uint) ([]domain.WaveParti
 	return out, nil
 }
 
-func (m *policyWaveRepo) ListParticipantsByProfile(profileID uint) ([]domain.WaveParticipantSnapshot, error) {
+func (m *policyWaveRepo) ListParticipantsByProfile(ctx context.Context, profileID uint) ([]domain.WaveParticipantSnapshot, error) {
 	panic("not implemented")
 }
 
-func (m *policyWaveRepo) UpdateLifecycle(_ uint, _ string, _ string) error { return nil }
+func (m *policyWaveRepo) UpdateLifecycle(ctx context.Context, _ uint, _ string, _ string) error {
+	return nil
+}
 
-func (m *policyWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) (int64, error) {
+func (m *policyWaveRepo) UpdateParticipantProfileID(ctx context.Context, oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var n int64
@@ -115,14 +118,14 @@ func (m *policyWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) (int64,
 	return n, nil
 }
 
-func (m *policyWaveRepo) DeleteParticipantsByWave(waveID uint) error {
+func (m *policyWaveRepo) DeleteParticipantsByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.participants, waveID)
 	return nil
 }
 
-func (m *policyWaveRepo) CountByDatePrefix(prefix string) (int, error) {
+func (m *policyWaveRepo) CountByDatePrefix(ctx context.Context, prefix string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	count := 0
@@ -147,7 +150,7 @@ func newPolicyRuleRepo() *policyRuleRepo {
 
 func (m *policyRuleRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *policyRuleRepo) Create(rule *domain.AllocationPolicyRule) error {
+func (m *policyRuleRepo) Create(ctx context.Context, rule *domain.AllocationPolicyRule) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	rule.ID = m.next()
@@ -156,7 +159,7 @@ func (m *policyRuleRepo) Create(rule *domain.AllocationPolicyRule) error {
 	return nil
 }
 
-func (m *policyRuleRepo) FindByID(id uint) (*domain.AllocationPolicyRule, error) {
+func (m *policyRuleRepo) FindByID(ctx context.Context, id uint) (*domain.AllocationPolicyRule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.rules[id]
@@ -167,7 +170,7 @@ func (m *policyRuleRepo) FindByID(id uint) (*domain.AllocationPolicyRule, error)
 	return &cp, nil
 }
 
-func (m *policyRuleRepo) ListByWave(waveID uint) ([]domain.AllocationPolicyRule, error) {
+func (m *policyRuleRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.AllocationPolicyRule, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.AllocationPolicyRule
@@ -179,7 +182,7 @@ func (m *policyRuleRepo) ListByWave(waveID uint) ([]domain.AllocationPolicyRule,
 	return out, nil
 }
 
-func (m *policyRuleRepo) Update(rule *domain.AllocationPolicyRule) error {
+func (m *policyRuleRepo) Update(ctx context.Context, rule *domain.AllocationPolicyRule) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.rules[rule.ID]; !ok {
@@ -190,7 +193,7 @@ func (m *policyRuleRepo) Update(rule *domain.AllocationPolicyRule) error {
 	return nil
 }
 
-func (m *policyRuleRepo) Delete(id uint) error {
+func (m *policyRuleRepo) Delete(ctx context.Context, id uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.rules[id]; !ok {
@@ -200,7 +203,7 @@ func (m *policyRuleRepo) Delete(id uint) error {
 	return nil
 }
 
-func (m *policyRuleRepo) DeleteByWave(waveID uint) error {
+func (m *policyRuleRepo) DeleteByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for id, r := range m.rules {
@@ -224,7 +227,7 @@ func newPolicyAdjRepo() *policyAdjRepo {
 
 func (m *policyAdjRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *policyAdjRepo) Create(adj *domain.FulfillmentAdjustment) error {
+func (m *policyAdjRepo) Create(ctx context.Context, adj *domain.FulfillmentAdjustment) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	adj.ID = m.next()
@@ -232,7 +235,7 @@ func (m *policyAdjRepo) Create(adj *domain.FulfillmentAdjustment) error {
 	return nil
 }
 
-func (m *policyAdjRepo) ListByWave(waveID uint) ([]domain.FulfillmentAdjustment, error) {
+func (m *policyAdjRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentAdjustment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.FulfillmentAdjustment
@@ -244,7 +247,7 @@ func (m *policyAdjRepo) ListByWave(waveID uint) ([]domain.FulfillmentAdjustment,
 	return out, nil
 }
 
-func (m *policyAdjRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.FulfillmentAdjustment, error) {
+func (m *policyAdjRepo) ListByFulfillmentLine(ctx context.Context, fulfillmentLineID uint) ([]domain.FulfillmentAdjustment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.FulfillmentAdjustment
@@ -256,7 +259,7 @@ func (m *policyAdjRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.
 	return out, nil
 }
 
-func (m *policyAdjRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, error) {
+func (m *policyAdjRepo) FindByID(ctx context.Context, id uint) (*domain.FulfillmentAdjustment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, a := range m.adjs {
@@ -267,7 +270,7 @@ func (m *policyAdjRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, error)
 	return nil, nil
 }
 
-func (m *policyAdjRepo) Update(adj *domain.FulfillmentAdjustment) error {
+func (m *policyAdjRepo) Update(ctx context.Context, adj *domain.FulfillmentAdjustment) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i := range m.adjs {
@@ -279,7 +282,7 @@ func (m *policyAdjRepo) Update(adj *domain.FulfillmentAdjustment) error {
 	return fmt.Errorf("adjustment %d not found", adj.ID)
 }
 
-func (m *policyAdjRepo) Delete(id uint) error {
+func (m *policyAdjRepo) Delete(ctx context.Context, id uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, a := range m.adjs {
@@ -291,7 +294,7 @@ func (m *policyAdjRepo) Delete(id uint) error {
 	return nil
 }
 
-func (m *policyAdjRepo) DeleteByWave(waveID uint) error {
+func (m *policyAdjRepo) DeleteByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var kept []domain.FulfillmentAdjustment
@@ -313,7 +316,7 @@ func newPolicyProductRepo() *policyProductRepo {
 	return &policyProductRepo{products: make(map[uint]*domain.Product)}
 }
 
-func (m *policyProductRepo) Create(product *domain.Product) error {
+func (m *policyProductRepo) Create(ctx context.Context, product *domain.Product) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if product.ID == 0 {
@@ -324,7 +327,7 @@ func (m *policyProductRepo) Create(product *domain.Product) error {
 	return nil
 }
 
-func (m *policyProductRepo) FindByID(id uint) (*domain.Product, error) {
+func (m *policyProductRepo) FindByID(ctx context.Context, id uint) (*domain.Product, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p, ok := m.products[id]
@@ -335,7 +338,7 @@ func (m *policyProductRepo) FindByID(id uint) (*domain.Product, error) {
 	return &cp, nil
 }
 
-func (m *policyProductRepo) FindByWaveAndID(waveID uint, id uint) (*domain.Product, error) {
+func (m *policyProductRepo) FindByWaveAndID(ctx context.Context, waveID uint, id uint) (*domain.Product, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p, ok := m.products[id]
@@ -346,7 +349,7 @@ func (m *policyProductRepo) FindByWaveAndID(waveID uint, id uint) (*domain.Produ
 	return &cp, nil
 }
 
-func (m *policyProductRepo) ListByWave(waveID uint) ([]domain.Product, error) {
+func (m *policyProductRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.Product, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.Product
@@ -358,7 +361,7 @@ func (m *policyProductRepo) ListByWave(waveID uint) ([]domain.Product, error) {
 	return out, nil
 }
 
-func (m *policyProductRepo) FindByWaveAndSKU(waveID uint, platform, sku string) (*domain.Product, error) {
+func (m *policyProductRepo) FindByWaveAndSKU(ctx context.Context, waveID uint, platform, sku string) (*domain.Product, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, p := range m.products {
@@ -370,7 +373,7 @@ func (m *policyProductRepo) FindByWaveAndSKU(waveID uint, platform, sku string) 
 	return nil, fmt.Errorf("product not found")
 }
 
-func (m *policyProductRepo) DeleteByWave(waveID uint) error {
+func (m *policyProductRepo) DeleteByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for id, p := range m.products {
@@ -399,7 +402,7 @@ func TestReconcileWave_EmptyRules_ReturnsZeroCreated(t *testing.T) {
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
-	result, err := uc.ReconcileWave(1)
+	result, err := uc.ReconcileWave(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ReconcileWave failed: %v", err)
 	}
@@ -432,7 +435,7 @@ func TestReconcileWave_SingleRule_MatchesAll(t *testing.T) {
 	}
 
 	// One rule: wave_all selector, product 10, quantity 3
-	if err := ruleRepo.Create(&domain.AllocationPolicyRule{
+	if err := ruleRepo.Create(context.Background(), &domain.AllocationPolicyRule{
 		WaveID:               waveID,
 		ProductID:            10,
 		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
@@ -446,7 +449,7 @@ func TestReconcileWave_SingleRule_MatchesAll(t *testing.T) {
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
-	result, err := uc.ReconcileWave(waveID)
+	result, err := uc.ReconcileWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ReconcileWave failed: %v", err)
 	}
@@ -456,7 +459,7 @@ func TestReconcileWave_SingleRule_MatchesAll(t *testing.T) {
 	}
 
 	// Verify persisted lines
-	lines, _ := fulfillRepo.ListByWave(waveID)
+	lines, _ := fulfillRepo.ListByWave(context.Background(), waveID)
 	if len(lines) != 2 {
 		t.Fatalf("expected 2 persisted lines, got %d", len(lines))
 	}
@@ -490,7 +493,7 @@ func TestReconcileWave_Idempotent(t *testing.T) {
 		{ID: 1, WaveID: waveID, CustomerProfileID: 100, IdentityPlatform: "bilibili", GiftLevel: "L1"},
 	}
 
-	if err := ruleRepo.Create(&domain.AllocationPolicyRule{
+	if err := ruleRepo.Create(context.Background(), &domain.AllocationPolicyRule{
 		WaveID:               waveID,
 		ProductID:            5,
 		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
@@ -505,7 +508,7 @@ func TestReconcileWave_Idempotent(t *testing.T) {
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	// First reconcile
-	result1, err := uc.ReconcileWave(waveID)
+	result1, err := uc.ReconcileWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("first ReconcileWave failed: %v", err)
 	}
@@ -514,7 +517,7 @@ func TestReconcileWave_Idempotent(t *testing.T) {
 	}
 
 	// Second reconcile — should delete old lines and rebuild (idempotent)
-	result2, err := uc.ReconcileWave(waveID)
+	result2, err := uc.ReconcileWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("second ReconcileWave failed: %v", err)
 	}
@@ -523,7 +526,7 @@ func TestReconcileWave_Idempotent(t *testing.T) {
 	}
 
 	// Only 1 line should exist (not 2)
-	lines, _ := fulfillRepo.ListByWave(waveID)
+	lines, _ := fulfillRepo.ListByWave(context.Background(), waveID)
 	if len(lines) != 1 {
 		t.Errorf("expected 1 line after idempotent rebuild, got %d", len(lines))
 	}
@@ -544,7 +547,7 @@ func TestReconcileWave_InactiveRulesSkipped(t *testing.T) {
 	}
 
 	// Inactive rule — should be skipped
-	if err := ruleRepo.Create(&domain.AllocationPolicyRule{
+	if err := ruleRepo.Create(context.Background(), &domain.AllocationPolicyRule{
 		WaveID:               waveID,
 		ProductID:            5,
 		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
@@ -561,7 +564,7 @@ func TestReconcileWave_InactiveRulesSkipped(t *testing.T) {
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
-	result, err := uc.ReconcileWave(waveID)
+	result, err := uc.ReconcileWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ReconcileWave failed: %v", err)
 	}
@@ -596,7 +599,7 @@ func TestCreateRule_And_ListRulesByWave(t *testing.T) {
 		Active:               true,
 	}
 
-	created, err := uc.CreateRule(input)
+	created, err := uc.CreateRule(context.Background(), input)
 	if err != nil {
 		t.Fatalf("CreateRule failed: %v", err)
 	}
@@ -611,7 +614,7 @@ func TestCreateRule_And_ListRulesByWave(t *testing.T) {
 	}
 
 	// List
-	rules, err := uc.ListRulesByWave(1)
+	rules, err := uc.ListRulesByWave(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ListRulesByWave failed: %v", err)
 	}
@@ -638,7 +641,7 @@ func TestUpdateRule(t *testing.T) {
 
 	// Create a rule first
 	selectorJSON2, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
-	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
+	created, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
 		SelectorPayload:      selectorJSON2,
@@ -653,7 +656,7 @@ func TestUpdateRule(t *testing.T) {
 
 	// Update quantity
 	newQty := 8
-	updated, err := uc.UpdateRule(dto.UpdateAllocationPolicyRuleInput{
+	updated, err := uc.UpdateRule(context.Background(), dto.UpdateAllocationPolicyRuleInput{
 		ID:                   created.ID,
 		ContributionQuantity: &newQty,
 	})
@@ -680,7 +683,7 @@ func TestDeleteRule(t *testing.T) {
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
 	selectorJSON3, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
-	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
+	created, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
 		SelectorPayload:      selectorJSON3,
@@ -693,12 +696,12 @@ func TestDeleteRule(t *testing.T) {
 		t.Fatalf("CreateRule failed: %v", err)
 	}
 
-	err = uc.DeleteRule(created.ID)
+	err = uc.DeleteRule(context.Background(), created.ID)
 	if err != nil {
 		t.Fatalf("DeleteRule failed: %v", err)
 	}
 
-	rules, _ := uc.ListRulesByWave(1)
+	rules, _ := uc.ListRulesByWave(context.Background(), 1)
 	if len(rules) != 0 {
 		t.Errorf("expected 0 rules after delete, got %d", len(rules))
 	}
@@ -717,7 +720,7 @@ func TestCreateRuleRejectsProductFromDifferentWave(t *testing.T) {
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
 	selectorJSON4, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
-	_, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
+	_, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
 		SelectorPayload:      selectorJSON4,
@@ -745,7 +748,7 @@ func TestUpdateRuleRejectsProductFromDifferentWave(t *testing.T) {
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, productRepo)
 
 	selectorJSON5, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
-	created, err := uc.CreateRule(dto.CreateAllocationPolicyRuleInput{
+	created, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
 		WaveID:               1,
 		ProductID:            10,
 		SelectorPayload:      selectorJSON5,
@@ -759,7 +762,7 @@ func TestUpdateRuleRejectsProductFromDifferentWave(t *testing.T) {
 	}
 
 	newProductID := uint(20)
-	_, err = uc.UpdateRule(dto.UpdateAllocationPolicyRuleInput{
+	_, err = uc.UpdateRule(context.Background(), dto.UpdateAllocationPolicyRuleInput{
 		ID:        created.ID,
 		ProductID: &newProductID,
 	})
@@ -785,7 +788,7 @@ func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *t
 		{ID: participantID, WaveID: waveID, CustomerProfileID: customerProfileID, IdentityPlatform: "bilibili", GiftLevel: "L1"},
 	}
 
-	if err := ruleRepo.Create(&domain.AllocationPolicyRule{
+	if err := ruleRepo.Create(context.Background(), &domain.AllocationPolicyRule{
 		WaveID:               waveID,
 		ProductID:            productID,
 		SelectorPayload:      domain.SelectorPayload{Type: "wave_all"},
@@ -799,7 +802,7 @@ func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *t
 
 	uc := NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjRepo, nil, nil, nil)
 
-	first, err := uc.ReconcileWave(waveID)
+	first, err := uc.ReconcileWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("first ReconcileWave failed: %v", err)
 	}
@@ -807,13 +810,13 @@ func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *t
 		t.Fatalf("expected first reconcile to create 1 line, got %d", first.Created)
 	}
 
-	lines, _ := fulfillRepo.ListByWave(waveID)
+	lines, _ := fulfillRepo.ListByWave(context.Background(), waveID)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line after first reconcile, got %d", len(lines))
 	}
 	originalLineID := lines[0].ID
 
-	if err := adjRepo.Create(&domain.FulfillmentAdjustment{
+	if err := adjRepo.Create(context.Background(), &domain.FulfillmentAdjustment{
 		WaveID:            waveID,
 		TargetKind:        "fulfillment_line",
 		FulfillmentLineID: &originalLineID,
@@ -824,7 +827,7 @@ func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *t
 		t.Fatalf("setup adjustment Create failed: %v", err)
 	}
 
-	second, err := uc.ReconcileWave(waveID)
+	second, err := uc.ReconcileWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("second ReconcileWave failed: %v", err)
 	}
@@ -832,7 +835,7 @@ func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *t
 		t.Fatalf("expected 0 replay failures after re-anchor, got %v", second.Failures)
 	}
 
-	updatedAdj, err := adjRepo.FindByID(1)
+	updatedAdj, err := adjRepo.FindByID(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("FindByID(updated adjustment): %v", err)
 	}
@@ -843,7 +846,7 @@ func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *t
 		t.Fatalf("expected adjustment target to be re-anchored away from old line ID %d", originalLineID)
 	}
 
-	lines, _ = fulfillRepo.ListByWave(waveID)
+	lines, _ = fulfillRepo.ListByWave(context.Background(), waveID)
 	if len(lines) != 1 {
 		t.Fatalf("expected 1 line after second reconcile, got %d", len(lines))
 	}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -43,7 +44,7 @@ func ParseProfileSnapshot(raw string) (*dto.BoundProfileSnapshot, error) {
 // falling back to a live profile lookup for backward compatibility with pre-binding data.
 // Callers should prefer the snapshot path; the live fallback exists only for documents
 // that were assigned before this feature was introduced.
-func ResolveEffectiveProfile(doc *domain.DemandDocument, profileRepo domain.IntegrationProfileRepository) (*dto.BoundProfileSnapshot, error) {
+func ResolveEffectiveProfile(ctx context.Context, doc *domain.DemandDocument, profileRepo domain.IntegrationProfileRepository) (*dto.BoundProfileSnapshot, error) {
 	// Prefer the bound snapshot — this is the stable, wave-time view of the profile.
 	if doc.BoundProfileSnapshot != "" {
 		snap, err := ParseProfileSnapshot(doc.BoundProfileSnapshot)
@@ -57,7 +58,7 @@ func ResolveEffectiveProfile(doc *domain.DemandDocument, profileRepo domain.Inte
 	if doc.IntegrationProfileID == nil {
 		return nil, nil
 	}
-	profile, err := profileRepo.FindByID(*doc.IntegrationProfileID)
+	profile, err := profileRepo.FindByID(ctx, *doc.IntegrationProfileID)
 	if err != nil {
 		return nil, err
 	}

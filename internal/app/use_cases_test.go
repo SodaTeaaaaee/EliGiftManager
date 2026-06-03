@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,9 +13,9 @@ import (
 // ── In-memory mock repositories ──
 
 type mockDemandRepo struct {
-	mu    sync.Mutex
-	docs  map[uint]*domain.DemandDocument
-	lines map[uint][]*domain.DemandLine
+	mu     sync.Mutex
+	docs   map[uint]*domain.DemandDocument
+	lines  map[uint][]*domain.DemandLine
 	lastID uint
 }
 
@@ -27,7 +28,7 @@ func newMockDemandRepo() *mockDemandRepo {
 
 func (m *mockDemandRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockDemandRepo) Create(doc *domain.DemandDocument) error {
+func (m *mockDemandRepo) Create(ctx context.Context, doc *domain.DemandDocument) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	doc.ID = m.next()
@@ -36,7 +37,7 @@ func (m *mockDemandRepo) Create(doc *domain.DemandDocument) error {
 	return nil
 }
 
-func (m *mockDemandRepo) FindByID(id uint) (*domain.DemandDocument, error) {
+func (m *mockDemandRepo) FindByID(ctx context.Context, id uint) (*domain.DemandDocument, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	d, ok := m.docs[id]
@@ -47,7 +48,7 @@ func (m *mockDemandRepo) FindByID(id uint) (*domain.DemandDocument, error) {
 	return &cp, nil
 }
 
-func (m *mockDemandRepo) List() ([]domain.DemandDocument, error) {
+func (m *mockDemandRepo) List(ctx context.Context) ([]domain.DemandDocument, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]domain.DemandDocument, 0, len(m.docs))
@@ -57,11 +58,11 @@ func (m *mockDemandRepo) List() ([]domain.DemandDocument, error) {
 	return out, nil
 }
 
-func (m *mockDemandRepo) ListUnassigned() ([]domain.DemandDocument, error) {
-	return m.List()
+func (m *mockDemandRepo) ListUnassigned(ctx context.Context) ([]domain.DemandDocument, error) {
+	return m.List(context.Background())
 }
 
-func (m *mockDemandRepo) CountByIntegrationProfileID(profileID uint) (int64, error) {
+func (m *mockDemandRepo) CountByIntegrationProfileID(ctx context.Context, profileID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var count int64
@@ -73,7 +74,7 @@ func (m *mockDemandRepo) CountByIntegrationProfileID(profileID uint) (int64, err
 	return count, nil
 }
 
-func (m *mockDemandRepo) CreateLine(line *domain.DemandLine) error {
+func (m *mockDemandRepo) CreateLine(ctx context.Context, line *domain.DemandLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	line.ID = m.next()
@@ -82,7 +83,7 @@ func (m *mockDemandRepo) CreateLine(line *domain.DemandLine) error {
 	return nil
 }
 
-func (m *mockDemandRepo) FindLineByID(id uint) (*domain.DemandLine, error) {
+func (m *mockDemandRepo) FindLineByID(ctx context.Context, id uint) (*domain.DemandLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, ll := range m.lines {
@@ -96,7 +97,7 @@ func (m *mockDemandRepo) FindLineByID(id uint) (*domain.DemandLine, error) {
 	return nil, fmt.Errorf("demand line %d not found", id)
 }
 
-func (m *mockDemandRepo) ListLinesByDocument(docID uint) ([]domain.DemandLine, error) {
+func (m *mockDemandRepo) ListLinesByDocument(ctx context.Context, docID uint) ([]domain.DemandLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ll, ok := m.lines[docID]
@@ -110,7 +111,7 @@ func (m *mockDemandRepo) ListLinesByDocument(docID uint) ([]domain.DemandLine, e
 	return out, nil
 }
 
-func (m *mockDemandRepo) UpdateLine(line *domain.DemandLine) error {
+func (m *mockDemandRepo) UpdateLine(ctx context.Context, line *domain.DemandLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.lines[line.DemandDocumentID] == nil {
@@ -125,7 +126,7 @@ func (m *mockDemandRepo) UpdateLine(line *domain.DemandLine) error {
 	return fmt.Errorf("line not found")
 }
 
-func (m *mockDemandRepo) UpdateLineRoutingFields(lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error {
+func (m *mockDemandRepo) UpdateLineRoutingFields(ctx context.Context, lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, lines := range m.lines {
@@ -141,11 +142,11 @@ func (m *mockDemandRepo) UpdateLineRoutingFields(lineID uint, routingDisposition
 	return fmt.Errorf("line %d not found", lineID)
 }
 
-func (m *mockDemandRepo) UpdateBoundProfileSnapshot(_ uint, _ string) error {
+func (m *mockDemandRepo) UpdateBoundProfileSnapshot(ctx context.Context, _ uint, _ string) error {
 	return nil
 }
 
-func (m *mockDemandRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) (int64, error) {
+func (m *mockDemandRepo) BulkUpdateCustomerProfileID(ctx context.Context, oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var n int64
@@ -173,7 +174,7 @@ func newMockWaveRepo() *mockWaveRepo {
 
 func (m *mockWaveRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockWaveRepo) Create(wave *domain.Wave) error {
+func (m *mockWaveRepo) Create(ctx context.Context, wave *domain.Wave) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	wave.ID = m.next()
@@ -182,7 +183,7 @@ func (m *mockWaveRepo) Create(wave *domain.Wave) error {
 	return nil
 }
 
-func (m *mockWaveRepo) FindByID(id uint) (*domain.Wave, error) {
+func (m *mockWaveRepo) FindByID(ctx context.Context, id uint) (*domain.Wave, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	w, ok := m.waves[id]
@@ -193,7 +194,7 @@ func (m *mockWaveRepo) FindByID(id uint) (*domain.Wave, error) {
 	return &cp, nil
 }
 
-func (m *mockWaveRepo) FindByWaveNo(waveNo string) (*domain.Wave, error) {
+func (m *mockWaveRepo) FindByWaveNo(ctx context.Context, waveNo string) (*domain.Wave, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, w := range m.waves {
@@ -205,7 +206,7 @@ func (m *mockWaveRepo) FindByWaveNo(waveNo string) (*domain.Wave, error) {
 	return nil, fmt.Errorf("wave %q not found", waveNo)
 }
 
-func (m *mockWaveRepo) List() ([]domain.Wave, error) {
+func (m *mockWaveRepo) List(ctx context.Context) ([]domain.Wave, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]domain.Wave, 0, len(m.waves))
@@ -215,25 +216,25 @@ func (m *mockWaveRepo) List() ([]domain.Wave, error) {
 	return out, nil
 }
 
-func (m *mockWaveRepo) ListPaginated(_, _ int) ([]domain.Wave, int64, error) {
-	all, err := m.List()
+func (m *mockWaveRepo) ListPaginated(ctx context.Context, _, _ int) ([]domain.Wave, int64, error) {
+	all, err := m.List(context.Background())
 	return all, int64(len(all)), err
 }
 
-func (m *mockWaveRepo) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
+func (m *mockWaveRepo) AddParticipant(ctx context.Context, snap *domain.WaveParticipantSnapshot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	snap.ID = m.next()
 	return nil
 }
 
-func (m *mockWaveRepo) ListParticipantsByWave(waveID uint) ([]domain.WaveParticipantSnapshot, error) {
+func (m *mockWaveRepo) ListParticipantsByWave(ctx context.Context, waveID uint) ([]domain.WaveParticipantSnapshot, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.participants, nil
 }
 
-func (m *mockWaveRepo) DeleteParticipantsByWave(waveID uint) error {
+func (m *mockWaveRepo) DeleteParticipantsByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var kept []domain.WaveParticipantSnapshot
@@ -246,7 +247,7 @@ func (m *mockWaveRepo) DeleteParticipantsByWave(waveID uint) error {
 	return nil
 }
 
-func (m *mockWaveRepo) ListParticipantsByProfile(profileID uint) ([]domain.WaveParticipantSnapshot, error) {
+func (m *mockWaveRepo) ListParticipantsByProfile(ctx context.Context, profileID uint) ([]domain.WaveParticipantSnapshot, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.WaveParticipantSnapshot
@@ -258,7 +259,7 @@ func (m *mockWaveRepo) ListParticipantsByProfile(profileID uint) ([]domain.WaveP
 	return out, nil
 }
 
-func (m *mockWaveRepo) UpdateLifecycle(waveID uint, stage string, _ string) error {
+func (m *mockWaveRepo) UpdateLifecycle(ctx context.Context, waveID uint, stage string, _ string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if w, ok := m.waves[waveID]; ok {
@@ -267,7 +268,7 @@ func (m *mockWaveRepo) UpdateLifecycle(waveID uint, stage string, _ string) erro
 	return nil
 }
 
-func (m *mockWaveRepo) UpdateParticipantProfileID(oldPID, newPID uint) (int64, error) {
+func (m *mockWaveRepo) UpdateParticipantProfileID(ctx context.Context, oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var n int64
@@ -286,7 +287,7 @@ func (m *mockWaveRepo) SetParticipants(snaps []domain.WaveParticipantSnapshot) {
 	m.participants = snaps
 }
 
-func (m *mockWaveRepo) CountByDatePrefix(prefix string) (int, error) {
+func (m *mockWaveRepo) CountByDatePrefix(ctx context.Context, prefix string) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	count := 0
@@ -312,7 +313,7 @@ func newMockFulfillRepo() *mockFulfillRepo {
 
 func (m *mockFulfillRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockFulfillRepo) Create(line *domain.FulfillmentLine) error {
+func (m *mockFulfillRepo) Create(ctx context.Context, line *domain.FulfillmentLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	line.ID = m.next()
@@ -321,7 +322,7 @@ func (m *mockFulfillRepo) Create(line *domain.FulfillmentLine) error {
 	return nil
 }
 
-func (m *mockFulfillRepo) FindByID(id uint) (*domain.FulfillmentLine, error) {
+func (m *mockFulfillRepo) FindByID(ctx context.Context, id uint) (*domain.FulfillmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l, ok := m.lines[id]
@@ -332,7 +333,7 @@ func (m *mockFulfillRepo) FindByID(id uint) (*domain.FulfillmentLine, error) {
 	return &cp, nil
 }
 
-func (m *mockFulfillRepo) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
+func (m *mockFulfillRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.FulfillmentLine
@@ -344,7 +345,7 @@ func (m *mockFulfillRepo) ListByWave(waveID uint) ([]domain.FulfillmentLine, err
 	return out, nil
 }
 
-func (m *mockFulfillRepo) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
+func (m *mockFulfillRepo) DeleteByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for id, l := range m.lines {
@@ -355,15 +356,15 @@ func (m *mockFulfillRepo) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy st
 	return nil
 }
 
-func (m *mockFulfillRepo) ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []domain.FulfillmentLine) error {
-	m.DeleteByWaveAndGeneratedBy(waveID, generatedBy)
+func (m *mockFulfillRepo) ReplaceByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string, newLines []domain.FulfillmentLine) error {
+	m.DeleteByWaveAndGeneratedBy(context.Background(), waveID, generatedBy)
 	for i := range newLines {
-		m.Create(&newLines[i])
+		m.Create(context.Background(), &newLines[i])
 	}
 	return nil
 }
 
-func (m *mockFulfillRepo) DeleteByWave(waveID uint) error {
+func (m *mockFulfillRepo) DeleteByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for id, l := range m.lines {
@@ -374,9 +375,11 @@ func (m *mockFulfillRepo) DeleteByWave(waveID uint) error {
 	return nil
 }
 
-func (m *mockFulfillRepo) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
+func (m *mockFulfillRepo) BulkUpdateStates(ctx context.Context, updates []domain.FulfillmentLineStateUpdate) error {
+	return nil
+}
 
-func (m *mockFulfillRepo) Update(line *domain.FulfillmentLine) error {
+func (m *mockFulfillRepo) Update(ctx context.Context, line *domain.FulfillmentLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing, ok := m.lines[line.ID]; ok {
@@ -385,7 +388,7 @@ func (m *mockFulfillRepo) Update(line *domain.FulfillmentLine) error {
 	return nil
 }
 
-func (m *mockFulfillRepo) BulkUpdateCustomerProfileID(oldPID, newPID uint) (int64, error) {
+func (m *mockFulfillRepo) BulkUpdateCustomerProfileID(ctx context.Context, oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var n int64
@@ -404,16 +407,20 @@ type mockRuleRepo struct{}
 
 func newMockRuleRepo() *mockRuleRepo { return &mockRuleRepo{} }
 
-func (m *mockRuleRepo) Create(rule *domain.AllocationPolicyRule) error { return nil }
-func (m *mockRuleRepo) FindByID(id uint) (*domain.AllocationPolicyRule, error) {
+func (m *mockRuleRepo) Create(ctx context.Context, rule *domain.AllocationPolicyRule) error {
+	return nil
+}
+func (m *mockRuleRepo) FindByID(ctx context.Context, id uint) (*domain.AllocationPolicyRule, error) {
 	return nil, fmt.Errorf("not found")
 }
-func (m *mockRuleRepo) ListByWave(waveID uint) ([]domain.AllocationPolicyRule, error) {
+func (m *mockRuleRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.AllocationPolicyRule, error) {
 	return nil, nil
 }
-func (m *mockRuleRepo) Update(rule *domain.AllocationPolicyRule) error { return nil }
-func (m *mockRuleRepo) Delete(id uint) error                          { return nil }
-func (m *mockRuleRepo) DeleteByWave(waveID uint) error                { return nil }
+func (m *mockRuleRepo) Update(ctx context.Context, rule *domain.AllocationPolicyRule) error {
+	return nil
+}
+func (m *mockRuleRepo) Delete(ctx context.Context, id uint) error           { return nil }
+func (m *mockRuleRepo) DeleteByWave(ctx context.Context, waveID uint) error { return nil }
 
 // ── mock assignment repo ──
 
@@ -433,7 +440,7 @@ func newMockAssignmentRepo(demandRepo *mockDemandRepo) *mockAssignmentRepo {
 
 func (m *mockAssignmentRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockAssignmentRepo) Create(assignment *domain.WaveDemandAssignment) error {
+func (m *mockAssignmentRepo) Create(ctx context.Context, assignment *domain.WaveDemandAssignment) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Check for duplicate
@@ -448,7 +455,7 @@ func (m *mockAssignmentRepo) Create(assignment *domain.WaveDemandAssignment) err
 	return nil
 }
 
-func (m *mockAssignmentRepo) ListByWave(waveID uint) ([]domain.WaveDemandAssignment, error) {
+func (m *mockAssignmentRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.WaveDemandAssignment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	aa := m.assignments[waveID]
@@ -459,7 +466,7 @@ func (m *mockAssignmentRepo) ListByWave(waveID uint) ([]domain.WaveDemandAssignm
 	return out, nil
 }
 
-func (m *mockAssignmentRepo) ListByDemandDocument(docID uint) ([]domain.WaveDemandAssignment, error) {
+func (m *mockAssignmentRepo) ListByDemandDocument(ctx context.Context, docID uint) ([]domain.WaveDemandAssignment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.WaveDemandAssignment
@@ -473,7 +480,7 @@ func (m *mockAssignmentRepo) ListByDemandDocument(docID uint) ([]domain.WaveDema
 	return out, nil
 }
 
-func (m *mockAssignmentRepo) DeleteByWaveAndDocument(waveID uint, demandDocumentID uint) error {
+func (m *mockAssignmentRepo) DeleteByWaveAndDocument(ctx context.Context, waveID uint, demandDocumentID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	aa := m.assignments[waveID]
@@ -486,20 +493,20 @@ func (m *mockAssignmentRepo) DeleteByWaveAndDocument(waveID uint, demandDocument
 	return nil
 }
 
-func (m *mockAssignmentRepo) DeleteByWave(waveID uint) error {
+func (m *mockAssignmentRepo) DeleteByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.assignments, waveID)
 	return nil
 }
 
-func (m *mockAssignmentRepo) ListDemandDocumentsByWave(waveID uint) ([]domain.DemandDocument, error) {
+func (m *mockAssignmentRepo) ListDemandDocumentsByWave(ctx context.Context, waveID uint) ([]domain.DemandDocument, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	aa := m.assignments[waveID]
 	var out []domain.DemandDocument
 	for _, a := range aa {
-		doc, err := m.demandRepo.FindByID(a.DemandDocumentID)
+		doc, err := m.demandRepo.FindByID(context.Background(), a.DemandDocumentID)
 		if err != nil {
 			continue
 		}
@@ -511,10 +518,10 @@ func (m *mockAssignmentRepo) ListDemandDocumentsByWave(waveID uint) ([]domain.De
 // ── mock supplier repo ──
 
 type mockSupplierRepo struct {
-	mu        sync.Mutex
-	orders    map[uint]*domain.SupplierOrder
+	mu         sync.Mutex
+	orders     map[uint]*domain.SupplierOrder
 	orderLines map[uint][]*domain.SupplierOrderLine
-	lastID    uint
+	lastID     uint
 }
 
 func newMockSupplierRepo() *mockSupplierRepo {
@@ -526,7 +533,7 @@ func newMockSupplierRepo() *mockSupplierRepo {
 
 func (m *mockSupplierRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockSupplierRepo) Create(order *domain.SupplierOrder) error {
+func (m *mockSupplierRepo) Create(ctx context.Context, order *domain.SupplierOrder) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	order.ID = m.next()
@@ -535,7 +542,7 @@ func (m *mockSupplierRepo) Create(order *domain.SupplierOrder) error {
 	return nil
 }
 
-func (m *mockSupplierRepo) FindByID(id uint) (*domain.SupplierOrder, error) {
+func (m *mockSupplierRepo) FindByID(ctx context.Context, id uint) (*domain.SupplierOrder, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	o, ok := m.orders[id]
@@ -546,7 +553,7 @@ func (m *mockSupplierRepo) FindByID(id uint) (*domain.SupplierOrder, error) {
 	return &cp, nil
 }
 
-func (m *mockSupplierRepo) List() ([]domain.SupplierOrder, error) {
+func (m *mockSupplierRepo) List(ctx context.Context) ([]domain.SupplierOrder, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]domain.SupplierOrder, 0, len(m.orders))
@@ -556,7 +563,7 @@ func (m *mockSupplierRepo) List() ([]domain.SupplierOrder, error) {
 	return out, nil
 }
 
-func (m *mockSupplierRepo) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
+func (m *mockSupplierRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.SupplierOrder, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.SupplierOrder
@@ -568,7 +575,7 @@ func (m *mockSupplierRepo) ListByWave(waveID uint) ([]domain.SupplierOrder, erro
 	return out, nil
 }
 
-func (m *mockSupplierRepo) CreateLine(line *domain.SupplierOrderLine) error {
+func (m *mockSupplierRepo) CreateLine(ctx context.Context, line *domain.SupplierOrderLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	line.ID = m.next()
@@ -577,7 +584,7 @@ func (m *mockSupplierRepo) CreateLine(line *domain.SupplierOrderLine) error {
 	return nil
 }
 
-func (m *mockSupplierRepo) ListLinesByOrder(orderID uint) ([]domain.SupplierOrderLine, error) {
+func (m *mockSupplierRepo) ListLinesByOrder(ctx context.Context, orderID uint) ([]domain.SupplierOrderLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ll, ok := m.orderLines[orderID]
@@ -591,7 +598,7 @@ func (m *mockSupplierRepo) ListLinesByOrder(orderID uint) ([]domain.SupplierOrde
 	return out, nil
 }
 
-func (m *mockSupplierRepo) FindLineByID(id uint) (*domain.SupplierOrderLine, error) {
+func (m *mockSupplierRepo) FindLineByID(ctx context.Context, id uint) (*domain.SupplierOrderLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, lines := range m.orderLines {
@@ -605,14 +612,14 @@ func (m *mockSupplierRepo) FindLineByID(id uint) (*domain.SupplierOrderLine, err
 	return nil, fmt.Errorf("supplier order line %d not found", id)
 }
 
-func (m *mockSupplierRepo) DeleteLinesByOrder(orderID uint) error {
+func (m *mockSupplierRepo) DeleteLinesByOrder(ctx context.Context, orderID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.orderLines, orderID)
 	return nil
 }
 
-func (m *mockSupplierRepo) DeleteDraftsByWave(waveID uint) error {
+func (m *mockSupplierRepo) DeleteDraftsByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var idsToDelete []uint
@@ -628,7 +635,7 @@ func (m *mockSupplierRepo) DeleteDraftsByWave(waveID uint) error {
 	return nil
 }
 
-func (m *mockSupplierRepo) Update(order *domain.SupplierOrder) error {
+func (m *mockSupplierRepo) Update(ctx context.Context, order *domain.SupplierOrder) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.orders[order.ID]; !ok {
@@ -639,7 +646,7 @@ func (m *mockSupplierRepo) Update(order *domain.SupplierOrder) error {
 	return nil
 }
 
-func (m *mockSupplierRepo) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, _ *domain.BasisPinParam) error {
+func (m *mockSupplierRepo) AtomicCreateSupplierOrder(ctx context.Context, order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, _ *domain.BasisPinParam) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	orderID := m.next()
@@ -681,7 +688,7 @@ func TestImportDemand(t *testing.T) {
 		},
 	}
 
-	err := uc.ImportDemand(doc, lines)
+	err := uc.ImportDemand(context.Background(), doc, lines)
 	if err != nil {
 		t.Fatalf("ImportDemand failed: %v", err)
 	}
@@ -694,7 +701,7 @@ func TestImportDemand(t *testing.T) {
 	}
 
 	// Verify lines persisted
-	persistedLines, err := repo.ListLinesByDocument(doc.ID)
+	persistedLines, err := repo.ListLinesByDocument(context.Background(), doc.ID)
 	if err != nil {
 		t.Fatalf("ListLinesByDocument failed: %v", err)
 	}
@@ -718,7 +725,7 @@ func TestCreateWaveGeneratesWaveNo(t *testing.T) {
 	uc := NewWaveUseCase(repo, nil, nil)
 
 	wave := &domain.Wave{Name: "测试波次"}
-	err := uc.CreateWave(wave)
+	err := uc.CreateWave(context.Background(), wave)
 	if err != nil {
 		t.Fatalf("CreateWave failed: %v", err)
 	}
@@ -738,7 +745,7 @@ func TestCreateWaveGeneratesWaveNo(t *testing.T) {
 
 	// Create a second wave, should get sequential number
 	wave2 := &domain.Wave{Name: "波次2"}
-	err = uc.CreateWave(wave2)
+	err = uc.CreateWave(context.Background(), wave2)
 	if err != nil {
 		t.Fatalf("CreateWave 2 failed: %v", err)
 	}
@@ -774,12 +781,12 @@ func TestMapDemandToFulfillmentDemandDriven(t *testing.T) {
 		{RoutingDisposition: "deferred", RequestedQuantity: 5, LineType: "sku_order"},
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 3, LineType: "sku_order"},
 	}
-	if err := demandUC.ImportDemand(doc, lines); err != nil {
+	if err := demandUC.ImportDemand(context.Background(), doc, lines); err != nil {
 		t.Fatalf("setup ImportDemand failed: %v", err)
 	}
 
 	// Assign the demand document to wave 1
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID:           1,
 		DemandDocumentID: doc.ID,
 	}); err != nil {
@@ -787,7 +794,7 @@ func TestMapDemandToFulfillmentDemandDriven(t *testing.T) {
 	}
 
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
-	dmResult, err := dmUC.MapDemandToFulfillment(1)
+	dmResult, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("MapDemandToFulfillment failed: %v", err)
 	}
@@ -847,18 +854,18 @@ func TestMapDemandToFulfillmentFailsOnPartialSnapshotMissing(t *testing.T) {
 		SourceChannel: "test", SourceDocumentNo: "PARTIAL-B",
 		CustomerProfileID: &profileB,
 	}
-	if err := demandUC.ImportDemand(docA, []*domain.DemandLine{
+	if err := demandUC.ImportDemand(context.Background(), docA, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := demandUC.ImportDemand(docB, []*domain.DemandLine{
+	if err := demandUC.ImportDemand(context.Background(), docB, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatal(err)
 	}
 	for _, doc := range []*domain.DemandDocument{docA, docB} {
-		if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+		if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 			WaveID: 1, DemandDocumentID: doc.ID,
 		}); err != nil {
 			t.Fatal(err)
@@ -866,7 +873,7 @@ func TestMapDemandToFulfillmentFailsOnPartialSnapshotMissing(t *testing.T) {
 	}
 
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
-	_, err := dmUC.MapDemandToFulfillment(1)
+	_, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err == nil {
 		t.Fatal("expected MapDemandToFulfillment to fail when some retail docs lack participant snapshot, but got nil")
 	}
@@ -875,7 +882,7 @@ func TestMapDemandToFulfillmentFailsOnPartialSnapshotMissing(t *testing.T) {
 	}
 
 	// Verify no fulfillment lines were created (fail-fast before delete+create)
-	allLines, _ := fulfillRepo.ListByWave(1)
+	allLines, _ := fulfillRepo.ListByWave(context.Background(), 1)
 	if len(allLines) != 0 {
 		t.Errorf("expected 0 fulfillment lines after failed MapDemandToFulfillment, got %d", len(allLines))
 	}
@@ -894,19 +901,19 @@ func TestMapDemandToFulfillmentFailsOnMissingCustomerProfileID(t *testing.T) {
 		Kind: "retail_order", CaptureMode: "manual_entry",
 		SourceChannel: "test", SourceDocumentNo: "NO-PROFILE",
 	}
-	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
+	if err := demandUC.ImportDemand(context.Background(), doc, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID: 1, DemandDocumentID: doc.ID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
-	_, err := dmUC.MapDemandToFulfillment(1)
+	_, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err == nil {
 		t.Fatal("expected MapDemandToFulfillment to fail when retail doc has no CustomerProfileID, but got nil")
 	}
@@ -924,7 +931,7 @@ func TestExportSupplierOrder(t *testing.T) {
 	// Setup: create fulfillment lines (no DemandDocumentID → catch-all group)
 	waveID := uint(42)
 	for i := 0; i < 3; i++ {
-		err := fulfillRepo.Create(&domain.FulfillmentLine{
+		err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
 			WaveID:          waveID,
 			Quantity:        10 + i,
 			AllocationState: "ready",
@@ -935,7 +942,7 @@ func TestExportSupplierOrder(t *testing.T) {
 	}
 
 	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
-	orders, err := exportUC.ExportSupplierOrder(waveID)
+	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder failed: %v", err)
 	}
@@ -957,7 +964,7 @@ func TestExportSupplierOrder(t *testing.T) {
 	}
 
 	// Verify order lines
-	orderLines, err := supplierRepo.ListLinesByOrder(order.ID)
+	orderLines, err := supplierRepo.ListLinesByOrder(context.Background(), order.ID)
 	if err != nil {
 		t.Fatalf("ListLinesByOrder failed: %v", err)
 	}
@@ -998,14 +1005,14 @@ func TestFullVerticalSlice(t *testing.T) {
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 7, LineType: "sku_order", ExternalTitle: "Widget A"},
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 2, LineType: "sku_order", ExternalTitle: "Widget B"},
 	}
-	if err := demandUC.ImportDemand(doc, demandLines); err != nil {
+	if err := demandUC.ImportDemand(context.Background(), doc, demandLines); err != nil {
 		t.Fatalf("Step 1 ImportDemand failed: %v", err)
 	}
 
 	// Step 2: Create Wave
 	waveUC := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
 	wave := &domain.Wave{Name: "纵切面测试波次"}
-	if err := waveUC.CreateWave(wave); err != nil {
+	if err := waveUC.CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("Step 2 CreateWave failed: %v", err)
 	}
 	if wave.WaveNo == "" || wave.ID == 0 {
@@ -1013,7 +1020,7 @@ func TestFullVerticalSlice(t *testing.T) {
 	}
 
 	// Assign the demand document to the wave
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID:           wave.ID,
 		DemandDocumentID: doc.ID,
 	}); err != nil {
@@ -1027,7 +1034,7 @@ func TestFullVerticalSlice(t *testing.T) {
 
 	// Step 3: Apply Allocation Rules
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
-	dmResult, err := dmUC.MapDemandToFulfillment(wave.ID)
+	dmResult, err := dmUC.MapDemandToFulfillment(context.Background(), wave.ID)
 	if err != nil {
 		t.Fatalf("Step 3 MapDemandToFulfillment failed: %v", err)
 	}
@@ -1037,7 +1044,7 @@ func TestFullVerticalSlice(t *testing.T) {
 
 	// Step 4: Export Supplier Order
 	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
-	exportedOrders, err := exportUC.ExportSupplierOrder(wave.ID)
+	exportedOrders, err := exportUC.ExportSupplierOrder(context.Background(), wave.ID)
 	if err != nil {
 		t.Fatalf("Step 4 ExportSupplierOrder failed: %v", err)
 	}
@@ -1050,7 +1057,7 @@ func TestFullVerticalSlice(t *testing.T) {
 	}
 
 	// Verify order lines link back to fulfillment lines
-	orderLines, _ := supplierRepo.ListLinesByOrder(order.ID)
+	orderLines, _ := supplierRepo.ListLinesByOrder(context.Background(), order.ID)
 	if len(orderLines) != 2 {
 		t.Errorf("Step 4: expected 2 order lines, got %d", len(orderLines))
 	}
@@ -1072,14 +1079,14 @@ func TestAssignDemandToWaveRejectsDuplicateAssignment(t *testing.T) {
 		SourceChannel:    "test",
 		SourceDocumentNo: "DUP-001",
 	}
-	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
+	if err := demandUC.ImportDemand(context.Background(), doc, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
 
 	// First assignment should succeed
-	err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID:           1,
 		DemandDocumentID: doc.ID,
 	})
@@ -1088,7 +1095,7 @@ func TestAssignDemandToWaveRejectsDuplicateAssignment(t *testing.T) {
 	}
 
 	// Second assignment (same wave + same demand) should fail
-	err = assignmentRepo.Create(&domain.WaveDemandAssignment{
+	err = assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID:           1,
 		DemandDocumentID: doc.ID,
 	})
@@ -1099,7 +1106,7 @@ func TestAssignDemandToWaveRejectsDuplicateAssignment(t *testing.T) {
 	}
 
 	// Verify only 1 assignment exists
-	assignments, _ := assignmentRepo.ListByWave(1)
+	assignments, _ := assignmentRepo.ListByWave(context.Background(), 1)
 	if len(assignments) != 1 {
 		t.Errorf("expected 1 assignment, got %d", len(assignments))
 	}
@@ -1127,12 +1134,12 @@ func TestMapDemandToFulfillmentIsIdempotentForSameWave(t *testing.T) {
 		SourceDocumentNo:  "IDEM-001",
 		CustomerProfileID: &profileID,
 	}
-	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
+	if err := demandUC.ImportDemand(context.Background(), doc, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 5, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatalf("setup ImportDemand failed: %v", err)
 	}
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID:           1,
 		DemandDocumentID: doc.ID,
 	}); err != nil {
@@ -1142,14 +1149,14 @@ func TestMapDemandToFulfillmentIsIdempotentForSameWave(t *testing.T) {
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 
 	// Run allocation first time
-	lines1, err := dmUC.MapDemandToFulfillment(1)
+	lines1, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("first MapDemandToFulfillment failed: %v", err)
 	}
 	count1 := len(lines1.CreatedLines)
 
 	// Run allocation second time — should be idempotent (rebuild, not append)
-	lines2, err := dmUC.MapDemandToFulfillment(1)
+	lines2, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("second MapDemandToFulfillment failed: %v", err)
 	}
@@ -1172,7 +1179,7 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 	// Setup: fulfillment lines for wave
 	waveID := uint(1)
 	for i := 0; i < 3; i++ {
-		if err := fulfillRepo.Create(&domain.FulfillmentLine{
+		if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
 			WaveID:          waveID,
 			Quantity:        10 + i,
 			AllocationState: "ready",
@@ -1185,7 +1192,7 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
 
 	// First export
-	orders1, err := exportUC.ExportSupplierOrder(waveID)
+	orders1, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("first ExportSupplierOrder failed: %v", err)
 	}
@@ -1193,14 +1200,14 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		t.Fatalf("expected 1 order after first export, got %d", len(orders1))
 	}
 
-	ordersAfter1, _ := supplierRepo.ListByWave(waveID)
+	ordersAfter1, _ := supplierRepo.ListByWave(context.Background(), waveID)
 	orderCount1 := len(ordersAfter1)
 	if orderCount1 != 1 {
 		t.Errorf("expected 1 order after first export, got %d", orderCount1)
 	}
 
 	// Second export — should be idempotent for draft
-	orders2, err := exportUC.ExportSupplierOrder(waveID)
+	orders2, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("second ExportSupplierOrder failed: %v", err)
 	}
@@ -1208,7 +1215,7 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		t.Fatalf("expected 1 order after second export, got %d", len(orders2))
 	}
 
-	ordersAfter2, _ := supplierRepo.ListByWave(waveID)
+	ordersAfter2, _ := supplierRepo.ListByWave(context.Background(), waveID)
 	orderCount2 := len(ordersAfter2)
 	if orderCount2 != 1 {
 		t.Errorf("idempotent violation: expected 1 order after second export, got %d", orderCount2)
@@ -1257,12 +1264,12 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 		SourceDocumentNo:  "ERR-001",
 		CustomerProfileID: &profileID,
 	}
-	if err := demandUC.ImportDemand(doc, []*domain.DemandLine{
+	if err := demandUC.ImportDemand(context.Background(), doc, []*domain.DemandLine{
 		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
 	}); err != nil {
 		t.Fatalf("setup failed: %v", err)
 	}
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID:           1,
 		DemandDocumentID: doc.ID,
 	}); err != nil {
@@ -1272,7 +1279,7 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
 
 	// Apply rules — should succeed and return correct count
-	lines, err := dmUC.MapDemandToFulfillment(1)
+	lines, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("MapDemandToFulfillment failed: %v", err)
 	}
@@ -1281,7 +1288,7 @@ func TestGetWaveOverviewStrictErrorHandling(t *testing.T) {
 	}
 
 	// Verify that when assignment repo is queried, it returns valid results
-	docs, err := assignmentRepo.ListDemandDocumentsByWave(1)
+	docs, err := assignmentRepo.ListDemandDocumentsByWave(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ListDemandDocumentsByWave should not fail for valid wave: %v", err)
 	}
@@ -1366,10 +1373,10 @@ func TestMapDemandToFulfillmentBlocksUnmappedProduct(t *testing.T) {
 		LineType:            "sku_order",
 		ProductMasterID:     &productMasterID,
 	}}
-	if err := demandUC.ImportDemand(doc, lines); err != nil {
+	if err := demandUC.ImportDemand(context.Background(), doc, lines); err != nil {
 		t.Fatal(err)
 	}
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID: 1, DemandDocumentID: doc.ID,
 	}); err != nil {
 		t.Fatal(err)
@@ -1377,7 +1384,7 @@ func TestMapDemandToFulfillmentBlocksUnmappedProduct(t *testing.T) {
 
 	// productRepo is nil — no wave-scoped products → mapping fails
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
-	result, err := dmUC.MapDemandToFulfillment(1)
+	result, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("MapDemandToFulfillment failed: %v", err)
 	}
@@ -1393,7 +1400,8 @@ func TestMapDemandToFulfillmentBlocksUnmappedProduct(t *testing.T) {
 	}
 }
 
-func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {	t.Parallel()
+func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {
+	t.Parallel()
 
 	demandRepo := newMockDemandRepo()
 	fulfillRepo := newMockFulfillRepo()
@@ -1419,17 +1427,17 @@ func TestMapDemandToFulfillmentSucceedsWithoutProductMasterID(t *testing.T) {	t.
 		RequestedQuantity:   2,
 		LineType:            "sku_order",
 	}}
-	if err := demandUC.ImportDemand(doc, lines); err != nil {
+	if err := demandUC.ImportDemand(context.Background(), doc, lines); err != nil {
 		t.Fatal(err)
 	}
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
 		WaveID: 1, DemandDocumentID: doc.ID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil)
-	result, err := dmUC.MapDemandToFulfillment(1)
+	result, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("MapDemandToFulfillment failed: %v", err)
 	}
@@ -1459,8 +1467,10 @@ func newMockProfileRepoForExport(profiles ...*domain.IntegrationProfile) *mockPr
 	return m
 }
 
-func (m *mockProfileRepoForExport) Create(profile *domain.IntegrationProfile) error { return nil }
-func (m *mockProfileRepoForExport) FindByID(id uint) (*domain.IntegrationProfile, error) {
+func (m *mockProfileRepoForExport) Create(ctx context.Context, profile *domain.IntegrationProfile) error {
+	return nil
+}
+func (m *mockProfileRepoForExport) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfile, error) {
 	p, ok := m.profiles[id]
 	if !ok {
 		return nil, fmt.Errorf("profile %d not found", id)
@@ -1468,25 +1478,33 @@ func (m *mockProfileRepoForExport) FindByID(id uint) (*domain.IntegrationProfile
 	cp := *p
 	return &cp, nil
 }
-func (m *mockProfileRepoForExport) FindByProfileKey(key string) (*domain.IntegrationProfile, error) {
+func (m *mockProfileRepoForExport) FindByProfileKey(ctx context.Context, key string) (*domain.IntegrationProfile, error) {
 	return nil, fmt.Errorf("not found")
 }
-func (m *mockProfileRepoForExport) List() ([]domain.IntegrationProfile, error)              { return nil, nil }
-func (m *mockProfileRepoForExport) Update(profile *domain.IntegrationProfile) error         { return nil }
-func (m *mockProfileRepoForExport) Delete(id uint) error                                    { return nil }
+func (m *mockProfileRepoForExport) List(ctx context.Context) ([]domain.IntegrationProfile, error) {
+	return nil, nil
+}
+func (m *mockProfileRepoForExport) Update(ctx context.Context, profile *domain.IntegrationProfile) error {
+	return nil
+}
+func (m *mockProfileRepoForExport) Delete(ctx context.Context, id uint) error { return nil }
 
 // mockBindingRepo is a minimal in-memory ProfileTemplateBindingRepository for tests.
 type mockBindingRepo struct{}
 
-func (m *mockBindingRepo) Create(b *domain.IntegrationProfileTemplateBinding) error { return nil }
-func (m *mockBindingRepo) ListByProfile(profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+func (m *mockBindingRepo) Create(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error {
+	return nil
+}
+func (m *mockBindingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
 	return nil, nil
 }
-func (m *mockBindingRepo) FindDefaultByProfileAndType(profileID uint, docType string) (*domain.IntegrationProfileTemplateBinding, error) {
+func (m *mockBindingRepo) FindDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) (*domain.IntegrationProfileTemplateBinding, error) {
 	return nil, nil
 }
-func (m *mockBindingRepo) Delete(id uint) error                          { return nil }
-func (m *mockBindingRepo) CountByProfileID(profileID uint) (int64, error) { return 0, nil }
+func (m *mockBindingRepo) Delete(ctx context.Context, id uint) error { return nil }
+func (m *mockBindingRepo) CountByProfileID(ctx context.Context, profileID uint) (int64, error) {
+	return 0, nil
+}
 
 // TestExportSupplierOrderGroupsByProfile verifies that fulfillment lines belonging
 // to different IntegrationProfiles are split into separate SupplierOrders, while
@@ -1505,16 +1523,16 @@ func TestExportSupplierOrderGroupsByProfile(t *testing.T) {
 	// Create demand documents with different integration profiles
 	docA := &domain.DemandDocument{IntegrationProfileID: &profileA}
 	docB := &domain.DemandDocument{IntegrationProfileID: &profileB}
-	if err := demandRepo.Create(docA); err != nil {
+	if err := demandRepo.Create(context.Background(), docA); err != nil {
 		t.Fatal(err)
 	}
-	if err := demandRepo.Create(docB); err != nil {
+	if err := demandRepo.Create(context.Background(), docB); err != nil {
 		t.Fatal(err)
 	}
 
 	// 2 lines for profile A, 1 line for profile B, 1 catch-all (no doc)
 	for i := 0; i < 2; i++ {
-		if err := fulfillRepo.Create(&domain.FulfillmentLine{
+		if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
 			WaveID:           waveID,
 			Quantity:         5,
 			DemandDocumentID: &docA.ID,
@@ -1522,14 +1540,14 @@ func TestExportSupplierOrderGroupsByProfile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := fulfillRepo.Create(&domain.FulfillmentLine{
+	if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
 		WaveID:           waveID,
 		Quantity:         3,
 		DemandDocumentID: &docB.ID,
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := fulfillRepo.Create(&domain.FulfillmentLine{
+	if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
 		WaveID:   waveID,
 		Quantity: 1,
 		// no DemandDocumentID → catch-all group
@@ -1544,7 +1562,7 @@ func TestExportSupplierOrderGroupsByProfile(t *testing.T) {
 	bindingRepo := &mockBindingRepo{}
 
 	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, bindingRepo)
-	orders, err := exportUC.ExportSupplierOrder(waveID)
+	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder failed: %v", err)
 	}
@@ -1557,7 +1575,7 @@ func TestExportSupplierOrderGroupsByProfile(t *testing.T) {
 	// Verify total line count across all orders equals 4
 	totalLines := 0
 	for _, o := range orders {
-		lines, err := supplierRepo.ListLinesByOrder(o.ID)
+		lines, err := supplierRepo.ListLinesByOrder(context.Background(), o.ID)
 		if err != nil {
 			t.Fatalf("ListLinesByOrder(%d) failed: %v", o.ID, err)
 		}

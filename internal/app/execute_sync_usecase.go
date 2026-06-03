@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -29,8 +30,8 @@ func NewExecuteSyncUseCase(
 	}
 }
 
-func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyncResult, error) {
-	job, err := uc.channelSyncRepo.FindJobByID(jobID)
+func (uc *executeSyncUseCase) ExecuteChannelSyncJob(ctx context.Context, jobID uint) (*dto.ExecuteSyncResult, error) {
+	job, err := uc.channelSyncRepo.FindJobByID(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("find job %d: %w", jobID, err)
 	}
@@ -39,22 +40,22 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 		return nil, fmt.Errorf("job %d has status %q; only pending jobs can be executed", jobID, job.Status)
 	}
 
-	profile, err := uc.profileRepo.FindByID(job.IntegrationProfileID)
+	profile, err := uc.profileRepo.FindByID(ctx, job.IntegrationProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("find profile %d for job %d: %w", job.IntegrationProfileID, jobID, err)
 	}
 
-	items, err := uc.channelSyncRepo.ListItemsByJob(jobID)
+	items, err := uc.channelSyncRepo.ListItemsByJob(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("list items for job %d: %w", jobID, err)
 	}
 
 	// Mark job as running
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	job.Status = "running"
-	job.StartedAt = now
+	job.StartedAt = &now
 	job.UpdatedAt = now
-	if err := uc.channelSyncRepo.SaveJob(job); err != nil {
+	if err := uc.channelSyncRepo.SaveJob(ctx, job); err != nil {
 		return nil, fmt.Errorf("save job running state: %w", err)
 	}
 
@@ -64,34 +65,34 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 	if err != nil {
 		job.Status = "failed"
 		job.ErrorMessage = err.Error()
-		job.FinishedAt = now
+		job.FinishedAt = &now
 		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(job)
+		_ = uc.channelSyncRepo.SaveJob(ctx, job)
 		for i := range items {
 			items[i].Status = "failed"
 			items[i].ErrorMessage = err.Error()
 			items[i].UpdatedAt = now
-			_ = uc.channelSyncRepo.SaveItem(&items[i])
+			_ = uc.channelSyncRepo.SaveItem(ctx, &items[i])
 		}
-		uc.projectSyncStateToFulfillment(items)
+		uc.projectSyncStateToFulfillment(ctx, items)
 		return nil, fmt.Errorf("resolve executor: %w", err)
 	}
 
 	// Execute — if executor fails, persist job as failed before returning the error.
-	result, err := executor.Execute(job, items, profile)
+	result, err := executor.Execute(ctx, job, items, profile)
 	if err != nil {
 		job.Status = "failed"
 		job.ErrorMessage = err.Error()
-		job.FinishedAt = now
+		job.FinishedAt = &now
 		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(job)
+		_ = uc.channelSyncRepo.SaveJob(ctx, job)
 		for i := range items {
 			items[i].Status = "failed"
 			items[i].ErrorMessage = err.Error()
 			items[i].UpdatedAt = now
-			_ = uc.channelSyncRepo.SaveItem(&items[i])
+			_ = uc.channelSyncRepo.SaveItem(ctx, &items[i])
 		}
-		uc.projectSyncStateToFulfillment(items)
+		uc.projectSyncStateToFulfillment(ctx, items)
 		return nil, fmt.Errorf("executor failed: %w", err)
 	}
 
@@ -103,7 +104,7 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 				item.Status = r.Status
 				item.ErrorMessage = r.ErrorMessage
 				item.UpdatedAt = now
-				if saveErr := uc.channelSyncRepo.SaveItem(&item); saveErr != nil {
+				if saveErr := uc.channelSyncRepo.SaveItem(ctx, &item); saveErr != nil {
 					return nil, fmt.Errorf("save item %d: %w", item.ID, saveErr)
 				}
 				updatedItems = append(updatedItems, item)
@@ -113,16 +114,16 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 	}
 
 	// Project sync state to fulfillment lines
-	uc.projectSyncStateToFulfillment(updatedItems)
+	uc.projectSyncStateToFulfillment(ctx, updatedItems)
 
 	// Update job aggregate
 	job.Status = result.AggregateStatus
 	job.RequestPayload = result.RequestPayload
 	job.ResponsePayload = result.ResponsePayload
 	job.ErrorMessage = result.ErrorMessage
-	job.FinishedAt = now
+	job.FinishedAt = &now
 	job.UpdatedAt = now
-	if err := uc.channelSyncRepo.SaveJob(job); err != nil {
+	if err := uc.channelSyncRepo.SaveJob(ctx, job); err != nil {
 		return nil, fmt.Errorf("save job final state: %w", err)
 	}
 
@@ -131,7 +132,7 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyn
 
 // projectSyncStateToFulfillment projects each ChannelSyncItem.Status back into
 // the corresponding FulfillmentLine.ChannelSyncState.
-func (uc *executeSyncUseCase) projectSyncStateToFulfillment(items []domain.ChannelSyncItem) {
+func (uc *executeSyncUseCase) projectSyncStateToFulfillment(ctx context.Context, items []domain.ChannelSyncItem) {
 	if uc.fulfillmentRepo == nil {
 		return
 	}
@@ -147,7 +148,7 @@ func (uc *executeSyncUseCase) projectSyncStateToFulfillment(items []domain.Chann
 		})
 	}
 	if len(updates) > 0 {
-		_ = uc.fulfillmentRepo.BulkUpdateStates(updates)
+		_ = uc.fulfillmentRepo.BulkUpdateStates(ctx, updates)
 	}
 }
 

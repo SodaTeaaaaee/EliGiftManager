@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -22,7 +24,7 @@ func newMockAdjustmentRepo() *mockAdjustmentRepo {
 	return &mockAdjustmentRepo{}
 }
 
-func (m *mockAdjustmentRepo) Create(adj *domain.FulfillmentAdjustment) error {
+func (m *mockAdjustmentRepo) Create(ctx context.Context, adj *domain.FulfillmentAdjustment) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.failOn == "create" {
@@ -30,14 +32,14 @@ func (m *mockAdjustmentRepo) Create(adj *domain.FulfillmentAdjustment) error {
 	}
 	m.lastID++
 	adj.ID = m.lastID
-	adj.CreatedAt = "2024-01-01T00:00:00Z"
-	adj.UpdatedAt = "2024-01-01T00:00:00Z"
+	adj.CreatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	adj.UpdatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	cp := *adj
 	m.records = append(m.records, cp)
 	return nil
 }
 
-func (m *mockAdjustmentRepo) ListByWave(waveID uint) ([]domain.FulfillmentAdjustment, error) {
+func (m *mockAdjustmentRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentAdjustment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.FulfillmentAdjustment
@@ -49,7 +51,7 @@ func (m *mockAdjustmentRepo) ListByWave(waveID uint) ([]domain.FulfillmentAdjust
 	return out, nil
 }
 
-func (m *mockAdjustmentRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.FulfillmentAdjustment, error) {
+func (m *mockAdjustmentRepo) ListByFulfillmentLine(ctx context.Context, fulfillmentLineID uint) ([]domain.FulfillmentAdjustment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.FulfillmentAdjustment
@@ -61,7 +63,7 @@ func (m *mockAdjustmentRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]do
 	return out, nil
 }
 
-func (m *mockAdjustmentRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, error) {
+func (m *mockAdjustmentRepo) FindByID(ctx context.Context, id uint) (*domain.FulfillmentAdjustment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, r := range m.records {
@@ -72,7 +74,7 @@ func (m *mockAdjustmentRepo) FindByID(id uint) (*domain.FulfillmentAdjustment, e
 	return nil, nil
 }
 
-func (m *mockAdjustmentRepo) Update(adj *domain.FulfillmentAdjustment) error {
+func (m *mockAdjustmentRepo) Update(ctx context.Context, adj *domain.FulfillmentAdjustment) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i := range m.records {
@@ -84,7 +86,7 @@ func (m *mockAdjustmentRepo) Update(adj *domain.FulfillmentAdjustment) error {
 	return fmt.Errorf("adjustment %d not found", adj.ID)
 }
 
-func (m *mockAdjustmentRepo) Delete(id uint) error {
+func (m *mockAdjustmentRepo) Delete(ctx context.Context, id uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for i, r := range m.records {
@@ -96,7 +98,7 @@ func (m *mockAdjustmentRepo) Delete(id uint) error {
 	return nil
 }
 
-func (m *mockAdjustmentRepo) DeleteByWave(waveID uint) error {
+func (m *mockAdjustmentRepo) DeleteByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var kept []domain.FulfillmentAdjustment
@@ -120,11 +122,11 @@ func newMockFulfillRepoForAdjustment() *mockFulfillRepoForAdjustment {
 	return &mockFulfillRepoForAdjustment{lines: make(map[uint]*domain.FulfillmentLine)}
 }
 
-func (m *mockFulfillRepoForAdjustment) Create(line *domain.FulfillmentLine) error {
+func (m *mockFulfillRepoForAdjustment) Create(ctx context.Context, line *domain.FulfillmentLine) error {
 	panic("not implemented")
 }
 
-func (m *mockFulfillRepoForAdjustment) FindByID(id uint) (*domain.FulfillmentLine, error) {
+func (m *mockFulfillRepoForAdjustment) FindByID(ctx context.Context, id uint) (*domain.FulfillmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l, ok := m.lines[id]
@@ -135,26 +137,33 @@ func (m *mockFulfillRepoForAdjustment) FindByID(id uint) (*domain.FulfillmentLin
 	return &cp, nil
 }
 
-func (m *mockFulfillRepoForAdjustment) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
+func (m *mockFulfillRepoForAdjustment) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentLine, error) {
 	panic("not implemented")
 }
 
-func (m *mockFulfillRepoForAdjustment) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
-	panic("not implemented")
-}
-func (m *mockFulfillRepoForAdjustment) ReplaceByWaveAndGeneratedBy(_ uint, _ string, _ []domain.FulfillmentLine) error {
+func (m *mockFulfillRepoForAdjustment) DeleteByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string) error {
 	panic("not implemented")
 }
 
-func (m *mockFulfillRepoForAdjustment) DeleteByWave(waveID uint) error {
+func (m *mockFulfillRepoForAdjustment) ReplaceByWaveAndGeneratedBy(ctx context.Context, _ uint, _ string, _ []domain.FulfillmentLine) error {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForAdjustment) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
-func (m *mockFulfillRepoForAdjustment) Update(line *domain.FulfillmentLine) error { panic("not implemented") }
-func (m *mockFulfillRepoForAdjustment) BulkUpdateCustomerProfileID(_, _ uint) (int64, error) {
+
+func (m *mockFulfillRepoForAdjustment) DeleteByWave(ctx context.Context, waveID uint) error {
+	panic("not implemented")
+}
+
+func (m *mockFulfillRepoForAdjustment) BulkUpdateStates(ctx context.Context, updates []domain.FulfillmentLineStateUpdate) error {
+	return nil
+}
+
+func (m *mockFulfillRepoForAdjustment) Update(ctx context.Context, line *domain.FulfillmentLine) error {
+	panic("not implemented")
+}
+
+func (m *mockFulfillRepoForAdjustment) BulkUpdateCustomerProfileID(ctx context.Context, _, _ uint) (int64, error) {
 	return 0, nil
 }
-
 
 // ── mock WaveRepository (adjustment tests) ──
 
@@ -169,46 +178,48 @@ func newMockWaveRepoForAdjustment() *mockWaveRepoForAdjustment {
 	}
 }
 
-func (m *mockWaveRepoForAdjustment) Create(wave *domain.Wave) error {
+func (m *mockWaveRepoForAdjustment) Create(ctx context.Context, wave *domain.Wave) error {
 	panic("not implemented")
 }
 
-func (m *mockWaveRepoForAdjustment) FindByID(id uint) (*domain.Wave, error) {
+func (m *mockWaveRepoForAdjustment) FindByID(ctx context.Context, id uint) (*domain.Wave, error) {
 	panic("not implemented")
 }
 
-func (m *mockWaveRepoForAdjustment) FindByWaveNo(waveNo string) (*domain.Wave, error) {
+func (m *mockWaveRepoForAdjustment) FindByWaveNo(ctx context.Context, waveNo string) (*domain.Wave, error) {
 	panic("not implemented")
 }
 
-func (m *mockWaveRepoForAdjustment) List() ([]domain.Wave, error) {
+func (m *mockWaveRepoForAdjustment) List(ctx context.Context) ([]domain.Wave, error) {
 	panic("not implemented")
 }
 
-func (m *mockWaveRepoForAdjustment) ListPaginated(_, _ int) ([]domain.Wave, int64, error) {
+func (m *mockWaveRepoForAdjustment) ListPaginated(ctx context.Context, _, _ int) ([]domain.Wave, int64, error) {
 	panic("not implemented")
 }
 
-func (m *mockWaveRepoForAdjustment) AddParticipant(snap *domain.WaveParticipantSnapshot) error {
+func (m *mockWaveRepoForAdjustment) AddParticipant(ctx context.Context, snap *domain.WaveParticipantSnapshot) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.participants[snap.WaveID] = append(m.participants[snap.WaveID], *snap)
 	return nil
 }
 
-func (m *mockWaveRepoForAdjustment) ListParticipantsByWave(waveID uint) ([]domain.WaveParticipantSnapshot, error) {
+func (m *mockWaveRepoForAdjustment) ListParticipantsByWave(ctx context.Context, waveID uint) ([]domain.WaveParticipantSnapshot, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.participants[waveID], nil
 }
 
-func (m *mockWaveRepoForAdjustment) ListParticipantsByProfile(profileID uint) ([]domain.WaveParticipantSnapshot, error) {
+func (m *mockWaveRepoForAdjustment) ListParticipantsByProfile(ctx context.Context, profileID uint) ([]domain.WaveParticipantSnapshot, error) {
 	panic("not implemented")
 }
 
-func (m *mockWaveRepoForAdjustment) UpdateLifecycle(_ uint, _ string, _ string) error { return nil }
+func (m *mockWaveRepoForAdjustment) UpdateLifecycle(ctx context.Context, _ uint, _ string, _ string) error {
+	return nil
+}
 
-func (m *mockWaveRepoForAdjustment) UpdateParticipantProfileID(oldPID, newPID uint) (int64, error) {
+func (m *mockWaveRepoForAdjustment) UpdateParticipantProfileID(ctx context.Context, oldPID, newPID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var n int64
@@ -224,14 +235,14 @@ func (m *mockWaveRepoForAdjustment) UpdateParticipantProfileID(oldPID, newPID ui
 	return n, nil
 }
 
-func (m *mockWaveRepoForAdjustment) DeleteParticipantsByWave(waveID uint) error {
+func (m *mockWaveRepoForAdjustment) DeleteParticipantsByWave(ctx context.Context, waveID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.participants, waveID)
 	return nil
 }
 
-func (m *mockWaveRepoForAdjustment) CountByDatePrefix(_ string) (int, error) {
+func (m *mockWaveRepoForAdjustment) CountByDatePrefix(ctx context.Context, _ string) (int, error) {
 	return 0, nil
 }
 
@@ -280,7 +291,7 @@ func TestRecordAdjustmentSuccess(t *testing.T) {
 	t.Parallel()
 	s := newAdjustmentTestSetup()
 
-	adj, err := s.uc.RecordAdjustment(validAdjustmentInput())
+	adj, err := s.uc.RecordAdjustment(context.Background(), validAdjustmentInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -314,7 +325,7 @@ func TestRecordAdjustmentDefaultTargetKind(t *testing.T) {
 	input := validAdjustmentInput()
 	input.TargetKind = "" // should default to "fulfillment_line"
 
-	adj, err := s.uc.RecordAdjustment(input)
+	adj, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -330,7 +341,7 @@ func TestRecordAdjustmentFulfillmentLineNotFound(t *testing.T) {
 	input := validAdjustmentInput()
 	input.FulfillmentLineID = uintPtr(999)
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for non-existent fulfillment line, got nil")
 	}
@@ -343,7 +354,7 @@ func TestRecordAdjustmentWaveMismatch(t *testing.T) {
 	input := validAdjustmentInput()
 	input.WaveID = 99 // line 1 belongs to wave 10, not 99
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for wave mismatch, got nil")
 	}
@@ -356,7 +367,7 @@ func TestRecordAdjustmentInvalidKind(t *testing.T) {
 	input := validAdjustmentInput()
 	input.AdjustmentKind = "invalid_kind"
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for invalid adjustment kind, got nil")
 	}
@@ -371,7 +382,7 @@ func TestListAdjustmentsByWave(t *testing.T) {
 
 	// Record two adjustments in wave 10
 	for i := 0; i < 2; i++ {
-		if _, err := s.uc.RecordAdjustment(validAdjustmentInput()); err != nil {
+		if _, err := s.uc.RecordAdjustment(context.Background(), validAdjustmentInput()); err != nil {
 			t.Fatalf("setup: unexpected error: %v", err)
 		}
 	}
@@ -379,11 +390,11 @@ func TestListAdjustmentsByWave(t *testing.T) {
 	other := validAdjustmentInput()
 	other.WaveID = 20
 	other.FulfillmentLineID = uintPtr(2)
-	if _, err := s.uc.RecordAdjustment(other); err != nil {
+	if _, err := s.uc.RecordAdjustment(context.Background(), other); err != nil {
 		t.Fatalf("setup: unexpected error: %v", err)
 	}
 
-	results, err := s.uc.ListAdjustmentsByWave(10)
+	results, err := s.uc.ListAdjustmentsByWave(context.Background(), 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -397,7 +408,7 @@ func TestListAdjustmentsByWave(t *testing.T) {
 	}
 
 	// Wave 20 should have exactly 1
-	results20, err := s.uc.ListAdjustmentsByWave(20)
+	results20, err := s.uc.ListAdjustmentsByWave(context.Background(), 20)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -422,7 +433,7 @@ func TestRecordSupplementAdjustmentWithParticipantTarget(t *testing.T) {
 		EvidenceRef:               "ref-002",
 	}
 
-	adj, err := s.uc.RecordAdjustment(input)
+	adj, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -445,7 +456,7 @@ func TestRecordSupplementAdjustmentRejectsFulfillmentLineTarget(t *testing.T) {
 	input.AdjustmentKind = "compensation"
 	input.TargetKind = "fulfillment_line"
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error: compensation should require participant target, got nil")
 	}
@@ -465,7 +476,7 @@ func TestRecordAddSendRejectsParticipantTarget(t *testing.T) {
 		OperatorID:                "op-1",
 	}
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error: add should require fulfillment_line target, got nil")
 	}
@@ -487,7 +498,7 @@ func TestRecordReplaceSuccess(t *testing.T) {
 		OperatorID:        "op-1",
 	}
 
-	adj, err := s.uc.RecordAdjustment(input)
+	adj, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error for replace: %v", err)
 	}
@@ -516,7 +527,7 @@ func TestRecordReplaceRejectsParticipantTarget(t *testing.T) {
 		OperatorID:                "op-1",
 	}
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error: replace should require fulfillment_line target, got nil")
 	}
@@ -535,7 +546,7 @@ func TestRecordReplaceMissingFromProductID(t *testing.T) {
 		OperatorID:        "op-1",
 	}
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error: replace without FromProductID should fail, got nil")
 	}
@@ -554,7 +565,7 @@ func TestRecordReplaceMissingToProductID(t *testing.T) {
 		OperatorID:        "op-1",
 	}
 
-	_, err := s.uc.RecordAdjustment(input)
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error: replace without ToProductID should fail, got nil")
 	}

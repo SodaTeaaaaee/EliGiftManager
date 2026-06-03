@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -20,7 +21,7 @@ func newMockProfileRepo() *mockProfileRepo {
 	return &mockProfileRepo{profiles: make(map[uint]*domain.IntegrationProfile)}
 }
 
-func (m *mockProfileRepo) FindByID(id uint) (*domain.IntegrationProfile, error) {
+func (m *mockProfileRepo) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfile, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p, ok := m.profiles[id]
@@ -31,7 +32,7 @@ func (m *mockProfileRepo) FindByID(id uint) (*domain.IntegrationProfile, error) 
 	return &cp, nil
 }
 
-func (m *mockProfileRepo) FindByProfileKey(key string) (*domain.IntegrationProfile, error) {
+func (m *mockProfileRepo) FindByProfileKey(ctx context.Context, key string) (*domain.IntegrationProfile, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, p := range m.profiles {
@@ -43,10 +44,16 @@ func (m *mockProfileRepo) FindByProfileKey(key string) (*domain.IntegrationProfi
 	return nil, fmt.Errorf("integration profile %q not found", key)
 }
 
-func (m *mockProfileRepo) Create(profile *domain.IntegrationProfile) error { panic("not implemented") }
-func (m *mockProfileRepo) List() ([]domain.IntegrationProfile, error)       { panic("not implemented") }
-func (m *mockProfileRepo) Update(profile *domain.IntegrationProfile) error  { panic("not implemented") }
-func (m *mockProfileRepo) Delete(id uint) error                             { panic("not implemented") }
+func (m *mockProfileRepo) Create(ctx context.Context, profile *domain.IntegrationProfile) error {
+	panic("not implemented")
+}
+func (m *mockProfileRepo) List(ctx context.Context) ([]domain.IntegrationProfile, error) {
+	panic("not implemented")
+}
+func (m *mockProfileRepo) Update(ctx context.Context, profile *domain.IntegrationProfile) error {
+	panic("not implemented")
+}
+func (m *mockProfileRepo) Delete(ctx context.Context, id uint) error { panic("not implemented") }
 
 // ── mock demand repo for closure ──
 
@@ -63,7 +70,7 @@ func newMockDemandRepoForClosure() *mockDemandRepoForClosure {
 	}
 }
 
-func (m *mockDemandRepoForClosure) FindByID(id uint) (*domain.DemandDocument, error) {
+func (m *mockDemandRepoForClosure) FindByID(ctx context.Context, id uint) (*domain.DemandDocument, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	d, ok := m.docs[id]
@@ -74,7 +81,7 @@ func (m *mockDemandRepoForClosure) FindByID(id uint) (*domain.DemandDocument, er
 	return &cp, nil
 }
 
-func (m *mockDemandRepoForClosure) FindLineByID(id uint) (*domain.DemandLine, error) {
+func (m *mockDemandRepoForClosure) FindLineByID(ctx context.Context, id uint) (*domain.DemandLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l, ok := m.linesByID[id]
@@ -85,22 +92,34 @@ func (m *mockDemandRepoForClosure) FindLineByID(id uint) (*domain.DemandLine, er
 	return &cp, nil
 }
 
-func (m *mockDemandRepoForClosure) Create(doc *domain.DemandDocument) error               { panic("not implemented") }
-func (m *mockDemandRepoForClosure) List() ([]domain.DemandDocument, error)                 { panic("not implemented") }
-func (m *mockDemandRepoForClosure) ListUnassigned() ([]domain.DemandDocument, error)       { panic("not implemented") }
-func (m *mockDemandRepoForClosure) CountByIntegrationProfileID(profileID uint) (int64, error)         { return 0, nil }
-func (m *mockDemandRepoForClosure) CreateLine(line *domain.DemandLine) error               { panic("not implemented") }
-func (m *mockDemandRepoForClosure) ListLinesByDocument(docID uint) ([]domain.DemandLine, error) {
+func (m *mockDemandRepoForClosure) Create(ctx context.Context, doc *domain.DemandDocument) error {
 	panic("not implemented")
 }
-func (m *mockDemandRepoForClosure) UpdateLine(_ *domain.DemandLine) error { panic("not implemented") }
-func (m *mockDemandRepoForClosure) UpdateLineRoutingFields(_ uint, _, _, _ string) error {
+func (m *mockDemandRepoForClosure) List(ctx context.Context) ([]domain.DemandDocument, error) {
 	panic("not implemented")
 }
-func (m *mockDemandRepoForClosure) UpdateBoundProfileSnapshot(_ uint, _ string) error {
+func (m *mockDemandRepoForClosure) ListUnassigned(ctx context.Context) ([]domain.DemandDocument, error) {
+	panic("not implemented")
+}
+func (m *mockDemandRepoForClosure) CountByIntegrationProfileID(ctx context.Context, profileID uint) (int64, error) {
+	return 0, nil
+}
+func (m *mockDemandRepoForClosure) CreateLine(ctx context.Context, line *domain.DemandLine) error {
+	panic("not implemented")
+}
+func (m *mockDemandRepoForClosure) ListLinesByDocument(ctx context.Context, docID uint) ([]domain.DemandLine, error) {
+	panic("not implemented")
+}
+func (m *mockDemandRepoForClosure) UpdateLine(ctx context.Context, _ *domain.DemandLine) error {
+	panic("not implemented")
+}
+func (m *mockDemandRepoForClosure) UpdateLineRoutingFields(ctx context.Context, _ uint, _, _, _ string) error {
+	panic("not implemented")
+}
+func (m *mockDemandRepoForClosure) UpdateBoundProfileSnapshot(ctx context.Context, _ uint, _ string) error {
 	return nil
 }
-func (m *mockDemandRepoForClosure) BulkUpdateCustomerProfileID(_, _ uint) (int64, error) {
+func (m *mockDemandRepoForClosure) BulkUpdateCustomerProfileID(ctx context.Context, _, _ uint) (int64, error) {
 	return 0, nil
 }
 
@@ -115,7 +134,7 @@ func newMockCarrierMappingRepo() *mockCarrierMappingRepo {
 	return &mockCarrierMappingRepo{mappings: make(map[uint][]domain.CarrierMapping)}
 }
 
-func (m *mockCarrierMappingRepo) FindByProfileAndInternal(profileID uint, internalCode string) (*domain.CarrierMapping, error) {
+func (m *mockCarrierMappingRepo) FindByProfileAndInternal(ctx context.Context, profileID uint, internalCode string) (*domain.CarrierMapping, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, cm := range m.mappings[profileID] {
@@ -127,11 +146,13 @@ func (m *mockCarrierMappingRepo) FindByProfileAndInternal(profileID uint, intern
 	return nil, fmt.Errorf("carrier mapping not found for profile %d, internal code %q", profileID, internalCode)
 }
 
-func (m *mockCarrierMappingRepo) Create(mapping *domain.CarrierMapping) error { panic("not implemented") }
-func (m *mockCarrierMappingRepo) ListByProfile(profileID uint) ([]domain.CarrierMapping, error) {
+func (m *mockCarrierMappingRepo) Create(ctx context.Context, mapping *domain.CarrierMapping) error {
 	panic("not implemented")
 }
-func (m *mockCarrierMappingRepo) Delete(id uint) error { panic("not implemented") }
+func (m *mockCarrierMappingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.CarrierMapping, error) {
+	panic("not implemented")
+}
+func (m *mockCarrierMappingRepo) Delete(ctx context.Context, id uint) error { panic("not implemented") }
 
 // ── helper setup ──
 
@@ -198,7 +219,7 @@ func TestPlanChannelClosureAPIPushCreatesJob(t *testing.T) {
 	t.Parallel()
 	s := newClosureTestSetup()
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -224,7 +245,7 @@ func TestPlanChannelClosureDocumentExportCreatesJob(t *testing.T) {
 	s := newClosureTestSetup()
 	s.profile.profiles[1].TrackingSyncMode = "document_export"
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -243,7 +264,7 @@ func TestPlanChannelClosureManualConfirmationReturnsItemsWithoutJob(t *testing.T
 	s := newClosureTestSetup()
 	s.profile.profiles[1].TrackingSyncMode = "manual_confirmation"
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -281,7 +302,7 @@ func TestPlanChannelClosureRejectsManualConfirmationWithoutAllowsManualClosure(t
 	s.profile.profiles[1].TrackingSyncMode = "manual_confirmation"
 	s.profile.profiles[1].AllowsManualClosure = false
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error for manual_confirmation with allows_manual_closure=false, got nil")
 	}
@@ -294,7 +315,7 @@ func TestPlanChannelClosureUnsupportedReturnsItemsWithoutJob(t *testing.T) {
 	s := newClosureTestSetup()
 	s.profile.profiles[1].TrackingSyncMode = "unsupported"
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -319,7 +340,7 @@ func TestPlanChannelClosureRejectsNoCandidatesForCreateJob(t *testing.T) {
 	s := newClosureTestSetup()
 	s.shipment.shipments = make(map[uint]*domain.Shipment)
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error for no candidates, got nil")
 	}
@@ -331,7 +352,7 @@ func TestPlanChannelClosureManualConfirmationRejectsNoCandidates(t *testing.T) {
 	s.profile.profiles[1].TrackingSyncMode = "manual_confirmation"
 	s.shipment.shipments = make(map[uint]*domain.Shipment)
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error for manual_confirmation with no candidates, got nil")
 	}
@@ -343,7 +364,7 @@ func TestPlanChannelClosureUnsupportedRejectsNoCandidates(t *testing.T) {
 	s.profile.profiles[1].TrackingSyncMode = "unsupported"
 	s.shipment.shipments = make(map[uint]*domain.Shipment)
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error for unsupported with no candidates, got nil")
 	}
@@ -355,7 +376,7 @@ func TestPlanChannelClosureRejectsMissingProfile(t *testing.T) {
 	t.Parallel()
 	s := newClosureTestSetup()
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 999})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 999})
 	if err == nil {
 		t.Fatal("expected error for missing profile, got nil")
 	}
@@ -367,7 +388,7 @@ func TestPlanChannelClosureRejectsMissingExternalOrderNo(t *testing.T) {
 	s.profile.profiles[1].RequiresExternalOrderNo = true
 	s.demand.docs[10].SourceDocumentNo = ""
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error for missing external_order_no, got nil")
 	}
@@ -397,12 +418,12 @@ func TestPlanChannelClosureOnlyIncludesCandidatesFromRequestedProfile(t *testing
 		DemandDocumentID: uintPtr(20),
 	}
 	s.shipment.addLine(domain.ShipmentLine{
-		ID:                 2,
-		ShipmentID:         1,
-		FulfillmentLineID:  2,
+		ID:                2,
+		ShipmentID:        1,
+		FulfillmentLineID: 2,
 	})
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -421,7 +442,7 @@ func TestPlanChannelClosureSkipsCandidatesWithoutDemandDocument(t *testing.T) {
 	s.fulfill.lines[2] = &domain.FulfillmentLine{ID: 2, WaveID: 1}
 	s.shipment.addLine(domain.ShipmentLine{ID: 2, ShipmentID: 1, FulfillmentLineID: 2})
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -438,7 +459,7 @@ func TestPlanChannelClosureSkipsCandidatesWithoutIntegrationProfileID(t *testing
 	s.fulfill.lines[2] = &domain.FulfillmentLine{ID: 2, WaveID: 1, DemandDocumentID: uintPtr(20)}
 	s.shipment.addLine(domain.ShipmentLine{ID: 2, ShipmentID: 1, FulfillmentLineID: 2})
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -453,7 +474,7 @@ func TestPlanChannelClosureReturnsNoCandidatesAfterProfileFiltering(t *testing.T
 
 	s.demand.docs[10].IntegrationProfileID = uintPtr(2)
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error after profile filtering removes all candidates, got nil")
 	}
@@ -469,7 +490,7 @@ func TestPlanChannelClosureRejectsMissingCarrierMapping(t *testing.T) {
 	s.profile.profiles[1].RequiresCarrierMapping = true
 	// No mapping registered for carrier "SF" — expect rejection.
 
-	_, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	_, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err == nil {
 		t.Fatal("expected error when requires_carrier_mapping=true and no mapping exists, got nil")
 	}
@@ -489,7 +510,7 @@ func TestPlanChannelClosureTranslatesCarrierCode(t *testing.T) {
 		},
 	}
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -516,7 +537,7 @@ func TestPlanChannelClosureListByWaveFilteringMatters(t *testing.T) {
 	s.fulfill.lines[3] = &domain.FulfillmentLine{ID: 3, WaveID: 2, DemandDocumentID: uintPtr(10)}
 
 	// PlanChannelClosure for wave 1 should only see the wave-1 shipment
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

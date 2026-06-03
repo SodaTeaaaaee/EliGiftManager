@@ -1,5 +1,7 @@
 import { createRouter, createWebHashHistory } from "vue-router";
 
+// NOTE: createWebHashHistory is correct for Wails desktop (file:// protocol).
+// If the app ever targets web/SSR, switch to createWebHistory.
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [

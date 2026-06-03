@@ -6,9 +6,9 @@ type MergeProfilesInput struct {
 }
 
 type MergeProfilesResult struct {
-	MigratedIdentityCount int `json:"migratedIdentityCount"`
-	MigratedAddressCount  int `json:"migratedAddressCount"`
-	UpdatedDemandDocs     int `json:"updatedDemandDocs"`
-	UpdatedParticipants   int `json:"updatedParticipants"`
+	MigratedIdentityCount   int `json:"migratedIdentityCount"`
+	MigratedAddressCount    int `json:"migratedAddressCount"`
+	UpdatedDemandDocs       int `json:"updatedDemandDocs"`
+	UpdatedParticipants     int `json:"updatedParticipants"`
 	UpdatedFulfillmentLines int `json:"updatedFulfillmentLines"`
 }

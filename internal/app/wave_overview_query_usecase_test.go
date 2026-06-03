@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -10,37 +11,51 @@ import (
 
 type failingProductRepo struct{}
 
-func (failingProductRepo) Create(*domain.Product) error { panic("not implemented") }
-func (failingProductRepo) FindByID(uint) (*domain.Product, error) {
+func (failingProductRepo) Create(_ context.Context, _ *domain.Product) error {
 	panic("not implemented")
 }
-func (failingProductRepo) FindByWaveAndID(uint, uint) (*domain.Product, error) {
+
+func (failingProductRepo) FindByID(_ context.Context, _ uint) (*domain.Product, error) {
 	panic("not implemented")
 }
-func (failingProductRepo) ListByWave(uint) ([]domain.Product, error) {
+
+func (failingProductRepo) FindByWaveAndID(_ context.Context, _ uint, _ uint) (*domain.Product, error) {
+	panic("not implemented")
+}
+
+func (failingProductRepo) ListByWave(_ context.Context, _ uint) ([]domain.Product, error) {
 	return nil, errTest("product repo unavailable")
 }
-func (failingProductRepo) FindByWaveAndSKU(uint, string, string) (*domain.Product, error) {
+
+func (failingProductRepo) FindByWaveAndSKU(_ context.Context, _ uint, _ string, _ string) (*domain.Product, error) {
 	panic("not implemented")
 }
-func (failingProductRepo) DeleteByWave(uint) error { panic("not implemented") }
+func (failingProductRepo) DeleteByWave(_ context.Context, _ uint) error { panic("not implemented") }
 
 type staticProductRepo struct {
 	products []domain.Product
 }
 
-func (s staticProductRepo) Create(*domain.Product) error { panic("not implemented") }
-func (s staticProductRepo) FindByID(uint) (*domain.Product, error) {
+func (s staticProductRepo) Create(_ context.Context, _ *domain.Product) error {
 	panic("not implemented")
 }
-func (s staticProductRepo) FindByWaveAndID(uint, uint) (*domain.Product, error) {
+
+func (s staticProductRepo) FindByID(_ context.Context, _ uint) (*domain.Product, error) {
 	panic("not implemented")
 }
-func (s staticProductRepo) ListByWave(uint) ([]domain.Product, error) { return s.products, nil }
-func (s staticProductRepo) FindByWaveAndSKU(uint, string, string) (*domain.Product, error) {
+
+func (s staticProductRepo) FindByWaveAndID(_ context.Context, _ uint, _ uint) (*domain.Product, error) {
 	panic("not implemented")
 }
-func (s staticProductRepo) DeleteByWave(uint) error { panic("not implemented") }
+
+func (s staticProductRepo) ListByWave(_ context.Context, _ uint) ([]domain.Product, error) {
+	return s.products, nil
+}
+
+func (s staticProductRepo) FindByWaveAndSKU(_ context.Context, _ uint, _ string, _ string) (*domain.Product, error) {
+	panic("not implemented")
+}
+func (s staticProductRepo) DeleteByWave(_ context.Context, _ uint) error { panic("not implemented") }
 
 func errTest(msg string) error { return &testErr{msg: msg} }
 
@@ -69,11 +84,11 @@ func TestBuildBaseOverviewPropagatesProductRepoError(t *testing.T) {
 	)
 
 	wave := &domain.Wave{Name: "overview-error"}
-	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(wave); err != nil {
+	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("CreateWave: %v", err)
 	}
 
-	_, err := queryUC.BuildBaseOverview(wave.ID)
+	_, err := queryUC.BuildBaseOverview(context.Background(), wave.ID)
 	if err == nil {
 		t.Fatal("expected BuildBaseOverview to fail when product repo fails, got nil")
 	}
@@ -106,7 +121,7 @@ func TestListDashboardRowsUsesProjectedStage(t *testing.T) {
 	)
 
 	wave := &domain.Wave{Name: "dashboard-wave"}
-	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(wave); err != nil {
+	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("CreateWave: %v", err)
 	}
 
@@ -118,7 +133,7 @@ func TestListDashboardRowsUsesProjectedStage(t *testing.T) {
 		SourceDocumentNo:  "DB-001",
 		CustomerProfileID: &profileID,
 	}
-	if err := NewDemandIntakeUseCase(demandRepo).ImportDemand(doc, []*domain.DemandLine{{
+	if err := NewDemandIntakeUseCase(demandRepo).ImportDemand(context.Background(), doc, []*domain.DemandLine{{
 		RoutingDisposition:  "accepted",
 		RecipientInputState: "ready",
 		RequestedQuantity:   1,
@@ -126,17 +141,17 @@ func TestListDashboardRowsUsesProjectedStage(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("ImportDemand: %v", err)
 	}
-	if err := assignmentRepo.Create(&domain.WaveDemandAssignment{WaveID: wave.ID, DemandDocumentID: doc.ID}); err != nil {
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{WaveID: wave.ID, DemandDocumentID: doc.ID}); err != nil {
 		t.Fatalf("assignment: %v", err)
 	}
 	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
 		{ID: 1, WaveID: wave.ID, CustomerProfileID: profileID, SnapshotType: "buyer"},
 	})
-	if _, err := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil).MapDemandToFulfillment(wave.ID); err != nil {
+	if _, err := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, nil).MapDemandToFulfillment(context.Background(), wave.ID); err != nil {
 		t.Fatalf("MapDemandToFulfillment: %v", err)
 	}
 
-	rows, err := queryUC.ListDashboardRows()
+	rows, err := queryUC.ListDashboardRows(context.Background())
 	if err != nil {
 		t.Fatalf("ListDashboardRows: %v", err)
 	}
@@ -169,11 +184,11 @@ func TestGetWaveWorkspaceSnapshotIncludesRecentHistoryAndHead(t *testing.T) {
 	)
 
 	wave := &domain.Wave{Name: "history-wave"}
-	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(wave); err != nil {
+	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("CreateWave: %v", err)
 	}
 
-	scope, err := scopeRepo.FindOrCreate("wave", "1")
+	scope, err := scopeRepo.FindOrCreate(context.Background(), "wave", "1")
 	if err != nil {
 		t.Fatalf("FindOrCreate scope: %v", err)
 	}
@@ -184,14 +199,14 @@ func TestGetWaveWorkspaceSnapshotIncludesRecentHistoryAndHead(t *testing.T) {
 		ProjectionHash: "hash-123",
 		CreatedBy:      "tester",
 	}
-	if err := nodeRepo.Create(head); err != nil {
+	if err := nodeRepo.Create(context.Background(), head); err != nil {
 		t.Fatalf("Create history node: %v", err)
 	}
-	if err := scopeRepo.UpdateHead(scope.ID, head.ID); err != nil {
+	if err := scopeRepo.UpdateHead(context.Background(), scope.ID, head.ID); err != nil {
 		t.Fatalf("UpdateHead: %v", err)
 	}
 
-	snapshot, err := queryUC.GetWaveWorkspaceSnapshot(wave.ID)
+	snapshot, err := queryUC.GetWaveWorkspaceSnapshot(context.Background(), wave.ID)
 	if err != nil {
 		t.Fatalf("GetWaveWorkspaceSnapshot: %v", err)
 	}
@@ -227,7 +242,7 @@ func TestListRecentHistorySkipsSystemBaseline(t *testing.T) {
 		staticProductRepo{}, profileRepo, scopeRepo, nodeRepo, NewWaveOverviewProjectionUseCase(newMockChannelSyncRepo(), newMockClosureDecisionRepo(), noopDriftUC{}, noopHistoryHeadUC{}),
 	)
 
-	scope, err := scopeRepo.FindOrCreate("wave", "1")
+	scope, err := scopeRepo.FindOrCreate(context.Background(), "wave", "1")
 	if err != nil {
 		t.Fatalf("FindOrCreate scope: %v", err)
 	}
@@ -236,10 +251,10 @@ func TestListRecentHistorySkipsSystemBaseline(t *testing.T) {
 		CommandKind:    domain.CmdSystemBaseline,
 		CommandSummary: "system baseline",
 	}
-	if err := nodeRepo.Create(baseline); err != nil {
+	if err := nodeRepo.Create(context.Background(), baseline); err != nil {
 		t.Fatalf("Create baseline: %v", err)
 	}
-	if err := scopeRepo.UpdateHead(scope.ID, baseline.ID); err != nil {
+	if err := scopeRepo.UpdateHead(context.Background(), scope.ID, baseline.ID); err != nil {
 		t.Fatalf("UpdateHead baseline: %v", err)
 	}
 	node := &domain.HistoryNode{
@@ -248,14 +263,14 @@ func TestListRecentHistorySkipsSystemBaseline(t *testing.T) {
 		CommandKind:    "create_rule",
 		CommandSummary: "create rule",
 	}
-	if err := nodeRepo.Create(node); err != nil {
+	if err := nodeRepo.Create(context.Background(), node); err != nil {
 		t.Fatalf("Create node: %v", err)
 	}
-	if err := scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+	if err := scopeRepo.UpdateHead(context.Background(), scope.ID, node.ID); err != nil {
 		t.Fatalf("UpdateHead node: %v", err)
 	}
 
-	items, err := queryUC.ListRecentHistory(1, 10)
+	items, err := queryUC.ListRecentHistory(context.Background(), 1, 10)
 	if err != nil {
 		t.Fatalf("ListRecentHistory: %v", err)
 	}

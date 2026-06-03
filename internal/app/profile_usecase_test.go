@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -11,50 +12,50 @@ import (
 // ── func-field mocks for profile usecase tests ──
 
 type stubIntegrationProfileRepo struct {
-	CreateFn       func(profile *domain.IntegrationProfile) error
-	FindByIDFn     func(id uint) (*domain.IntegrationProfile, error)
-	FindByKeyFn    func(key string) (*domain.IntegrationProfile, error)
-	ListFn         func() ([]domain.IntegrationProfile, error)
-	UpdateFn       func(profile *domain.IntegrationProfile) error
-	DeleteFn       func(id uint) error
+	CreateFn    func(profile *domain.IntegrationProfile) error
+	FindByIDFn  func(id uint) (*domain.IntegrationProfile, error)
+	FindByKeyFn func(key string) (*domain.IntegrationProfile, error)
+	ListFn      func() ([]domain.IntegrationProfile, error)
+	UpdateFn    func(profile *domain.IntegrationProfile) error
+	DeleteFn    func(id uint) error
 }
 
-func (s *stubIntegrationProfileRepo) Create(profile *domain.IntegrationProfile) error {
+func (s *stubIntegrationProfileRepo) Create(ctx context.Context, profile *domain.IntegrationProfile) error {
 	if s.CreateFn != nil {
 		return s.CreateFn(profile)
 	}
 	return nil
 }
 
-func (s *stubIntegrationProfileRepo) FindByID(id uint) (*domain.IntegrationProfile, error) {
+func (s *stubIntegrationProfileRepo) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfile, error) {
 	if s.FindByIDFn != nil {
 		return s.FindByIDFn(id)
 	}
 	return &domain.IntegrationProfile{ID: id}, nil
 }
 
-func (s *stubIntegrationProfileRepo) FindByProfileKey(key string) (*domain.IntegrationProfile, error) {
+func (s *stubIntegrationProfileRepo) FindByProfileKey(ctx context.Context, key string) (*domain.IntegrationProfile, error) {
 	if s.FindByKeyFn != nil {
 		return s.FindByKeyFn(key)
 	}
 	return nil, fmt.Errorf("not found")
 }
 
-func (s *stubIntegrationProfileRepo) List() ([]domain.IntegrationProfile, error) {
+func (s *stubIntegrationProfileRepo) List(ctx context.Context) ([]domain.IntegrationProfile, error) {
 	if s.ListFn != nil {
 		return s.ListFn()
 	}
 	return nil, nil
 }
 
-func (s *stubIntegrationProfileRepo) Update(profile *domain.IntegrationProfile) error {
+func (s *stubIntegrationProfileRepo) Update(ctx context.Context, profile *domain.IntegrationProfile) error {
 	if s.UpdateFn != nil {
 		return s.UpdateFn(profile)
 	}
 	return nil
 }
 
-func (s *stubIntegrationProfileRepo) Delete(id uint) error {
+func (s *stubIntegrationProfileRepo) Delete(ctx context.Context, id uint) error {
 	if s.DeleteFn != nil {
 		return s.DeleteFn(id)
 	}
@@ -65,31 +66,43 @@ type stubDemandDocumentRepo struct {
 	CountByIntegrationProfileIDFn func(profileID uint) (int64, error)
 }
 
-func (s *stubDemandDocumentRepo) Create(_ *domain.DemandDocument) error { return nil }
-func (s *stubDemandDocumentRepo) FindByID(_ uint) (*domain.DemandDocument, error) {
+func (s *stubDemandDocumentRepo) Create(ctx context.Context, _ *domain.DemandDocument) error {
+	return nil
+}
+func (s *stubDemandDocumentRepo) FindByID(ctx context.Context, _ uint) (*domain.DemandDocument, error) {
 	return nil, fmt.Errorf("not found")
 }
-func (s *stubDemandDocumentRepo) List() ([]domain.DemandDocument, error)           { return nil, nil }
-func (s *stubDemandDocumentRepo) ListUnassigned() ([]domain.DemandDocument, error) { return nil, nil }
-func (s *stubDemandDocumentRepo) CountByIntegrationProfileID(profileID uint) (int64, error) {
+func (s *stubDemandDocumentRepo) List(ctx context.Context) ([]domain.DemandDocument, error) {
+	return nil, nil
+}
+func (s *stubDemandDocumentRepo) ListUnassigned(ctx context.Context) ([]domain.DemandDocument, error) {
+	return nil, nil
+}
+func (s *stubDemandDocumentRepo) CountByIntegrationProfileID(ctx context.Context, profileID uint) (int64, error) {
 	if s.CountByIntegrationProfileIDFn != nil {
 		return s.CountByIntegrationProfileIDFn(profileID)
 	}
 	return 0, nil
 }
-func (s *stubDemandDocumentRepo) CreateLine(_ *domain.DemandLine) error { return nil }
-func (s *stubDemandDocumentRepo) FindLineByID(_ uint) (*domain.DemandLine, error) {
-	return nil, fmt.Errorf("not found")
-}
-func (s *stubDemandDocumentRepo) ListLinesByDocument(_ uint) ([]domain.DemandLine, error) {
-	return nil, nil
-}
-func (s *stubDemandDocumentRepo) UpdateLine(_ *domain.DemandLine) error { return nil }
-func (s *stubDemandDocumentRepo) UpdateLineRoutingFields(_ uint, _, _, _ string) error {
+func (s *stubDemandDocumentRepo) CreateLine(ctx context.Context, _ *domain.DemandLine) error {
 	return nil
 }
-func (s *stubDemandDocumentRepo) UpdateBoundProfileSnapshot(_ uint, _ string) error { return nil }
-func (s *stubDemandDocumentRepo) BulkUpdateCustomerProfileID(_, _ uint) (int64, error) {
+func (s *stubDemandDocumentRepo) FindLineByID(ctx context.Context, _ uint) (*domain.DemandLine, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (s *stubDemandDocumentRepo) ListLinesByDocument(ctx context.Context, _ uint) ([]domain.DemandLine, error) {
+	return nil, nil
+}
+func (s *stubDemandDocumentRepo) UpdateLine(ctx context.Context, _ *domain.DemandLine) error {
+	return nil
+}
+func (s *stubDemandDocumentRepo) UpdateLineRoutingFields(ctx context.Context, _ uint, _, _, _ string) error {
+	return nil
+}
+func (s *stubDemandDocumentRepo) UpdateBoundProfileSnapshot(ctx context.Context, _ uint, _ string) error {
+	return nil
+}
+func (s *stubDemandDocumentRepo) BulkUpdateCustomerProfileID(ctx context.Context, _, _ uint) (int64, error) {
 	return 0, nil
 }
 
@@ -97,23 +110,31 @@ type stubChannelSyncRepo struct {
 	CountJobsByProfileIDFn func(profileID uint) (int64, error)
 }
 
-func (s *stubChannelSyncRepo) CreateJob(_ *domain.ChannelSyncJob) error { return nil }
-func (s *stubChannelSyncRepo) FindJobByID(_ uint) (*domain.ChannelSyncJob, error) {
-	return nil, fmt.Errorf("not found")
-}
-func (s *stubChannelSyncRepo) ListJobsByWave(_ uint) ([]domain.ChannelSyncJob, error) {
-	return nil, nil
-}
-func (s *stubChannelSyncRepo) SaveJob(_ *domain.ChannelSyncJob) error    { return nil }
-func (s *stubChannelSyncRepo) CreateItem(_ *domain.ChannelSyncItem) error { return nil }
-func (s *stubChannelSyncRepo) SaveItem(_ *domain.ChannelSyncItem) error   { return nil }
-func (s *stubChannelSyncRepo) ListItemsByJob(_ uint) ([]domain.ChannelSyncItem, error) {
-	return nil, nil
-}
-func (s *stubChannelSyncRepo) AtomicCreateChannelSync(_ *domain.ChannelSyncJob, _ []*domain.ChannelSyncItem, _ *domain.BasisPinParam) error {
+func (s *stubChannelSyncRepo) CreateJob(ctx context.Context, _ *domain.ChannelSyncJob) error {
 	return nil
 }
-func (s *stubChannelSyncRepo) CountJobsByProfileID(profileID uint) (int64, error) {
+func (s *stubChannelSyncRepo) FindJobByID(ctx context.Context, _ uint) (*domain.ChannelSyncJob, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (s *stubChannelSyncRepo) ListJobsByWave(ctx context.Context, _ uint) ([]domain.ChannelSyncJob, error) {
+	return nil, nil
+}
+func (s *stubChannelSyncRepo) SaveJob(ctx context.Context, _ *domain.ChannelSyncJob) error {
+	return nil
+}
+func (s *stubChannelSyncRepo) CreateItem(ctx context.Context, _ *domain.ChannelSyncItem) error {
+	return nil
+}
+func (s *stubChannelSyncRepo) SaveItem(ctx context.Context, _ *domain.ChannelSyncItem) error {
+	return nil
+}
+func (s *stubChannelSyncRepo) ListItemsByJob(ctx context.Context, _ uint) ([]domain.ChannelSyncItem, error) {
+	return nil, nil
+}
+func (s *stubChannelSyncRepo) AtomicCreateChannelSync(ctx context.Context, _ *domain.ChannelSyncJob, _ []*domain.ChannelSyncItem, _ *domain.BasisPinParam) error {
+	return nil
+}
+func (s *stubChannelSyncRepo) CountJobsByProfileID(ctx context.Context, profileID uint) (int64, error) {
 	if s.CountJobsByProfileIDFn != nil {
 		return s.CountJobsByProfileIDFn(profileID)
 	}
@@ -124,17 +145,17 @@ type stubProfileTemplateBindingRepo struct {
 	CountByProfileIDFn func(profileID uint) (int64, error)
 }
 
-func (s *stubProfileTemplateBindingRepo) Create(_ *domain.IntegrationProfileTemplateBinding) error {
+func (s *stubProfileTemplateBindingRepo) Create(ctx context.Context, _ *domain.IntegrationProfileTemplateBinding) error {
 	return nil
 }
-func (s *stubProfileTemplateBindingRepo) ListByProfile(_ uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+func (s *stubProfileTemplateBindingRepo) ListByProfile(ctx context.Context, _ uint) ([]domain.IntegrationProfileTemplateBinding, error) {
 	return nil, nil
 }
-func (s *stubProfileTemplateBindingRepo) FindDefaultByProfileAndType(_ uint, _ string) (*domain.IntegrationProfileTemplateBinding, error) {
+func (s *stubProfileTemplateBindingRepo) FindDefaultByProfileAndType(ctx context.Context, _ uint, _ string) (*domain.IntegrationProfileTemplateBinding, error) {
 	return nil, fmt.Errorf("not found")
 }
-func (s *stubProfileTemplateBindingRepo) Delete(_ uint) error { return nil }
-func (s *stubProfileTemplateBindingRepo) CountByProfileID(profileID uint) (int64, error) {
+func (s *stubProfileTemplateBindingRepo) Delete(ctx context.Context, _ uint) error { return nil }
+func (s *stubProfileTemplateBindingRepo) CountByProfileID(ctx context.Context, profileID uint) (int64, error) {
 	if s.CountByProfileIDFn != nil {
 		return s.CountByProfileIDFn(profileID)
 	}
@@ -145,17 +166,19 @@ type stubClosureDecisionRepo struct {
 	CountByProfileIDFn func(profileID uint) (int64, error)
 }
 
-func (s *stubClosureDecisionRepo) Create(_ *domain.ChannelClosureDecisionRecord) error { return nil }
-func (s *stubClosureDecisionRepo) AtomicCreate(_ []*domain.ChannelClosureDecisionRecord) error {
+func (s *stubClosureDecisionRepo) Create(ctx context.Context, _ *domain.ChannelClosureDecisionRecord) error {
 	return nil
 }
-func (s *stubClosureDecisionRepo) ListByFulfillmentLine(_ uint) ([]domain.ChannelClosureDecisionRecord, error) {
+func (s *stubClosureDecisionRepo) AtomicCreate(ctx context.Context, _ []*domain.ChannelClosureDecisionRecord) error {
+	return nil
+}
+func (s *stubClosureDecisionRepo) ListByFulfillmentLine(ctx context.Context, _ uint) ([]domain.ChannelClosureDecisionRecord, error) {
 	return nil, nil
 }
-func (s *stubClosureDecisionRepo) ListByWave(_ uint) ([]domain.ChannelClosureDecisionRecord, error) {
+func (s *stubClosureDecisionRepo) ListByWave(ctx context.Context, _ uint) ([]domain.ChannelClosureDecisionRecord, error) {
 	return nil, nil
 }
-func (s *stubClosureDecisionRepo) CountByProfileID(profileID uint) (int64, error) {
+func (s *stubClosureDecisionRepo) CountByProfileID(ctx context.Context, profileID uint) (int64, error) {
 	if s.CountByProfileIDFn != nil {
 		return s.CountByProfileIDFn(profileID)
 	}
@@ -355,7 +378,7 @@ func TestCreateProfileValidatesExecutionReadiness(t *testing.T) {
 				&stubClosureDecisionRepo{},
 				execProvider,
 			)
-			_, err := uc.CreateProfile(tc.input)
+			_, err := uc.CreateProfile(context.Background(), tc.input)
 			if tc.wantErr && err == nil {
 				t.Errorf("expected error, got nil")
 			}
@@ -412,13 +435,13 @@ func TestUpdateProfileValidatesExecutionReadiness(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-				execProvider := NewRuntimeExecutorProviderWith(map[string]map[string]ChannelSyncExecutor{
-					"api_push": {
-						"valid.connector": NewFakeExecutor(),
-					},
-					"document_export": {
-						"eli.local_export": NewFakeExecutor(),
-					},
+			execProvider := NewRuntimeExecutorProviderWith(map[string]map[string]ChannelSyncExecutor{
+				"api_push": {
+					"valid.connector": NewFakeExecutor(),
+				},
+				"document_export": {
+					"eli.local_export": NewFakeExecutor(),
+				},
 			})
 			uc := NewProfileManagementUseCase(
 				&stubIntegrationProfileRepo{},
@@ -428,7 +451,7 @@ func TestUpdateProfileValidatesExecutionReadiness(t *testing.T) {
 				&stubClosureDecisionRepo{},
 				execProvider,
 			)
-			_, err := uc.UpdateProfile(tc.input)
+			_, err := uc.UpdateProfile(context.Background(), tc.input)
 			if tc.wantErr && err == nil {
 				t.Errorf("expected error, got nil")
 			}
@@ -475,7 +498,7 @@ func TestDeleteProfileClosureDecisionGating(t *testing.T) {
 					},
 				},
 				&stubDemandDocumentRepo{
-				CountByIntegrationProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
+					CountByIntegrationProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
 				},
 				&stubChannelSyncRepo{
 					CountJobsByProfileIDFn: func(_ uint) (int64, error) { return 0, nil },
@@ -489,7 +512,7 @@ func TestDeleteProfileClosureDecisionGating(t *testing.T) {
 				nil,
 			)
 
-			err := uc.DeleteProfile(1)
+			err := uc.DeleteProfile(context.Background(), 1)
 			if tc.wantErr && err == nil {
 				t.Errorf("expected error, got nil")
 			}
@@ -538,7 +561,7 @@ func TestSeedDefaultProfilesUsesExecutableDefaults(t *testing.T) {
 		provider,
 	)
 
-	profiles, err := uc.SeedDefaultProfiles()
+	profiles, err := uc.SeedDefaultProfiles(context.Background())
 	if err != nil {
 		t.Fatalf("SeedDefaultProfiles failed: %v", err)
 	}

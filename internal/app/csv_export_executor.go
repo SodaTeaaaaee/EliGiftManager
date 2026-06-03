@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"fmt"
@@ -40,6 +41,7 @@ func (e *csvExportExecutor) Capabilities() ConnectorCapabilities {
 }
 
 func (e *csvExportExecutor) Execute(
+	ctx context.Context,
 	job *domain.ChannelSyncJob,
 	items []domain.ChannelSyncItem,
 	profile *domain.IntegrationProfile,

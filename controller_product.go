@@ -24,25 +24,30 @@ func NewProductController() *ProductController {
 
 // CreateProductMaster creates a new product master record.
 func (c *ProductController) CreateProductMaster(input dto.CreateProductMasterInput) (*dto.ProductMasterDTO, error) {
-	return c.uc.CreateProductMaster(input)
+	ctx := appContext
+	return c.uc.CreateProductMaster(ctx, input)
 }
 
 // ListProductMasters returns all product masters.
 func (c *ProductController) ListProductMasters() ([]dto.ProductMasterDTO, error) {
-	return c.uc.ListProductMasters()
+	ctx := appContext
+	return c.uc.ListProductMasters(ctx)
 }
 
 // UpdateProductMaster updates an existing product master.
 func (c *ProductController) UpdateProductMaster(input dto.UpdateProductMasterInput) (*dto.ProductMasterDTO, error) {
-	return c.uc.UpdateProductMaster(input)
+	ctx := appContext
+	return c.uc.UpdateProductMaster(ctx, input)
 }
 
 // SnapshotProductsForWave creates wave-scoped product snapshots from master IDs.
 func (c *ProductController) SnapshotProductsForWave(input dto.SnapshotProductsInput) ([]dto.ProductDTO, error) {
-	return c.uc.SnapshotProductsForWave(input)
+	ctx := appContext
+	return c.uc.SnapshotProductsForWave(ctx, input)
 }
 
 // ListProductsByWave returns all products snapshotted into a wave.
 func (c *ProductController) ListProductsByWave(waveID uint) ([]dto.ProductDTO, error) {
-	return c.uc.ListProductsByWave(waveID)
+	ctx := appContext
+	return c.uc.ListProductsByWave(ctx, waveID)
 }

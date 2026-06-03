@@ -47,7 +47,7 @@ func NewExportController() *ExportController {
 		exportUC:            app.NewExportUseCase(supplierRepo, fulfillRepo, basisStamp, demandRepo, profileRepo, bindingRepo),
 		supplierRepo:        supplierRepo,
 		gdb:                 gdb,
-		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc)),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
 	}
@@ -56,37 +56,39 @@ func NewExportController() *ExportController {
 // ExportSupplierOrder exports supplier orders from the given wave, grouped by execution boundary.
 // Returns all created draft orders for the wave.
 func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrderDTO, error) {
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
+	ctx := appContext
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
 
 	var orders []*domain.SupplierOrder
 	err = c.gdb.Transaction(func(tx *gorm.DB) error {
-		supplierRepo := infra.NewSupplierOrderRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		ruleRepo := infra.NewRuleRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		waveRepo := infra.NewWaveRepository(tx)
-		productRepo := infra.NewProductRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyPinRepo := infra.NewHistoryPinRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		profileRepo := infra.NewIntegrationProfileRepository(tx)
-		bindingRepo := infra.NewProfileTemplateBindingRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		supplierRepo := repos.SupplierRepo
+		fulfillRepo := repos.FulfillRepo
+		ruleRepo := repos.RuleRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		assignmentRepo := repos.AssignmentRepo
+		waveRepo := repos.WaveRepo
+		productRepo := repos.ProductRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyPinRepo := repos.HistoryPin
+		historyCheckpointRepo := repos.HistoryCheckpoint
+		demandRepo := repos.DemandRepo
+		profileRepo := repos.Profile
+		bindingRepo := repos.Binding
 
 		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
 		exportUC := app.NewExportUseCase(supplierRepo, fulfillRepo, basisStamp, demandRepo, profileRepo, bindingRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		exported, exportErr := exportUC.ExportSupplierOrder(waveID)
+		exported, exportErr := exportUC.ExportSupplierOrder(ctx, waveID)
 		if exportErr != nil {
 			return exportErr
 		}
@@ -97,11 +99,11 @@ func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrder
 		if len(orders) > 0 {
 			firstID = orders[0].ID
 		}
-		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, waveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdExportSupplierOrder,
 			CommandSummary:          fmt.Sprintf("export %d supplier order(s) for wave %d (first id: %d)", len(orders), waveID, firstID),
@@ -125,7 +127,8 @@ func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrder
 
 // ListSupplierOrders lists all supplier orders.
 func (c *ExportController) ListSupplierOrders() ([]dto.SupplierOrderDTO, error) {
-	orders, err := c.supplierRepo.List()
+	ctx := appContext
+	orders, err := c.supplierRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +141,8 @@ func (c *ExportController) ListSupplierOrders() ([]dto.SupplierOrderDTO, error) 
 
 // GetSupplierOrderByWave returns all supplier orders for the given wave.
 func (c *ExportController) GetSupplierOrderByWave(waveID uint) ([]dto.SupplierOrderDTO, error) {
-	orders, err := c.supplierRepo.ListByWave(waveID)
+	ctx := appContext
+	orders, err := c.supplierRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +155,8 @@ func (c *ExportController) GetSupplierOrderByWave(waveID uint) ([]dto.SupplierOr
 
 // ListLinesBySupplierOrder returns all lines for the given supplier order.
 func (c *ExportController) ListLinesBySupplierOrder(orderID uint) ([]dto.SupplierOrderLineDTO, error) {
-	lines, err := c.supplierRepo.ListLinesByOrder(orderID)
+	ctx := appContext
+	lines, err := c.supplierRepo.ListLinesByOrder(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}

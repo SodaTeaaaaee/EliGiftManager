@@ -6,6 +6,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// Soft-delete design: all models that embed gorm.Model inherit gorm.DeletedAt,
+// which GORM uses to automatically exclude soft-deleted rows from queries (WHERE
+// deleted_at IS NULL). No explicit scope, callback, or plugin is needed.
+// Intentional hard deletes (e.g. patch executor restore, cleanup by wave) use
+// db.Unscoped().Delete() with comments explaining why the row must be fully absent.
+// The few models that do NOT embed gorm.Model (ShipmentLine, ChannelSyncItem) have
+// no DeletedAt and are never soft-deleted — they are append-only join/link rows.
+
 // ---- CustomerProfile ----
 
 type CustomerProfile struct {

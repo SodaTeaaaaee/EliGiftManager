@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -57,11 +58,11 @@ func ptrVal(p *uint) uint {
 // ComputeHash returns a stable SHA-256 digest of the wave's semantic projection
 // state.  IDs are excluded from the hash inputs because they change after a
 // restore-snapshot cycle; instead rows are sorted by stable semantic keys.
-func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
+func (s *ProjectionHashService) ComputeHash(ctx context.Context, waveID uint) (string, error) {
 	h := sha256.New()
 
 	// Rules — sort by (ProductID, RuleKind, Priority) — stable regardless of row ID.
-	rules, err := s.ruleRepo.ListByWave(waveID)
+	rules, err := s.ruleRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", err
 	}
@@ -84,7 +85,7 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 	}
 
 	// Fulfillment lines — sort by (WaveParticipantSnapshotID, ProductID, DemandLineID).
-	lines, err := s.fulfillRepo.ListByWave(waveID)
+	lines, err := s.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", err
 	}
@@ -108,7 +109,7 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 	}
 
 	// Adjustments — sort by (AdjustmentKind, QuantityDelta, FulfillmentLineID).
-	adjs, err := s.adjRepo.ListByWave(waveID)
+	adjs, err := s.adjRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", err
 	}
@@ -128,7 +129,7 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 
 	// Demand assignments — sort by DemandDocumentID.
 	if s.assignmentRepo != nil {
-		assignments, err := s.assignmentRepo.ListByWave(waveID)
+		assignments, err := s.assignmentRepo.ListByWave(ctx, waveID)
 		if err != nil {
 			return "", err
 		}
@@ -142,7 +143,7 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 
 	// Wave participant snapshots — sort by (CustomerProfileID, SnapshotType, IdentityPlatform, IdentityValue).
 	if s.waveRepo != nil {
-		participants, err := s.waveRepo.ListParticipantsByWave(waveID)
+		participants, err := s.waveRepo.ListParticipantsByWave(ctx, waveID)
 		if err != nil {
 			return "", err
 		}
@@ -166,7 +167,7 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 
 	// Wave-scoped product snapshots — sort by (SupplierPlatform, FactorySKU).
 	if s.productRepo != nil {
-		products, err := s.productRepo.ListByWave(waveID)
+		products, err := s.productRepo.ListByWave(ctx, waveID)
 		if err != nil {
 			return "", err
 		}
@@ -184,7 +185,7 @@ func (s *ProjectionHashService) ComputeHash(waveID uint) (string, error) {
 
 	// Manual closure decisions — sort by (FulfillmentLineID, DecisionKind, IntegrationProfileID).
 	if s.closureRepo != nil {
-		decisions, err := s.closureRepo.ListByWave(waveID)
+		decisions, err := s.closureRepo.ListByWave(ctx, waveID)
 		if err != nil {
 			return "", err
 		}

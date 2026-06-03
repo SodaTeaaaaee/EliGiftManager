@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -37,7 +38,7 @@ var validProductKinds = map[string]bool{
 	"other":    true,
 }
 
-func (uc *productUseCase) CreateProductMaster(input dto.CreateProductMasterInput) (*dto.ProductMasterDTO, error) {
+func (uc *productUseCase) CreateProductMaster(ctx context.Context, input dto.CreateProductMasterInput) (*dto.ProductMasterDTO, error) {
 	if input.SupplierPlatform == "" {
 		return nil, fmt.Errorf("supplier_platform is required")
 	}
@@ -66,15 +67,15 @@ func (uc *productUseCase) CreateProductMaster(input dto.CreateProductMasterInput
 		Archived:           false,
 		ExtraData:          "",
 	}
-	if err := uc.masterRepo.Create(master); err != nil {
+	if err := uc.masterRepo.Create(ctx, master); err != nil {
 		return nil, err
 	}
 	d := productMasterToDTO(master)
 	return &d, nil
 }
 
-func (uc *productUseCase) ListProductMasters() ([]dto.ProductMasterDTO, error) {
-	masters, err := uc.masterRepo.List()
+func (uc *productUseCase) ListProductMasters(ctx context.Context) ([]dto.ProductMasterDTO, error) {
+	masters, err := uc.masterRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +86,8 @@ func (uc *productUseCase) ListProductMasters() ([]dto.ProductMasterDTO, error) {
 	return result, nil
 }
 
-func (uc *productUseCase) UpdateProductMaster(input dto.UpdateProductMasterInput) (*dto.ProductMasterDTO, error) {
-	master, err := uc.masterRepo.FindByID(input.ID)
+func (uc *productUseCase) UpdateProductMaster(ctx context.Context, input dto.UpdateProductMasterInput) (*dto.ProductMasterDTO, error) {
+	master, err := uc.masterRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -107,32 +108,32 @@ func (uc *productUseCase) UpdateProductMaster(input dto.UpdateProductMasterInput
 	master.ProductKind = domain.ProductKind(productKind)
 	master.Archived = input.Archived
 
-	if err := uc.masterRepo.Update(master); err != nil {
+	if err := uc.masterRepo.Update(ctx, master); err != nil {
 		return nil, err
 	}
 	d := productMasterToDTO(master)
 	return &d, nil
 }
 
-func (uc *productUseCase) SnapshotProductsForWave(input dto.SnapshotProductsInput) ([]dto.ProductDTO, error) {
+func (uc *productUseCase) SnapshotProductsForWave(ctx context.Context, input dto.SnapshotProductsInput) ([]dto.ProductDTO, error) {
 	if input.WaveID == 0 {
 		return nil, fmt.Errorf("wave_id is required")
 	}
 
 	// Validate wave exists
-	if _, err := uc.waveRepo.FindByID(input.WaveID); err != nil {
+	if _, err := uc.waveRepo.FindByID(ctx, input.WaveID); err != nil {
 		return nil, fmt.Errorf("wave %d does not exist: %w", input.WaveID, err)
 	}
 
 	var results []dto.ProductDTO
 
 	for _, masterID := range input.MasterIDs {
-		master, err := uc.masterRepo.FindByID(masterID)
+		master, err := uc.masterRepo.FindByID(ctx, masterID)
 		if err != nil {
 			return nil, fmt.Errorf("product master %d not found: %w", masterID, err)
 		}
 
-		existing, err := uc.productRepo.FindByWaveAndSKU(input.WaveID, master.SupplierPlatform, master.FactorySKU)
+		existing, err := uc.productRepo.FindByWaveAndSKU(ctx, input.WaveID, master.SupplierPlatform, master.FactorySKU)
 		if err == nil && existing != nil {
 			results = append(results, productToDTO(existing))
 			continue
@@ -147,7 +148,7 @@ func (uc *productUseCase) SnapshotProductsForWave(input dto.SnapshotProductsInpu
 			Name:             master.Name,
 			ExtraData:        "",
 		}
-		if err := uc.productRepo.Create(product); err != nil {
+		if err := uc.productRepo.Create(ctx, product); err != nil {
 			return nil, err
 		}
 		results = append(results, productToDTO(product))
@@ -156,8 +157,8 @@ func (uc *productUseCase) SnapshotProductsForWave(input dto.SnapshotProductsInpu
 	return results, nil
 }
 
-func (uc *productUseCase) ListProductsByWave(waveID uint) ([]dto.ProductDTO, error) {
-	products, err := uc.productRepo.ListByWave(waveID)
+func (uc *productUseCase) ListProductsByWave(ctx context.Context, waveID uint) ([]dto.ProductDTO, error) {
+	products, err := uc.productRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
@@ -38,10 +40,10 @@ func NewWaveOverviewProjectionUseCase(
 	return uc
 }
 
-func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOverviewDTO) (dto.WaveOverviewDTO, error) {
+func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(ctx context.Context, base dto.WaveOverviewDTO) (dto.WaveOverviewDTO, error) {
 	waveID := base.Wave.ID
 
-	jobs, err := uc.channelSyncRepo.ListJobsByWave(waveID)
+	jobs, err := uc.channelSyncRepo.ListJobsByWave(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -62,7 +64,7 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 		}
 	}
 
-	decisions, err := uc.closureRepo.ListByWave(waveID)
+	decisions, err := uc.closureRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -83,7 +85,7 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 	// This is the single authoritative stage aggregation point.
 	projectedStage := deriveStage(base)
 
-	hasUncoveredFailures, err := uc.hasUncoveredFailedItems(jobs, decisions)
+	hasUncoveredFailures, err := uc.hasUncoveredFailedItems(ctx, jobs, decisions)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -114,11 +116,11 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 	base.ProjectedLifecycleStage = projectedStage
 
 	// Basis drift detection
-	projHash, err := uc.historyHeadUC.GetCurrentProjectionHash(waveID)
+	projHash, err := uc.historyHeadUC.GetCurrentProjectionHash(ctx, waveID)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
-	signals, err := uc.driftUC.DetectWaveBasisDrift(waveID, projHash)
+	signals, err := uc.driftUC.DetectWaveBasisDrift(ctx, waveID, projHash)
 	if err != nil {
 		return dto.WaveOverviewDTO{}, err
 	}
@@ -137,11 +139,11 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 	// Only runs when both repos are wired in; skips silently otherwise.
 	base.ReplayHealthy = true
 	if uc.fulfillRepo != nil && uc.adjustmentRepo != nil {
-		lines, lErr := uc.fulfillRepo.ListByWave(waveID)
+		lines, lErr := uc.fulfillRepo.ListByWave(ctx, waveID)
 		if lErr != nil {
 			return dto.WaveOverviewDTO{}, lErr
 		}
-		adjustments, aErr := uc.adjustmentRepo.ListByWave(waveID)
+		adjustments, aErr := uc.adjustmentRepo.ListByWave(ctx, waveID)
 		if aErr != nil {
 			return dto.WaveOverviewDTO{}, aErr
 		}
@@ -159,6 +161,7 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(base dto.WaveOvervi
 }
 
 func (uc *waveOverviewProjectionUseCase) hasUncoveredFailedItems(
+	ctx context.Context,
 	jobs []domain.ChannelSyncJob,
 	decisions []domain.ChannelClosureDecisionRecord,
 ) (bool, error) {
@@ -171,7 +174,7 @@ func (uc *waveOverviewProjectionUseCase) hasUncoveredFailedItems(
 		if j.Status != "failed" && j.Status != "partial_success" {
 			continue
 		}
-		items, err := uc.channelSyncRepo.ListItemsByJob(j.ID)
+		items, err := uc.channelSyncRepo.ListItemsByJob(ctx, j.ID)
 		if err != nil {
 			return false, err
 		}

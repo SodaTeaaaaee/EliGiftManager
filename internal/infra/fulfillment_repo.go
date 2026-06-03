@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"context"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
@@ -14,61 +16,61 @@ func NewFulfillmentRepository(db *gorm.DB) domain.FulfillmentLineRepository {
 	return &fulfillmentRepository{db: db}
 }
 
-func (r *fulfillmentRepository) Create(line *domain.FulfillmentLine) error {
-	p := persistence.ToPersistenceFulfillmentLine(line)
-	if err := r.db.Create(p).Error; err != nil {
+func (r *fulfillmentRepository) Create(ctx context.Context, line *domain.FulfillmentLine) error {
+	p := persistence.FulfillmentLineFromDomain(line)
+	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
 		return err
 	}
-	*line = *persistence.FromPersistenceFulfillmentLine(p)
+	*line = *persistence.FulfillmentLineToDomain(p)
 	return nil
 }
 
-func (r *fulfillmentRepository) FindByID(id uint) (*domain.FulfillmentLine, error) {
+func (r *fulfillmentRepository) FindByID(ctx context.Context, id uint) (*domain.FulfillmentLine, error) {
 	var p persistence.FulfillmentLine
-	if err := r.db.First(&p, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&p, id).Error; err != nil {
 		return nil, err
 	}
-	return persistence.FromPersistenceFulfillmentLine(&p), nil
+	return persistence.FulfillmentLineToDomain(&p), nil
 }
 
-func (r *fulfillmentRepository) Update(line *domain.FulfillmentLine) error {
-	p := persistence.ToPersistenceFulfillmentLine(line)
+func (r *fulfillmentRepository) Update(ctx context.Context, line *domain.FulfillmentLine) error {
+	p := persistence.FulfillmentLineFromDomain(line)
 	p.ID = line.ID
-	return r.db.Save(p).Error
+	return r.db.WithContext(ctx).Save(p).Error
 }
 
-func (r *fulfillmentRepository) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
+func (r *fulfillmentRepository) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentLine, error) {
 	var ps []persistence.FulfillmentLine
-	if err := r.db.Where("wave_id = ?", waveID).Find(&ps).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("wave_id = ?", waveID).Find(&ps).Error; err != nil {
 		return nil, err
 	}
 	result := make([]domain.FulfillmentLine, len(ps))
 	for i, p := range ps {
-		result[i] = *persistence.FromPersistenceFulfillmentLine(&p)
+		result[i] = *persistence.FulfillmentLineToDomain(&p)
 	}
 	return result, nil
 }
 
-func (r *fulfillmentRepository) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
-	return r.db.Where("wave_id = ? AND generated_by = ?", waveID, generatedBy).Delete(&persistence.FulfillmentLine{}).Error
+func (r *fulfillmentRepository) DeleteByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string) error {
+	return r.db.WithContext(ctx).Where("wave_id = ? AND generated_by = ?", waveID, generatedBy).Delete(&persistence.FulfillmentLine{}).Error
 }
 
-func (r *fulfillmentRepository) DeleteByWave(waveID uint) error {
-	return r.db.Unscoped().Where("wave_id = ?", waveID).Delete(&persistence.FulfillmentLine{}).Error
+func (r *fulfillmentRepository) DeleteByWave(ctx context.Context, waveID uint) error {
+	return r.db.WithContext(ctx).Unscoped().Where("wave_id = ?", waveID).Delete(&persistence.FulfillmentLine{}).Error
 }
 
-func (r *fulfillmentRepository) BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) (int64, error) {
-	res := r.db.Model(&persistence.FulfillmentLine{}).
+func (r *fulfillmentRepository) BulkUpdateCustomerProfileID(ctx context.Context, oldProfileID, newProfileID uint) (int64, error) {
+	res := r.db.WithContext(ctx).Model(&persistence.FulfillmentLine{}).
 		Where("customer_profile_id = ?", oldProfileID).
 		Update("customer_profile_id", newProfileID)
 	return res.RowsAffected, res.Error
 }
 
-func (r *fulfillmentRepository) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error {
+func (r *fulfillmentRepository) BulkUpdateStates(ctx context.Context, updates []domain.FulfillmentLineStateUpdate) error {
 	if len(updates) == 0 {
 		return nil
 	}
-	return r.db.Transaction(func(tx *gorm.DB) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, u := range updates {
 			cols := make(map[string]interface{})
 			if u.SupplierState != "" {
@@ -88,17 +90,17 @@ func (r *fulfillmentRepository) BulkUpdateStates(updates []domain.FulfillmentLin
 	})
 }
 
-func (r *fulfillmentRepository) ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []domain.FulfillmentLine) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+func (r *fulfillmentRepository) ReplaceByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string, newLines []domain.FulfillmentLine) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("wave_id = ? AND generated_by = ?", waveID, generatedBy).Delete(&persistence.FulfillmentLine{}).Error; err != nil {
 			return err
 		}
 		for i := range newLines {
-			p := persistence.ToPersistenceFulfillmentLine(&newLines[i])
+			p := persistence.FulfillmentLineFromDomain(&newLines[i])
 			if err := tx.Create(p).Error; err != nil {
 				return err
 			}
-			newLines[i] = *persistence.FromPersistenceFulfillmentLine(p)
+			newLines[i] = *persistence.FulfillmentLineToDomain(p)
 		}
 		return nil
 	})

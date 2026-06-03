@@ -162,11 +162,11 @@ const (
 type ChannelSyncJobStatus string
 
 const (
-	ChannelSyncJobStatusPending       ChannelSyncJobStatus = "pending"
-	ChannelSyncJobStatusRunning       ChannelSyncJobStatus = "running"
-	ChannelSyncJobStatusSuccess       ChannelSyncJobStatus = "success"
+	ChannelSyncJobStatusPending        ChannelSyncJobStatus = "pending"
+	ChannelSyncJobStatusRunning        ChannelSyncJobStatus = "running"
+	ChannelSyncJobStatusSuccess        ChannelSyncJobStatus = "success"
 	ChannelSyncJobStatusPartialSuccess ChannelSyncJobStatus = "partial_success"
-	ChannelSyncJobStatusFailed        ChannelSyncJobStatus = "failed"
+	ChannelSyncJobStatusFailed         ChannelSyncJobStatus = "failed"
 )
 
 // ChannelSyncItem: Status

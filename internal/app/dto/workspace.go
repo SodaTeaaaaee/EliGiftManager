@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type WaveStepStateDTO struct {
 	StepKey        string `json:"stepKey"`
 	Status         string `json:"status"`
@@ -80,23 +82,23 @@ type ListDemandInboxInput struct {
 }
 
 type DemandInboxRowDTO struct {
-	DemandDocumentID        uint   `json:"demandDocumentId"`
-	Kind                    string `json:"kind"`
-	CaptureMode             string `json:"captureMode"`
-	SourceChannel           string `json:"sourceChannel"`
-	SourceSurface           string `json:"sourceSurface"`
-	SourceDocumentNo        string `json:"sourceDocumentNo"`
-	CustomerProfileID       *uint  `json:"customerProfileId"`
-	IntegrationProfileID    *uint  `json:"integrationProfileId"`
-	IntegrationProfileLabel string `json:"integrationProfileLabel"`
-	Assigned                bool   `json:"assigned"`
-	AssignedWaveID          *uint  `json:"assignedWaveId"`
-	AssignedWaveLabel       string `json:"assignedWaveLabel"`
-	TotalLineCount          int    `json:"totalLineCount"`
-	AcceptedCount           int    `json:"acceptedCount"`
-	ReadyAcceptedCount      int    `json:"readyAcceptedCount"`
-	WaitingInputCount       int    `json:"waitingInputCount"`
-	DeferredCount           int    `json:"deferredCount"`
-	ExcludedCount           int    `json:"excludedCount"`
-	CreatedAt               string `json:"createdAt"`
+	DemandDocumentID        uint      `json:"demandDocumentId"`
+	Kind                    string    `json:"kind"`
+	CaptureMode             string    `json:"captureMode"`
+	SourceChannel           string    `json:"sourceChannel"`
+	SourceSurface           string    `json:"sourceSurface"`
+	SourceDocumentNo        string    `json:"sourceDocumentNo"`
+	CustomerProfileID       *uint     `json:"customerProfileId"`
+	IntegrationProfileID    *uint     `json:"integrationProfileId"`
+	IntegrationProfileLabel string    `json:"integrationProfileLabel"`
+	Assigned                bool      `json:"assigned"`
+	AssignedWaveID          *uint     `json:"assignedWaveId"`
+	AssignedWaveLabel       string    `json:"assignedWaveLabel"`
+	TotalLineCount          int       `json:"totalLineCount"`
+	AcceptedCount           int       `json:"acceptedCount"`
+	ReadyAcceptedCount      int       `json:"readyAcceptedCount"`
+	WaitingInputCount       int       `json:"waitingInputCount"`
+	DeferredCount           int       `json:"deferredCount"`
+	ExcludedCount           int       `json:"excludedCount"`
+	CreatedAt               time.Time `json:"createdAt" ts_type:"string"`
 }

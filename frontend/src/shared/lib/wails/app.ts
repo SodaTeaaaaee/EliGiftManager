@@ -318,35 +318,15 @@ export async function listShipmentsByWave(waveId: number): Promise<dto.ShipmentD
   return ListShipmentsByWave(waveId)
 }
 
-export interface ImportShipmentEntry {
-  supplierOrderLineId: number
-  fulfillmentLineId: number
-  externalShipmentNo: string
-  carrierCode: string
-  carrierName: string
-  trackingNo: string
-  quantity: number
-  shippedAt: string
-}
+export type ImportShipmentEntry = dto.ImportShipmentEntry
 
-export interface ImportShipmentsInput {
-  waveId: number
-  integrationProfileId: number
-  importMode: string
-  entries: ImportShipmentEntry[]
-}
+export type ImportShipmentsInput = dto.ImportShipmentInput
 
-export interface ImportShipmentsResult {
-  createdShipments: dto.ShipmentDTO[]
-  errors: Array<{ entryIndex: number; reason: string }>
-  totalProcessed: number
-  successCount: number
-  errorCount: number
-}
+export type ImportShipmentsResult = dto.ImportShipmentResult
 
 export async function importShipments(input: ImportShipmentsInput): Promise<ImportShipmentsResult> {
   assertWailsRuntime()
-  return ImportShipments(dto.ImportShipmentInput.createFrom(input)) as unknown as Promise<ImportShipmentsResult>
+  return ImportShipments(dto.ImportShipmentInput.createFrom(input))
 }
 
 // ── ChannelSyncController ──
@@ -594,21 +574,23 @@ export async function listAllocationPolicyRules(
   waveID: number,
 ): Promise<AllocationPolicyRule[]> {
   if (!isWailsRuntimeAvailable()) return []
-  return ListAllocationPolicyRules(waveID) as Promise<AllocationPolicyRule[]>
+  // DTO.selectorPayload is codegen'd as number[] (json.RawMessage → []byte) but
+  // is a SelectorPayload object at runtime, so go through unknown.
+  return ListAllocationPolicyRules(waveID) as unknown as Promise<AllocationPolicyRule[]>
 }
 
 export async function createAllocationPolicyRule(
   input: CreateAllocationPolicyRuleInput,
 ): Promise<AllocationPolicyRule> {
   assertWailsRuntime()
-  return CreateAllocationPolicyRule(input as any) as Promise<AllocationPolicyRule>
+  return CreateAllocationPolicyRule(input as any) as unknown as Promise<AllocationPolicyRule>
 }
 
 export async function updateAllocationPolicyRule(
   input: UpdateAllocationPolicyRuleInput,
 ): Promise<AllocationPolicyRule> {
   assertWailsRuntime()
-  return UpdateAllocationPolicyRule(input as any) as Promise<AllocationPolicyRule>
+  return UpdateAllocationPolicyRule(input as any) as unknown as Promise<AllocationPolicyRule>
 }
 
 export async function deleteAllocationPolicyRule(ruleID: number): Promise<void> {
@@ -649,12 +631,12 @@ export async function listRecentHistory(
   limit: number = 10,
 ): Promise<dto.HistoryNodeDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
-  return ListRecentHistory(waveId, limit) as Promise<dto.HistoryNodeDTO[]>
+  return ListRecentHistory(waveId, limit)
 }
 
 export async function getHistoryGraph(waveId: number): Promise<dto.HistoryGraphDTO> {
   assertWailsRuntime()
-  return GetHistoryGraph(waveId) as unknown as Promise<dto.HistoryGraphDTO>
+  return GetHistoryGraph(waveId)
 }
 
 
@@ -763,40 +745,14 @@ export async function batchUpdateDemandLineRouting(input: {
     recipientInputState: string
     routingReasonCode: string
   }>
-}): Promise<{
-  updatedCount: number
-  errors: Array<{ demandLineId: number; reason: string }>
-}> {
+}): Promise<dto.BatchUpdateDemandLineRoutingResult> {
   assertWailsRuntime()
-  return BatchUpdateDemandLineRouting(dto.BatchUpdateDemandLineRoutingInput.createFrom(input)) as unknown as Promise<{
-    updatedCount: number
-    errors: Array<{ demandLineId: number; reason: string }>
-  }>
+  return BatchUpdateDemandLineRouting(dto.BatchUpdateDemandLineRoutingInput.createFrom(input))
 }
 
-export async function getWaveRoutingStats(waveId: number): Promise<{
-  totalLines: number
-  acceptedReadyCount: number
-  acceptedWaitingCount: number
-  acceptedPartialCount: number
-  deferredCount: number
-  excludedManualCount: number
-  excludedDuplicateCount: number
-  excludedRevokedCount: number
-  pendingIntakeCount: number
-}> {
+export async function getWaveRoutingStats(waveId: number): Promise<dto.WaveRoutingStatsDTO> {
   assertWailsRuntime()
-  return GetWaveRoutingStats(waveId) as unknown as Promise<{
-    totalLines: number
-    acceptedReadyCount: number
-    acceptedWaitingCount: number
-    acceptedPartialCount: number
-    deferredCount: number
-    excludedManualCount: number
-    excludedDuplicateCount: number
-    excludedRevokedCount: number
-    pendingIntakeCount: number
-  }>
+  return GetWaveRoutingStats(waveId)
 }
 
 // ── App (utility) ──
@@ -915,7 +871,7 @@ export async function listWavesPaginated(input: PaginationInput): Promise<{
   pagination: PaginationResult
 }> {
   if (!isWailsRuntimeAvailable()) return { items: [], pagination: { page: 1, pageSize: 50, totalCount: 0, totalPages: 0 } }
-  return ListWavesPaginated(dto.PaginationInput.createFrom(input)) as unknown as Promise<{
+  return ListWavesPaginated(dto.PaginationInput.createFrom(input)) as Promise<{
     items: dto.WaveDTO[]
     pagination: PaginationResult
   }>
@@ -932,20 +888,12 @@ import {
   MergeProfiles as _MergeProfiles,
 } from "../../../../wailsjs/go/main/MergeController";
 
-export interface MergeProfilesResult {
-  migratedIdentityCount: number
-  migratedAddressCount: number
-  updatedDemandDocs: number
-  updatedParticipants: number
-  updatedFulfillmentLines: number
-}
-
 export async function mergeProfiles(input: {
   sourceProfileId: number
   targetProfileId: number
-}): Promise<MergeProfilesResult> {
+}): Promise<dto.MergeProfilesResult> {
   assertWailsRuntime()
-  return _MergeProfiles(input as any) as Promise<MergeProfilesResult>
+  return _MergeProfiles(dto.MergeProfilesInput.createFrom(input))
 }
 
 // ── CustomerProfileController ──

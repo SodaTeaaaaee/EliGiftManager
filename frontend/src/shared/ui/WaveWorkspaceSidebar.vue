@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h } from "vue";
+import { computed, h, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { NTag, NIcon, NMenu, type MenuOption } from "naive-ui";
 import {
@@ -47,22 +47,20 @@ const stepStateMap = computed(() => {
   return map;
 });
 
-function getStepStatus(
-  key: string,
-): "current" | "available" | "active" | "idle" {
-  const state = stepStateMap.value.get(key);
-  return ((state?.status as any) || "idle") as
-    | "current"
-    | "available"
-    | "active"
-    | "idle";
+type StepStatus = 'current' | 'available' | 'active' | 'idle'
+
+const VALID_STATUSES: ReadonlySet<string> = new Set<StepStatus>(['current', 'available', 'active', 'idle'])
+
+function getStepStatus(key: string): StepStatus {
+  const raw = stepStateMap.value.get(key)?.status
+  return VALID_STATUSES.has(raw ?? '') ? (raw as StepStatus) : 'idle'
 }
 
-function renderIcon(icon: any, status: string) {
-  if (status === "idle") {
-    return () => h(NIcon, null, { default: () => h(LockClosedOutline) });
+function renderIcon(icon: Component, status: StepStatus) {
+  if (status === 'idle') {
+    return () => h(NIcon, null, { default: () => h(LockClosedOutline) })
   }
-  return () => h(NIcon, null, { default: () => h(icon) });
+  return () => h(NIcon, null, { default: () => h(icon) })
 }
 
 function renderLabelWithCount(
@@ -118,83 +116,80 @@ const allocationBadge = computed(() => {
   return undefined;
 });
 
-const menuOptions = computed<MenuOption[]>(() => {
-  const opts: MenuOption[] = [];
+const menuOptions = computed(() => {
+  const opts: any[] = []
 
   // ── 总览 ──
   opts.push({
-    label: renderLabelWithCount(t("waveSidebar.overview")),
-    key: "wave_overview",
-    icon: renderIcon(GridOutline, "available"),
-  } as any);
+    label: renderLabelWithCount(t('waveSidebar.overview')),
+    key: 'wave_overview',
+    icon: renderIcon(GridOutline, 'available'),
+  })
 
   // ── ① Demand Intake (波次内只读视图) ──
   opts.push({
-    type: "group",
-    label: t("waveSidebar.sectionDemandIntake"),
-    key: "section_intake",
+    type: 'group',
+    label: t('waveSidebar.sectionDemandIntake'),
+    key: 'section_intake',
     children: [
       {
         label: renderLabelWithCount(
-          t("waveSidebar.intakeView"),
-          stepStateMap.value.get("demand_intake")?.primaryCount,
+          t('waveSidebar.intakeView'),
+          stepStateMap.value.get('demand_intake')?.primaryCount,
         ),
-        key: "demand_intake",
-        icon: renderIcon(CloudUploadOutline, "available"),
+        key: 'demand_intake',
+        icon: renderIcon(CloudUploadOutline, 'available'),
       },
     ],
-  } as any);
+  })
 
   // ── ② Initial Allocation (折叠分组) ──
-  const allocChildren: MenuOption[] = [];
+  const allocChildren: any[] = []
   if (isMembership.value || !isRetail.value) {
-    // 纯会员或混合 → 显示 Membership Allocation
     allocChildren.push({
       label: renderLabelWithCount(
-        t("waveSidebar.membershipAllocation"),
-        stepStateMap.value.get("membership_allocation")?.primaryCount,
+        t('waveSidebar.membershipAllocation'),
+        stepStateMap.value.get('membership_allocation')?.primaryCount,
       ),
-      key: "membership_allocation",
-      icon: renderIcon(PeopleOutline, getStepStatus("membership_allocation")),
-    } as any);
+      key: 'membership_allocation',
+      icon: renderIcon(PeopleOutline, getStepStatus('membership_allocation')),
+    })
   }
   if (isRetail.value || !isMembership.value) {
-    // 纯零售或混合 → 显示 Demand Mapping
     allocChildren.push({
       label: renderLabelWithCount(
-        t("waveSidebar.demandMapping"),
-        stepStateMap.value.get("demand_mapping")?.primaryCount,
+        t('waveSidebar.demandMapping'),
+        stepStateMap.value.get('demand_mapping')?.primaryCount,
       ),
-      key: "demand_mapping",
-      icon: renderIcon(ListOutline, getStepStatus("demand_mapping")),
-    } as any);
+      key: 'demand_mapping',
+      icon: renderIcon(ListOutline, getStepStatus('demand_mapping')),
+    })
   }
-  // 默认（纯会员）若 demandKinds 为空，仍要给一个入口
   if (allocChildren.length === 0) {
     allocChildren.push({
-      label: renderLabelWithCount(t("waveSidebar.membershipAllocation")),
-      key: "membership_allocation",
-      icon: renderIcon(PeopleOutline, "available"),
-    } as any);
+      label: renderLabelWithCount(t('waveSidebar.membershipAllocation')),
+      key: 'membership_allocation',
+      icon: renderIcon(PeopleOutline, 'available'),
+    })
   }
 
   opts.push({
-    type: "group",
+    type: 'group',
     label: () =>
       h(
-        "div",
-        { style: "display: flex; align-items: center; gap: 6px;" },
+        'div',
+        { style: 'display: flex; align-items: center; gap: 6px;' },
         [
-          h("span", null, t("waveSidebar.sectionInitialAllocation")),
+          h('span', null, t('waveSidebar.sectionInitialAllocation')),
           ...(allocationBadge.value
             ? [
                 h(
                   NTag,
                   {
-                    size: "tiny",
+                    size: 'tiny',
                     round: true,
                     bordered: false,
-                    type: "default",
+                    type: 'default',
                   },
                   { default: () => allocationBadge.value },
                 ),
@@ -202,120 +197,120 @@ const menuOptions = computed<MenuOption[]>(() => {
             : []),
         ],
       ),
-    key: "section_allocation",
+    key: 'section_allocation',
     children: allocChildren,
-  } as any);
+  })
 
   // ── ③ Adjustment Review ──
   opts.push({
-    type: "group",
-    label: t("waveSidebar.sectionAdjustment"),
-    key: "section_adjustment",
+    type: 'group',
+    label: t('waveSidebar.sectionAdjustment'),
+    key: 'section_adjustment',
     children: [
       {
         label: renderLabelWithCount(
-          t("waveSidebar.adjustmentReview"),
-          stepStateMap.value.get("adjustment_review")?.primaryCount,
+          t('waveSidebar.adjustmentReview'),
+          stepStateMap.value.get('adjustment_review')?.primaryCount,
         ),
-        key: "adjustment_review",
+        key: 'adjustment_review',
         icon: renderIcon(
           CheckmarkCircleOutline,
-          getStepStatus("adjustment_review"),
+          getStepStatus('adjustment_review'),
         ),
       },
     ],
-  } as any);
+  })
 
   // ── ④ Execution Readiness ──
   opts.push({
-    type: "group",
-    label: t("waveSidebar.sectionReadiness"),
-    key: "section_readiness",
+    type: 'group',
+    label: t('waveSidebar.sectionReadiness'),
+    key: 'section_readiness',
     children: [
       {
         label: renderLabelWithCount(
-          t("waveSidebar.readiness"),
-          stepStateMap.value.get("execution_readiness")?.primaryCount,
+          t('waveSidebar.readiness'),
+          stepStateMap.value.get('execution_readiness')?.primaryCount,
         ),
-        key: "execution_readiness",
+        key: 'execution_readiness',
         icon: renderIcon(
           ShieldCheckmarkOutline,
-          getStepStatus("execution_readiness") === "idle"
-            ? "available"
-            : getStepStatus("execution_readiness"),
+          getStepStatus('execution_readiness') === 'idle'
+            ? 'available'
+            : getStepStatus('execution_readiness'),
         ),
       },
     ],
-  } as any);
+  })
 
   // ── ⑤ Supplier Execution ──
   opts.push({
-    type: "group",
-    label: t("waveSidebar.sectionSupplierExecution"),
-    key: "section_execution",
+    type: 'group',
+    label: t('waveSidebar.sectionSupplierExecution'),
+    key: 'section_execution',
     children: [
       {
         label: renderLabelWithCount(
-          t("waveSidebar.exportNow"),
-          stepStateMap.value.get("supplier_execution")?.primaryCount,
+          t('waveSidebar.exportNow'),
+          stepStateMap.value.get('supplier_execution')?.primaryCount,
         ),
-        key: "supplier_execution",
+        key: 'supplier_execution',
         icon: renderIcon(
           CloudUploadOutline,
-          getStepStatus("supplier_execution"),
+          getStepStatus('supplier_execution'),
         ),
       },
     ],
-  } as any);
+  })
 
   // ── ⑥ Shipment Intake ──
   opts.push({
-    type: "group",
-    label: t("waveSidebar.sectionShipmentIntake"),
-    key: "section_shipment",
+    type: 'group',
+    label: t('waveSidebar.sectionShipmentIntake'),
+    key: 'section_shipment',
     children: [
       {
         label: renderLabelWithCount(
-          t("waveSidebar.shipmentIntake"),
-          stepStateMap.value.get("shipment_intake")?.primaryCount,
+          t('waveSidebar.shipmentIntake'),
+          stepStateMap.value.get('shipment_intake')?.primaryCount,
         ),
-        key: "shipment_intake",
-        icon: renderIcon(AirplaneOutline, getStepStatus("shipment_intake")),
+        key: 'shipment_intake',
+        icon: renderIcon(AirplaneOutline, getStepStatus('shipment_intake')),
       },
     ],
-  } as any);
+  })
 
   // ── ⑦ Channel Sync / Closure ──
   opts.push({
-    type: "group",
-    label: t("waveSidebar.sectionChannelSync"),
-    key: "section_sync",
+    type: 'group',
+    label: t('waveSidebar.sectionChannelSync'),
+    key: 'section_sync',
     children: [
       {
         label: renderLabelWithCount(
-          t("waveSidebar.channelSync"),
-          stepStateMap.value.get("channel_sync")?.primaryCount,
+          t('waveSidebar.channelSync'),
+          stepStateMap.value.get('channel_sync')?.primaryCount,
         ),
-        key: "channel_sync",
-        icon: renderIcon(SyncOutline, getStepStatus("channel_sync")),
+        key: 'channel_sync',
+        icon: renderIcon(SyncOutline, getStepStatus('channel_sync')),
       },
     ],
-  } as any);
+  })
 
   // ── 高级 ──
   opts.push({
-    type: "divider",
-    key: "divider_advanced",
-  } as any);
+    type: 'divider',
+    key: 'divider_advanced',
+  })
 
   opts.push({
-    label: renderLabelWithCount(t("waveSidebar.historyTree")),
-    key: "history_tree",
-    icon: renderIcon(GitNetworkOutline, "available"),
-  } as any);
+    label: renderLabelWithCount(t('waveSidebar.historyTree')),
+    key: 'history_tree',
+    icon: renderIcon(GitNetworkOutline, 'available'),
+  })
 
-  return opts;
-});
+  return opts as MenuOption[]
+})
 
 // 当前激活 menu key
 const currentMenuKey = computed(() => {

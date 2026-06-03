@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,7 +35,7 @@ type patchOp struct {
 	Data             json.RawMessage `json:"data,omitempty"`
 }
 
-func (pe *PatchExecutor) ApplyPatch(payload string) error {
+func (pe *PatchExecutor) ApplyPatch(ctx context.Context, payload string) error {
 	if payload == "" {
 		return ErrOperationNotUndoable
 	}
@@ -42,10 +43,10 @@ func (pe *PatchExecutor) ApplyPatch(payload string) error {
 	if err := json.Unmarshal([]byte(payload), &op); err != nil {
 		return fmt.Errorf("patch: invalid payload: %w", err)
 	}
-	return pe.execute(op)
+	return pe.execute(ctx, op)
 }
 
-func (pe *PatchExecutor) ApplyInversePatch(payload string) error {
+func (pe *PatchExecutor) ApplyInversePatch(ctx context.Context, payload string) error {
 	if payload == "" {
 		return ErrOperationNotUndoable
 	}
@@ -53,10 +54,10 @@ func (pe *PatchExecutor) ApplyInversePatch(payload string) error {
 	if err := json.Unmarshal([]byte(payload), &op); err != nil {
 		return fmt.Errorf("patch: invalid inverse payload: %w", err)
 	}
-	return pe.execute(op)
+	return pe.execute(ctx, op)
 }
 
-func (pe *PatchExecutor) execute(op patchOp) error {
+func (pe *PatchExecutor) execute(ctx context.Context, op patchOp) error {
 	switch op.Op {
 	case "create_rule":
 		return pe.createRule(op)
@@ -75,7 +76,7 @@ func (pe *PatchExecutor) execute(op patchOp) error {
 	case "unassign_demand":
 		return pe.unassignDemand(op)
 	case "restore_checkpoint":
-		return pe.restoreCheckpoint(op)
+		return pe.restoreCheckpoint(ctx, op)
 	case "generate_participants", "clear_participants",
 		"map_demand_lines", "clear_allocation_lines":
 		return ErrOperationNotUndoable
@@ -153,7 +154,10 @@ func (pe *PatchExecutor) updateRule(op patchOp) error {
 	if err := json.Unmarshal(op.Data, &rule); err != nil {
 		return fmt.Errorf("patch: unmarshal rule data: %w", err)
 	}
-	p := persistence.ToPersistenceAllocationPolicyRule(&rule)
+	p, err := persistence.AllocationPolicyRuleFromDomain(&rule)
+	if err != nil {
+		return fmt.Errorf("patch: convert rule: %w", err)
+	}
 	p.ID = op.RuleID
 	return pe.db.Save(p).Error
 }
@@ -200,7 +204,7 @@ func (pe *PatchExecutor) unassignDemand(op patchOp) error {
 		Delete(&persistence.WaveDemandAssignment{}).Error
 }
 
-func (pe *PatchExecutor) restoreCheckpoint(op patchOp) error {
+func (pe *PatchExecutor) restoreCheckpoint(ctx context.Context, op patchOp) error {
 	if pe.snapshotSvc == nil {
 		return fmt.Errorf("patch: restore_checkpoint requires snapshot service")
 	}
@@ -213,5 +217,5 @@ func (pe *PatchExecutor) restoreCheckpoint(op patchOp) error {
 		// op.Data may already be the unquoted JSON object
 		payload = string(op.Data)
 	}
-	return pe.snapshotSvc.RestoreSnapshot(payload)
+	return pe.snapshotSvc.RestoreSnapshot(ctx, payload)
 }

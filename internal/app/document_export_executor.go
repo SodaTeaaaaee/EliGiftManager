@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -44,12 +45,12 @@ func (e *documentExportExecutor) Capabilities() ConnectorCapabilities {
 }
 
 type exportPayload struct {
-	JobID               uint               `json:"job_id"`
-	WaveID              uint               `json:"wave_id"`
-	IntegrationProfileID uint               `json:"integration_profile_id"`
-	Direction           string             `json:"direction"`
-	GeneratedAt         string             `json:"generated_at"`
-	Items               []exportPayloadItem `json:"items"`
+	JobID                uint                `json:"job_id"`
+	WaveID               uint                `json:"wave_id"`
+	IntegrationProfileID uint                `json:"integration_profile_id"`
+	Direction            string              `json:"direction"`
+	GeneratedAt          string              `json:"generated_at"`
+	Items                []exportPayloadItem `json:"items"`
 }
 
 type exportPayloadItem struct {
@@ -63,6 +64,7 @@ type exportPayloadItem struct {
 }
 
 func (e *documentExportExecutor) Execute(
+	ctx context.Context,
 	job *domain.ChannelSyncJob,
 	items []domain.ChannelSyncItem,
 	profile *domain.IntegrationProfile,
@@ -70,12 +72,12 @@ func (e *documentExportExecutor) Execute(
 	generatedAt := time.Now().Format(time.RFC3339)
 
 	payload := exportPayload{
-		JobID:               job.ID,
-		WaveID:              job.WaveID,
+		JobID:                job.ID,
+		WaveID:               job.WaveID,
 		IntegrationProfileID: job.IntegrationProfileID,
-		Direction:           job.Direction,
-		GeneratedAt:         generatedAt,
-		Items:               make([]exportPayloadItem, len(items)),
+		Direction:            job.Direction,
+		GeneratedAt:          generatedAt,
+		Items:                make([]exportPayloadItem, len(items)),
 	}
 	for i, it := range items {
 		payload.Items[i] = exportPayloadItem{

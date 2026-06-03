@@ -21,29 +21,36 @@ func NewAddressController() *AddressController {
 }
 
 func (c *AddressController) CreateAddress(input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error) {
-	return c.uc.CreateAddress(input)
+	ctx := appContext
+	return c.uc.CreateAddress(ctx, input)
 }
 
 func (c *AddressController) UpdateAddress(input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error) {
-	return c.uc.UpdateAddress(input)
+	ctx := appContext
+	return c.uc.UpdateAddress(ctx, input)
 }
 
 func (c *AddressController) DeleteAddress(id uint) error {
-	return c.uc.DeleteAddress(id)
+	ctx := appContext
+	return c.uc.DeleteAddress(ctx, id)
 }
 
 func (c *AddressController) GetAddress(id uint) (*dto.CustomerAddressDTO, error) {
-	return c.uc.GetAddress(id)
+	ctx := appContext
+	return c.uc.GetAddress(ctx, id)
 }
 
 func (c *AddressController) ListAddressesByProfile(profileID uint) ([]dto.CustomerAddressDTO, error) {
-	return c.uc.ListAddressesByProfile(profileID)
+	ctx := appContext
+	return c.uc.ListAddressesByProfile(ctx, profileID)
 }
 
 func (c *AddressController) BindAddressToLine(input dto.BindAddressInput) (*dto.CustomerAddressDTO, error) {
-	return c.uc.BindAddressToLine(input)
+	ctx := appContext
+	return c.uc.BindAddressToLine(ctx, input)
 }
 
 func (c *AddressController) UnbindAddressFromLine(fulfillmentLineID uint) error {
-	return c.uc.UnbindAddressFromLine(fulfillmentLineID)
+	ctx := appContext
+	return c.uc.UnbindAddressFromLine(ctx, fulfillmentLineID)
 }

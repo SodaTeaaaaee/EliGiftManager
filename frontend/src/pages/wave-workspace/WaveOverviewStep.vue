@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject } from "vue";
+import { computed, inject, ref } from "vue";
 import { useRouter } from "vue-router";
 import {
   NAlert,
@@ -18,15 +18,12 @@ import {
 } from "@vicons/ionicons5";
 import { dto } from "@/../wailsjs/go/models";
 import { useI18n } from "@/shared/i18n";
+import { waveWorkspaceSnapshotKey } from "@/shared/model/wave-injection-keys";
 import PageHeader from "@/shared/ui/PageHeader.vue";
 import GlassCard from "@/shared/ui/GlassCard.vue";
 import BasisDriftPanel from "@/shared/ui/BasisDriftPanel.vue";
 import RoutingFlowBanner from "@/shared/ui/RoutingFlowBanner.vue";
-
-const snapshot = inject(
-  "waveWorkspaceSnapshot",
-  computed(() => null),
-) as { value: dto.WaveWorkspaceSnapshotDTO | null };
+const snapshot = inject(waveWorkspaceSnapshotKey, ref(null))
 
 const router = useRouter();
 const { t } = useI18n();

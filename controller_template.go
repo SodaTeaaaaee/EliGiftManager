@@ -22,7 +22,8 @@ func NewTemplateController() *TemplateController {
 }
 
 func (c *TemplateController) CreateDocumentTemplate(input dto.CreateDocumentTemplateInput) (dto.DocumentTemplateDTO, error) {
-	result, err := c.templateUC.CreateDocumentTemplate(input)
+	ctx := appContext
+	result, err := c.templateUC.CreateDocumentTemplate(ctx, input)
 	if err != nil {
 		return dto.DocumentTemplateDTO{}, err
 	}
@@ -30,11 +31,13 @@ func (c *TemplateController) CreateDocumentTemplate(input dto.CreateDocumentTemp
 }
 
 func (c *TemplateController) ListDocumentTemplates() ([]dto.DocumentTemplateDTO, error) {
-	return c.templateUC.ListDocumentTemplates()
+	ctx := appContext
+	return c.templateUC.ListDocumentTemplates(ctx)
 }
 
 func (c *TemplateController) BindTemplateToProfile(input dto.BindTemplateToProfileInput) (dto.ProfileTemplateBindingDTO, error) {
-	result, err := c.templateUC.BindTemplateToProfile(input)
+	ctx := appContext
+	result, err := c.templateUC.BindTemplateToProfile(ctx, input)
 	if err != nil {
 		return dto.ProfileTemplateBindingDTO{}, err
 	}
@@ -42,11 +45,13 @@ func (c *TemplateController) BindTemplateToProfile(input dto.BindTemplateToProfi
 }
 
 func (c *TemplateController) ListBindingsByProfile(profileID uint) ([]dto.ProfileTemplateBindingDTO, error) {
-	return c.templateUC.ListBindingsByProfile(profileID)
+	ctx := appContext
+	return c.templateUC.ListBindingsByProfile(ctx, profileID)
 }
 
 func (c *TemplateController) GetDefaultTemplateForProfile(profileID uint, docType string) (dto.DocumentTemplateDTO, error) {
-	result, err := c.templateUC.GetDefaultTemplateForProfile(profileID, docType)
+	ctx := appContext
+	result, err := c.templateUC.GetDefaultTemplateForProfile(ctx, profileID, docType)
 	if err != nil {
 		return dto.DocumentTemplateDTO{}, err
 	}

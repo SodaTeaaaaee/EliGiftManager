@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -35,25 +36,26 @@ func TestChannelSyncRepositorySaveJobPreservesCreatedAt(t *testing.T) {
 		Direction:            "push_tracking",
 		Status:               "pending",
 	}
-	if err := repo.CreateJob(job); err != nil {
+	if err := repo.CreateJob(context.Background(), job); err != nil {
 		t.Fatalf("create job: %v", err)
 	}
 
 	originalCreatedAt := job.CreatedAt
-	if originalCreatedAt == "" {
+	if originalCreatedAt.IsZero() {
 		t.Fatal("CreatedAt should be set by CreateJob")
 	}
 
 	// Update runtime fields via SaveJob
 	job.Status = "running"
-	job.StartedAt = time.Now().Format(time.RFC3339)
+	now := time.Now()
+	job.StartedAt = &now
 	job.RequestPayload = `{"test":true}`
-	if err := repo.SaveJob(job); err != nil {
+	if err := repo.SaveJob(context.Background(), job); err != nil {
 		t.Fatalf("save job: %v", err)
 	}
 
 	// Read back
-	got, err := repo.FindJobByID(job.ID)
+	got, err := repo.FindJobByID(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("find job: %v", err)
 	}
@@ -64,11 +66,11 @@ func TestChannelSyncRepositorySaveJobPreservesCreatedAt(t *testing.T) {
 	if got.RequestPayload != `{"test":true}` {
 		t.Errorf("RequestPayload = %q, want {\"test\":true}", got.RequestPayload)
 	}
-	if got.StartedAt == "" {
+	if got.StartedAt == nil || got.StartedAt.IsZero() {
 		t.Error("StartedAt should be updated")
 	}
-	if got.CreatedAt != originalCreatedAt {
-		t.Errorf("CreatedAt = %q, want %q (should be preserved)", got.CreatedAt, originalCreatedAt)
+	if !got.CreatedAt.Equal(originalCreatedAt) {
+		t.Errorf("CreatedAt = %v, want %v (should be preserved)", got.CreatedAt, originalCreatedAt)
 	}
 }
 
@@ -87,7 +89,7 @@ func TestChannelSyncRepositorySaveItemPreservesCreatedAt(t *testing.T) {
 		Direction:            "push_tracking",
 		Status:               "pending",
 	}
-	if err := repo.CreateJob(job); err != nil {
+	if err := repo.CreateJob(context.Background(), job); err != nil {
 		t.Fatalf("create job: %v", err)
 	}
 
@@ -97,12 +99,12 @@ func TestChannelSyncRepositorySaveItemPreservesCreatedAt(t *testing.T) {
 		ShipmentID:        1,
 		Status:            "pending",
 	}
-	if err := repo.CreateItem(item); err != nil {
+	if err := repo.CreateItem(context.Background(), item); err != nil {
 		t.Fatalf("create item: %v", err)
 	}
 
 	originalCreatedAt := item.CreatedAt
-	if originalCreatedAt == "" {
+	if originalCreatedAt.IsZero() {
 		t.Fatal("CreatedAt should be set by CreateItem")
 	}
 
@@ -110,12 +112,12 @@ func TestChannelSyncRepositorySaveItemPreservesCreatedAt(t *testing.T) {
 	item.Status = "success"
 	item.ErrorMessage = ""
 	item.TrackingNo = "TRACK-UPDATED"
-	if err := repo.SaveItem(item); err != nil {
+	if err := repo.SaveItem(context.Background(), item); err != nil {
 		t.Fatalf("save item: %v", err)
 	}
 
 	// Read back via ListItemsByJob
-	items, err := repo.ListItemsByJob(job.ID)
+	items, err := repo.ListItemsByJob(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("list items: %v", err)
 	}
@@ -130,8 +132,8 @@ func TestChannelSyncRepositorySaveItemPreservesCreatedAt(t *testing.T) {
 	if got.TrackingNo != "TRACK-UPDATED" {
 		t.Errorf("TrackingNo = %q, want TRACK-UPDATED", got.TrackingNo)
 	}
-	if got.CreatedAt != originalCreatedAt {
-		t.Errorf("CreatedAt = %q, want %q (should be preserved)", got.CreatedAt, originalCreatedAt)
+	if !got.CreatedAt.Equal(originalCreatedAt) {
+		t.Errorf("CreatedAt = %v, want %v (should be preserved)", got.CreatedAt, originalCreatedAt)
 	}
 }
 
@@ -150,22 +152,22 @@ func TestChannelSyncRepositorySaveJobDoesNotOverwriteUnrelatedColumns(t *testing
 		Status:               "pending",
 		BasisPayloadSnapshot: `{"original":"basis"}`,
 	}
-	if err := repo.CreateJob(job); err != nil {
+	if err := repo.CreateJob(context.Background(), job); err != nil {
 		t.Fatalf("create job: %v", err)
 	}
 
 	originalBasis := job.BasisPayloadSnapshot
 
 	// SaveJob via a partial domain object — only Status and ErrorMessage are set
-	loaded, _ := repo.FindJobByID(job.ID)
+	loaded, _ := repo.FindJobByID(context.Background(), job.ID)
 	loaded.Status = "failed"
 	loaded.ErrorMessage = "test error"
 	// Intentionally NOT setting BasisPayloadSnapshot
-	if err := repo.SaveJob(loaded); err != nil {
+	if err := repo.SaveJob(context.Background(), loaded); err != nil {
 		t.Fatalf("save job: %v", err)
 	}
 
-	got, err := repo.FindJobByID(job.ID)
+	got, err := repo.FindJobByID(context.Background(), job.ID)
 	if err != nil {
 		t.Fatalf("find job: %v", err)
 	}

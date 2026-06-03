@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -28,13 +29,13 @@ func TestWaveOverviewReplayFailuresDetected(t *testing.T) {
 
 	// Create the wave.
 	wave := &domain.Wave{Name: "replay-failure-wave"}
-	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(wave); err != nil {
+	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("CreateWave: %v", err)
 	}
 	waveID = wave.ID
 
 	// Create one real fulfillment line so the wave has FulfillmentCount > 0.
-	if err := fulfillRepo.Create(&domain.FulfillmentLine{
+	if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
 		WaveID:          waveID,
 		Quantity:        1,
 		AllocationState: "ready",
@@ -52,7 +53,7 @@ func TestWaveOverviewReplayFailuresDetected(t *testing.T) {
 		AdjustmentKind:    "add",
 		QuantityDelta:     1,
 	}
-	if err := adjRepo.Create(adj); err != nil {
+	if err := adjRepo.Create(context.Background(), adj); err != nil {
 		t.Fatalf("Create adjustment: %v", err)
 	}
 
@@ -70,7 +71,7 @@ func TestWaveOverviewReplayFailuresDetected(t *testing.T) {
 		adjRepo,
 	)
 
-	overview, err := queryUC.GetWaveOverview(waveID)
+	overview, err := queryUC.GetWaveOverview(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("GetWaveOverview: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestWaveOverviewReplayHealthyWhenNoFailures(t *testing.T) {
 	closureRepo := newMockClosureDecisionRepo()
 
 	wave := &domain.Wave{Name: "replay-healthy-wave"}
-	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(wave); err != nil {
+	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("CreateWave: %v", err)
 	}
 	waveID := wave.ID
@@ -122,7 +123,7 @@ func TestWaveOverviewReplayHealthyWhenNoFailures(t *testing.T) {
 		Quantity:        5,
 		AllocationState: "ready",
 	}
-	if err := fulfillRepo.Create(fl); err != nil {
+	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("Create fulfillment line: %v", err)
 	}
 
@@ -134,7 +135,7 @@ func TestWaveOverviewReplayHealthyWhenNoFailures(t *testing.T) {
 		AdjustmentKind:    "add",
 		QuantityDelta:     2,
 	}
-	if err := adjRepo.Create(adj); err != nil {
+	if err := adjRepo.Create(context.Background(), adj); err != nil {
 		t.Fatalf("Create adjustment: %v", err)
 	}
 
@@ -151,7 +152,7 @@ func TestWaveOverviewReplayHealthyWhenNoFailures(t *testing.T) {
 		adjRepo,
 	)
 
-	overview, err := queryUC.GetWaveOverview(waveID)
+	overview, err := queryUC.GetWaveOverview(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("GetWaveOverview: %v", err)
 	}
@@ -188,7 +189,7 @@ func TestWaveOverviewReplayHealthyWhenNoAdjustments(t *testing.T) {
 	closureRepo := newMockClosureDecisionRepo()
 
 	wave := &domain.Wave{Name: "replay-no-adj-wave"}
-	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(wave); err != nil {
+	if err := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo).CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("CreateWave: %v", err)
 	}
 
@@ -205,7 +206,7 @@ func TestWaveOverviewReplayHealthyWhenNoAdjustments(t *testing.T) {
 		adjRepo,
 	)
 
-	overview, err := queryUC.GetWaveOverview(wave.ID)
+	overview, err := queryUC.GetWaveOverview(context.Background(), wave.ID)
 	if err != nil {
 		t.Fatalf("GetWaveOverview: %v", err)
 	}

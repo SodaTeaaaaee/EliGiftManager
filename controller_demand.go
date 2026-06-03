@@ -12,15 +12,15 @@ import (
 
 // DemandController exposes demand-intake Wails bindings.
 type DemandController struct {
-	intakeUC              app.DemandIntakeUseCase
-	entitlementRoutingUC  app.EntitlementRoutingUseCase
-	demandRepo            domain.DemandDocumentRepository
-	profileRepo           domain.CustomerProfileRepository
-	integrationProfile    domain.IntegrationProfileRepository
-	assignmentRepo        domain.WaveDemandAssignmentRepository
-	waveRepo              domain.WaveRepository
-	identityResolution    *app.IdentityResolutionService
-	templateMapping       *app.TemplateMappingService
+	intakeUC             app.DemandIntakeUseCase
+	entitlementRoutingUC app.EntitlementRoutingUseCase
+	demandRepo           domain.DemandDocumentRepository
+	profileRepo          domain.CustomerProfileRepository
+	integrationProfile   domain.IntegrationProfileRepository
+	assignmentRepo       domain.WaveDemandAssignmentRepository
+	waveRepo             domain.WaveRepository
+	identityResolution   *app.IdentityResolutionService
+	templateMapping      *app.TemplateMappingService
 }
 
 func NewDemandController() *DemandController {
@@ -47,8 +47,9 @@ func NewDemandController() *DemandController {
 
 // ImportDemandDocument imports a DemandDocument with its DemandLines.
 func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dto.DemandDocumentDTO, error) {
+	ctx := appContext
 	if input.CustomerProfileID != nil {
-		if _, err := c.profileRepo.FindByID(*input.CustomerProfileID); err != nil {
+		if _, err := c.profileRepo.FindByID(ctx, *input.CustomerProfileID); err != nil {
 			return dto.DemandDocumentDTO{}, fmt.Errorf("customer profile %d does not exist", *input.CustomerProfileID)
 		}
 	}
@@ -65,7 +66,7 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 
 	var resolvedProfileID *uint
 	if input.IntegrationProfileID != nil {
-		profile, err := c.integrationProfile.FindByID(*input.IntegrationProfileID)
+		profile, err := c.integrationProfile.FindByID(ctx, *input.IntegrationProfileID)
 		if err != nil {
 			return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d does not exist", *input.IntegrationProfileID)
 		}
@@ -82,7 +83,7 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 		// Auto-resolve CustomerProfile via identity when SourceCustomerRef is provided.
 		if input.CustomerProfileID == nil && input.SourceCustomerRef != "" && effectiveSourceChannel != "" {
 			identityType := app.ResolveIdentityStrategy(profile.IdentityStrategy)
-			pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(effectiveSourceChannel, input.SourceCustomerRef, identityType)
+			pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(ctx, effectiveSourceChannel, input.SourceCustomerRef, identityType)
 			if resolveErr != nil {
 				return dto.DemandDocumentDTO{}, fmt.Errorf("identity resolution failed: %w", resolveErr)
 			}
@@ -114,7 +115,7 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 			RecipientInputState:   l.RecipientInputState,
 			RoutingDisposition:    l.RoutingDisposition,
 			RoutingReasonCode:     l.RoutingReasonCode,
-			EligibilityContextRef:  l.EligibilityContextRef,
+			EligibilityContextRef: l.EligibilityContextRef,
 			EntitlementCode:       l.EntitlementCode,
 			GiftLevelSnapshot:     l.GiftLevelSnapshot,
 			ProductMasterID:       l.ProductMasterID,
@@ -123,55 +124,56 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 			RequestedQuantity:     l.RequestedQuantity,
 		}
 	}
-	if err := c.intakeUC.ImportDemand(&doc, lines); err != nil {
+	if err := c.intakeUC.ImportDemand(ctx, &doc, lines); err != nil {
 		return dto.DemandDocumentDTO{}, err
 	}
 	return domainToDemandDTO(&doc), nil
 }
 
-	// ImportDemandFromCSV imports a demand document using a template-driven CSV pipeline.
+// ImportDemandFromCSV imports a demand document using a template-driven CSV pipeline.
 func (c *DemandController) ImportDemandFromCSV(input dto.ImportDemandTemplateInput) (dto.DemandDocumentDTO, error) {
-		profile, err := c.integrationProfile.FindByID(input.IntegrationProfileID)
-		if err != nil {
-			return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d not found: %w", input.IntegrationProfileID, err)
-		}
-		docType := input.DocumentType
-		if docType == "" {
-			docType = "import_entitlement"
-		}
-		_, mappedLines, err := c.templateMapping.BuildImportPipeline(profile.ID, docType, input.Rows)
-		if err != nil {
-			return dto.DemandDocumentDTO{}, fmt.Errorf("template pipeline: %w", err)
-		}
-		var customerProfileID *uint
-		if input.SourceCustomerRef != "" && profile.SourceChannel != "" {
-			identityType := app.ResolveIdentityStrategy(profile.IdentityStrategy)
-			pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(profile.SourceChannel, input.SourceCustomerRef, identityType)
-			if resolveErr != nil {
-				return dto.DemandDocumentDTO{}, fmt.Errorf("identity resolution: %w", resolveErr)
-			}
-			customerProfileID = &pid
-		}
-		doc := domain.DemandDocument{
-			Kind:                 profile.DemandKind,
-			CaptureMode:          "document_import",
-			SourceChannel:        profile.SourceChannel,
-			SourceSurface:        profile.SourceSurface,
-			SourceDocumentNo:     input.SourceDocumentNo,
-			SourceCustomerRef:    input.SourceCustomerRef,
-			CustomerProfileID:    customerProfileID,
-			IntegrationProfileID: &profile.ID,
-		}
-		if err := c.intakeUC.ImportDemand(&doc, mappedLines); err != nil {
-			return dto.DemandDocumentDTO{}, err
-		}
-		return domainToDemandDTO(&doc), nil
+	ctx := appContext
+	profile, err := c.integrationProfile.FindByID(ctx, input.IntegrationProfileID)
+	if err != nil {
+		return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d not found: %w", input.IntegrationProfileID, err)
 	}
-
+	docType := input.DocumentType
+	if docType == "" {
+		docType = "import_entitlement"
+	}
+	_, mappedLines, err := c.templateMapping.BuildImportPipeline(ctx, profile.ID, docType, input.Rows)
+	if err != nil {
+		return dto.DemandDocumentDTO{}, fmt.Errorf("template pipeline: %w", err)
+	}
+	var customerProfileID *uint
+	if input.SourceCustomerRef != "" && profile.SourceChannel != "" {
+		identityType := app.ResolveIdentityStrategy(profile.IdentityStrategy)
+		pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(ctx, profile.SourceChannel, input.SourceCustomerRef, identityType)
+		if resolveErr != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("identity resolution: %w", resolveErr)
+		}
+		customerProfileID = &pid
+	}
+	doc := domain.DemandDocument{
+		Kind:                 profile.DemandKind,
+		CaptureMode:          "document_import",
+		SourceChannel:        profile.SourceChannel,
+		SourceSurface:        profile.SourceSurface,
+		SourceDocumentNo:     input.SourceDocumentNo,
+		SourceCustomerRef:    input.SourceCustomerRef,
+		CustomerProfileID:    customerProfileID,
+		IntegrationProfileID: &profile.ID,
+	}
+	if err := c.intakeUC.ImportDemand(ctx, &doc, mappedLines); err != nil {
+		return dto.DemandDocumentDTO{}, err
+	}
+	return domainToDemandDTO(&doc), nil
+}
 
 // ListDemandDocuments lists all demand documents.
 func (c *DemandController) ListDemandDocuments() ([]dto.DemandDocumentDTO, error) {
-	docs, err := c.demandRepo.List()
+	ctx := appContext
+	docs, err := c.demandRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +186,8 @@ func (c *DemandController) ListDemandDocuments() ([]dto.DemandDocumentDTO, error
 
 // ListUnassignedDemandDocuments returns demand documents not assigned to any wave.
 func (c *DemandController) ListUnassignedDemandDocuments() ([]dto.DemandDocumentDTO, error) {
-	docs, err := c.demandRepo.ListUnassigned()
+	ctx := appContext
+	docs, err := c.demandRepo.ListUnassigned(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +200,8 @@ func (c *DemandController) ListUnassignedDemandDocuments() ([]dto.DemandDocument
 
 // ListDemandLines returns all demand lines for a given document.
 func (c *DemandController) ListDemandLines(documentID uint) ([]dto.DemandLineDTO, error) {
-	lines, err := c.demandRepo.ListLinesByDocument(documentID)
+	ctx := appContext
+	lines, err := c.demandRepo.ListLinesByDocument(ctx, documentID)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +214,8 @@ func (c *DemandController) ListDemandLines(documentID uint) ([]dto.DemandLineDTO
 
 // GetDemandDocument returns a single demand document by ID.
 func (c *DemandController) GetDemandDocument(id uint) (dto.DemandDocumentDTO, error) {
-	doc, err := c.demandRepo.FindByID(id)
+	ctx := appContext
+	doc, err := c.demandRepo.FindByID(ctx, id)
 	if err != nil {
 		return dto.DemandDocumentDTO{}, err
 	}
@@ -218,11 +223,12 @@ func (c *DemandController) GetDemandDocument(id uint) (dto.DemandDocumentDTO, er
 }
 
 func (c *DemandController) ListDemandInboxRows(input dto.DemandInboxFilterInput) ([]dto.DemandInboxRowDTO, error) {
-	docs, err := c.demandRepo.List()
+	ctx := appContext
+	docs, err := c.demandRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
-	waves, err := c.waveRepo.List()
+	waves, err := c.waveRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +243,7 @@ func (c *DemandController) ListDemandInboxRows(input dto.DemandInboxFilterInput)
 			continue
 		}
 
-		assignments, err := c.assignmentRepo.ListByDemandDocument(doc.ID)
+		assignments, err := c.assignmentRepo.ListByDemandDocument(ctx, doc.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +255,7 @@ func (c *DemandController) ListDemandInboxRows(input dto.DemandInboxFilterInput)
 			continue
 		}
 
-		lines, err := c.demandRepo.ListLinesByDocument(doc.ID)
+		lines, err := c.demandRepo.ListLinesByDocument(ctx, doc.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +273,7 @@ func (c *DemandController) ListDemandInboxRows(input dto.DemandInboxFilterInput)
 			CreatedAt:            doc.CreatedAt,
 		}
 		if doc.IntegrationProfileID != nil {
-			if profile, profileErr := c.integrationProfile.FindByID(*doc.IntegrationProfileID); profileErr == nil && profile != nil {
+			if profile, profileErr := c.integrationProfile.FindByID(ctx, *doc.IntegrationProfileID); profileErr == nil && profile != nil {
 				row.IntegrationProfileLabel = fmt.Sprintf("%s (%s)", profile.ProfileKey, profile.SourceChannel)
 			}
 		}
@@ -341,7 +347,7 @@ func domainToDemandLineDTO(line *domain.DemandLine) dto.DemandLineDTO {
 		RecipientInputState:   line.RecipientInputState,
 		RoutingDisposition:    line.RoutingDisposition,
 		RoutingReasonCode:     line.RoutingReasonCode,
-		EligibilityContextRef:  line.EligibilityContextRef,
+		EligibilityContextRef: line.EligibilityContextRef,
 		ProductMasterID:       line.ProductMasterID,
 		ExternalTitle:         line.ExternalTitle,
 		RequestedQuantity:     line.RequestedQuantity,
@@ -373,12 +379,14 @@ func domainLineSliceToPtrs(lines []domain.DemandLine) []*domain.DemandLine {
 // UpdateDemandLineRouting updates routing disposition, recipient input state, and reason code
 // for a single demand line.
 func (c *DemandController) UpdateDemandLineRouting(input dto.UpdateDemandLineRoutingInput) error {
-	return c.entitlementRoutingUC.UpdateDemandLineRouting(input)
+	ctx := appContext
+	return c.entitlementRoutingUC.UpdateDemandLineRouting(ctx, input)
 }
 
 // BatchUpdateDemandLineRouting applies routing updates to multiple demand lines in one call.
 func (c *DemandController) BatchUpdateDemandLineRouting(input dto.BatchUpdateDemandLineRoutingInput) (dto.BatchUpdateDemandLineRoutingResult, error) {
-	result, err := c.entitlementRoutingUC.BatchUpdateDemandLineRouting(input)
+	ctx := appContext
+	result, err := c.entitlementRoutingUC.BatchUpdateDemandLineRouting(ctx, input)
 	if err != nil {
 		return dto.BatchUpdateDemandLineRoutingResult{}, err
 	}
@@ -387,7 +395,8 @@ func (c *DemandController) BatchUpdateDemandLineRouting(input dto.BatchUpdateDem
 
 // GetWaveRoutingStats returns routing disposition counts for all demand lines in a wave.
 func (c *DemandController) GetWaveRoutingStats(waveID uint) (dto.WaveRoutingStatsDTO, error) {
-	stats, err := c.entitlementRoutingUC.GetWaveRoutingStats(waveID)
+	ctx := appContext
+	stats, err := c.entitlementRoutingUC.GetWaveRoutingStats(ctx, waveID)
 	if err != nil {
 		return dto.WaveRoutingStatsDTO{}, err
 	}

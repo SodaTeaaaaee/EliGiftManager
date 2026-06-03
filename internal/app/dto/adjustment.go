@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type RecordAdjustmentInput struct {
 	WaveID                    uint   `json:"waveId"`
 	TargetKind                string `json:"targetKind"`
@@ -16,19 +18,19 @@ type RecordAdjustmentInput struct {
 }
 
 type FulfillmentAdjustmentDTO struct {
-	ID                        uint   `json:"id"`
-	WaveID                    uint   `json:"waveId"`
-	TargetKind                string `json:"targetKind"`
-	FulfillmentLineID         *uint  `json:"fulfillmentLineId"`
-	WaveParticipantSnapshotID *uint  `json:"waveParticipantSnapshotId"`
-	AdjustmentKind            string `json:"adjustmentKind"`
-	QuantityDelta             int    `json:"quantityDelta"`
-	FromProductID             *uint  `json:"fromProductId"`
-	ToProductID               *uint  `json:"toProductId"`
-	ReasonCode                string `json:"reasonCode"`
-	OperatorID                string `json:"operatorId"`
-	Note                      string `json:"note"`
-	EvidenceRef               string `json:"evidenceRef"`
-	CreatedAt                 string `json:"createdAt"`
-	UpdatedAt                 string `json:"updatedAt"`
+	ID                        uint      `json:"id"`
+	WaveID                    uint      `json:"waveId"`
+	TargetKind                string    `json:"targetKind"`
+	FulfillmentLineID         *uint     `json:"fulfillmentLineId"`
+	WaveParticipantSnapshotID *uint     `json:"waveParticipantSnapshotId"`
+	AdjustmentKind            string    `json:"adjustmentKind"`
+	QuantityDelta             int       `json:"quantityDelta"`
+	FromProductID             *uint     `json:"fromProductId"`
+	ToProductID               *uint     `json:"toProductId"`
+	ReasonCode                string    `json:"reasonCode"`
+	OperatorID                string    `json:"operatorId"`
+	Note                      string    `json:"note"`
+	EvidenceRef               string    `json:"evidenceRef"`
+	CreatedAt                 time.Time `json:"createdAt" ts_type:"string"`
+	UpdatedAt                 time.Time `json:"updatedAt" ts_type:"string"`
 }

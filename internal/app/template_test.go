@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -26,7 +28,7 @@ func newMockDocumentTemplateRepo() *mockDocumentTemplateRepo {
 	}
 }
 
-func (m *mockDocumentTemplateRepo) Create(t *domain.DocumentTemplate) error {
+func (m *mockDocumentTemplateRepo) Create(ctx context.Context, t *domain.DocumentTemplate) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.failOn == "create" {
@@ -34,15 +36,15 @@ func (m *mockDocumentTemplateRepo) Create(t *domain.DocumentTemplate) error {
 	}
 	m.lastID++
 	t.ID = m.lastID
-	t.CreatedAt = "2024-01-01T00:00:00Z"
-	t.UpdatedAt = "2024-01-01T00:00:00Z"
+	t.CreatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	t.UpdatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	cp := *t
 	m.records[t.ID] = &cp
 	m.byKey[t.TemplateKey] = &cp
 	return nil
 }
 
-func (m *mockDocumentTemplateRepo) FindByID(id uint) (*domain.DocumentTemplate, error) {
+func (m *mockDocumentTemplateRepo) FindByID(ctx context.Context, id uint) (*domain.DocumentTemplate, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.records[id]
@@ -53,7 +55,7 @@ func (m *mockDocumentTemplateRepo) FindByID(id uint) (*domain.DocumentTemplate, 
 	return &cp, nil
 }
 
-func (m *mockDocumentTemplateRepo) FindByKey(key string) (*domain.DocumentTemplate, error) {
+func (m *mockDocumentTemplateRepo) FindByKey(ctx context.Context, key string) (*domain.DocumentTemplate, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	t, ok := m.byKey[key]
@@ -64,7 +66,7 @@ func (m *mockDocumentTemplateRepo) FindByKey(key string) (*domain.DocumentTempla
 	return &cp, nil
 }
 
-func (m *mockDocumentTemplateRepo) List() ([]domain.DocumentTemplate, error) {
+func (m *mockDocumentTemplateRepo) List(ctx context.Context) ([]domain.DocumentTemplate, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	out := make([]domain.DocumentTemplate, 0, len(m.records))
@@ -74,7 +76,7 @@ func (m *mockDocumentTemplateRepo) List() ([]domain.DocumentTemplate, error) {
 	return out, nil
 }
 
-func (m *mockDocumentTemplateRepo) ListByDocumentType(docType string) ([]domain.DocumentTemplate, error) {
+func (m *mockDocumentTemplateRepo) ListByDocumentType(ctx context.Context, docType string) ([]domain.DocumentTemplate, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.DocumentTemplate
@@ -100,18 +102,18 @@ func newMockProfileTemplateBindingRepo() *mockProfileTemplateBindingRepo {
 	}
 }
 
-func (m *mockProfileTemplateBindingRepo) Create(b *domain.IntegrationProfileTemplateBinding) error {
+func (m *mockProfileTemplateBindingRepo) Create(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastID++
 	b.ID = m.lastID
-	b.CreatedAt = "2024-01-01T00:00:00Z"
+	b.CreatedAt = time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	cp := *b
 	m.records[b.ID] = &cp
 	return nil
 }
 
-func (m *mockProfileTemplateBindingRepo) ListByProfile(profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+func (m *mockProfileTemplateBindingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.IntegrationProfileTemplateBinding
@@ -123,7 +125,7 @@ func (m *mockProfileTemplateBindingRepo) ListByProfile(profileID uint) ([]domain
 	return out, nil
 }
 
-func (m *mockProfileTemplateBindingRepo) FindDefaultByProfileAndType(profileID uint, docType string) (*domain.IntegrationProfileTemplateBinding, error) {
+func (m *mockProfileTemplateBindingRepo) FindDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) (*domain.IntegrationProfileTemplateBinding, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, b := range m.records {
@@ -135,14 +137,14 @@ func (m *mockProfileTemplateBindingRepo) FindDefaultByProfileAndType(profileID u
 	return nil, nil
 }
 
-func (m *mockProfileTemplateBindingRepo) Delete(id uint) error {
+func (m *mockProfileTemplateBindingRepo) Delete(ctx context.Context, id uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.records, id)
 	return nil
 }
 
-func (m *mockProfileTemplateBindingRepo) CountByProfileID(profileID uint) (int64, error) {
+func (m *mockProfileTemplateBindingRepo) CountByProfileID(ctx context.Context, profileID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var count int64
@@ -167,11 +169,11 @@ func newMockIntegrationProfileRepoForTemplate() *mockIntegrationProfileRepoForTe
 	}
 }
 
-func (m *mockIntegrationProfileRepoForTemplate) Create(p *domain.IntegrationProfile) error {
+func (m *mockIntegrationProfileRepoForTemplate) Create(ctx context.Context, p *domain.IntegrationProfile) error {
 	panic("not implemented")
 }
 
-func (m *mockIntegrationProfileRepoForTemplate) FindByID(id uint) (*domain.IntegrationProfile, error) {
+func (m *mockIntegrationProfileRepoForTemplate) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfile, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	p, ok := m.profiles[id]
@@ -182,19 +184,19 @@ func (m *mockIntegrationProfileRepoForTemplate) FindByID(id uint) (*domain.Integ
 	return &cp, nil
 }
 
-func (m *mockIntegrationProfileRepoForTemplate) FindByProfileKey(key string) (*domain.IntegrationProfile, error) {
+func (m *mockIntegrationProfileRepoForTemplate) FindByProfileKey(ctx context.Context, key string) (*domain.IntegrationProfile, error) {
 	panic("not implemented")
 }
 
-func (m *mockIntegrationProfileRepoForTemplate) List() ([]domain.IntegrationProfile, error) {
+func (m *mockIntegrationProfileRepoForTemplate) List(ctx context.Context) ([]domain.IntegrationProfile, error) {
 	panic("not implemented")
 }
 
-func (m *mockIntegrationProfileRepoForTemplate) Update(profile *domain.IntegrationProfile) error {
+func (m *mockIntegrationProfileRepoForTemplate) Update(ctx context.Context, profile *domain.IntegrationProfile) error {
 	panic("not implemented")
 }
 
-func (m *mockIntegrationProfileRepoForTemplate) Delete(id uint) error {
+func (m *mockIntegrationProfileRepoForTemplate) Delete(ctx context.Context, id uint) error {
 	panic("not implemented")
 }
 
@@ -237,7 +239,7 @@ func TestCreateDocumentTemplateSuccess(t *testing.T) {
 	t.Parallel()
 	s := newTemplateTestSetup()
 
-	result, err := s.uc.CreateDocumentTemplate(validCreateTemplateInput())
+	result, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -262,7 +264,7 @@ func TestCreateDocumentTemplateInvalidType(t *testing.T) {
 	input := validCreateTemplateInput()
 	input.DocumentType = "not_a_real_type"
 
-	_, err := s.uc.CreateDocumentTemplate(input)
+	_, err := s.uc.CreateDocumentTemplate(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for invalid documentType, got nil")
 	}
@@ -275,7 +277,7 @@ func TestCreateDocumentTemplateInvalidFormat(t *testing.T) {
 	input := validCreateTemplateInput()
 	input.Format = "pdf"
 
-	_, err := s.uc.CreateDocumentTemplate(input)
+	_, err := s.uc.CreateDocumentTemplate(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for invalid format, got nil")
 	}
@@ -286,7 +288,7 @@ func TestBindTemplateToProfileSuccess(t *testing.T) {
 	s := newTemplateTestSetup()
 
 	// Create a template first.
-	tmpl, err := s.uc.CreateDocumentTemplate(validCreateTemplateInput())
+	tmpl, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
 	if err != nil {
 		t.Fatalf("setup: create template: %v", err)
 	}
@@ -297,7 +299,7 @@ func TestBindTemplateToProfileSuccess(t *testing.T) {
 		TemplateID:           tmpl.ID,
 		IsDefault:            true,
 	}
-	binding, err := s.uc.BindTemplateToProfile(bindInput)
+	binding, err := s.uc.BindTemplateToProfile(context.Background(), bindInput)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -317,11 +319,11 @@ func TestGetDefaultTemplateForProfile(t *testing.T) {
 	s := newTemplateTestSetup()
 
 	// Create template and bind it as default.
-	tmpl, err := s.uc.CreateDocumentTemplate(validCreateTemplateInput())
+	tmpl, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
 	if err != nil {
 		t.Fatalf("setup: create template: %v", err)
 	}
-	_, err = s.uc.BindTemplateToProfile(dto.BindTemplateToProfileInput{
+	_, err = s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
 		IntegrationProfileID: 1,
 		DocumentType:         "import_entitlement",
 		TemplateID:           tmpl.ID,
@@ -331,7 +333,7 @@ func TestGetDefaultTemplateForProfile(t *testing.T) {
 		t.Fatalf("setup: bind template: %v", err)
 	}
 
-	result, err := s.uc.GetDefaultTemplateForProfile(1, "import_entitlement")
+	result, err := s.uc.GetDefaultTemplateForProfile(context.Background(), 1, "import_entitlement")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

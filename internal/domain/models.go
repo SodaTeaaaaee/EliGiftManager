@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"time"
 )
 
 // ---- SelectorPayload ----
@@ -56,8 +57,8 @@ type CustomerProfile struct {
 	DisplayName string
 	ProfileType string
 	ExtraData   string
-	CreatedAt   string
-	UpdatedAt   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // ---- CustomerIdentity ----
@@ -70,8 +71,8 @@ type CustomerIdentity struct {
 	IdentityType      string
 	IsPrimary         bool
 	ExtraData         string
-	CreatedAt         string
-	UpdatedAt         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // ---- CustomerAddress ----
@@ -94,8 +95,8 @@ type CustomerAddress struct {
 	ValidationStatus  string
 	ValidationDetail  string
 	ExtraData         string
-	CreatedAt         string
-	UpdatedAt         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // ---- DemandDocument ----
@@ -110,15 +111,15 @@ type DemandDocument struct {
 	SourceDocumentNo     string
 	SourceCustomerRef    string
 	CustomerProfileID    *uint
-	SourceCreatedAt      string
-	SourcePaidAt         string
+	SourceCreatedAt      *time.Time
+	SourcePaidAt         *time.Time
 	Currency             string
-	AuthoritySnapshotAt  string
+	AuthoritySnapshotAt  *time.Time
 	RawPayload           string
 	ExtraData            string
 	BoundProfileSnapshot string // JSON snapshot of execution-relevant profile fields at wave assignment time
-	CreatedAt            string
-	UpdatedAt            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ---- DemandLine ----
@@ -142,8 +143,8 @@ type DemandLine struct {
 	RecipientInputPayload string
 	RawPayload            string
 	ExtraData             string
-	CreatedAt             string
-	UpdatedAt             string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
 }
 
 // ---- Wave ----
@@ -157,8 +158,8 @@ type Wave struct {
 	ProgressSnapshot string
 	Notes            string
 	LevelTags        string
-	CreatedAt        string
-	UpdatedAt        string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // ---- WaveParticipantSnapshot ----
@@ -176,7 +177,7 @@ type WaveParticipantSnapshot struct {
 	SourceDocumentRefs string
 	SourceProfileRefs  string
 	ExtraData          string
-	CreatedAt          string
+	CreatedAt          time.Time
 }
 
 // ---- FulfillmentLine ----
@@ -198,8 +199,8 @@ type FulfillmentLine struct {
 	LineReason                string
 	GeneratedBy               string
 	ExtraData                 string
-	CreatedAt                 string
-	UpdatedAt                 string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 }
 
 // ---- AllocationPolicyRule ----
@@ -214,8 +215,8 @@ type AllocationPolicyRule struct {
 	RuleKind             string
 	Priority             int
 	Active               bool
-	CreatedAt            string
-	UpdatedAt            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ---- SupplierOrder ----
@@ -228,7 +229,7 @@ type SupplierOrder struct {
 	BatchNo              string
 	ExternalOrderNo      string
 	SubmissionMode       string
-	SubmittedAt          string
+	SubmittedAt          *time.Time
 	Status               string
 	RequestPayload       string
 	ResponsePayload      string
@@ -236,8 +237,8 @@ type SupplierOrder struct {
 	BasisProjectionHash  string
 	BasisPayloadSnapshot string
 	ExtraData            string
-	CreatedAt            string
-	UpdatedAt            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ---- SupplierOrderLine ----
@@ -252,8 +253,8 @@ type SupplierOrderLine struct {
 	AcceptedQuantity  int
 	Status            string
 	ExtraData         string
-	CreatedAt         string
-	UpdatedAt         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // ---- WaveDemandAssignment ----
@@ -262,11 +263,11 @@ type WaveDemandAssignment struct {
 	ID               uint
 	WaveID           uint
 	DemandDocumentID uint
-	AcceptedAt       string
+	AcceptedAt       *time.Time
 	AcceptedBy       string
 	ExtraData        string
-	CreatedAt        string
-	UpdatedAt        string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // ---- Shipment ----
@@ -281,13 +282,13 @@ type Shipment struct {
 	CarrierName          string
 	TrackingNo           string
 	Status               string
-	ShippedAt            string
+	ShippedAt            *time.Time
 	BasisHistoryNodeID   string
 	BasisProjectionHash  string
 	BasisPayloadSnapshot string
 	ExtraData            string
-	CreatedAt            string
-	UpdatedAt            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ---- ShipmentLine ----
@@ -298,7 +299,7 @@ type ShipmentLine struct {
 	SupplierOrderLineID uint
 	FulfillmentLineID   uint
 	Quantity            int
-	CreatedAt           string
+	CreatedAt           time.Time
 }
 
 // ---- ChannelSyncJob ----
@@ -315,10 +316,10 @@ type ChannelSyncJob struct {
 	RequestPayload       string
 	ResponsePayload      string
 	ErrorMessage         string
-	StartedAt            string
-	FinishedAt           string
-	CreatedAt            string
-	UpdatedAt            string
+	StartedAt            *time.Time
+	FinishedAt           *time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ---- ChannelSyncItem ----
@@ -334,8 +335,8 @@ type ChannelSyncItem struct {
 	CarrierCode        string
 	Status             string
 	ErrorMessage       string
-	CreatedAt          string
-	UpdatedAt          string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // ---- IntegrationProfile ----
@@ -363,8 +364,8 @@ type IntegrationProfile struct {
 	SupportedLocales          string
 	DefaultLocale             string
 	ExtraData                 string
-	CreatedAt                 string
-	UpdatedAt                 string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 }
 
 // ---- ChannelClosureDecisionRecord ----
@@ -379,8 +380,8 @@ type ChannelClosureDecisionRecord struct {
 	Note                 string
 	EvidenceRef          string
 	OperatorID           string
-	CreatedAt            string
-	UpdatedAt            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ---- FulfillmentAdjustment ----
@@ -399,8 +400,8 @@ type FulfillmentAdjustment struct {
 	OperatorID                string
 	Note                      string
 	EvidenceRef               string
-	CreatedAt                 string
-	UpdatedAt                 string
+	CreatedAt                 time.Time
+	UpdatedAt                 time.Time
 }
 
 // ---- DocumentTemplate ----
@@ -412,8 +413,8 @@ type DocumentTemplate struct {
 	Format       string
 	MappingRules string
 	ExtraData    string
-	CreatedAt    string
-	UpdatedAt    string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // ---- IntegrationProfileTemplateBinding ----
@@ -424,7 +425,7 @@ type IntegrationProfileTemplateBinding struct {
 	DocumentType         string
 	TemplateID           uint
 	IsDefault            bool
-	CreatedAt            string
+	CreatedAt            time.Time
 }
 
 // ---- HistoryScope ----
@@ -434,8 +435,8 @@ type HistoryScope struct {
 	ScopeType         string
 	ScopeKey          string
 	CurrentHeadNodeID uint
-	CreatedAt         string
-	UpdatedAt         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // ---- HistoryNode ----
@@ -452,7 +453,7 @@ type HistoryNode struct {
 	CheckpointHint       bool
 	ProjectionHash       string
 	CreatedBy            string
-	CreatedAt            string
+	CreatedAt            time.Time
 }
 
 // ---- HistoryCheckpoint ----
@@ -463,7 +464,7 @@ type HistoryCheckpoint struct {
 	HistoryNodeID   uint
 	SnapshotPayload string
 	SchemaVersion   string
-	CreatedAt       string
+	CreatedAt       time.Time
 }
 
 // ---- HistoryPin ----
@@ -474,7 +475,7 @@ type HistoryPin struct {
 	PinKind       string
 	RefType       string
 	RefID         uint
-	CreatedAt     string
+	CreatedAt     time.Time
 }
 
 // BasisPinParam carries the parameters needed to create a HistoryPin
@@ -496,8 +497,8 @@ type ProductMaster struct {
 	ProductKind        ProductKind
 	Archived           bool
 	ExtraData          string
-	CreatedAt          string
-	UpdatedAt          string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 // ---- Product ----
@@ -510,8 +511,8 @@ type Product struct {
 	FactorySKU       string
 	Name             string
 	ExtraData        string
-	CreatedAt        string
-	UpdatedAt        string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // ---- CarrierMapping ----
@@ -524,6 +525,6 @@ type CarrierMapping struct {
 	ExternalCarrierCode  string
 	ExternalCarrierName  string
 	IsDefault            bool
-	CreatedAt            string
-	UpdatedAt            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }

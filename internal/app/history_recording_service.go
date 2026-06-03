@@ -1,10 +1,20 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
+
+// HistoryRecordingOption configures optional dependencies for HistoryRecordingService.
+type HistoryRecordingOption func(*HistoryRecordingService)
+
+// WithSnapshotService injects the wave snapshot service used to capture
+// point-in-time snapshots during history recording.
+func WithSnapshotService(svc *WaveSnapshotService) HistoryRecordingOption {
+	return func(s *HistoryRecordingService) { s.snapshotSvc = svc }
+}
 
 type HistoryRecordingService struct {
 	scopeRepo      domain.HistoryScopeRepository
@@ -17,21 +27,21 @@ func NewHistoryRecordingService(
 	scopeRepo domain.HistoryScopeRepository,
 	nodeRepo domain.HistoryNodeRepository,
 	checkpointRepo domain.HistoryCheckpointRepository,
-	snapshotSvc ...*WaveSnapshotService,
+	opts ...HistoryRecordingOption,
 ) *HistoryRecordingService {
 	svc := &HistoryRecordingService{
 		scopeRepo:      scopeRepo,
 		nodeRepo:       nodeRepo,
 		checkpointRepo: checkpointRepo,
 	}
-	if len(snapshotSvc) > 0 && snapshotSvc[0] != nil {
-		svc.snapshotSvc = snapshotSvc[0]
+	for _, opt := range opts {
+		opt(svc)
 	}
 	return svc
 }
 
-func (s *HistoryRecordingService) FindScope(waveID uint) (*domain.HistoryScope, error) {
-	return s.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+func (s *HistoryRecordingService) FindScope(ctx context.Context, waveID uint) (*domain.HistoryScope, error) {
+	return s.scopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 }
 
 type RecordNodeInput struct {
@@ -47,17 +57,17 @@ type RecordNodeInput struct {
 	CreatedBy               string
 }
 
-func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.HistoryNode, error) {
-	scope, err := s.scopeRepo.FindOrCreate("wave", fmt.Sprintf("%d", input.WaveID))
+func (s *HistoryRecordingService) RecordNode(ctx context.Context, input RecordNodeInput) (*domain.HistoryNode, error) {
+	scope, err := s.scopeRepo.FindOrCreate(ctx, "wave", fmt.Sprintf("%d", input.WaveID))
 	if err != nil {
 		return nil, fmt.Errorf("history: find or create scope: %w", err)
 	}
 
 	if scope.CurrentHeadNodeID == 0 {
-		if _, err := s.createSystemBaseline(scope, input.WaveID, input.BaselineSnapshotPayload); err != nil {
+		if _, err := s.createSystemBaseline(ctx, scope, input.WaveID, input.BaselineSnapshotPayload); err != nil {
 			return nil, err
 		}
-		scope, err = s.scopeRepo.FindByID(scope.ID)
+		scope, err = s.scopeRepo.FindByID(ctx, scope.ID)
 		if err != nil {
 			return nil, fmt.Errorf("history: reload scope after baseline: %w", err)
 		}
@@ -78,30 +88,30 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 		CreatedBy:           input.CreatedBy,
 	}
 
-	if err := s.nodeRepo.Create(node); err != nil {
+	if err := s.nodeRepo.Create(ctx, node); err != nil {
 		return nil, fmt.Errorf("history: create node: %w", err)
 	}
 
 	if scope.CurrentHeadNodeID != 0 {
-		if err := s.nodeRepo.UpdatePreferredRedoChild(scope.CurrentHeadNodeID, node.ID); err != nil {
+		if err := s.nodeRepo.UpdatePreferredRedoChild(ctx, scope.CurrentHeadNodeID, node.ID); err != nil {
 			return nil, fmt.Errorf("history: update preferred redo child: %w", err)
 		}
 	}
 
-	if err := s.scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+	if err := s.scopeRepo.UpdateHead(ctx, scope.ID, node.ID); err != nil {
 		return nil, fmt.Errorf("history: update head: %w", err)
 	}
 
 	needsCheckpoint := input.CheckpointHint
 	if !needsCheckpoint {
-		needsCheckpoint = s.shouldCreatePeriodicCheckpoint(node)
+		needsCheckpoint = s.shouldCreatePeriodicCheckpoint(ctx, node)
 	}
 
 	if needsCheckpoint {
 		snapshotPayload := input.SnapshotPayload
 		if snapshotPayload == "" && s.snapshotSvc != nil {
 			var captureErr error
-			snapshotPayload, captureErr = s.snapshotSvc.CaptureSnapshot(input.WaveID)
+			snapshotPayload, captureErr = s.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
 			if captureErr != nil {
 				return nil, fmt.Errorf("history: capture checkpoint snapshot: %w", captureErr)
 			}
@@ -113,7 +123,7 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 				SnapshotPayload: snapshotPayload,
 				SchemaVersion:   snapshotSchemaVersion,
 			}
-			if err := s.checkpointRepo.Create(cp); err != nil {
+			if err := s.checkpointRepo.Create(ctx, cp); err != nil {
 				return nil, fmt.Errorf("history: create checkpoint: %w", err)
 			}
 		}
@@ -122,7 +132,7 @@ func (s *HistoryRecordingService) RecordNode(input RecordNodeInput) (*domain.His
 	return node, nil
 }
 
-func (s *HistoryRecordingService) createSystemBaseline(scope *domain.HistoryScope, waveID uint, snapshotPayload string) (*domain.HistoryNode, error) {
+func (s *HistoryRecordingService) createSystemBaseline(ctx context.Context, scope *domain.HistoryScope, waveID uint, snapshotPayload string) (*domain.HistoryNode, error) {
 	node := &domain.HistoryNode{
 		HistoryScopeID:      scope.ID,
 		ParentNodeID:        0,
@@ -135,7 +145,7 @@ func (s *HistoryRecordingService) createSystemBaseline(scope *domain.HistoryScop
 	}
 
 	if snapshotPayload == "" && s.snapshotSvc != nil {
-		capturedPayload, err := s.snapshotSvc.CaptureSnapshot(waveID)
+		capturedPayload, err := s.snapshotSvc.CaptureSnapshot(ctx, waveID)
 		if err != nil {
 			return nil, fmt.Errorf("history: capture baseline snapshot: %w", err)
 		}
@@ -144,7 +154,7 @@ func (s *HistoryRecordingService) createSystemBaseline(scope *domain.HistoryScop
 
 	if snapshotPayload != "" {
 		node.CheckpointHint = true
-		if err := s.nodeRepo.Create(node); err != nil {
+		if err := s.nodeRepo.Create(ctx, node); err != nil {
 			return nil, fmt.Errorf("history: create baseline node: %w", err)
 		}
 		cp := &domain.HistoryCheckpoint{
@@ -153,19 +163,19 @@ func (s *HistoryRecordingService) createSystemBaseline(scope *domain.HistoryScop
 			SnapshotPayload: snapshotPayload,
 			SchemaVersion:   snapshotSchemaVersion,
 		}
-		if err := s.checkpointRepo.Create(cp); err != nil {
+		if err := s.checkpointRepo.Create(ctx, cp); err != nil {
 			return nil, fmt.Errorf("history: create baseline checkpoint: %w", err)
 		}
-		if err := s.scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+		if err := s.scopeRepo.UpdateHead(ctx, scope.ID, node.ID); err != nil {
 			return nil, fmt.Errorf("history: update head to baseline: %w", err)
 		}
 		return node, nil
 	}
 
-	if err := s.nodeRepo.Create(node); err != nil {
+	if err := s.nodeRepo.Create(ctx, node); err != nil {
 		return nil, fmt.Errorf("history: create baseline node: %w", err)
 	}
-	if err := s.scopeRepo.UpdateHead(scope.ID, node.ID); err != nil {
+	if err := s.scopeRepo.UpdateHead(ctx, scope.ID, node.ID); err != nil {
 		return nil, fmt.Errorf("history: update head to baseline: %w", err)
 	}
 	return node, nil
@@ -173,11 +183,11 @@ func (s *HistoryRecordingService) createSystemBaseline(scope *domain.HistoryScop
 
 const checkpointInterval = 20
 
-func (s *HistoryRecordingService) shouldCreatePeriodicCheckpoint(node *domain.HistoryNode) bool {
+func (s *HistoryRecordingService) shouldCreatePeriodicCheckpoint(ctx context.Context, node *domain.HistoryNode) bool {
 	count := 0
 	current := node
 	for current != nil && current.ParentNodeID != 0 {
-		cp, _ := s.checkpointRepo.FindByNodeID(current.ID)
+		cp, _ := s.checkpointRepo.FindByNodeID(ctx, current.ID)
 		if cp != nil {
 			return false
 		}
@@ -185,7 +195,7 @@ func (s *HistoryRecordingService) shouldCreatePeriodicCheckpoint(node *domain.Hi
 		if count >= checkpointInterval {
 			return true
 		}
-		parent, err := s.nodeRepo.FindByID(current.ParentNodeID)
+		parent, err := s.nodeRepo.FindByID(ctx, current.ParentNodeID)
 		if err != nil || parent == nil {
 			break
 		}

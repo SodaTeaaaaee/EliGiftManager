@@ -65,7 +65,7 @@ func NewWaveController() *WaveController {
 		demandRepo:          demandRepo,
 		nodeRepo:            historyNodeRepo,
 		gdb:                 gormDB,
-		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc)),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
 		historyGraphUC:      app.NewHistoryGraphQueryUseCase(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, historyPinRepo),
@@ -76,21 +76,24 @@ func NewWaveController() *WaveController {
 }
 
 func (c *WaveController) persistLifecycle(waveID uint) {
+	ctx := appContext
 	if c.lifecycleSvc != nil {
-		_ = c.lifecycleSvc.ProjectAndPersist(waveID)
+		_ = c.lifecycleSvc.ProjectAndPersist(ctx, waveID)
 	}
 }
 
 // CreateWave creates a new wave.
 func (c *WaveController) CreateWave(input dto.CreateWaveInput) (dto.WaveDTO, error) {
+	ctx := appContext
 	var wave domain.Wave
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
-		waveRepo := infra.NewWaveRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		waveRepo := repos.WaveRepo
+		demandRepo := repos.DemandRepo
+		assignmentRepo := repos.AssignmentRepo
 		waveUC := app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
 		w := domain.Wave{Name: input.Name}
-		if err := waveUC.CreateWave(&w); err != nil {
+		if err := waveUC.CreateWave(ctx, &w); err != nil {
 			return err
 		}
 		wave = w
@@ -104,7 +107,8 @@ func (c *WaveController) CreateWave(input dto.CreateWaveInput) (dto.WaveDTO, err
 
 // ListWaves lists all waves.
 func (c *WaveController) ListWaves() ([]dto.WaveDTO, error) {
-	waves, err := c.waveUC.ListWaves()
+	ctx := appContext
+	waves, err := c.waveUC.ListWaves(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +121,8 @@ func (c *WaveController) ListWaves() ([]dto.WaveDTO, error) {
 
 // GetWave returns a single wave by ID.
 func (c *WaveController) GetWave(id uint) (dto.WaveDTO, error) {
-	w, err := c.waveUC.GetWave(id)
+	ctx := appContext
+	w, err := c.waveUC.GetWave(ctx, id)
 	if err != nil {
 		return dto.WaveDTO{}, err
 	}
@@ -126,91 +131,98 @@ func (c *WaveController) GetWave(id uint) (dto.WaveDTO, error) {
 
 // GetWaveOverview returns aggregated wave overview data.
 func (c *WaveController) GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, error) {
-	return c.overviewQueryUC.GetWaveOverview(waveID)
+	ctx := appContext
+	return c.overviewQueryUC.GetWaveOverview(ctx, waveID)
 }
 
 func (c *WaveController) GetWaveWorkspaceSnapshot(waveID uint) (dto.WaveWorkspaceSnapshotDTO, error) {
-	return c.overviewQueryUC.GetWaveWorkspaceSnapshot(waveID)
+	ctx := appContext
+	return c.overviewQueryUC.GetWaveWorkspaceSnapshot(ctx, waveID)
 }
 
 func (c *WaveController) ListWaveFulfillmentRows(waveID uint) ([]dto.WaveFulfillmentRowDTO, error) {
-	return c.overviewQueryUC.ListWaveFulfillmentRows(waveID)
+	ctx := appContext
+	return c.overviewQueryUC.ListWaveFulfillmentRows(ctx, waveID)
 }
 
 func (c *WaveController) ListWaveParticipantRows(waveID uint) ([]dto.WaveParticipantRowDTO, error) {
-	return c.overviewQueryUC.ListWaveParticipantRows(waveID)
+	ctx := appContext
+	return c.overviewQueryUC.ListWaveParticipantRows(ctx, waveID)
 }
 
 // ListWaveDashboardRows returns batch-projected dashboard rows with authoritative
 // projected lifecycle stages. This is the only dashboard data source.
 func (c *WaveController) ListWaveDashboardRows() ([]dto.WaveDashboardRowDTO, error) {
-	return c.overviewQueryUC.ListDashboardRows()
+	ctx := appContext
+	return c.overviewQueryUC.ListDashboardRows(ctx)
 }
 
 // AssignDemandToWave assigns a demand document to a wave.
 func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) error {
+	ctx := appContext
 	defer c.persistLifecycle(waveID)
 
 	gormDB := c.gdb
 
 	// Validate wave existence
-	if _, err := c.waveUC.GetWave(waveID); err != nil {
+	if _, err := c.waveUC.GetWave(ctx, waveID); err != nil {
 		return err
 	}
 	// Validate demand document existence
-	if _, err := c.demandRepo.FindByID(demandDocumentID); err != nil {
+	if _, err := c.demandRepo.FindByID(ctx, demandDocumentID); err != nil {
 		return err
 	}
 
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
 	if err != nil {
 		return err
 	}
 
 	return gormDB.Transaction(func(tx *gorm.DB) error {
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
-		ruleRepo := infra.NewRuleRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		waveRepo := infra.NewWaveRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		productRepo := infra.NewProductRepository(tx)
-		demandRepoTx := infra.NewDemandRepository(tx)
-		integrationProfileRepoTx := infra.NewIntegrationProfileRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		assignmentRepo := repos.AssignmentRepo
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyCheckpointRepo := repos.HistoryCheckpoint
+		ruleRepo := repos.RuleRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		waveRepo := repos.WaveRepo
+		fulfillRepo := repos.FulfillRepo
+		closureDecisionRepo := repos.ClosureDecision
+		productRepo := repos.ProductRepo
+		demandRepoTx := repos.DemandRepo
+		integrationProfileRepoTx := repos.Profile
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		now := time.Now().Format(time.RFC3339)
+		now := time.Now()
 		assignment := &domain.WaveDemandAssignment{
 			WaveID:           waveID,
 			DemandDocumentID: demandDocumentID,
-			AcceptedAt:       now,
+			AcceptedAt:       &now,
 			CreatedAt:        now,
 			UpdatedAt:        now,
 		}
-		if err := assignmentRepo.Create(assignment); err != nil {
+		if err := assignmentRepo.Create(ctx, assignment); err != nil {
 			return err
 		}
 
 		// Capture profile snapshot onto the demand document at assignment time.
-		doc, docErr := demandRepoTx.FindByID(demandDocumentID)
+		doc, docErr := demandRepoTx.FindByID(ctx, demandDocumentID)
 		if docErr == nil && doc != nil && doc.IntegrationProfileID != nil {
-			profile, profErr := integrationProfileRepoTx.FindByID(*doc.IntegrationProfileID)
+			profile, profErr := integrationProfileRepoTx.FindByID(ctx, *doc.IntegrationProfileID)
 			if profErr == nil && profile != nil {
 				snapshot := app.CaptureProfileSnapshot(profile)
-				_ = demandRepoTx.UpdateBoundProfileSnapshot(demandDocumentID, snapshot)
+				_ = demandRepoTx.UpdateBoundProfileSnapshot(ctx, demandDocumentID, snapshot)
 			}
 		}
 
-		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, waveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, err := historySvc.RecordNode(app.RecordNodeInput{
+		_, err := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdAssignDemand,
 			CommandSummary:          fmt.Sprintf("assign demand %d to wave %d", demandDocumentID, waveID),
@@ -228,49 +240,51 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 
 // GenerateParticipants generates WaveParticipantSnapshots from accepted demand lines.
 func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
+	ctx := appContext
 	defer c.persistLifecycle(waveID)
 
 	gormDB := c.gdb
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
 	if err != nil {
 		return 0, err
 	}
 
 	var count int
 	err = gormDB.Transaction(func(tx *gorm.DB) error {
-		waveRepo := infra.NewWaveRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		ruleRepo := infra.NewRuleRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		waveRepo := repos.WaveRepo
+		demandRepo := repos.DemandRepo
+		assignmentRepo := repos.AssignmentRepo
+		ruleRepo := repos.RuleRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		fulfillRepo := repos.FulfillRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyCheckpointRepo := repos.HistoryCheckpoint
 
 		waveUC := app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
-		productRepo := infra.NewProductRepository(tx)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
+		productRepo := repos.ProductRepo
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		generatedCount, genErr := waveUC.GenerateParticipants(waveID)
+		generatedCount, genErr := waveUC.GenerateParticipants(ctx, waveID)
 		if genErr != nil {
 			return genErr
 		}
 		count = generatedCount
 
-		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(waveID)
+		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(ctx, waveID)
 		if snapErr != nil {
 			return snapErr
 		}
 
-		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, waveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdGenerateParticipants,
 			CommandSummary:          fmt.Sprintf("generate participants for wave %d (%d created)", waveID, count),
@@ -290,51 +304,53 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 
 // MapDemandLines converts eligible demand-driven DemandLines into FulfillmentLines.
 func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, error) {
+	ctx := appContext
 	defer c.persistLifecycle(waveID)
 
 	gormDB := c.gdb
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
 
 	var mappingResult *dto.DemandMappingResult
 	err = gormDB.Transaction(func(tx *gorm.DB) error {
-		waveRepo := infra.NewWaveRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		ruleRepo := infra.NewRuleRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		productRepo := infra.NewProductRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
-		addressRepo := infra.NewAddressRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		waveRepo := repos.WaveRepo
+		demandRepo := repos.DemandRepo
+		fulfillRepo := repos.FulfillRepo
+		assignmentRepo := repos.AssignmentRepo
+		ruleRepo := repos.RuleRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		productRepo := repos.ProductRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyCheckpointRepo := repos.HistoryCheckpoint
+		addressRepo := repos.Address
 
 		dmUC := app.NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, productRepo, addressRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		result, applyErr := dmUC.MapDemandToFulfillment(waveID)
+		result, applyErr := dmUC.MapDemandToFulfillment(ctx, waveID)
 		if applyErr != nil {
 			return applyErr
 		}
 		mappingResult = result
 
-		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(waveID)
+		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(ctx, waveID)
 		if snapErr != nil {
 			return snapErr
 		}
 
 		summary := fmt.Sprintf("map demand lines for wave %d (%d created, %d blocked)", waveID, len(result.CreatedLines), len(result.BlockedLines))
-		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, waveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdMapDemandLines,
 			CommandSummary:          summary,
@@ -401,7 +417,8 @@ func domainToFulfillmentLineDTO(fl *domain.FulfillmentLine) dto.FulfillmentLineD
 
 // ListAssignedDemandsByWave returns all demand documents assigned to the given wave.
 func (c *WaveController) ListAssignedDemandsByWave(waveID uint) ([]dto.DemandDocumentDTO, error) {
-	docs, err := c.assignmentRepo.ListDemandDocumentsByWave(waveID)
+	ctx := appContext
+	docs, err := c.assignmentRepo.ListDemandDocumentsByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -416,24 +433,26 @@ func (c *WaveController) ListAssignedDemandsByWave(waveID uint) ([]dto.DemandDoc
 // repositories are all bound to the given transaction, so the inverse-patch
 // application and the head-pointer update commit (or roll back) atomically.
 func (c *WaveController) buildUndoRedoUC(tx *gorm.DB) app.UndoRedoUseCase {
-	ruleRepo := infra.NewRuleRepository(tx)
-	adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-	assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-	waveRepo := infra.NewWaveRepository(tx)
-	fulfillRepo := infra.NewFulfillmentRepository(tx)
-	closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-	scopeRepo := infra.NewHistoryScopeRepository(tx)
-	nodeRepo := infra.NewHistoryNodeRepository(tx)
+	repos := infra.NewTxRepos(tx)
+	ruleRepo := repos.RuleRepo
+	adjustmentRepo := repos.AdjustmentRepo
+	assignmentRepo := repos.AssignmentRepo
+	waveRepo := repos.WaveRepo
+	fulfillRepo := repos.FulfillRepo
+	closureDecisionRepo := repos.ClosureDecision
+	scopeRepo := repos.HistoryScope
+	nodeRepo := repos.HistoryNode
 	snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 	return app.NewUndoRedoUseCase(scopeRepo, nodeRepo, app.NewPatchExecutor(tx, snapshotSvc))
 }
 
 // UndoWaveAction undoes the last action for the given wave.
 func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
+	ctx := appContext
 	defer c.persistLifecycle(waveID)
 	var summary string
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
-		s, undoErr := c.buildUndoRedoUC(tx).Undo(waveID)
+		s, undoErr := c.buildUndoRedoUC(tx).Undo(ctx, waveID)
 		summary = s
 		return undoErr
 	})
@@ -445,10 +464,11 @@ func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
 
 // RedoWaveAction redoes the last undone action for the given wave.
 func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
+	ctx := appContext
 	defer c.persistLifecycle(waveID)
 	var summary string
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
-		s, redoErr := c.buildUndoRedoUC(tx).Redo(waveID)
+		s, redoErr := c.buildUndoRedoUC(tx).Redo(ctx, waveID)
 		summary = s
 		return redoErr
 	})
@@ -460,12 +480,14 @@ func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
 
 // ListRecentHistory returns the most recent history nodes for a wave.
 func (c *WaveController) ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error) {
-	return c.overviewQueryUC.ListRecentHistory(waveID, limit)
+	ctx := appContext
+	return c.overviewQueryUC.ListRecentHistory(ctx, waveID, limit)
 }
 
 // GetHistoryGraph returns the full history node graph for a wave.
 func (c *WaveController) GetHistoryGraph(waveID uint) (dto.HistoryGraphDTO, error) {
-	graph, err := c.historyGraphUC.GetHistoryGraph(waveID)
+	ctx := appContext
+	graph, err := c.historyGraphUC.GetHistoryGraph(ctx, waveID)
 	if err != nil {
 		return dto.HistoryGraphDTO{}, err
 	}
@@ -474,14 +496,16 @@ func (c *WaveController) GetHistoryGraph(waveID uint) (dto.HistoryGraphDTO, erro
 
 // RunHistoryGC runs garbage collection on the history for a wave, keeping the last 100 reachable nodes.
 func (c *WaveController) RunHistoryGC(waveID uint) (int, error) {
-	return c.historyGCSvc.CollectGarbageForWave(waveID, 100)
+	ctx := appContext
+	return c.historyGCSvc.CollectGarbageForWave(ctx, waveID, 100)
 }
 
 // ListWavesPaginated returns a paginated list of waves.
 func (c *WaveController) ListWavesPaginated(input dto.PaginationInput) (map[string]any, error) {
+	ctx := appContext
 	input = dto.NormalizePagination(input)
 	offset := (input.Page - 1) * input.PageSize
-	waves, total, err := c.waveUC.ListWavesPaginated(offset, input.PageSize)
+	waves, total, err := c.waveUC.ListWavesPaginated(ctx, offset, input.PageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -497,20 +521,21 @@ func (c *WaveController) ListWavesPaginated(input dto.PaginationInput) (map[stri
 
 // ValidateStepAccess checks workspace guard invariants for a wave step.
 func (c *WaveController) ValidateStepAccess(waveID uint, stepKey string) error {
+	ctx := appContext
 	if c.workspaceGuard == nil {
 		return nil
 	}
 	switch stepKey {
 	case "allocation":
-		return c.workspaceGuard.GuardAllocationRequiresDemandIntake(waveID)
+		return c.workspaceGuard.GuardAllocationRequiresDemandIntake(ctx, waveID)
 	case "review":
-		return c.workspaceGuard.GuardReviewRequiresFulfillment(waveID)
+		return c.workspaceGuard.GuardReviewRequiresFulfillment(ctx, waveID)
 	case "execution":
-		return c.workspaceGuard.GuardExecutionRequiresReview(waveID)
+		return c.workspaceGuard.GuardExecutionRequiresReview(ctx, waveID)
 	case "shipment":
-		return c.workspaceGuard.GuardShipmentRequiresSupplierOrder(waveID)
+		return c.workspaceGuard.GuardShipmentRequiresSupplierOrder(ctx, waveID)
 	case "sync":
-		return c.workspaceGuard.GuardSyncRequiresShipment(waveID)
+		return c.workspaceGuard.GuardSyncRequiresShipment(ctx, waveID)
 	default:
 		return fmt.Errorf("unknown step key: %s", stepKey)
 	}

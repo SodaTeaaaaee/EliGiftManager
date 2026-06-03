@@ -1,8 +1,9 @@
 package app
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -27,14 +28,14 @@ func NewShipmentUseCase(shipmentRepo domain.ShipmentRepository, supplierRepo dom
 	}
 }
 
-func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domain.Shipment, []domain.ShipmentLine, error) {
+func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateShipmentInput) (*domain.Shipment, []domain.ShipmentLine, error) {
 	// 1. Empty line check
 	if len(input.Lines) == 0 {
 		return nil, nil, fmt.Errorf("shipment must have at least one line")
 	}
 
 	// 2. Validate supplier order existence
-	supplierOrder, err := uc.supplierRepo.FindByID(input.SupplierOrderID)
+	supplierOrder, err := uc.supplierRepo.FindByID(ctx, input.SupplierOrderID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("supplier order %d not found: %w", input.SupplierOrderID, err)
 	}
@@ -42,12 +43,12 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 	// 3. Validate each line (all checks outside transaction)
 	for _, li := range input.Lines {
 		// Validate supplier order line existence
-		sol, err := uc.supplierRepo.FindLineByID(li.SupplierOrderLineID)
+		sol, err := uc.supplierRepo.FindLineByID(ctx, li.SupplierOrderLineID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("supplier order line %d not found: %w", li.SupplierOrderLineID, err)
 		}
 		// Validate fulfillment line existence
-		fl, err := uc.fulfillRepo.FindByID(li.FulfillmentLineID)
+		fl, err := uc.fulfillRepo.FindByID(ctx, li.FulfillmentLineID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("fulfillment line %d not found: %w", li.FulfillmentLineID, err)
 		}
@@ -64,7 +65,7 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 			return nil, nil, fmt.Errorf("fulfillment line %d belongs to wave %d, not wave %d", li.FulfillmentLineID, fl.WaveID, supplierOrder.WaveID)
 		}
 		// Validate cumulative shipped quantity does not exceed submitted quantity.
-		alreadyShipped, err := uc.shipmentRepo.SumShippedQuantityBySOL(sol.ID)
+		alreadyShipped, err := uc.shipmentRepo.SumShippedQuantityBySOL(ctx, sol.ID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to query shipped quantity for SOL %d: %w", sol.ID, err)
 		}
@@ -79,7 +80,7 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 	var pinNodeID uint
 	if uc.basisStamp != nil {
 		var err error
-		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(supplierOrder.WaveID)
+		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(ctx, supplierOrder.WaveID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve basis for shipment: %w", err)
 		}
@@ -89,7 +90,7 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 	}
 
 	// 5. Build domain objects
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	shipment := &domain.Shipment{
 		SupplierOrderID:      input.SupplierOrderID,
 		SupplierPlatform:     input.SupplierPlatform,
@@ -126,7 +127,7 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 			RefType:       "shipment",
 		}
 	}
-	if err := uc.shipmentRepo.AtomicCreateShipment(shipment, lines, pin); err != nil {
+	if err := uc.shipmentRepo.AtomicCreateShipment(ctx, shipment, lines, pin); err != nil {
 		return nil, nil, err
 	}
 
@@ -142,15 +143,15 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 			})
 		}
 		if len(stateUpdates) > 0 {
-			if err := uc.fulfillRepo.BulkUpdateStates(stateUpdates); err != nil {
-				log.Printf("WARNING: supplier order status projection failed: %v", err)
+			if err := uc.fulfillRepo.BulkUpdateStates(ctx, stateUpdates); err != nil {
+				slog.Warn("supplier order status projection failed", "error", err)
 			}
 		}
 	}
 
 	// 8. Project SupplierOrder status based on cumulative shipped quantities across all SOLs.
-	if err := uc.projectSupplierOrderStatus(supplierOrder.ID); err != nil {
-		log.Printf("WARNING: supplier order status projection failed: %v", err)
+	if err := uc.projectSupplierOrderStatus(ctx, supplierOrder.ID); err != nil {
+		slog.Warn("supplier order status projection failed", "error", err)
 	}
 
 	// 9. Return domain objects
@@ -170,8 +171,8 @@ func (uc *shipmentUseCase) CreateShipment(input dto.CreateShipmentInput) (*domai
 //
 // Errors are intentionally swallowed: status projection is best-effort and must not
 // roll back an already-persisted shipment.
-func (uc *shipmentUseCase) projectSupplierOrderStatus(supplierOrderID uint) error {
-	sols, err := uc.supplierRepo.ListLinesByOrder(supplierOrderID)
+func (uc *shipmentUseCase) projectSupplierOrderStatus(ctx context.Context, supplierOrderID uint) error {
+	sols, err := uc.supplierRepo.ListLinesByOrder(ctx, supplierOrderID)
 	if err != nil || len(sols) == 0 {
 		return err
 	}
@@ -181,7 +182,7 @@ func (uc *shipmentUseCase) projectSupplierOrderStatus(supplierOrderID uint) erro
 	anyShipped := false
 
 	for _, sol := range sols {
-		shipped, err := uc.shipmentRepo.SumShippedQuantityBySOL(sol.ID)
+		shipped, err := uc.shipmentRepo.SumShippedQuantityBySOL(ctx, sol.ID)
 		if err != nil {
 			return err
 		}
@@ -201,10 +202,10 @@ func (uc *shipmentUseCase) projectSupplierOrderStatus(supplierOrderID uint) erro
 		return nil // no change needed
 	}
 
-	order, err := uc.supplierRepo.FindByID(supplierOrderID)
+	order, err := uc.supplierRepo.FindByID(ctx, supplierOrderID)
 	if err != nil {
 		return err
 	}
 	order.Status = newStatus
-	return uc.supplierRepo.Update(order)
+	return uc.supplierRepo.Update(ctx, order)
 }

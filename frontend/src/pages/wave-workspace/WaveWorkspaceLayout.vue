@@ -21,6 +21,7 @@ import { getWaveWorkspaceSnapshot } from '@/shared/lib/wails/app'
 import { dto } from '@/../wailsjs/go/models'
 import { useI18n } from '@/shared/i18n'
 import { useSidebarStore } from '@/shared/model/sidebar'
+import { waveRefreshKey, waveWorkspaceSnapshotKey } from '@/shared/model/wave-injection-keys'
 import WaveHistoryPanel from './WaveHistoryPanel.vue'
 
 const route = useRoute()
@@ -35,9 +36,9 @@ const waveId = computed(() => {
 })
 
 const refreshKey = ref(0)
-provide('waveRefreshKey', refreshKey)
+provide(waveRefreshKey, refreshKey)
 const workspaceSnapshot = ref<dto.WaveWorkspaceSnapshotDTO | null>(null)
-provide('waveWorkspaceSnapshot', workspaceSnapshot)
+provide(waveWorkspaceSnapshotKey, workspaceSnapshot)
 const loading = ref(false)
 const error = ref('')
 

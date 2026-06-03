@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, h, inject, type Ref } from 'vue'
+import { computed, onMounted, ref, h, inject } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { 
   NAlert, 
@@ -29,6 +29,7 @@ import {
 } from '@/shared/lib/wails/app'
 import { useI18n } from '@/shared/i18n'
 import { dto } from '@/../wailsjs/go/models'
+import { waveWorkspaceSnapshotKey } from '@/shared/model/wave-injection-keys'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,7 +37,7 @@ const message = useMessage()
 const { t } = useI18n()
 const waveId = computed(() => Number(route.params.waveId) || 0)
 
-const snapshot = inject('waveWorkspaceSnapshot') as Ref<dto.WaveWorkspaceSnapshotDTO | null> | undefined
+const snapshot = inject(waveWorkspaceSnapshotKey)
 const overview = computed(() => snapshot?.value?.overview)
 
 const loading = ref(false)

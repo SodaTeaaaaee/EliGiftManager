@@ -1,6 +1,7 @@
 package infra
 
 import (
+	"context"
 	"errors"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -16,20 +17,20 @@ func NewDocumentTemplateRepository(db *gorm.DB) domain.DocumentTemplateRepositor
 	return &documentTemplateRepository{db: db}
 }
 
-func (r *documentTemplateRepository) Create(t *domain.DocumentTemplate) error {
+func (r *documentTemplateRepository) Create(ctx context.Context, t *domain.DocumentTemplate) error {
 	p := persistence.DocumentTemplateFromDomain(t)
-	if err := r.db.Create(p).Error; err != nil {
+	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
 		return err
 	}
 	t.ID = p.ID
-	t.CreatedAt = p.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
-	t.UpdatedAt = p.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+	t.CreatedAt = p.CreatedAt
+	t.UpdatedAt = p.UpdatedAt
 	return nil
 }
 
-func (r *documentTemplateRepository) FindByID(id uint) (*domain.DocumentTemplate, error) {
+func (r *documentTemplateRepository) FindByID(ctx context.Context, id uint) (*domain.DocumentTemplate, error) {
 	var p persistence.DocumentTemplate
-	if err := r.db.First(&p, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&p, id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -38,9 +39,9 @@ func (r *documentTemplateRepository) FindByID(id uint) (*domain.DocumentTemplate
 	return persistence.DocumentTemplateToDomain(&p), nil
 }
 
-func (r *documentTemplateRepository) FindByKey(key string) (*domain.DocumentTemplate, error) {
+func (r *documentTemplateRepository) FindByKey(ctx context.Context, key string) (*domain.DocumentTemplate, error) {
 	var p persistence.DocumentTemplate
-	if err := r.db.Where("template_key = ?", key).First(&p).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("template_key = ?", key).First(&p).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -49,9 +50,9 @@ func (r *documentTemplateRepository) FindByKey(key string) (*domain.DocumentTemp
 	return persistence.DocumentTemplateToDomain(&p), nil
 }
 
-func (r *documentTemplateRepository) List() ([]domain.DocumentTemplate, error) {
+func (r *documentTemplateRepository) List(ctx context.Context) ([]domain.DocumentTemplate, error) {
 	var records []persistence.DocumentTemplate
-	if err := r.db.Order("created_at DESC").Find(&records).Error; err != nil {
+	if err := r.db.WithContext(ctx).Order("created_at DESC").Find(&records).Error; err != nil {
 		return nil, err
 	}
 	out := make([]domain.DocumentTemplate, len(records))
@@ -61,9 +62,9 @@ func (r *documentTemplateRepository) List() ([]domain.DocumentTemplate, error) {
 	return out, nil
 }
 
-func (r *documentTemplateRepository) ListByDocumentType(docType string) ([]domain.DocumentTemplate, error) {
+func (r *documentTemplateRepository) ListByDocumentType(ctx context.Context, docType string) ([]domain.DocumentTemplate, error) {
 	var records []persistence.DocumentTemplate
-	if err := r.db.Where("document_type = ?", docType).Order("created_at DESC").Find(&records).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("document_type = ?", docType).Order("created_at DESC").Find(&records).Error; err != nil {
 		return nil, err
 	}
 	out := make([]domain.DocumentTemplate, len(records))

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -25,7 +26,7 @@ func (m *mockHistoryScopeRepo) key(scopeType, scopeKey string) string {
 	return scopeType + ":" + scopeKey
 }
 
-func (m *mockHistoryScopeRepo) Create(scope *domain.HistoryScope) error {
+func (m *mockHistoryScopeRepo) Create(ctx context.Context, scope *domain.HistoryScope) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastID++
@@ -35,7 +36,7 @@ func (m *mockHistoryScopeRepo) Create(scope *domain.HistoryScope) error {
 	return nil
 }
 
-func (m *mockHistoryScopeRepo) FindByID(id uint) (*domain.HistoryScope, error) {
+func (m *mockHistoryScopeRepo) FindByID(ctx context.Context, id uint) (*domain.HistoryScope, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, s := range m.scopes {
@@ -47,7 +48,7 @@ func (m *mockHistoryScopeRepo) FindByID(id uint) (*domain.HistoryScope, error) {
 	return nil, nil
 }
 
-func (m *mockHistoryScopeRepo) FindByScopeTypeAndKey(scopeType, scopeKey string) (*domain.HistoryScope, error) {
+func (m *mockHistoryScopeRepo) FindByScopeTypeAndKey(ctx context.Context, scopeType, scopeKey string) (*domain.HistoryScope, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.errOn == "FindByScopeTypeAndKey" {
@@ -61,7 +62,7 @@ func (m *mockHistoryScopeRepo) FindByScopeTypeAndKey(scopeType, scopeKey string)
 	return &cp, nil
 }
 
-func (m *mockHistoryScopeRepo) UpdateHead(scopeID uint, headNodeID uint) error {
+func (m *mockHistoryScopeRepo) UpdateHead(ctx context.Context, scopeID uint, headNodeID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, s := range m.scopes {
@@ -73,8 +74,8 @@ func (m *mockHistoryScopeRepo) UpdateHead(scopeID uint, headNodeID uint) error {
 	return fmt.Errorf("scope %d not found", scopeID)
 }
 
-func (m *mockHistoryScopeRepo) FindOrCreate(scopeType string, scopeKey string) (*domain.HistoryScope, error) {
-	existing, err := m.FindByScopeTypeAndKey(scopeType, scopeKey)
+func (m *mockHistoryScopeRepo) FindOrCreate(ctx context.Context, scopeType string, scopeKey string) (*domain.HistoryScope, error) {
+	existing, err := m.FindByScopeTypeAndKey(context.Background(), scopeType, scopeKey)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +83,7 @@ func (m *mockHistoryScopeRepo) FindOrCreate(scopeType string, scopeKey string) (
 		return existing, nil
 	}
 	scope := &domain.HistoryScope{ScopeType: scopeType, ScopeKey: scopeKey}
-	if err := m.Create(scope); err != nil {
+	if err := m.Create(context.Background(), scope); err != nil {
 		return nil, err
 	}
 	return scope, nil
@@ -101,7 +102,7 @@ func newMockHistoryNodeRepo() *mockHistoryNodeRepo {
 	return &mockHistoryNodeRepo{nodes: make(map[uint]*domain.HistoryNode)}
 }
 
-func (m *mockHistoryNodeRepo) Create(node *domain.HistoryNode) error {
+func (m *mockHistoryNodeRepo) Create(ctx context.Context, node *domain.HistoryNode) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.lastID++
@@ -111,7 +112,7 @@ func (m *mockHistoryNodeRepo) Create(node *domain.HistoryNode) error {
 	return nil
 }
 
-func (m *mockHistoryNodeRepo) FindByID(id uint) (*domain.HistoryNode, error) {
+func (m *mockHistoryNodeRepo) FindByID(ctx context.Context, id uint) (*domain.HistoryNode, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.errOn == "FindByID" {
@@ -125,7 +126,7 @@ func (m *mockHistoryNodeRepo) FindByID(id uint) (*domain.HistoryNode, error) {
 	return &cp, nil
 }
 
-func (m *mockHistoryNodeRepo) UpdatePreferredRedoChild(nodeID uint, childID uint) error {
+func (m *mockHistoryNodeRepo) UpdatePreferredRedoChild(ctx context.Context, nodeID uint, childID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	n, ok := m.nodes[nodeID]
@@ -136,7 +137,7 @@ func (m *mockHistoryNodeRepo) UpdatePreferredRedoChild(nodeID uint, childID uint
 	return nil
 }
 
-func (m *mockHistoryNodeRepo) ListByScopeRecent(scopeID uint, limit int) ([]domain.HistoryNode, error) {
+func (m *mockHistoryNodeRepo) ListByScopeRecent(ctx context.Context, scopeID uint, limit int) ([]domain.HistoryNode, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var result []domain.HistoryNode
@@ -151,7 +152,7 @@ func (m *mockHistoryNodeRepo) ListByScopeRecent(scopeID uint, limit int) ([]doma
 	return result, nil
 }
 
-func (m *mockHistoryNodeRepo) ListByScope(scopeID uint) ([]domain.HistoryNode, error) {
+func (m *mockHistoryNodeRepo) ListByScope(ctx context.Context, scopeID uint) ([]domain.HistoryNode, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var result []domain.HistoryNode
@@ -163,7 +164,7 @@ func (m *mockHistoryNodeRepo) ListByScope(scopeID uint) ([]domain.HistoryNode, e
 	return result, nil
 }
 
-func (m *mockHistoryNodeRepo) DeleteByID(nodeID uint) error {
+func (m *mockHistoryNodeRepo) DeleteByID(ctx context.Context, nodeID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.nodes, nodeID)
@@ -181,7 +182,7 @@ func TestHistoryHeadQueryNoScopeReturnsEmptyHash(t *testing.T) {
 	nodeRepo := newMockHistoryNodeRepo()
 	uc := NewHistoryHeadQueryUseCase(scopeRepo, nodeRepo)
 
-	hash, err := uc.GetCurrentProjectionHash(42)
+	hash, err := uc.GetCurrentProjectionHash(context.Background(), 42)
 	if err != nil {
 		t.Fatalf("expected nil error when no scope exists, got: %v", err)
 	}
@@ -198,7 +199,7 @@ func TestHistoryHeadQueryNoScopeReturnsZeroNodeID(t *testing.T) {
 	nodeRepo := newMockHistoryNodeRepo()
 	uc := NewHistoryHeadQueryUseCase(scopeRepo, nodeRepo)
 
-	nodeID, hash, err := uc.GetCurrentHeadNodeIDAndHash(42)
+	nodeID, hash, err := uc.GetCurrentHeadNodeIDAndHash(context.Background(), 42)
 	if err != nil {
 		t.Fatalf("expected nil error when no scope exists, got: %v", err)
 	}
@@ -219,7 +220,7 @@ func TestHistoryHeadQueryScopeExistsButNoHeadNode(t *testing.T) {
 	nodeRepo := newMockHistoryNodeRepo()
 
 	// Create a scope with no head node
-	if err := scopeRepo.Create(&domain.HistoryScope{
+	if err := scopeRepo.Create(context.Background(), &domain.HistoryScope{
 		ScopeType:         "wave",
 		ScopeKey:          "7",
 		CurrentHeadNodeID: 0,
@@ -229,7 +230,7 @@ func TestHistoryHeadQueryScopeExistsButNoHeadNode(t *testing.T) {
 
 	uc := NewHistoryHeadQueryUseCase(scopeRepo, nodeRepo)
 
-	hash, err := uc.GetCurrentProjectionHash(7)
+	hash, err := uc.GetCurrentProjectionHash(context.Background(), 7)
 	if err != nil {
 		t.Fatalf("expected nil error when scope has no head node, got: %v", err)
 	}
@@ -249,7 +250,7 @@ func TestHistoryHeadQueryReturnsNodeHash(t *testing.T) {
 		ProjectionHash: "abc123",
 		CommandSummary: "test command",
 	}
-	if err := nodeRepo.Create(node); err != nil {
+	if err := nodeRepo.Create(context.Background(), node); err != nil {
 		t.Fatalf("setup node: %v", err)
 	}
 
@@ -258,13 +259,13 @@ func TestHistoryHeadQueryReturnsNodeHash(t *testing.T) {
 		ScopeKey:          "5",
 		CurrentHeadNodeID: node.ID,
 	}
-	if err := scopeRepo.Create(scope); err != nil {
+	if err := scopeRepo.Create(context.Background(), scope); err != nil {
 		t.Fatalf("setup scope: %v", err)
 	}
 
 	uc := NewHistoryHeadQueryUseCase(scopeRepo, nodeRepo)
 
-	hash, err := uc.GetCurrentProjectionHash(5)
+	hash, err := uc.GetCurrentProjectionHash(context.Background(), 5)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -282,7 +283,7 @@ func TestHistoryHeadQueryScopeRepoErrorPropagates(t *testing.T) {
 	nodeRepo := newMockHistoryNodeRepo()
 	uc := NewHistoryHeadQueryUseCase(scopeRepo, nodeRepo)
 
-	_, err := uc.GetCurrentProjectionHash(1)
+	_, err := uc.GetCurrentProjectionHash(context.Background(), 1)
 	if err == nil {
 		t.Fatal("expected error when scope repo fails, got nil")
 	}
@@ -298,7 +299,7 @@ func TestUndoNoHistoryScopeReturnsError(t *testing.T) {
 	nodeRepo := newMockHistoryNodeRepo()
 	uc := NewUndoRedoUseCase(scopeRepo, nodeRepo)
 
-	_, err := uc.Undo(99)
+	_, err := uc.Undo(context.Background(), 99)
 	if err == nil {
 		t.Fatal("expected error when no history scope exists for wave, got nil")
 	}
@@ -312,7 +313,7 @@ func TestRedoNoHistoryScopeReturnsError(t *testing.T) {
 	nodeRepo := newMockHistoryNodeRepo()
 	uc := NewUndoRedoUseCase(scopeRepo, nodeRepo)
 
-	_, err := uc.Redo(99)
+	_, err := uc.Redo(context.Background(), 99)
 	if err == nil {
 		t.Fatal("expected error when no history scope exists for wave, got nil")
 	}

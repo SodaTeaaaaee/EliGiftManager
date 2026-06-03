@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -38,65 +39,65 @@ func NewLifecycleProjectionService(
 
 // ProgressSnapshot captures a lightweight state summary for Wave.progress_snapshot.
 type ProgressSnapshot struct {
-	DemandCount       int `json:"demandCount"`
-	FulfillmentCount  int `json:"fulfillmentCount"`
+	DemandCount        int `json:"demandCount"`
+	FulfillmentCount   int `json:"fulfillmentCount"`
 	SupplierOrderCount int `json:"supplierOrderCount"`
-	ShipmentCount     int `json:"shipmentCount"`
-	SyncJobCount      int `json:"syncJobCount"`
-	ParticipantCount  int `json:"participantCount"`
+	ShipmentCount      int `json:"shipmentCount"`
+	SyncJobCount       int `json:"syncJobCount"`
+	ParticipantCount   int `json:"participantCount"`
 }
 
 // ProjectAndPersist computes the current lifecycle stage and progress snapshot
 // from repository state, then persists them to the Wave record.
-func (s *LifecycleProjectionService) ProjectAndPersist(waveID uint) error {
-	stage, snap, err := s.compute(waveID)
+func (s *LifecycleProjectionService) ProjectAndPersist(ctx context.Context, waveID uint) error {
+	stage, snap, err := s.compute(ctx, waveID)
 	if err != nil {
 		return err
 	}
 	snapJSON, _ := json.Marshal(snap)
-	return s.waveRepo.UpdateLifecycle(waveID, stage, string(snapJSON))
+	return s.waveRepo.UpdateLifecycle(ctx, waveID, stage, string(snapJSON))
 }
 
-func (s *LifecycleProjectionService) compute(waveID uint) (string, ProgressSnapshot, error) {
+func (s *LifecycleProjectionService) compute(ctx context.Context, waveID uint) (string, ProgressSnapshot, error) {
 	var snap ProgressSnapshot
 
 	// Count demand documents assigned
-	assignments, err := s.assignmentRepo.ListByWave(waveID)
+	assignments, err := s.assignmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", snap, fmt.Errorf("list assignments: %w", err)
 	}
 	snap.DemandCount = len(assignments)
 
 	// Count fulfillment lines
-	fulfillLines, err := s.fulfillRepo.ListByWave(waveID)
+	fulfillLines, err := s.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", snap, fmt.Errorf("list fulfillment lines: %w", err)
 	}
 	snap.FulfillmentCount = len(fulfillLines)
 
 	// Count supplier orders
-	orders, err := s.supplierRepo.ListByWave(waveID)
+	orders, err := s.supplierRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", snap, fmt.Errorf("list supplier orders: %w", err)
 	}
 	snap.SupplierOrderCount = len(orders)
 
 	// Count shipments
-	shipments, err := s.shipmentRepo.ListByWave(waveID)
+	shipments, err := s.shipmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", snap, fmt.Errorf("list shipments: %w", err)
 	}
 	snap.ShipmentCount = len(shipments)
 
 	// Count sync jobs
-	jobs, err := s.channelSync.ListJobsByWave(waveID)
+	jobs, err := s.channelSync.ListJobsByWave(ctx, waveID)
 	if err != nil {
 		return "", snap, fmt.Errorf("list sync jobs: %w", err)
 	}
 	snap.SyncJobCount = len(jobs)
 
 	// Count participants
-	participants, err := s.waveRepo.ListParticipantsByWave(waveID)
+	participants, err := s.waveRepo.ListParticipantsByWave(ctx, waveID)
 	if err != nil {
 		return "", snap, fmt.Errorf("list participants: %w", err)
 	}

@@ -1,72 +1,74 @@
 package domain
 
+import "context"
+
 // CustomerProfileRepository defines persistence operations for CustomerProfile and CustomerIdentity.
 type CustomerProfileRepository interface {
-	Create(profile *CustomerProfile) error
-	Update(profile *CustomerProfile) error
-	FindByID(id uint) (*CustomerProfile, error)
-	List() ([]CustomerProfile, error)
+	Create(ctx context.Context, profile *CustomerProfile) error
+	Update(ctx context.Context, profile *CustomerProfile) error
+	FindByID(ctx context.Context, id uint) (*CustomerProfile, error)
+	List(ctx context.Context) ([]CustomerProfile, error)
 
-	CreateIdentity(identity *CustomerIdentity) error
-	ListIdentitiesByProfile(profileID uint) ([]CustomerIdentity, error)
-	FindIdentityByPlatformAndValue(platform, value string) (*CustomerIdentity, error)
-	UpdateIdentityProfileID(identityID uint, newProfileID uint) error
-	BulkUpdateIdentityProfileID(identityIDs []uint, newProfileID uint) error
-	SoftDelete(id uint) error
-	DeleteIdentity(id uint) error
+	CreateIdentity(ctx context.Context, identity *CustomerIdentity) error
+	ListIdentitiesByProfile(ctx context.Context, profileID uint) ([]CustomerIdentity, error)
+	FindIdentityByPlatformAndValue(ctx context.Context, platform, value string) (*CustomerIdentity, error)
+	UpdateIdentityProfileID(ctx context.Context, identityID uint, newProfileID uint) error
+	BulkUpdateIdentityProfileID(ctx context.Context, identityIDs []uint, newProfileID uint) error
+	SoftDelete(ctx context.Context, id uint) error
+	DeleteIdentity(ctx context.Context, id uint) error
 }
 
 // CustomerAddressRepository defines persistence operations for CustomerAddress.
 type CustomerAddressRepository interface {
-	Create(addr *CustomerAddress) error
-	FindByID(id uint) (*CustomerAddress, error)
-	ListByProfile(profileID uint) ([]CustomerAddress, error)
-	Update(addr *CustomerAddress) error
-	SoftDelete(id uint) error
-	ClearDefaultByProfile(profileID uint) error
-	BulkUpdateProfileID(oldProfileID, newProfileID uint) error
+	Create(ctx context.Context, addr *CustomerAddress) error
+	FindByID(ctx context.Context, id uint) (*CustomerAddress, error)
+	ListByProfile(ctx context.Context, profileID uint) ([]CustomerAddress, error)
+	Update(ctx context.Context, addr *CustomerAddress) error
+	SoftDelete(ctx context.Context, id uint) error
+	ClearDefaultByProfile(ctx context.Context, profileID uint) error
+	BulkUpdateProfileID(ctx context.Context, oldProfileID, newProfileID uint) error
 }
 
 // DemandDocumentRepository defines persistence operations for DemandDocument and DemandLine.
 type DemandDocumentRepository interface {
-	Create(doc *DemandDocument) error
-	FindByID(id uint) (*DemandDocument, error)
-	List() ([]DemandDocument, error)
-	ListUnassigned() ([]DemandDocument, error)
-	CountByIntegrationProfileID(profileID uint) (int64, error)
+	Create(ctx context.Context, doc *DemandDocument) error
+	FindByID(ctx context.Context, id uint) (*DemandDocument, error)
+	List(ctx context.Context) ([]DemandDocument, error)
+	ListUnassigned(ctx context.Context) ([]DemandDocument, error)
+	CountByIntegrationProfileID(ctx context.Context, profileID uint) (int64, error)
 
 	// UpdateBoundProfileSnapshot persists only the BoundProfileSnapshot field for the given document ID.
 	// Used at wave assignment time and during explicit profile refresh.
-	UpdateBoundProfileSnapshot(docID uint, snapshot string) error
+	UpdateBoundProfileSnapshot(ctx context.Context, docID uint, snapshot string) error
 
 	// BulkUpdateCustomerProfileID reassigns all demand documents from oldProfileID to newProfileID.
 	// Returns the number of rows updated.
-	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) (int64, error)
+	BulkUpdateCustomerProfileID(ctx context.Context, oldProfileID, newProfileID uint) (int64, error)
 
-	CreateLine(line *DemandLine) error
-	FindLineByID(id uint) (*DemandLine, error)
-	ListLinesByDocument(docID uint) ([]DemandLine, error)
-	UpdateLine(line *DemandLine) error
-	UpdateLineRoutingFields(lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error
+	CreateLine(ctx context.Context, line *DemandLine) error
+	FindLineByID(ctx context.Context, id uint) (*DemandLine, error)
+	ListLinesByDocument(ctx context.Context, docID uint) ([]DemandLine, error)
+	UpdateLine(ctx context.Context, line *DemandLine) error
+	UpdateLineRoutingFields(ctx context.Context, lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error
 }
 
 // WaveRepository defines persistence operations for Wave and WaveParticipantSnapshot.
 type WaveRepository interface {
-	Create(wave *Wave) error
-	FindByID(id uint) (*Wave, error)
-	FindByWaveNo(waveNo string) (*Wave, error)
-	List() ([]Wave, error)
+	Create(ctx context.Context, wave *Wave) error
+	FindByID(ctx context.Context, id uint) (*Wave, error)
+	FindByWaveNo(ctx context.Context, waveNo string) (*Wave, error)
+	List(ctx context.Context) ([]Wave, error)
 	// ListPaginated returns a page of waves (ordered by id) plus the total count,
 	// pushing LIMIT/OFFSET down to SQL instead of slicing in memory.
-	ListPaginated(offset, limit int) ([]Wave, int64, error)
-	UpdateLifecycle(waveID uint, stage string, progressSnapshot string) error
+	ListPaginated(ctx context.Context, offset, limit int) ([]Wave, int64, error)
+	UpdateLifecycle(ctx context.Context, waveID uint, stage string, progressSnapshot string) error
 
-	AddParticipant(snap *WaveParticipantSnapshot) error
-	ListParticipantsByWave(waveID uint) ([]WaveParticipantSnapshot, error)
-	ListParticipantsByProfile(profileID uint) ([]WaveParticipantSnapshot, error)
-	UpdateParticipantProfileID(oldProfileID, newProfileID uint) (int64, error)
-	DeleteParticipantsByWave(waveID uint) error
-	CountByDatePrefix(prefix string) (int, error)
+	AddParticipant(ctx context.Context, snap *WaveParticipantSnapshot) error
+	ListParticipantsByWave(ctx context.Context, waveID uint) ([]WaveParticipantSnapshot, error)
+	ListParticipantsByProfile(ctx context.Context, profileID uint) ([]WaveParticipantSnapshot, error)
+	UpdateParticipantProfileID(ctx context.Context, oldProfileID, newProfileID uint) (int64, error)
+	DeleteParticipantsByWave(ctx context.Context, waveID uint) error
+	CountByDatePrefix(ctx context.Context, prefix string) (int, error)
 }
 
 // FulfillmentLineRepository defines persistence operations for FulfillmentLine.
@@ -77,199 +79,199 @@ type FulfillmentLineStateUpdate struct {
 }
 
 type FulfillmentLineRepository interface {
-	Create(line *FulfillmentLine) error
-	FindByID(id uint) (*FulfillmentLine, error)
-	ListByWave(waveID uint) ([]FulfillmentLine, error)
-	Update(line *FulfillmentLine) error
-	DeleteByWave(waveID uint) error
-	DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error
-	ReplaceByWaveAndGeneratedBy(waveID uint, generatedBy string, newLines []FulfillmentLine) error
-	BulkUpdateStates(updates []FulfillmentLineStateUpdate) error
-	BulkUpdateCustomerProfileID(oldProfileID, newProfileID uint) (int64, error)
+	Create(ctx context.Context, line *FulfillmentLine) error
+	FindByID(ctx context.Context, id uint) (*FulfillmentLine, error)
+	ListByWave(ctx context.Context, waveID uint) ([]FulfillmentLine, error)
+	Update(ctx context.Context, line *FulfillmentLine) error
+	DeleteByWave(ctx context.Context, waveID uint) error
+	DeleteByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string) error
+	ReplaceByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string, newLines []FulfillmentLine) error
+	BulkUpdateStates(ctx context.Context, updates []FulfillmentLineStateUpdate) error
+	BulkUpdateCustomerProfileID(ctx context.Context, oldProfileID, newProfileID uint) (int64, error)
 }
 
 // SupplierOrderRepository defines persistence operations for SupplierOrder and SupplierOrderLine.
 type SupplierOrderRepository interface {
-	Create(order *SupplierOrder) error
-	FindByID(id uint) (*SupplierOrder, error)
-	List() ([]SupplierOrder, error)
-	ListByWave(waveID uint) ([]SupplierOrder, error)
-	DeleteDraftsByWave(waveID uint) error
+	Create(ctx context.Context, order *SupplierOrder) error
+	FindByID(ctx context.Context, id uint) (*SupplierOrder, error)
+	List(ctx context.Context) ([]SupplierOrder, error)
+	ListByWave(ctx context.Context, waveID uint) ([]SupplierOrder, error)
+	DeleteDraftsByWave(ctx context.Context, waveID uint) error
 
-	CreateLine(line *SupplierOrderLine) error
-	ListLinesByOrder(orderID uint) ([]SupplierOrderLine, error)
-	FindLineByID(id uint) (*SupplierOrderLine, error)
-	DeleteLinesByOrder(orderID uint) error
+	CreateLine(ctx context.Context, line *SupplierOrderLine) error
+	ListLinesByOrder(ctx context.Context, orderID uint) ([]SupplierOrderLine, error)
+	FindLineByID(ctx context.Context, id uint) (*SupplierOrderLine, error)
+	DeleteLinesByOrder(ctx context.Context, orderID uint) error
 
 	// AtomicCreateSupplierOrder creates order + lines + optional basis pin in one transaction.
-	AtomicCreateSupplierOrder(order *SupplierOrder, lines []*SupplierOrderLine, pin *BasisPinParam) error
+	AtomicCreateSupplierOrder(ctx context.Context, order *SupplierOrder, lines []*SupplierOrderLine, pin *BasisPinParam) error
 
-	Update(order *SupplierOrder) error
+	Update(ctx context.Context, order *SupplierOrder) error
 }
 
 // AllocationPolicyRuleRepository defines persistence operations for AllocationPolicyRule.
 type AllocationPolicyRuleRepository interface {
-	Create(rule *AllocationPolicyRule) error
-	FindByID(id uint) (*AllocationPolicyRule, error)
-	ListByWave(waveID uint) ([]AllocationPolicyRule, error)
-	Update(rule *AllocationPolicyRule) error
-	Delete(id uint) error
-	DeleteByWave(waveID uint) error
+	Create(ctx context.Context, rule *AllocationPolicyRule) error
+	FindByID(ctx context.Context, id uint) (*AllocationPolicyRule, error)
+	ListByWave(ctx context.Context, waveID uint) ([]AllocationPolicyRule, error)
+	Update(ctx context.Context, rule *AllocationPolicyRule) error
+	Delete(ctx context.Context, id uint) error
+	DeleteByWave(ctx context.Context, waveID uint) error
 }
 
 // WaveDemandAssignmentRepository defines persistence operations for wave-demand linkage.
 type WaveDemandAssignmentRepository interface {
-	Create(assignment *WaveDemandAssignment) error
-	DeleteByWaveAndDocument(waveID uint, demandDocumentID uint) error
-	DeleteByWave(waveID uint) error
-	ListByWave(waveID uint) ([]WaveDemandAssignment, error)
-	ListByDemandDocument(docID uint) ([]WaveDemandAssignment, error)
-	ListDemandDocumentsByWave(waveID uint) ([]DemandDocument, error)
+	Create(ctx context.Context, assignment *WaveDemandAssignment) error
+	DeleteByWaveAndDocument(ctx context.Context, waveID uint, demandDocumentID uint) error
+	DeleteByWave(ctx context.Context, waveID uint) error
+	ListByWave(ctx context.Context, waveID uint) ([]WaveDemandAssignment, error)
+	ListByDemandDocument(ctx context.Context, docID uint) ([]WaveDemandAssignment, error)
+	ListDemandDocumentsByWave(ctx context.Context, waveID uint) ([]DemandDocument, error)
 }
 
 // ShipmentRepository defines persistence operations for Shipment and ShipmentLine.
 type ShipmentRepository interface {
-	Create(shipment *Shipment) error
-	FindByID(id uint) (*Shipment, error)
-	ListBySupplierOrder(supplierOrderID uint) ([]Shipment, error)
-	ListByWave(waveID uint) ([]Shipment, error)
+	Create(ctx context.Context, shipment *Shipment) error
+	FindByID(ctx context.Context, id uint) (*Shipment, error)
+	ListBySupplierOrder(ctx context.Context, supplierOrderID uint) ([]Shipment, error)
+	ListByWave(ctx context.Context, waveID uint) ([]Shipment, error)
 
-	CreateLine(line *ShipmentLine) error
-	ListLinesByShipment(shipmentID uint) ([]ShipmentLine, error)
+	CreateLine(ctx context.Context, line *ShipmentLine) error
+	ListLinesByShipment(ctx context.Context, shipmentID uint) ([]ShipmentLine, error)
 
 	// SumShippedQuantityBySOL returns the total quantity already shipped for a given
 	// SupplierOrderLine across all existing shipments. Used for cumulative over-shipment
 	// validation before persisting a new shipment.
-	SumShippedQuantityBySOL(supplierOrderLineID uint) (int, error)
+	SumShippedQuantityBySOL(ctx context.Context, supplierOrderLineID uint) (int, error)
 
 	// AtomicCreateShipment creates a shipment, its lines, and optional basis pin atomically.
-	AtomicCreateShipment(shipment *Shipment, lines []*ShipmentLine, pin *BasisPinParam) error
+	AtomicCreateShipment(ctx context.Context, shipment *Shipment, lines []*ShipmentLine, pin *BasisPinParam) error
 }
 
 // ChannelSyncRepository defines persistence operations for ChannelSyncJob and ChannelSyncItem.
 type ChannelSyncRepository interface {
-	CreateJob(job *ChannelSyncJob) error
-	FindJobByID(id uint) (*ChannelSyncJob, error)
-	ListJobsByWave(waveID uint) ([]ChannelSyncJob, error)
-	SaveJob(job *ChannelSyncJob) error
+	CreateJob(ctx context.Context, job *ChannelSyncJob) error
+	FindJobByID(ctx context.Context, id uint) (*ChannelSyncJob, error)
+	ListJobsByWave(ctx context.Context, waveID uint) ([]ChannelSyncJob, error)
+	SaveJob(ctx context.Context, job *ChannelSyncJob) error
 
-	CreateItem(item *ChannelSyncItem) error
-	SaveItem(item *ChannelSyncItem) error
-	ListItemsByJob(jobID uint) ([]ChannelSyncItem, error)
+	CreateItem(ctx context.Context, item *ChannelSyncItem) error
+	SaveItem(ctx context.Context, item *ChannelSyncItem) error
+	ListItemsByJob(ctx context.Context, jobID uint) ([]ChannelSyncItem, error)
 
 	// AtomicCreateChannelSync creates a job, its items, and optional basis pin atomically.
-	AtomicCreateChannelSync(job *ChannelSyncJob, items []*ChannelSyncItem, pin *BasisPinParam) error
+	AtomicCreateChannelSync(ctx context.Context, job *ChannelSyncJob, items []*ChannelSyncItem, pin *BasisPinParam) error
 
-	CountJobsByProfileID(profileID uint) (int64, error)
+	CountJobsByProfileID(ctx context.Context, profileID uint) (int64, error)
 }
 
 // ChannelClosureDecisionRepository defines persistence operations for channel closure decision records.
 type ChannelClosureDecisionRepository interface {
-	Create(record *ChannelClosureDecisionRecord) error
-	AtomicCreate(records []*ChannelClosureDecisionRecord) error
-	ListByFulfillmentLine(fulfillmentLineID uint) ([]ChannelClosureDecisionRecord, error)
-	ListByWave(waveID uint) ([]ChannelClosureDecisionRecord, error)
-	CountByProfileID(profileID uint) (int64, error)
+	Create(ctx context.Context, record *ChannelClosureDecisionRecord) error
+	AtomicCreate(ctx context.Context, records []*ChannelClosureDecisionRecord) error
+	ListByFulfillmentLine(ctx context.Context, fulfillmentLineID uint) ([]ChannelClosureDecisionRecord, error)
+	ListByWave(ctx context.Context, waveID uint) ([]ChannelClosureDecisionRecord, error)
+	CountByProfileID(ctx context.Context, profileID uint) (int64, error)
 }
 
 // IntegrationProfileRepository defines persistence operations for IntegrationProfile.
 type IntegrationProfileRepository interface {
-	Create(profile *IntegrationProfile) error
-	FindByID(id uint) (*IntegrationProfile, error)
-	FindByProfileKey(profileKey string) (*IntegrationProfile, error)
-	List() ([]IntegrationProfile, error)
-	Update(profile *IntegrationProfile) error
-	Delete(id uint) error
+	Create(ctx context.Context, profile *IntegrationProfile) error
+	FindByID(ctx context.Context, id uint) (*IntegrationProfile, error)
+	FindByProfileKey(ctx context.Context, profileKey string) (*IntegrationProfile, error)
+	List(ctx context.Context) ([]IntegrationProfile, error)
+	Update(ctx context.Context, profile *IntegrationProfile) error
+	Delete(ctx context.Context, id uint) error
 }
 
 // FulfillmentAdjustmentRepository defines persistence operations for FulfillmentAdjustment.
 type FulfillmentAdjustmentRepository interface {
-	Create(adj *FulfillmentAdjustment) error
-	FindByID(id uint) (*FulfillmentAdjustment, error)
-	Update(adj *FulfillmentAdjustment) error
-	Delete(id uint) error
-	DeleteByWave(waveID uint) error
-	ListByWave(waveID uint) ([]FulfillmentAdjustment, error)
-	ListByFulfillmentLine(fulfillmentLineID uint) ([]FulfillmentAdjustment, error)
+	Create(ctx context.Context, adj *FulfillmentAdjustment) error
+	FindByID(ctx context.Context, id uint) (*FulfillmentAdjustment, error)
+	Update(ctx context.Context, adj *FulfillmentAdjustment) error
+	Delete(ctx context.Context, id uint) error
+	DeleteByWave(ctx context.Context, waveID uint) error
+	ListByWave(ctx context.Context, waveID uint) ([]FulfillmentAdjustment, error)
+	ListByFulfillmentLine(ctx context.Context, fulfillmentLineID uint) ([]FulfillmentAdjustment, error)
 }
 
 // DocumentTemplateRepository defines persistence operations for DocumentTemplate.
 type DocumentTemplateRepository interface {
-	Create(t *DocumentTemplate) error
-	FindByID(id uint) (*DocumentTemplate, error)
-	FindByKey(key string) (*DocumentTemplate, error)
-	List() ([]DocumentTemplate, error)
-	ListByDocumentType(docType string) ([]DocumentTemplate, error)
+	Create(ctx context.Context, t *DocumentTemplate) error
+	FindByID(ctx context.Context, id uint) (*DocumentTemplate, error)
+	FindByKey(ctx context.Context, key string) (*DocumentTemplate, error)
+	List(ctx context.Context) ([]DocumentTemplate, error)
+	ListByDocumentType(ctx context.Context, docType string) ([]DocumentTemplate, error)
 }
 
 // ProfileTemplateBindingRepository defines persistence operations for IntegrationProfileTemplateBinding.
 type ProfileTemplateBindingRepository interface {
-	Create(b *IntegrationProfileTemplateBinding) error
-	ListByProfile(profileID uint) ([]IntegrationProfileTemplateBinding, error)
-	FindDefaultByProfileAndType(profileID uint, docType string) (*IntegrationProfileTemplateBinding, error)
-	Delete(id uint) error
-	CountByProfileID(profileID uint) (int64, error)
+	Create(ctx context.Context, b *IntegrationProfileTemplateBinding) error
+	ListByProfile(ctx context.Context, profileID uint) ([]IntegrationProfileTemplateBinding, error)
+	FindDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) (*IntegrationProfileTemplateBinding, error)
+	Delete(ctx context.Context, id uint) error
+	CountByProfileID(ctx context.Context, profileID uint) (int64, error)
 }
 
 // HistoryScopeRepository defines persistence operations for HistoryScope.
 type HistoryScopeRepository interface {
-	Create(scope *HistoryScope) error
-	FindByID(id uint) (*HistoryScope, error)
-	FindByScopeTypeAndKey(scopeType string, scopeKey string) (*HistoryScope, error)
-	UpdateHead(scopeID uint, headNodeID uint) error
-	FindOrCreate(scopeType string, scopeKey string) (*HistoryScope, error)
+	Create(ctx context.Context, scope *HistoryScope) error
+	FindByID(ctx context.Context, id uint) (*HistoryScope, error)
+	FindByScopeTypeAndKey(ctx context.Context, scopeType string, scopeKey string) (*HistoryScope, error)
+	UpdateHead(ctx context.Context, scopeID uint, headNodeID uint) error
+	FindOrCreate(ctx context.Context, scopeType string, scopeKey string) (*HistoryScope, error)
 }
 
 // HistoryNodeRepository defines persistence operations for HistoryNode.
 type HistoryNodeRepository interface {
-	Create(node *HistoryNode) error
-	FindByID(id uint) (*HistoryNode, error)
-	UpdatePreferredRedoChild(nodeID uint, childID uint) error
-	ListByScopeRecent(scopeID uint, limit int) ([]HistoryNode, error)
-	ListByScope(scopeID uint) ([]HistoryNode, error)
-	DeleteByID(nodeID uint) error
+	Create(ctx context.Context, node *HistoryNode) error
+	FindByID(ctx context.Context, id uint) (*HistoryNode, error)
+	UpdatePreferredRedoChild(ctx context.Context, nodeID uint, childID uint) error
+	ListByScopeRecent(ctx context.Context, scopeID uint, limit int) ([]HistoryNode, error)
+	ListByScope(ctx context.Context, scopeID uint) ([]HistoryNode, error)
+	DeleteByID(ctx context.Context, nodeID uint) error
 }
 
 // HistoryCheckpointRepository defines persistence operations for HistoryCheckpoint.
 type HistoryCheckpointRepository interface {
-	Create(cp *HistoryCheckpoint) error
-	FindByNodeID(nodeID uint) (*HistoryCheckpoint, error)
-	DeleteByNodeID(nodeID uint) error
+	Create(ctx context.Context, cp *HistoryCheckpoint) error
+	FindByNodeID(ctx context.Context, nodeID uint) (*HistoryCheckpoint, error)
+	DeleteByNodeID(ctx context.Context, nodeID uint) error
 }
 
 // HistoryPinRepository defines persistence operations for HistoryPin.
 type HistoryPinRepository interface {
-	Create(pin *HistoryPin) error
-	ListByNodeID(nodeID uint) ([]HistoryPin, error)
-	CountByNodeID(nodeID uint) (int64, error)
-	ListPinnedNodeIDsByScope(scopeID uint) ([]uint, error)
+	Create(ctx context.Context, pin *HistoryPin) error
+	ListByNodeID(ctx context.Context, nodeID uint) ([]HistoryPin, error)
+	CountByNodeID(ctx context.Context, nodeID uint) (int64, error)
+	ListPinnedNodeIDsByScope(ctx context.Context, scopeID uint) ([]uint, error)
 }
 
 // ProductMasterRepository defines persistence operations for ProductMaster.
 type ProductMasterRepository interface {
-	Create(master *ProductMaster) error
-	FindByID(id uint) (*ProductMaster, error)
-	List() ([]ProductMaster, error)
-	FindByPlatformAndSKU(platform, sku string) (*ProductMaster, error)
-	Update(master *ProductMaster) error
+	Create(ctx context.Context, master *ProductMaster) error
+	FindByID(ctx context.Context, id uint) (*ProductMaster, error)
+	List(ctx context.Context) ([]ProductMaster, error)
+	FindByPlatformAndSKU(ctx context.Context, platform, sku string) (*ProductMaster, error)
+	Update(ctx context.Context, master *ProductMaster) error
 }
 
 // ProductRepository defines persistence operations for Product.
 type ProductRepository interface {
-	Create(product *Product) error
-	FindByID(id uint) (*Product, error)
-	FindByWaveAndID(waveID uint, id uint) (*Product, error)
-	ListByWave(waveID uint) ([]Product, error)
-	FindByWaveAndSKU(waveID uint, platform, sku string) (*Product, error)
-	DeleteByWave(waveID uint) error
+	Create(ctx context.Context, product *Product) error
+	FindByID(ctx context.Context, id uint) (*Product, error)
+	FindByWaveAndID(ctx context.Context, waveID uint, id uint) (*Product, error)
+	ListByWave(ctx context.Context, waveID uint) ([]Product, error)
+	FindByWaveAndSKU(ctx context.Context, waveID uint, platform, sku string) (*Product, error)
+	DeleteByWave(ctx context.Context, waveID uint) error
 }
 
 // CarrierMappingRepository defines persistence operations for CarrierMapping.
 type CarrierMappingRepository interface {
-	Create(mapping *CarrierMapping) error
-	ListByProfile(profileID uint) ([]CarrierMapping, error)
-	FindByProfileAndInternal(profileID uint, internalCode string) (*CarrierMapping, error)
-	Delete(id uint) error
+	Create(ctx context.Context, mapping *CarrierMapping) error
+	ListByProfile(ctx context.Context, profileID uint) ([]CarrierMapping, error)
+	FindByProfileAndInternal(ctx context.Context, profileID uint, internalCode string) (*CarrierMapping, error)
+	Delete(ctx context.Context, id uint) error
 }
 
 // MergeSuggestion represents a suggestion to merge two customer profiles.
@@ -290,10 +292,10 @@ type DuplicateGroup struct {
 
 // MergeSuggestionRepository defines persistence operations for MergeSuggestion.
 type MergeSuggestionRepository interface {
-	ListPending() ([]MergeSuggestion, error)
-	Dismiss(id uint) error
-	CountBySourceAndTarget(sourceID, targetID uint) (int64, error)
-	Create(suggestion *MergeSuggestion) error
-	FindEmailDuplicates() ([]DuplicateGroup, error)
-	FindPhoneDuplicates() ([]DuplicateGroup, error)
+	ListPending(ctx context.Context) ([]MergeSuggestion, error)
+	Dismiss(ctx context.Context, id uint) error
+	CountBySourceAndTarget(ctx context.Context, sourceID, targetID uint) (int64, error)
+	Create(ctx context.Context, suggestion *MergeSuggestion) error
+	FindEmailDuplicates(ctx context.Context) ([]DuplicateGroup, error)
+	FindPhoneDuplicates(ctx context.Context) ([]DuplicateGroup, error)
 }

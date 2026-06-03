@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -21,14 +22,14 @@ const snapshotSchemaVersion = "3"
 //	"2" — adds Participants + FulfillmentLines; IDs preserved on restore
 //	"3" — adds ChannelClosureDecisionRecords to the mutable local wave snapshot
 type WaveSnapshot struct {
-	WaveID           uint                               `json:"wave_id"`
-	Rules            []domain.AllocationPolicyRule      `json:"rules"`
-	Adjustments      []domain.FulfillmentAdjustment     `json:"adjustments"`
-	Assignments      []domain.WaveDemandAssignment      `json:"assignments"`
-	Participants     []domain.WaveParticipantSnapshot   `json:"participants"`
-	FulfillmentLines []domain.FulfillmentLine           `json:"fulfillment_lines"`
+	WaveID           uint                                  `json:"wave_id"`
+	Rules            []domain.AllocationPolicyRule         `json:"rules"`
+	Adjustments      []domain.FulfillmentAdjustment        `json:"adjustments"`
+	Assignments      []domain.WaveDemandAssignment         `json:"assignments"`
+	Participants     []domain.WaveParticipantSnapshot      `json:"participants"`
+	FulfillmentLines []domain.FulfillmentLine              `json:"fulfillment_lines"`
 	ClosureDecisions []domain.ChannelClosureDecisionRecord `json:"closure_decisions,omitempty"`
-	SchemaVersion    string                             `json:"schema_version"`
+	SchemaVersion    string                                `json:"schema_version"`
 }
 
 // WaveSnapshotService captures and restores wave mutable state for checkpoint-based undo.
@@ -69,35 +70,35 @@ func NewWaveSnapshotService(
 // CaptureSnapshot serializes the wave's current mutable local state to JSON.
 // Includes participants and fulfillment lines so undo of GenerateParticipants /
 // ApplyAllocationRules fully restores prior state.
-func (s *WaveSnapshotService) CaptureSnapshot(waveID uint) (string, error) {
-	rules, err := s.ruleRepo.ListByWave(waveID)
+func (s *WaveSnapshotService) CaptureSnapshot(ctx context.Context, waveID uint) (string, error) {
+	rules, err := s.ruleRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", fmt.Errorf("snapshot: list rules for wave %d: %w", waveID, err)
 	}
 
-	adjs, err := s.adjRepo.ListByWave(waveID)
+	adjs, err := s.adjRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", fmt.Errorf("snapshot: list adjustments for wave %d: %w", waveID, err)
 	}
 
-	assignments, err := s.assignmentRepo.ListByWave(waveID)
+	assignments, err := s.assignmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", fmt.Errorf("snapshot: list assignments for wave %d: %w", waveID, err)
 	}
 
-	participants, err := s.waveRepo.ListParticipantsByWave(waveID)
+	participants, err := s.waveRepo.ListParticipantsByWave(ctx, waveID)
 	if err != nil {
 		return "", fmt.Errorf("snapshot: list participants for wave %d: %w", waveID, err)
 	}
 
-	lines, err := s.fulfillRepo.ListByWave(waveID)
+	lines, err := s.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return "", fmt.Errorf("snapshot: list fulfillment lines for wave %d: %w", waveID, err)
 	}
 
 	var decisions []domain.ChannelClosureDecisionRecord
 	if s.closureRepo != nil {
-		decisions, err = s.closureRepo.ListByWave(waveID)
+		decisions, err = s.closureRepo.ListByWave(ctx, waveID)
 		if err != nil {
 			return "", fmt.Errorf("snapshot: list closure decisions for wave %d: %w", waveID, err)
 		}
@@ -123,12 +124,12 @@ func (s *WaveSnapshotService) CaptureSnapshot(waveID uint) (string, error) {
 
 // CaptureSnapshotForSupplierOrder resolves the wave from a supplier order and
 // captures the corresponding wave-local snapshot.
-func (s *WaveSnapshotService) CaptureSnapshotForSupplierOrder(supplierOrderID uint) (string, error) {
+func (s *WaveSnapshotService) CaptureSnapshotForSupplierOrder(ctx context.Context, supplierOrderID uint) (string, error) {
 	var order persistence.SupplierOrder
 	if err := s.db.First(&order, supplierOrderID).Error; err != nil {
 		return "", fmt.Errorf("snapshot: find supplier order %d: %w", supplierOrderID, err)
 	}
-	return s.CaptureSnapshot(order.WaveID)
+	return s.CaptureSnapshot(ctx, order.WaveID)
 }
 
 // RestoreSnapshot parses a WaveSnapshot JSON and replaces the wave's mutable
@@ -141,7 +142,7 @@ func (s *WaveSnapshotService) CaptureSnapshotForSupplierOrder(supplierOrderID ui
 // Hard deletes are used throughout so that the original IDs are fully freed
 // before re-insertion; GORM's Create with a non-zero primary key then uses the
 // specified value directly in SQLite.
-func (s *WaveSnapshotService) RestoreSnapshot(payload string) error {
+func (s *WaveSnapshotService) RestoreSnapshot(ctx context.Context, payload string) error {
 	var snap WaveSnapshot
 	if err := json.Unmarshal([]byte(payload), &snap); err != nil {
 		return fmt.Errorf("snapshot: unmarshal payload: %w", err)
@@ -152,23 +153,23 @@ func (s *WaveSnapshotService) RestoreSnapshot(payload string) error {
 	// Hard-delete all mutable wave state.  Order matters: fulfillment lines
 	// reference participants via WaveParticipantSnapshotID; delete lines first
 	// so the participant rows are free to drop.
-	if err := s.fulfillRepo.DeleteByWave(waveID); err != nil {
+	if err := s.fulfillRepo.DeleteByWave(ctx, waveID); err != nil {
 		return fmt.Errorf("snapshot: delete fulfillment lines for wave %d: %w", waveID, err)
 	}
-	if err := s.waveRepo.DeleteParticipantsByWave(waveID); err != nil {
+	if err := s.waveRepo.DeleteParticipantsByWave(ctx, waveID); err != nil {
 		return fmt.Errorf("snapshot: delete participants for wave %d: %w", waveID, err)
 	}
-	if err := s.ruleRepo.DeleteByWave(waveID); err != nil {
+	if err := s.ruleRepo.DeleteByWave(ctx, waveID); err != nil {
 		return fmt.Errorf("snapshot: delete rules for wave %d: %w", waveID, err)
 	}
-	if err := s.adjRepo.DeleteByWave(waveID); err != nil {
+	if err := s.adjRepo.DeleteByWave(ctx, waveID); err != nil {
 		return fmt.Errorf("snapshot: delete adjustments for wave %d: %w", waveID, err)
 	}
-	if err := s.assignmentRepo.DeleteByWave(waveID); err != nil {
+	if err := s.assignmentRepo.DeleteByWave(ctx, waveID); err != nil {
 		return fmt.Errorf("snapshot: delete assignments for wave %d: %w", waveID, err)
 	}
 	if s.closureRepo != nil {
-		records, err := s.closureRepo.ListByWave(waveID)
+		records, err := s.closureRepo.ListByWave(ctx, waveID)
 		if err != nil {
 			return fmt.Errorf("snapshot: list closure decisions for delete in wave %d: %w", waveID, err)
 		}
@@ -228,8 +229,8 @@ func (s *WaveSnapshotService) RestoreSnapshot(payload string) error {
 
 	for i := range snap.Participants {
 		pt := snap.Participants[i]
-		p := persistence.ToPersistenceWaveParticipantSnapshot(&pt)
-		// ToPersistenceWaveParticipantSnapshot already copies d.ID into the struct.
+		p := persistence.WaveParticipantSnapshotFromDomain(&pt)
+		// WaveParticipantSnapshotFromDomain already copies d.ID into the struct.
 		if err := s.db.Create(p).Error; err != nil {
 			return fmt.Errorf("snapshot: restore participant %d (wave %d): %w", pt.ID, waveID, err)
 		}
@@ -263,7 +264,7 @@ func (s *WaveSnapshotService) RestoreSnapshot(payload string) error {
 
 	for i := range snap.ClosureDecisions {
 		cd := snap.ClosureDecisions[i]
-		p := persistence.ToPersistenceChannelClosureDecisionRecord(&cd)
+		p := persistence.ChannelClosureDecisionRecordFromDomain(&cd)
 		p.ID = cd.ID
 		if err := s.db.Create(p).Error; err != nil {
 			return fmt.Errorf("snapshot: restore closure decision %d (wave %d): %w", cd.ID, waveID, err)

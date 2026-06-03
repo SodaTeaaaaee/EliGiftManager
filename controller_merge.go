@@ -22,15 +22,17 @@ func NewMergeController() *MergeController {
 // back cleanly instead of leaving data half-migrated.
 func (c *MergeController) MergeProfiles(input dto.MergeProfilesInput) (*dto.MergeProfilesResult, error) {
 	var result *dto.MergeProfilesResult
+	ctx := appContext
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		repos := infra.NewTxRepos(tx)
 		mergeUC := app.NewProfileMergeUseCase(
-			infra.NewProfileRepository(tx),
-			infra.NewAddressRepository(tx),
-			infra.NewDemandRepository(tx),
-			infra.NewWaveRepository(tx),
-			infra.NewFulfillmentRepository(tx),
+			repos.CustomerProfile,
+			repos.Address,
+			repos.DemandRepo,
+			repos.WaveRepo,
+			repos.FulfillRepo,
 		)
-		r, mergeErr := mergeUC.MergeProfiles(input)
+		r, mergeErr := mergeUC.MergeProfiles(ctx, input)
 		if mergeErr != nil {
 			return mergeErr
 		}

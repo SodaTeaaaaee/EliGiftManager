@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -25,8 +26,8 @@ func NewUndoRedoUseCase(
 	return uc
 }
 
-func (uc *undoRedoUseCase) Undo(waveID uint) (string, error) {
-	scope, err := uc.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+func (uc *undoRedoUseCase) Undo(ctx context.Context, waveID uint) (string, error) {
+	scope, err := uc.scopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return "", err
 	}
@@ -34,7 +35,7 @@ func (uc *undoRedoUseCase) Undo(waveID uint) (string, error) {
 		return "", fmt.Errorf("no history for wave %d", waveID)
 	}
 
-	currentNode, err := uc.nodeRepo.FindByID(scope.CurrentHeadNodeID)
+	currentNode, err := uc.nodeRepo.FindByID(ctx, scope.CurrentHeadNodeID)
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +44,7 @@ func (uc *undoRedoUseCase) Undo(waveID uint) (string, error) {
 	}
 
 	if uc.patchExecutor != nil && currentNode.InversePatchPayload != "" {
-		if err := uc.patchExecutor.ApplyInversePatch(currentNode.InversePatchPayload); err != nil {
+		if err := uc.patchExecutor.ApplyInversePatch(ctx, currentNode.InversePatchPayload); err != nil {
 			if errors.Is(err, ErrOperationNotUndoable) {
 				return "", fmt.Errorf("cannot undo %q: %w", currentNode.CommandSummary, err)
 			}
@@ -51,14 +52,14 @@ func (uc *undoRedoUseCase) Undo(waveID uint) (string, error) {
 		}
 	}
 
-	if err := uc.scopeRepo.UpdateHead(scope.ID, currentNode.ParentNodeID); err != nil {
+	if err := uc.scopeRepo.UpdateHead(ctx, scope.ID, currentNode.ParentNodeID); err != nil {
 		return "", err
 	}
 	return currentNode.CommandSummary, nil
 }
 
-func (uc *undoRedoUseCase) Redo(waveID uint) (string, error) {
-	scope, err := uc.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+func (uc *undoRedoUseCase) Redo(ctx context.Context, waveID uint) (string, error) {
+	scope, err := uc.scopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +67,7 @@ func (uc *undoRedoUseCase) Redo(waveID uint) (string, error) {
 		return "", fmt.Errorf("no history for wave %d", waveID)
 	}
 
-	currentNode, err := uc.nodeRepo.FindByID(scope.CurrentHeadNodeID)
+	currentNode, err := uc.nodeRepo.FindByID(ctx, scope.CurrentHeadNodeID)
 	if err != nil {
 		return "", err
 	}
@@ -74,7 +75,7 @@ func (uc *undoRedoUseCase) Redo(waveID uint) (string, error) {
 		return "", fmt.Errorf("nothing to redo")
 	}
 
-	childNode, err := uc.nodeRepo.FindByID(currentNode.PreferredRedoChildID)
+	childNode, err := uc.nodeRepo.FindByID(ctx, currentNode.PreferredRedoChildID)
 	if err != nil {
 		return "", err
 	}
@@ -83,7 +84,7 @@ func (uc *undoRedoUseCase) Redo(waveID uint) (string, error) {
 	}
 
 	if uc.patchExecutor != nil && childNode.PatchPayload != "" {
-		if err := uc.patchExecutor.ApplyPatch(childNode.PatchPayload); err != nil {
+		if err := uc.patchExecutor.ApplyPatch(ctx, childNode.PatchPayload); err != nil {
 			if errors.Is(err, ErrOperationNotUndoable) {
 				return "", fmt.Errorf("cannot redo %q: %w", childNode.CommandSummary, err)
 			}
@@ -91,7 +92,7 @@ func (uc *undoRedoUseCase) Redo(waveID uint) (string, error) {
 		}
 	}
 
-	if err := uc.scopeRepo.UpdateHead(scope.ID, currentNode.PreferredRedoChildID); err != nil {
+	if err := uc.scopeRepo.UpdateHead(ctx, scope.ID, currentNode.PreferredRedoChildID); err != nil {
 		return "", err
 	}
 	return childNode.CommandSummary, nil

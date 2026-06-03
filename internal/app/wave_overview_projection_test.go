@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -11,15 +12,17 @@ import (
 // Used so existing projection tests are unaffected by drift detection.
 type noopDriftUC struct{}
 
-func (noopDriftUC) DetectWaveBasisDrift(_ uint, _ string) ([]dto.BasisDriftSignalDTO, error) {
+func (noopDriftUC) DetectWaveBasisDrift(ctx context.Context, _ uint, _ string) ([]dto.BasisDriftSignalDTO, error) {
 	return nil, nil
 }
 
 // noopHistoryHeadUC is a no-op HistoryHeadQueryUseCase that always returns empty values.
 type noopHistoryHeadUC struct{}
 
-func (noopHistoryHeadUC) GetCurrentProjectionHash(_ uint) (string, error) { return "", nil }
-func (noopHistoryHeadUC) GetCurrentHeadNodeIDAndHash(_ uint) (uint, string, error) {
+func (noopHistoryHeadUC) GetCurrentProjectionHash(ctx context.Context, _ uint) (string, error) {
+	return "", nil
+}
+func (noopHistoryHeadUC) GetCurrentHeadNodeIDAndHash(ctx context.Context, _ uint) (uint, string, error) {
 	return 0, "", nil
 }
 
@@ -47,7 +50,7 @@ func (p *projTestSetup) addJob(waveID uint, status string) uint {
 		Direction: "push_tracking",
 		Status:    status,
 	}
-	if err := p.syncRepo.CreateJob(job); err != nil {
+	if err := p.syncRepo.CreateJob(context.Background(), job); err != nil {
 		panic("projTestSetup.addJob: " + err.Error())
 	}
 	return job.ID
@@ -59,7 +62,7 @@ func (p *projTestSetup) addItem(jobID uint, fulfillmentLineID uint, status strin
 		FulfillmentLineID: fulfillmentLineID,
 		Status:            status,
 	}
-	if err := p.syncRepo.CreateItem(item); err != nil {
+	if err := p.syncRepo.CreateItem(context.Background(), item); err != nil {
 		panic("projTestSetup.addItem: " + err.Error())
 	}
 }
@@ -71,7 +74,7 @@ func (p *projTestSetup) addDecision(waveID uint, fulfillmentLineID uint, kind st
 		DecisionKind:      kind,
 		OperatorID:        "op-test",
 	}
-	if err := p.closureRepo.Create(record); err != nil {
+	if err := p.closureRepo.Create(context.Background(), record); err != nil {
 		panic("projTestSetup.addDecision: " + err.Error())
 	}
 }
@@ -103,7 +106,7 @@ func TestProjectWaveOverviewNoJobsNoDecisions(t *testing.T) {
 	t.Parallel()
 	p := newProjTestSetup()
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +133,7 @@ func TestProjectWaveOverviewActivePendingJobsSetSyncingBack(t *testing.T) {
 	p.addJob(1, "pending")
 	p.addJob(1, "success")
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -159,7 +162,7 @@ func TestProjectWaveOverviewDecisionsWithoutManualCompletedSetsAwaitingManualClo
 	p.addItem(failedJobID, 101, "failed")
 	// No decisions yet — user hasn't acted on the failures
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -186,7 +189,7 @@ func TestProjectWaveOverviewPartialDecisionsCoverageStillAwaiting(t *testing.T) 
 	// Only 1 of 2 failed items has a decision — still awaiting
 	p.addDecision(1, 100, "mark_sync_unsupported")
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,7 +213,7 @@ func TestProjectWaveOverviewAllFailedItemsCoveredWithJobsSetsClosed(t *testing.T
 	p.addDecision(1, 100, "mark_sync_unsupported")
 	p.addDecision(1, 101, "mark_sync_completed_manually")
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -231,7 +234,7 @@ func TestProjectWaveOverviewManualClosureCandidatesWithoutJobsAwaitingManualClos
 	t.Parallel()
 	p := newProjTestSetup()
 
-	result, err := p.uc.ProjectWaveOverview(baseOverviewWithCandidates(1, "execution", 0, 2))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverviewWithCandidates(1, "execution", 0, 2))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -250,7 +253,7 @@ func TestProjectWaveOverviewManualClosureCandidatesCoveredWithoutJobsSetsClosed(
 	p.addDecision(1, 100, "mark_sync_completed_manually")
 	p.addDecision(1, 101, "mark_sync_skipped")
 
-	result, err := p.uc.ProjectWaveOverview(baseOverviewWithCandidates(1, "execution", 0, 2))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverviewWithCandidates(1, "execution", 0, 2))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -34,8 +35,8 @@ func NewBasisStampService(
 //
 // Call this BEFORE persisting the external object so its basis fields can be
 // set before the INSERT.
-func (s *BasisStampService) ResolveBasis(waveID uint) (nodeID string, projectionHash string, err error) {
-	nid, hash, err := s.historyHeadUC.GetCurrentHeadNodeIDAndHash(waveID)
+func (s *BasisStampService) ResolveBasis(ctx context.Context, waveID uint) (nodeID string, projectionHash string, err error) {
+	nid, hash, err := s.historyHeadUC.GetCurrentHeadNodeIDAndHash(ctx, waveID)
 	if err != nil {
 		return "", "", err
 	}
@@ -50,7 +51,7 @@ func (s *BasisStampService) ResolveBasis(waveID uint) (nodeID string, projection
 // ResolveBasis; if it is empty the call is a no-op (no history scope existed).
 //
 // Call this AFTER persisting the external object so refID is populated.
-func (s *BasisStampService) CreatePin(basisNodeID string, pinKind string, refType string, refID uint) error {
+func (s *BasisStampService) CreatePin(ctx context.Context, basisNodeID string, pinKind string, refType string, refID uint) error {
 	if basisNodeID == "" {
 		return nil
 	}
@@ -61,7 +62,7 @@ func (s *BasisStampService) CreatePin(basisNodeID string, pinKind string, refTyp
 	if nodeID == 0 {
 		return nil
 	}
-	return s.pinRepo.Create(&domain.HistoryPin{
+	return s.pinRepo.Create(ctx, &domain.HistoryPin{
 		HistoryNodeID: nodeID,
 		PinKind:       pinKind,
 		RefType:       refType,

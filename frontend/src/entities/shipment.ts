@@ -1,8 +1,8 @@
 /**
- * Shipment entity definitions — aligned to Go dto.ShipmentDTO / dto.ShipmentLineDTO.
- * JSON tags in the Go DTO are the authoritative field names.
- * Go `uint` / `int` → TS `number`; Go `string` → TS `string`.
+ * Shipment entity types — domain enums defined here; DTO shapes re-exported
+ * from generated Wails models (wailsjs/go/models.ts).
  */
+import type { dto } from '@/../wailsjs/go/models'
 
 /** Shipment lifecycle status. */
 export type ShipmentStatus =
@@ -13,64 +13,17 @@ export type ShipmentStatus =
   | 'exception'
   | 'returned'
 
-/**
- * Shipment (aligned to Go dto.ShipmentDTO).
- */
-export interface Shipment {
-  id: number
-  supplierOrderId: number
-  supplierPlatform: string
-  shipmentNo: string
-  externalShipmentNo: string
-  carrierCode: string
-  carrierName: string
-  trackingNo: string
-  status: string
-  shippedAt: string
-  basisHistoryNodeId: string
-  basisProjectionHash: string
-  basisPayloadSnapshot: string
-  extraData: string
-  createdAt: string
-  updatedAt: string
-  lines: ShipmentLine[]
-}
-
 /** Import mode for bulk shipment import. */
 export type ImportMode = 'reject_all' | 'skip_invalid'
 
-/**
- * Input for bulk shipment import (aligned to Go dto.ImportShipmentInput).
- */
-export interface ImportShipmentInput {
-  waveId: number
-  integrationProfileId: number
-  importMode?: ImportMode
-  entries: ImportShipmentEntry[]
-}
+/** Shipment DTO — re-exported from generated model. */
+export type Shipment = dto.ShipmentDTO
 
-/**
- * One row in a bulk shipment import (aligned to Go dto.ImportShipmentEntry).
- */
-export interface ImportShipmentEntry {
-  supplierOrderLineId: number
-  fulfillmentLineId: number
-  externalShipmentNo: string
-  carrierCode: string
-  carrierName: string
-  trackingNo: string
-  quantity: number
-  shippedAt: string
-}
+/** ShipmentLine DTO — re-exported from generated model. */
+export type ShipmentLine = dto.ShipmentLineDTO
 
-/**
- * ShipmentLine (aligned to Go dto.ShipmentLineDTO).
- */
-export interface ShipmentLine {
-  id: number
-  shipmentId: number
-  supplierOrderLineId: number
-  fulfillmentLineId: number
-  quantity: number
-  createdAt: string
-}
+/** ImportShipmentInput — re-exported from generated model. */
+export type ImportShipmentInput = dto.ImportShipmentInput
+
+/** ImportShipmentEntry — re-exported from generated model. */
+export type ImportShipmentEntry = dto.ImportShipmentEntry

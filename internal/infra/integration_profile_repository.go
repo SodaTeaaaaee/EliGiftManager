@@ -1,6 +1,8 @@
 package infra
 
 import (
+	"context"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
@@ -14,49 +16,49 @@ func NewIntegrationProfileRepository(db *gorm.DB) domain.IntegrationProfileRepos
 	return &integrationProfileRepository{db: db}
 }
 
-func (r *integrationProfileRepository) Create(profile *domain.IntegrationProfile) error {
-	p := persistence.ToPersistenceIntegrationProfile(profile)
-	if err := r.db.Create(p).Error; err != nil {
+func (r *integrationProfileRepository) Create(ctx context.Context, profile *domain.IntegrationProfile) error {
+	p := persistence.IntegrationProfileFromDomain(profile)
+	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
 		return err
 	}
-	*profile = *persistence.FromPersistenceIntegrationProfile(p)
+	*profile = *persistence.IntegrationProfileToDomain(p)
 	return nil
 }
 
-func (r *integrationProfileRepository) FindByID(id uint) (*domain.IntegrationProfile, error) {
+func (r *integrationProfileRepository) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfile, error) {
 	var p persistence.IntegrationProfile
-	if err := r.db.First(&p, id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&p, id).Error; err != nil {
 		return nil, err
 	}
-	return persistence.FromPersistenceIntegrationProfile(&p), nil
+	return persistence.IntegrationProfileToDomain(&p), nil
 }
 
-func (r *integrationProfileRepository) FindByProfileKey(profileKey string) (*domain.IntegrationProfile, error) {
+func (r *integrationProfileRepository) FindByProfileKey(ctx context.Context, profileKey string) (*domain.IntegrationProfile, error) {
 	var p persistence.IntegrationProfile
-	if err := r.db.Where("profile_key = ?", profileKey).First(&p).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("profile_key = ?", profileKey).First(&p).Error; err != nil {
 		return nil, err
 	}
-	return persistence.FromPersistenceIntegrationProfile(&p), nil
+	return persistence.IntegrationProfileToDomain(&p), nil
 }
 
-func (r *integrationProfileRepository) List() ([]domain.IntegrationProfile, error) {
+func (r *integrationProfileRepository) List(ctx context.Context) ([]domain.IntegrationProfile, error) {
 	var ps []persistence.IntegrationProfile
-	if err := r.db.Find(&ps).Error; err != nil {
+	if err := r.db.WithContext(ctx).Find(&ps).Error; err != nil {
 		return nil, err
 	}
 	result := make([]domain.IntegrationProfile, len(ps))
 	for i, p := range ps {
-		result[i] = *persistence.FromPersistenceIntegrationProfile(&p)
+		result[i] = *persistence.IntegrationProfileToDomain(&p)
 	}
 	return result, nil
 }
 
-func (r *integrationProfileRepository) Update(profile *domain.IntegrationProfile) error {
-	p := persistence.ToPersistenceIntegrationProfile(profile)
+func (r *integrationProfileRepository) Update(ctx context.Context, profile *domain.IntegrationProfile) error {
+	p := persistence.IntegrationProfileFromDomain(profile)
 	p.ID = profile.ID
-	return r.db.Save(p).Error
+	return r.db.WithContext(ctx).Save(p).Error
 }
 
-func (r *integrationProfileRepository) Delete(id uint) error {
-	return r.db.Delete(&persistence.IntegrationProfile{}, id).Error
+func (r *integrationProfileRepository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&persistence.IntegrationProfile{}, id).Error
 }

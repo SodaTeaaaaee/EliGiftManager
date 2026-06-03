@@ -24,45 +24,56 @@ func NewCustomerProfileController() *CustomerProfileController {
 }
 
 func (c *CustomerProfileController) ListCustomerProfiles(keyword, platform string, missingAddressOnly bool) ([]dto.CustomerProfileDTO, error) {
-	return c.uc.ListCustomerProfiles(keyword, platform, missingAddressOnly)
+	ctx := appContext
+	return c.uc.ListCustomerProfiles(ctx, keyword, platform, missingAddressOnly)
 }
 
 func (c *CustomerProfileController) GetCustomerProfile(id uint) (*dto.CustomerProfileDTO, error) {
-	return c.uc.GetCustomerProfile(id)
+	ctx := appContext
+	return c.uc.GetCustomerProfile(ctx, id)
 }
 
 func (c *CustomerProfileController) CreateCustomerProfile(input dto.CreateCustomerProfileInput) (*dto.CustomerProfileDTO, error) {
-	return c.uc.CreateCustomerProfile(input)
+	ctx := appContext
+	return c.uc.CreateCustomerProfile(ctx, input)
 }
 
 func (c *CustomerProfileController) UpdateCustomerProfile(input dto.UpdateCustomerProfileInput) (*dto.CustomerProfileDTO, error) {
-	return c.uc.UpdateCustomerProfile(input)
+	ctx := appContext
+	return c.uc.UpdateCustomerProfile(ctx, input)
 }
 
 func (c *CustomerProfileController) DeleteCustomerProfile(id uint) error {
-	return c.uc.DeleteCustomerProfile(id)
+	ctx := appContext
+	return c.uc.DeleteCustomerProfile(ctx, id)
 }
 
 func (c *CustomerProfileController) AddCustomerIdentity(input dto.CreateCustomerIdentityInput) (*dto.CustomerIdentityDTO, error) {
-	return c.uc.AddCustomerIdentity(input)
+	ctx := appContext
+	return c.uc.AddCustomerIdentity(ctx, input)
 }
 
 func (c *CustomerProfileController) DeleteCustomerIdentity(id uint) error {
-	return c.uc.DeleteCustomerIdentity(id)
+	ctx := appContext
+	return c.uc.DeleteCustomerIdentity(ctx, id)
 }
 
 func (c *CustomerProfileController) GetMergeSuggestions() ([]dto.MergeSuggestionDTO, error) {
-	return c.uc.GetMergeSuggestions()
+	ctx := appContext
+	return c.uc.GetMergeSuggestions(ctx)
 }
 
 func (c *CustomerProfileController) DismissMergeSuggestion(id uint) error {
-	return c.uc.DismissMergeSuggestion(id)
+	ctx := appContext
+	return c.uc.DismissMergeSuggestion(ctx, id)
 }
 
 func (c *CustomerProfileController) SaveSettings(settings dto.SystemSettingsDTO) error {
-	return c.uc.SaveSettings(settings)
+	ctx := appContext
+	return c.uc.SaveSettings(ctx, settings)
 }
 
 func (c *CustomerProfileController) GetSettings() (dto.SystemSettingsDTO, error) {
-	return c.uc.GetSettings()
+	ctx := appContext
+	return c.uc.GetSettings(ctx)
 }

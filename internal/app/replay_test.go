@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
@@ -481,7 +482,7 @@ func TestReplayAdjustments_ASCOrder_Semantic(t *testing.T) {
 			FulfillmentLineID: uint_ptr(1),
 			AdjustmentKind:    "add",
 			QuantityDelta:     5,
-			CreatedAt:         "2026-01-01T00:00:00Z", // earlier
+			CreatedAt:         time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), // earlier
 		},
 		{
 			ID:                2,
@@ -489,7 +490,7 @@ func TestReplayAdjustments_ASCOrder_Semantic(t *testing.T) {
 			FulfillmentLineID: uint_ptr(1),
 			AdjustmentKind:    "remove",
 			QuantityDelta:     0,
-			CreatedAt:         "2026-01-02T00:00:00Z", // later
+			CreatedAt:         time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC), // later
 		},
 	}
 	// In ASC order: add(+5) → remove(=0). Result = 0.

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -9,9 +10,9 @@ import (
 
 // HistoryGraphQueryUseCase queries the history graph for a wave scope.
 type HistoryGraphQueryUseCase interface {
-	GetHistoryGraph(waveID uint) (*dto.HistoryGraphDTO, error)
-	ListNodeChildren(nodeID uint) ([]dto.HistoryNodeDTO, error)
-	GetNodeDetail(nodeID uint) (*dto.HistoryNodeDetailDTO, error)
+	GetHistoryGraph(ctx context.Context, waveID uint) (*dto.HistoryGraphDTO, error)
+	ListNodeChildren(ctx context.Context, nodeID uint) ([]dto.HistoryNodeDTO, error)
+	GetNodeDetail(ctx context.Context, nodeID uint) (*dto.HistoryNodeDetailDTO, error)
 }
 
 type historyGraphQueryUseCase struct {
@@ -36,8 +37,8 @@ func NewHistoryGraphQueryUseCase(
 }
 
 // GetHistoryGraph returns the full node graph for the given wave.
-func (uc *historyGraphQueryUseCase) GetHistoryGraph(waveID uint) (*dto.HistoryGraphDTO, error) {
-	scope, err := uc.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+func (uc *historyGraphQueryUseCase) GetHistoryGraph(ctx context.Context, waveID uint) (*dto.HistoryGraphDTO, error) {
+	scope, err := uc.scopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return nil, fmt.Errorf("history graph: find scope: %w", err)
 	}
@@ -46,7 +47,7 @@ func (uc *historyGraphQueryUseCase) GetHistoryGraph(waveID uint) (*dto.HistoryGr
 		return &dto.HistoryGraphDTO{Nodes: []dto.HistoryGraphNodeDTO{}}, nil
 	}
 
-	nodes, err := uc.nodeRepo.ListByScope(scope.ID)
+	nodes, err := uc.nodeRepo.ListByScope(ctx, scope.ID)
 	if err != nil {
 		return nil, fmt.Errorf("history graph: list nodes: %w", err)
 	}
@@ -60,7 +61,7 @@ func (uc *historyGraphQueryUseCase) GetHistoryGraph(waveID uint) (*dto.HistoryGr
 	}
 
 	// Collect pinned node IDs for this scope
-	pinnedIDs, err := uc.pinRepo.ListPinnedNodeIDsByScope(scope.ID)
+	pinnedIDs, err := uc.pinRepo.ListPinnedNodeIDsByScope(ctx, scope.ID)
 	if err != nil {
 		return nil, fmt.Errorf("history graph: list pinned nodes: %w", err)
 	}
@@ -95,8 +96,8 @@ func (uc *historyGraphQueryUseCase) GetHistoryGraph(waveID uint) (*dto.HistoryGr
 }
 
 // ListNodeChildren returns all direct children of a node.
-func (uc *historyGraphQueryUseCase) ListNodeChildren(nodeID uint) ([]dto.HistoryNodeDTO, error) {
-	node, err := uc.nodeRepo.FindByID(nodeID)
+func (uc *historyGraphQueryUseCase) ListNodeChildren(ctx context.Context, nodeID uint) ([]dto.HistoryNodeDTO, error) {
+	node, err := uc.nodeRepo.FindByID(ctx, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("history graph: find node: %w", err)
 	}
@@ -105,7 +106,7 @@ func (uc *historyGraphQueryUseCase) ListNodeChildren(nodeID uint) ([]dto.History
 	}
 
 	// List all nodes in the same scope, then filter for parent = nodeID
-	allNodes, err := uc.nodeRepo.ListByScope(node.HistoryScopeID)
+	allNodes, err := uc.nodeRepo.ListByScope(ctx, node.HistoryScopeID)
 	if err != nil {
 		return nil, fmt.Errorf("history graph: list scope nodes: %w", err)
 	}
@@ -123,8 +124,8 @@ func (uc *historyGraphQueryUseCase) ListNodeChildren(nodeID uint) ([]dto.History
 }
 
 // GetNodeDetail returns a node with its pins and checkpoint presence.
-func (uc *historyGraphQueryUseCase) GetNodeDetail(nodeID uint) (*dto.HistoryNodeDetailDTO, error) {
-	node, err := uc.nodeRepo.FindByID(nodeID)
+func (uc *historyGraphQueryUseCase) GetNodeDetail(ctx context.Context, nodeID uint) (*dto.HistoryNodeDetailDTO, error) {
+	node, err := uc.nodeRepo.FindByID(ctx, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("history graph: find node: %w", err)
 	}
@@ -132,12 +133,12 @@ func (uc *historyGraphQueryUseCase) GetNodeDetail(nodeID uint) (*dto.HistoryNode
 		return nil, fmt.Errorf("history graph: node %d not found", nodeID)
 	}
 
-	pins, err := uc.pinRepo.ListByNodeID(nodeID)
+	pins, err := uc.pinRepo.ListByNodeID(ctx, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("history graph: list pins: %w", err)
 	}
 
-	cp, err := uc.checkpointRepo.FindByNodeID(nodeID)
+	cp, err := uc.checkpointRepo.FindByNodeID(ctx, nodeID)
 	if err != nil {
 		return nil, fmt.Errorf("history graph: find checkpoint: %w", err)
 	}

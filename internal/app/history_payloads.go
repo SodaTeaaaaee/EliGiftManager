@@ -30,4 +30,3 @@ func BuildAdjustmentPatch(op string, adj *domain.FulfillmentAdjustment) (string,
 	}
 	return fmt.Sprintf(`{"op":%q,"adjustment_id":%d,"wave_id":%d,"data":%s}`, op, adj.ID, adj.WaveID, data), nil
 }
-

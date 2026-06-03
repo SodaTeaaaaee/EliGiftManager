@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -31,7 +33,7 @@ func newMockShipmentRepo() *mockShipmentRepo {
 
 func (m *mockShipmentRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockShipmentRepo) Create(shipment *domain.Shipment) error {
+func (m *mockShipmentRepo) Create(ctx context.Context, shipment *domain.Shipment) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	shipment.ID = m.next()
@@ -40,7 +42,7 @@ func (m *mockShipmentRepo) Create(shipment *domain.Shipment) error {
 	return nil
 }
 
-func (m *mockShipmentRepo) FindByID(id uint) (*domain.Shipment, error) {
+func (m *mockShipmentRepo) FindByID(ctx context.Context, id uint) (*domain.Shipment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.shipments[id]
@@ -51,7 +53,7 @@ func (m *mockShipmentRepo) FindByID(id uint) (*domain.Shipment, error) {
 	return &cp, nil
 }
 
-func (m *mockShipmentRepo) ListBySupplierOrder(supplierOrderID uint) ([]domain.Shipment, error) {
+func (m *mockShipmentRepo) ListBySupplierOrder(ctx context.Context, supplierOrderID uint) ([]domain.Shipment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.Shipment
@@ -63,7 +65,7 @@ func (m *mockShipmentRepo) ListBySupplierOrder(supplierOrderID uint) ([]domain.S
 	return out, nil
 }
 
-func (m *mockShipmentRepo) ListByWave(waveID uint) ([]domain.Shipment, error) {
+func (m *mockShipmentRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.Shipment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.Shipment
@@ -75,7 +77,7 @@ func (m *mockShipmentRepo) ListByWave(waveID uint) ([]domain.Shipment, error) {
 	return out, nil
 }
 
-func (m *mockShipmentRepo) CreateLine(line *domain.ShipmentLine) error {
+func (m *mockShipmentRepo) CreateLine(ctx context.Context, line *domain.ShipmentLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	line.ID = m.next()
@@ -84,7 +86,7 @@ func (m *mockShipmentRepo) CreateLine(line *domain.ShipmentLine) error {
 	return nil
 }
 
-func (m *mockShipmentRepo) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine, _ *domain.BasisPinParam) error {
+func (m *mockShipmentRepo) AtomicCreateShipment(ctx context.Context, shipment *domain.Shipment, lines []*domain.ShipmentLine, _ *domain.BasisPinParam) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -123,7 +125,7 @@ func (m *mockShipmentRepo) AtomicCreateShipment(shipment *domain.Shipment, lines
 	return nil
 }
 
-func (m *mockShipmentRepo) ListLinesByShipment(shipmentID uint) ([]domain.ShipmentLine, error) {
+func (m *mockShipmentRepo) ListLinesByShipment(ctx context.Context, shipmentID uint) ([]domain.ShipmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ll, ok := m.shipmentLines[shipmentID]
@@ -137,7 +139,7 @@ func (m *mockShipmentRepo) ListLinesByShipment(shipmentID uint) ([]domain.Shipme
 	return out, nil
 }
 
-func (m *mockShipmentRepo) SumShippedQuantityBySOL(supplierOrderLineID uint) (int, error) {
+func (m *mockShipmentRepo) SumShippedQuantityBySOL(ctx context.Context, supplierOrderLineID uint) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	total := 0
@@ -167,7 +169,7 @@ func TestCreateShipmentPersistsShipmentAndLines(t *testing.T) {
 		CarrierCode:     "SF",
 		CarrierName:     "顺丰速运",
 	}
-	if err := repo.Create(shipment); err != nil {
+	if err := repo.Create(context.Background(), shipment); err != nil {
 		t.Fatalf("Create shipment: %v", err)
 	}
 	if shipment.ID == 0 {
@@ -187,10 +189,10 @@ func TestCreateShipmentPersistsShipmentAndLines(t *testing.T) {
 		FulfillmentLineID:   101,
 		Quantity:            3,
 	}
-	if err := repo.CreateLine(line1); err != nil {
+	if err := repo.CreateLine(context.Background(), line1); err != nil {
 		t.Fatalf("CreateLine 1: %v", err)
 	}
-	if err := repo.CreateLine(line2); err != nil {
+	if err := repo.CreateLine(context.Background(), line2); err != nil {
 		t.Fatalf("CreateLine 2: %v", err)
 	}
 	if line1.ID == 0 {
@@ -207,7 +209,7 @@ func TestCreateShipmentPersistsShipmentAndLines(t *testing.T) {
 	}
 
 	// Read back and verify field completeness
-	got, err := repo.FindByID(shipment.ID)
+	got, err := repo.FindByID(context.Background(), shipment.ID)
 	if err != nil {
 		t.Fatalf("FindByID: %v", err)
 	}
@@ -225,7 +227,7 @@ func TestCreateShipmentPersistsShipmentAndLines(t *testing.T) {
 	}
 
 	// Read back lines
-	lines, err := repo.ListLinesByShipment(shipment.ID)
+	lines, err := repo.ListLinesByShipment(context.Background(), shipment.ID)
 	if err != nil {
 		t.Fatalf("ListLinesByShipment: %v", err)
 	}
@@ -249,7 +251,7 @@ func TestListShipmentsByWaveReturnsJoinedResults(t *testing.T) {
 		ShipmentNo:      "SHIP-100",
 		Status:          "shipped",
 	}
-	if err := repo.Create(s1); err != nil {
+	if err := repo.Create(context.Background(), s1); err != nil {
 		t.Fatalf("Create s1: %v", err)
 	}
 
@@ -259,12 +261,12 @@ func TestListShipmentsByWaveReturnsJoinedResults(t *testing.T) {
 		ShipmentNo:      "SHIP-200",
 		Status:          "delivered",
 	}
-	if err := repo.Create(s2); err != nil {
+	if err := repo.Create(context.Background(), s2); err != nil {
 		t.Fatalf("Create s2: %v", err)
 	}
 
 	// ListByWave(1) → 1 result
-	w1, err := repo.ListByWave(1)
+	w1, err := repo.ListByWave(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ListByWave(1): %v", err)
 	}
@@ -276,7 +278,7 @@ func TestListShipmentsByWaveReturnsJoinedResults(t *testing.T) {
 	}
 
 	// ListByWave(2) → 1 result
-	w2, err := repo.ListByWave(2)
+	w2, err := repo.ListByWave(context.Background(), 2)
 	if err != nil {
 		t.Fatalf("ListByWave(2): %v", err)
 	}
@@ -288,7 +290,7 @@ func TestListShipmentsByWaveReturnsJoinedResults(t *testing.T) {
 	}
 
 	// ListByWave(3) → 0 results
-	w3, err := repo.ListByWave(3)
+	w3, err := repo.ListByWave(context.Background(), 3)
 	if err != nil {
 		t.Fatalf("ListByWave(3): %v", err)
 	}
@@ -313,12 +315,12 @@ func TestWaveOverviewCountsShipmentsAndTrackedFulfillment(t *testing.T) {
 		TrackingNo:      "TRACK-999",
 		Status:          "shipped",
 	}
-	if err := repo.Create(trackedShipment); err != nil {
+	if err := repo.Create(context.Background(), trackedShipment); err != nil {
 		t.Fatalf("Create tracked shipment: %v", err)
 	}
 
 	// Lines for tracked shipment with distinct fulfillment line IDs
-	if err := repo.CreateLine(&domain.ShipmentLine{
+	if err := repo.CreateLine(context.Background(), &domain.ShipmentLine{
 		ShipmentID:          trackedShipment.ID,
 		SupplierOrderLineID: 10,
 		FulfillmentLineID:   100,
@@ -326,7 +328,7 @@ func TestWaveOverviewCountsShipmentsAndTrackedFulfillment(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateLine for tracked: %v", err)
 	}
-	if err := repo.CreateLine(&domain.ShipmentLine{
+	if err := repo.CreateLine(context.Background(), &domain.ShipmentLine{
 		ShipmentID:          trackedShipment.ID,
 		SupplierOrderLineID: 11,
 		FulfillmentLineID:   101,
@@ -342,12 +344,12 @@ func TestWaveOverviewCountsShipmentsAndTrackedFulfillment(t *testing.T) {
 		TrackingNo:      "",
 		Status:          "pending",
 	}
-	if err := repo.Create(untrackedShipment); err != nil {
+	if err := repo.Create(context.Background(), untrackedShipment); err != nil {
 		t.Fatalf("Create untracked shipment: %v", err)
 	}
 
 	// Line for untracked shipment
-	if err := repo.CreateLine(&domain.ShipmentLine{
+	if err := repo.CreateLine(context.Background(), &domain.ShipmentLine{
 		ShipmentID:          untrackedShipment.ID,
 		SupplierOrderLineID: 20,
 		FulfillmentLineID:   200,
@@ -357,7 +359,7 @@ func TestWaveOverviewCountsShipmentsAndTrackedFulfillment(t *testing.T) {
 	}
 
 	// Verify shipmentCount for wave 1
-	allShipments, err := repo.ListByWave(1)
+	allShipments, err := repo.ListByWave(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("ListByWave(1): %v", err)
 	}
@@ -373,7 +375,7 @@ func TestWaveOverviewCountsShipmentsAndTrackedFulfillment(t *testing.T) {
 		if s.TrackingNo == "" {
 			continue // skip untracked
 		}
-		lines, err := repo.ListLinesByShipment(s.ID)
+		lines, err := repo.ListLinesByShipment(context.Background(), s.ID)
 		if err != nil {
 			t.Fatalf("ListLinesByShipment(%d): %v", s.ID, err)
 		}
@@ -407,7 +409,7 @@ func newMockSupplierRepoForShipment() *mockSupplierRepoForShipment {
 	}
 }
 
-func (m *mockSupplierRepoForShipment) FindByID(id uint) (*domain.SupplierOrder, error) {
+func (m *mockSupplierRepoForShipment) FindByID(ctx context.Context, id uint) (*domain.SupplierOrder, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	o, ok := m.orders[id]
@@ -418,7 +420,7 @@ func (m *mockSupplierRepoForShipment) FindByID(id uint) (*domain.SupplierOrder, 
 	return &cp, nil
 }
 
-func (m *mockSupplierRepoForShipment) FindLineByID(id uint) (*domain.SupplierOrderLine, error) {
+func (m *mockSupplierRepoForShipment) FindLineByID(ctx context.Context, id uint) (*domain.SupplierOrderLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l, ok := m.orderLines[id]
@@ -430,9 +432,15 @@ func (m *mockSupplierRepoForShipment) FindLineByID(id uint) (*domain.SupplierOrd
 }
 
 // Stub methods to satisfy domain.SupplierOrderRepository — unused by shipment tests
-func (m *mockSupplierRepoForShipment) Create(order *domain.SupplierOrder) error { panic("not implemented") }
-func (m *mockSupplierRepoForShipment) List() ([]domain.SupplierOrder, error)    { panic("not implemented") }
-func (m *mockSupplierRepoForShipment) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
+func (m *mockSupplierRepoForShipment) Create(ctx context.Context, order *domain.SupplierOrder) error {
+	panic("not implemented")
+}
+
+func (m *mockSupplierRepoForShipment) List(ctx context.Context) ([]domain.SupplierOrder, error) {
+	panic("not implemented")
+}
+
+func (m *mockSupplierRepoForShipment) ListByWave(ctx context.Context, waveID uint) ([]domain.SupplierOrder, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.SupplierOrder
@@ -444,11 +452,16 @@ func (m *mockSupplierRepoForShipment) ListByWave(waveID uint) ([]domain.Supplier
 	}
 	return out, nil
 }
-func (m *mockSupplierRepoForShipment) DeleteDraftsByWave(waveID uint) error { panic("not implemented") }
-func (m *mockSupplierRepoForShipment) CreateLine(line *domain.SupplierOrderLine) error {
+
+func (m *mockSupplierRepoForShipment) DeleteDraftsByWave(ctx context.Context, waveID uint) error {
 	panic("not implemented")
 }
-func (m *mockSupplierRepoForShipment) ListLinesByOrder(orderID uint) ([]domain.SupplierOrderLine, error) {
+
+func (m *mockSupplierRepoForShipment) CreateLine(ctx context.Context, line *domain.SupplierOrderLine) error {
+	panic("not implemented")
+}
+
+func (m *mockSupplierRepoForShipment) ListLinesByOrder(ctx context.Context, orderID uint) ([]domain.SupplierOrderLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.SupplierOrderLine
@@ -460,15 +473,20 @@ func (m *mockSupplierRepoForShipment) ListLinesByOrder(orderID uint) ([]domain.S
 	}
 	return out, nil
 }
-func (m *mockSupplierRepoForShipment) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
-func (m *mockSupplierRepoForShipment) Update(order *domain.SupplierOrder) error {
+
+func (m *mockSupplierRepoForShipment) DeleteLinesByOrder(ctx context.Context, orderID uint) error {
+	panic("not implemented")
+}
+
+func (m *mockSupplierRepoForShipment) Update(ctx context.Context, order *domain.SupplierOrder) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cp := *order
 	m.orders[order.ID] = &cp
 	return nil
 }
-func (m *mockSupplierRepoForShipment) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
+
+func (m *mockSupplierRepoForShipment) AtomicCreateSupplierOrder(ctx context.Context, order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
 	panic("not implemented")
 }
 
@@ -483,7 +501,7 @@ func newMockFulfillRepoForShipment() *mockFulfillRepoForShipment {
 	return &mockFulfillRepoForShipment{lines: make(map[uint]*domain.FulfillmentLine)}
 }
 
-func (m *mockFulfillRepoForShipment) FindByID(id uint) (*domain.FulfillmentLine, error) {
+func (m *mockFulfillRepoForShipment) FindByID(ctx context.Context, id uint) (*domain.FulfillmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l, ok := m.lines[id]
@@ -495,24 +513,35 @@ func (m *mockFulfillRepoForShipment) FindByID(id uint) (*domain.FulfillmentLine,
 }
 
 // Stub methods to satisfy domain.FulfillmentLineRepository — unused by shipment tests
-func (m *mockFulfillRepoForShipment) Create(line *domain.FulfillmentLine) error { panic("not implemented") }
-func (m *mockFulfillRepoForShipment) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
+func (m *mockFulfillRepoForShipment) Create(ctx context.Context, line *domain.FulfillmentLine) error {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForShipment) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
+
+func (m *mockFulfillRepoForShipment) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentLine, error) {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForShipment) ReplaceByWaveAndGeneratedBy(_ uint, _ string, _ []domain.FulfillmentLine) error {
+
+func (m *mockFulfillRepoForShipment) DeleteByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string) error {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForShipment) DeleteByWave(waveID uint) error {
+
+func (m *mockFulfillRepoForShipment) ReplaceByWaveAndGeneratedBy(ctx context.Context, _ uint, _ string, _ []domain.FulfillmentLine) error {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForShipment) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
-func (m *mockFulfillRepoForShipment) BulkUpdateCustomerProfileID(_, _ uint) (int64, error) {
+
+func (m *mockFulfillRepoForShipment) DeleteByWave(ctx context.Context, waveID uint) error {
+	panic("not implemented")
+}
+
+func (m *mockFulfillRepoForShipment) BulkUpdateStates(ctx context.Context, updates []domain.FulfillmentLineStateUpdate) error {
+	return nil
+}
+
+func (m *mockFulfillRepoForShipment) BulkUpdateCustomerProfileID(ctx context.Context, _, _ uint) (int64, error) {
 	return 0, nil
 }
-func (m *mockFulfillRepoForShipment) Update(line *domain.FulfillmentLine) error {
+
+func (m *mockFulfillRepoForShipment) Update(ctx context.Context, line *domain.FulfillmentLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing, ok := m.lines[line.ID]; ok {
@@ -520,7 +549,6 @@ func (m *mockFulfillRepoForShipment) Update(line *domain.FulfillmentLine) error 
 	}
 	return nil
 }
-
 
 // ── validation tests ──
 
@@ -612,10 +640,10 @@ func createShipmentWithValidation(
 	fulfillRepo *mockFulfillRepoForShipment,
 	input dto.CreateShipmentInput,
 ) (dto.ShipmentDTO, error) {
-	now := "2024-01-01T00:00:00Z"
+	now := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	// Validate supplier order existence
-	supplierOrder, err := supplierRepo.FindByID(input.SupplierOrderID)
+	supplierOrder, err := supplierRepo.FindByID(context.Background(), input.SupplierOrderID)
 	if err != nil {
 		return dto.ShipmentDTO{}, fmt.Errorf("supplier order %d not found: %w", input.SupplierOrderID, err)
 	}
@@ -631,16 +659,16 @@ func createShipmentWithValidation(
 		UpdatedAt:        now,
 	}
 
-	if err := shipmentRepo.Create(shipment); err != nil {
+	if err := shipmentRepo.Create(context.Background(), shipment); err != nil {
 		return dto.ShipmentDTO{}, err
 	}
 
 	for _, li := range input.Lines {
-		sol, err := supplierRepo.FindLineByID(li.SupplierOrderLineID)
+		sol, err := supplierRepo.FindLineByID(context.Background(), li.SupplierOrderLineID)
 		if err != nil {
 			return dto.ShipmentDTO{}, fmt.Errorf("supplier order line %d not found: %w", li.SupplierOrderLineID, err)
 		}
-		fl, err := fulfillRepo.FindByID(li.FulfillmentLineID)
+		fl, err := fulfillRepo.FindByID(context.Background(), li.FulfillmentLineID)
 		if err != nil {
 			return dto.ShipmentDTO{}, fmt.Errorf("fulfillment line %d not found: %w", li.FulfillmentLineID, err)
 		}
@@ -661,7 +689,7 @@ func createShipmentWithValidation(
 			Quantity:            li.Quantity,
 			CreatedAt:           now,
 		}
-		if err := shipmentRepo.CreateLine(line); err != nil {
+		if err := shipmentRepo.CreateLine(context.Background(), line); err != nil {
 			return dto.ShipmentDTO{}, err
 		}
 	}
@@ -682,7 +710,7 @@ func TestCreateShipmentRejectsEmptyLines(t *testing.T) {
 		Lines:           []dto.CreateShipmentLineInput{},
 	}
 
-	_, _, err := uc.CreateShipment(input)
+	_, _, err := uc.CreateShipment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for empty lines, got nil")
 	}
@@ -697,7 +725,7 @@ func TestCreateShipmentPersistsShipmentAndLinesAtomically(t *testing.T) {
 	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
 	// Setup: existing supplier order + line + fulfillment line
-	now := "2026-01-01T00:00:00Z"
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	supplierOrder := &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
 	supplierRepo.orders[1] = supplierOrder
 	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
@@ -714,7 +742,7 @@ func TestCreateShipmentPersistsShipmentAndLinesAtomically(t *testing.T) {
 		},
 	}
 
-	shipment, lines, err := uc.CreateShipment(input)
+	shipment, lines, err := uc.CreateShipment(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -738,7 +766,7 @@ func TestCreateShipmentRollsBackWhenLinePersistenceFails(t *testing.T) {
 	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
 	// Setup: supplier order 1 (wave 1), two supplier order lines -> two fulfillment lines
-	now := "2026-01-01T00:00:00Z"
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
 	supplierRepo.orderLines[10] = &domain.SupplierOrderLine{ID: 10, SupplierOrderID: 1, FulfillmentLineID: 100, SubmittedQuantity: 10}
 	supplierRepo.orderLines[11] = &domain.SupplierOrderLine{ID: 11, SupplierOrderID: 1, FulfillmentLineID: 101, SubmittedQuantity: 10}
@@ -759,7 +787,7 @@ func TestCreateShipmentRollsBackWhenLinePersistenceFails(t *testing.T) {
 		},
 	}
 
-	shipment, lines, err := uc.CreateShipment(input)
+	shipment, lines, err := uc.CreateShipment(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -790,7 +818,7 @@ func TestCreateShipmentRejectsOverShipment(t *testing.T) {
 	fulfillRepo := newMockFulfillRepoForShipment()
 	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
-	now := "2026-01-01T00:00:00Z"
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
 	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
 	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
@@ -803,7 +831,7 @@ func TestCreateShipmentRejectsOverShipment(t *testing.T) {
 		Status:           "shipped",
 		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10}},
 	}
-	if _, _, err := uc.CreateShipment(input1); err != nil {
+	if _, _, err := uc.CreateShipment(context.Background(), input1); err != nil {
 		t.Fatalf("first shipment should succeed: %v", err)
 	}
 
@@ -815,7 +843,7 @@ func TestCreateShipmentRejectsOverShipment(t *testing.T) {
 		Status:           "shipped",
 		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 1}},
 	}
-	_, _, err := uc.CreateShipment(input2)
+	_, _, err := uc.CreateShipment(context.Background(), input2)
 	if err == nil {
 		t.Fatal("expected over-shipment error on second attempt, got nil")
 	}
@@ -829,7 +857,7 @@ func TestCreateShipmentAllowsPartialThenRemainder(t *testing.T) {
 	fulfillRepo := newMockFulfillRepoForShipment()
 	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
-	now := "2026-01-01T00:00:00Z"
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
 	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
 	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
@@ -842,7 +870,7 @@ func TestCreateShipmentAllowsPartialThenRemainder(t *testing.T) {
 		Status:           "shipped",
 		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 5}},
 	}
-	if _, _, err := uc.CreateShipment(input1); err != nil {
+	if _, _, err := uc.CreateShipment(context.Background(), input1); err != nil {
 		t.Fatalf("partial shipment should succeed: %v", err)
 	}
 
@@ -854,7 +882,7 @@ func TestCreateShipmentAllowsPartialThenRemainder(t *testing.T) {
 		Status:           "shipped",
 		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 5}},
 	}
-	if _, _, err := uc.CreateShipment(input2); err != nil {
+	if _, _, err := uc.CreateShipment(context.Background(), input2); err != nil {
 		t.Fatalf("remainder shipment should succeed: %v", err)
 	}
 
@@ -866,7 +894,7 @@ func TestCreateShipmentAllowsPartialThenRemainder(t *testing.T) {
 		Status:           "shipped",
 		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 1}},
 	}
-	_, _, err := uc.CreateShipment(input3)
+	_, _, err := uc.CreateShipment(context.Background(), input3)
 	if err == nil {
 		t.Fatal("expected over-shipment error after full quantity shipped, got nil")
 	}
@@ -880,7 +908,7 @@ func TestImportShipmentsRejectsOverShipment(t *testing.T) {
 	fulfillRepo := newMockFulfillRepoForShipment()
 	uc := NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
-	now := "2026-01-01T00:00:00Z"
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
 	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
 	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
@@ -904,7 +932,7 @@ func TestImportShipmentsRejectsOverShipment(t *testing.T) {
 		},
 	}
 
-	result, err := uc.ImportShipments(input)
+	result, err := uc.ImportShipments(context.Background(), input)
 	if err != nil {
 		t.Fatalf("ImportShipments returned unexpected error: %v", err)
 	}
@@ -924,7 +952,7 @@ func TestShipmentStatusProjectionPartiallyShipped(t *testing.T) {
 	fulfillRepo := newMockFulfillRepoForShipment()
 	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
-	now := "2026-01-01T00:00:00Z"
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
 	// Two SOLs: 10 each.
 	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
@@ -940,7 +968,7 @@ func TestShipmentStatusProjectionPartiallyShipped(t *testing.T) {
 		Status:           "shipped",
 		Lines:            []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10}},
 	}
-	shipment, lines, err := uc.CreateShipment(input)
+	shipment, lines, err := uc.CreateShipment(context.Background(), input)
 	if err != nil {
 		t.Fatalf("CreateShipment failed: %v", err)
 	}
@@ -949,7 +977,7 @@ func TestShipmentStatusProjectionPartiallyShipped(t *testing.T) {
 	}
 
 	// Verify SumShippedQuantityBySOL reflects the persisted line.
-	sum, err := shipmentRepo.SumShippedQuantityBySOL(1)
+	sum, err := shipmentRepo.SumShippedQuantityBySOL(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("SumShippedQuantityBySOL: %v", err)
 	}
@@ -958,7 +986,7 @@ func TestShipmentStatusProjectionPartiallyShipped(t *testing.T) {
 	}
 
 	// SOL 2 should still be 0.
-	sum2, err := shipmentRepo.SumShippedQuantityBySOL(2)
+	sum2, err := shipmentRepo.SumShippedQuantityBySOL(context.Background(), 2)
 	if err != nil {
 		t.Fatalf("SumShippedQuantityBySOL SOL2: %v", err)
 	}

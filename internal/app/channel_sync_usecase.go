@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -32,7 +33,7 @@ func NewChannelSyncUseCase(
 	}
 }
 
-func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJobInput) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error) {
+func (uc *channelSyncUseCase) CreateChannelSyncJob(ctx context.Context, input dto.CreateChannelSyncJobInput) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error) {
 	if len(input.Items) == 0 {
 		return nil, nil, fmt.Errorf("channel sync job must have at least one item")
 	}
@@ -47,17 +48,17 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 
 	// Validate reference chain for every item (all checks outside transaction).
 	for i, it := range input.Items {
-		shipment, err := uc.shipmentRepo.FindByID(it.ShipmentID)
+		shipment, err := uc.shipmentRepo.FindByID(ctx, it.ShipmentID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("item %d: shipment %d not found: %w", i, it.ShipmentID, err)
 		}
 
-		fulfillLine, err := uc.fulfillRepo.FindByID(it.FulfillmentLineID)
+		fulfillLine, err := uc.fulfillRepo.FindByID(ctx, it.FulfillmentLineID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("item %d: fulfillment line %d not found: %w", i, it.FulfillmentLineID, err)
 		}
 
-		supplierOrder, err := uc.supplierRepo.FindByID(shipment.SupplierOrderID)
+		supplierOrder, err := uc.supplierRepo.FindByID(ctx, shipment.SupplierOrderID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("item %d: supplier order %d not found (referenced by shipment %d): %w", i, shipment.SupplierOrderID, it.ShipmentID, err)
 		}
@@ -70,7 +71,7 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 			return nil, nil, fmt.Errorf("item %d: fulfillment line %d belongs to wave %d, not wave %d", i, it.FulfillmentLineID, fulfillLine.WaveID, input.WaveID)
 		}
 
-		shipmentLines, err := uc.shipmentRepo.ListLinesByShipment(it.ShipmentID)
+		shipmentLines, err := uc.shipmentRepo.ListLinesByShipment(ctx, it.ShipmentID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("item %d: cannot list shipment lines for shipment %d: %w", i, it.ShipmentID, err)
 		}
@@ -92,7 +93,7 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 	var pinNodeID uint
 	if uc.basisStamp != nil {
 		var err error
-		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(input.WaveID)
+		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(ctx, input.WaveID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("resolve basis for channel sync job: %w", err)
 		}
@@ -101,7 +102,7 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 		}
 	}
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	job := &domain.ChannelSyncJob{
 		WaveID:               input.WaveID,
 		IntegrationProfileID: input.IntegrationProfileID,
@@ -137,7 +138,7 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(input dto.CreateChannelSyncJo
 		}
 	}
 
-	if err := uc.channelSyncRepo.AtomicCreateChannelSync(job, items, pin); err != nil {
+	if err := uc.channelSyncRepo.AtomicCreateChannelSync(ctx, job, items, pin); err != nil {
 		return nil, nil, err
 	}
 

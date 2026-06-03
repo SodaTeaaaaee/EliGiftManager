@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -12,9 +13,9 @@ import (
 // TemplateMappingService applies a template's MappingRules to convert raw rows
 // into structured DemandLines.
 type TemplateMappingService struct {
-	templateRepo    domain.DocumentTemplateRepository
-	bindingRepo     domain.ProfileTemplateBindingRepository
-	profileRepo     domain.IntegrationProfileRepository
+	templateRepo domain.DocumentTemplateRepository
+	bindingRepo  domain.ProfileTemplateBindingRepository
+	profileRepo  domain.IntegrationProfileRepository
 }
 
 func NewTemplateMappingService(
@@ -51,15 +52,15 @@ func ParseMappingRules(raw string) (*TemplateMappingRules, error) {
 }
 
 // ResolveImportTemplate finds the default template binding for a profile and document type.
-func (s *TemplateMappingService) ResolveImportTemplate(profileID uint, documentType string) (*domain.DocumentTemplate, error) {
-	binding, err := s.bindingRepo.FindDefaultByProfileAndType(profileID, documentType)
+func (s *TemplateMappingService) ResolveImportTemplate(ctx context.Context, profileID uint, documentType string) (*domain.DocumentTemplate, error) {
+	binding, err := s.bindingRepo.FindDefaultByProfileAndType(ctx, profileID, documentType)
 	if err != nil {
 		return nil, fmt.Errorf("resolve template binding for profile %d / type %s: %w", profileID, documentType, err)
 	}
 	if binding == nil {
 		return nil, fmt.Errorf("no default template binding for profile %d / type %s", profileID, documentType)
 	}
-	t, err := s.templateRepo.FindByID(binding.TemplateID)
+	t, err := s.templateRepo.FindByID(ctx, binding.TemplateID)
 	if err != nil {
 		return nil, fmt.Errorf("template %d not found: %w", binding.TemplateID, err)
 	}
@@ -131,8 +132,8 @@ func setDemandLineField(line *domain.DemandLine, field, value string) error {
 
 // BuildImportPipeline resolves the template for a profile + document type,
 // then maps all CSV rows to DemandLines. Returns parsed lines and the resolved template.
-func (s *TemplateMappingService) BuildImportPipeline(profileID uint, documentType string, rows []map[string]string) (*domain.DocumentTemplate, []*domain.DemandLine, error) {
-	t, err := s.ResolveImportTemplate(profileID, documentType)
+func (s *TemplateMappingService) BuildImportPipeline(ctx context.Context, profileID uint, documentType string, rows []map[string]string) (*domain.DocumentTemplate, []*domain.DemandLine, error) {
+	t, err := s.ResolveImportTemplate(ctx, profileID, documentType)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -142,17 +143,17 @@ func (s *TemplateMappingService) BuildImportPipeline(profileID uint, documentTyp
 		return nil, nil, fmt.Errorf("template %s: %w", t.TemplateKey, err)
 	}
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	lines := make([]*domain.DemandLine, 0, len(rows))
 	for i, row := range rows {
 		line, err := MapCSVRowToDemandLine(row, rules)
 		if err != nil {
 			return nil, nil, fmt.Errorf("row %d: %w", i+1, err)
 		}
-		if line.CreatedAt == "" {
+		if line.CreatedAt.IsZero() {
 			line.CreatedAt = now
 		}
-		if line.UpdatedAt == "" {
+		if line.UpdatedAt.IsZero() {
 			line.UpdatedAt = now
 		}
 		lines = append(lines, line)

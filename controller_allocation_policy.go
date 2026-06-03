@@ -39,7 +39,7 @@ func NewAllocationPolicyController() *AllocationPolicyController {
 	return &AllocationPolicyController{
 		uc:                  app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo),
 		ruleRepo:            ruleRepo,
-		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc),
+		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc)),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
 		gdb:                 gdb,
@@ -49,46 +49,48 @@ func NewAllocationPolicyController() *AllocationPolicyController {
 // ReconcileWave idempotently rebuilds policy-driven fulfillment lines for the wave,
 // replaying any recorded adjustments.
 func (c *AllocationPolicyController) ReconcileWave(waveID uint) (*dto.ReconcileResultDTO, error) {
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(waveID)
+	ctx := appContext
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
 
 	var result *dto.ReconcileResultDTO
 	err = c.gdb.Transaction(func(tx *gorm.DB) error {
-		ruleRepo := infra.NewRuleRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		waveRepo := infra.NewWaveRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		productRepo := infra.NewProductRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		ruleRepo := repos.RuleRepo
+		fulfillRepo := repos.FulfillRepo
+		waveRepo := repos.WaveRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		demandRepo := repos.DemandRepo
+		assignmentRepo := repos.AssignmentRepo
+		productRepo := repos.ProductRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyCheckpointRepo := repos.HistoryCheckpoint
 
 		allocationUC := app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		reconcileResult, reconcileErr := allocationUC.ReconcileWave(waveID)
+		reconcileResult, reconcileErr := allocationUC.ReconcileWave(ctx, waveID)
 		if reconcileErr != nil {
 			return reconcileErr
 		}
 		result = reconcileResult
 
-		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(waveID)
+		postSnapshot, snapErr := snapshotSvc.CaptureSnapshot(ctx, waveID)
 		if snapErr != nil {
 			return snapErr
 		}
 
-		projHash, hashErr := projHashSvc.ComputeHash(waveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, waveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  waveID,
 			CommandKind:             domain.CmdReconcileWave,
 			CommandSummary:          fmt.Sprintf("reconcile wave %d (%d created, %d deleted)", waveID, result.Created, result.Deleted),
@@ -109,37 +111,39 @@ func (c *AllocationPolicyController) ReconcileWave(waveID uint) (*dto.ReconcileR
 
 // CreateAllocationPolicyRule creates a new allocation policy rule.
 func (c *AllocationPolicyController) CreateAllocationPolicyRule(input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(input.WaveID)
+	ctx := appContext
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
 	if err != nil {
 		return nil, err
 	}
 
 	var rule *dto.AllocationPolicyRuleDTO
 	err = c.gdb.Transaction(func(tx *gorm.DB) error {
-		ruleRepo := infra.NewRuleRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		waveRepo := infra.NewWaveRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		productRepo := infra.NewProductRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		ruleRepo := repos.RuleRepo
+		fulfillRepo := repos.FulfillRepo
+		waveRepo := repos.WaveRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		demandRepo := repos.DemandRepo
+		assignmentRepo := repos.AssignmentRepo
+		productRepo := repos.ProductRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyCheckpointRepo := repos.HistoryCheckpoint
 
 		allocationUC := app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		createdRule, createErr := allocationUC.CreateRule(input)
+		createdRule, createErr := allocationUC.CreateRule(ctx, input)
 		if createErr != nil {
 			return createErr
 		}
 		rule = createdRule
 
-		domainRule, findErr := ruleRepo.FindByID(createdRule.ID)
+		domainRule, findErr := ruleRepo.FindByID(ctx, createdRule.ID)
 		if findErr != nil {
 			return findErr
 		}
@@ -148,11 +152,11 @@ func (c *AllocationPolicyController) CreateAllocationPolicyRule(input dto.Create
 			return patchErr
 		}
 
-		projHash, hashErr := projHashSvc.ComputeHash(input.WaveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, input.WaveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  input.WaveID,
 			CommandKind:             domain.CmdCreateRule,
 			CommandSummary:          fmt.Sprintf("create allocation rule %d for wave %d", createdRule.ID, input.WaveID),
@@ -171,14 +175,15 @@ func (c *AllocationPolicyController) CreateAllocationPolicyRule(input dto.Create
 
 // UpdateAllocationPolicyRule updates an existing allocation policy rule.
 func (c *AllocationPolicyController) UpdateAllocationPolicyRule(input dto.UpdateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
-	oldRule, err := c.ruleRepo.FindByID(input.ID)
+	ctx := appContext
+	oldRule, err := c.ruleRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 	if oldRule == nil {
 		return nil, fmt.Errorf("allocation rule %d not found", input.ID)
 	}
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(oldRule.WaveID)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, oldRule.WaveID)
 	if err != nil {
 		return nil, err
 	}
@@ -189,30 +194,31 @@ func (c *AllocationPolicyController) UpdateAllocationPolicyRule(input dto.Update
 
 	var rule *dto.AllocationPolicyRuleDTO
 	err = c.gdb.Transaction(func(tx *gorm.DB) error {
-		ruleRepo := infra.NewRuleRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		waveRepo := infra.NewWaveRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		productRepo := infra.NewProductRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		ruleRepo := repos.RuleRepo
+		fulfillRepo := repos.FulfillRepo
+		waveRepo := repos.WaveRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		demandRepo := repos.DemandRepo
+		assignmentRepo := repos.AssignmentRepo
+		productRepo := repos.ProductRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyCheckpointRepo := repos.HistoryCheckpoint
 
 		allocationUC := app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		updatedRule, updateErr := allocationUC.UpdateRule(input)
+		updatedRule, updateErr := allocationUC.UpdateRule(ctx, input)
 		if updateErr != nil {
 			return updateErr
 		}
 		rule = updatedRule
 
-		domainRule, findErr := ruleRepo.FindByID(updatedRule.ID)
+		domainRule, findErr := ruleRepo.FindByID(ctx, updatedRule.ID)
 		if findErr != nil {
 			return findErr
 		}
@@ -221,11 +227,11 @@ func (c *AllocationPolicyController) UpdateAllocationPolicyRule(input dto.Update
 			return patchErr
 		}
 
-		projHash, hashErr := projHashSvc.ComputeHash(updatedRule.WaveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, updatedRule.WaveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  updatedRule.WaveID,
 			CommandKind:             domain.CmdUpdateRule,
 			CommandSummary:          fmt.Sprintf("update allocation rule %d for wave %d", updatedRule.ID, updatedRule.WaveID),
@@ -244,14 +250,15 @@ func (c *AllocationPolicyController) UpdateAllocationPolicyRule(input dto.Update
 
 // DeleteAllocationPolicyRule deletes an allocation policy rule by ID.
 func (c *AllocationPolicyController) DeleteAllocationPolicyRule(ruleID uint) error {
-	rule, err := c.ruleRepo.FindByID(ruleID)
+	ctx := appContext
+	rule, err := c.ruleRepo.FindByID(ctx, ruleID)
 	if err != nil {
 		return err
 	}
 	if rule == nil {
 		return fmt.Errorf("allocation rule %d not found", ruleID)
 	}
-	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(rule.WaveID)
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, rule.WaveID)
 	if err != nil {
 		return err
 	}
@@ -261,32 +268,33 @@ func (c *AllocationPolicyController) DeleteAllocationPolicyRule(ruleID uint) err
 	}
 
 	return c.gdb.Transaction(func(tx *gorm.DB) error {
-		ruleRepo := infra.NewRuleRepository(tx)
-		fulfillRepo := infra.NewFulfillmentRepository(tx)
-		waveRepo := infra.NewWaveRepository(tx)
-		adjustmentRepo := infra.NewFulfillmentAdjustmentRepository(tx)
-		demandRepo := infra.NewDemandRepository(tx)
-		assignmentRepo := infra.NewWaveDemandAssignmentRepository(tx)
-		productRepo := infra.NewProductRepository(tx)
-		closureDecisionRepo := infra.NewClosureDecisionRepository(tx)
-		historyScopeRepo := infra.NewHistoryScopeRepository(tx)
-		historyNodeRepo := infra.NewHistoryNodeRepository(tx)
-		historyCheckpointRepo := infra.NewHistoryCheckpointRepository(tx)
+		repos := infra.NewTxRepos(tx)
+		ruleRepo := repos.RuleRepo
+		fulfillRepo := repos.FulfillRepo
+		waveRepo := repos.WaveRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		demandRepo := repos.DemandRepo
+		assignmentRepo := repos.AssignmentRepo
+		productRepo := repos.ProductRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyCheckpointRepo := repos.HistoryCheckpoint
 
 		allocationUC := app.NewAllocationPolicyUseCase(ruleRepo, fulfillRepo, waveRepo, adjustmentRepo, demandRepo, assignmentRepo, productRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
-		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, snapshotSvc)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		if deleteErr := allocationUC.DeleteRule(ruleID); deleteErr != nil {
+		if deleteErr := allocationUC.DeleteRule(ctx, ruleID); deleteErr != nil {
 			return deleteErr
 		}
 
-		projHash, hashErr := projHashSvc.ComputeHash(rule.WaveID)
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, rule.WaveID)
 		if hashErr != nil {
 			return hashErr
 		}
-		_, recordErr := historySvc.RecordNode(app.RecordNodeInput{
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
 			WaveID:                  rule.WaveID,
 			CommandKind:             domain.CmdDeleteRule,
 			CommandSummary:          fmt.Sprintf("delete allocation rule %d from wave %d", ruleID, rule.WaveID),
@@ -301,5 +309,6 @@ func (c *AllocationPolicyController) DeleteAllocationPolicyRule(ruleID uint) err
 
 // ListAllocationPolicyRules lists all allocation policy rules for a wave.
 func (c *AllocationPolicyController) ListAllocationPolicyRules(waveID uint) ([]dto.AllocationPolicyRuleDTO, error) {
-	return c.uc.ListRulesByWave(waveID)
+	ctx := appContext
+	return c.uc.ListRulesByWave(ctx, waveID)
 }

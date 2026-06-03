@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -12,9 +13,9 @@ import (
 // ── mock address repo ──
 
 type mockAddressRepo struct {
-	mu      sync.Mutex
-	addrs   map[uint]*domain.CustomerAddress
-	lastID  uint
+	mu     sync.Mutex
+	addrs  map[uint]*domain.CustomerAddress
+	lastID uint
 }
 
 func newMockAddressRepo() *mockAddressRepo {
@@ -23,7 +24,7 @@ func newMockAddressRepo() *mockAddressRepo {
 
 func (m *mockAddressRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockAddressRepo) Create(addr *domain.CustomerAddress) error {
+func (m *mockAddressRepo) Create(ctx context.Context, addr *domain.CustomerAddress) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	id := m.next()
@@ -33,7 +34,7 @@ func (m *mockAddressRepo) Create(addr *domain.CustomerAddress) error {
 	return nil
 }
 
-func (m *mockAddressRepo) FindByID(id uint) (*domain.CustomerAddress, error) {
+func (m *mockAddressRepo) FindByID(ctx context.Context, id uint) (*domain.CustomerAddress, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	a, ok := m.addrs[id]
@@ -44,7 +45,7 @@ func (m *mockAddressRepo) FindByID(id uint) (*domain.CustomerAddress, error) {
 	return &cp, nil
 }
 
-func (m *mockAddressRepo) ListByProfile(profileID uint) ([]domain.CustomerAddress, error) {
+func (m *mockAddressRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.CustomerAddress, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var result []domain.CustomerAddress
@@ -56,7 +57,7 @@ func (m *mockAddressRepo) ListByProfile(profileID uint) ([]domain.CustomerAddres
 	return result, nil
 }
 
-func (m *mockAddressRepo) Update(addr *domain.CustomerAddress) error {
+func (m *mockAddressRepo) Update(ctx context.Context, addr *domain.CustomerAddress) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing, ok := m.addrs[addr.ID]; ok {
@@ -65,14 +66,14 @@ func (m *mockAddressRepo) Update(addr *domain.CustomerAddress) error {
 	return nil
 }
 
-func (m *mockAddressRepo) SoftDelete(id uint) error {
+func (m *mockAddressRepo) SoftDelete(ctx context.Context, id uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.addrs, id)
 	return nil
 }
 
-func (m *mockAddressRepo) BulkUpdateProfileID(oldPID, newPID uint) error {
+func (m *mockAddressRepo) BulkUpdateProfileID(ctx context.Context, oldPID, newPID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, a := range m.addrs {
@@ -83,7 +84,7 @@ func (m *mockAddressRepo) BulkUpdateProfileID(oldPID, newPID uint) error {
 	return nil
 }
 
-func (m *mockAddressRepo) ClearDefaultByProfile(profileID uint) error {
+func (m *mockAddressRepo) ClearDefaultByProfile(ctx context.Context, profileID uint) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, a := range m.addrs {
@@ -102,7 +103,7 @@ func TestCreateAddress(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
-	result, err := uc.CreateAddress(dto.CreateAddressInput{
+	result, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 		CustomerProfileID: 1,
 		Label:             "Home",
 		RecipientName:     "Hina",
@@ -128,7 +129,7 @@ func TestCreateAddressDefaultClearsPrevious(t *testing.T) {
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
 	// create first default
-	r1, err := uc.CreateAddress(dto.CreateAddressInput{
+	r1, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 		CustomerProfileID: 1,
 		Label:             "First",
 		IsDefault:         true,
@@ -141,7 +142,7 @@ func TestCreateAddressDefaultClearsPrevious(t *testing.T) {
 	}
 
 	// create second default — should clear the first
-	r2, err := uc.CreateAddress(dto.CreateAddressInput{
+	r2, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 		CustomerProfileID: 1,
 		Label:             "Second",
 		IsDefault:         true,
@@ -151,7 +152,7 @@ func TestCreateAddressDefaultClearsPrevious(t *testing.T) {
 	}
 
 	// verify first is no longer default
-	a1, _ := addrRepo.FindByID(r1.ID)
+	a1, _ := addrRepo.FindByID(context.Background(), r1.ID)
 	if a1.IsDefault {
 		t.Error("first address should no longer be default")
 	}
@@ -166,7 +167,7 @@ func TestUpdateAddress(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
-	created, err := uc.CreateAddress(dto.CreateAddressInput{
+	created, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 		CustomerProfileID: 1,
 		Label:             "Old",
 		City:              "OldCity",
@@ -175,7 +176,7 @@ func TestUpdateAddress(t *testing.T) {
 		t.Fatalf("create: %v", err)
 	}
 
-	updated, err := uc.UpdateAddress(dto.UpdateAddressInput{
+	updated, err := uc.UpdateAddress(context.Background(), dto.UpdateAddressInput{
 		ID:                created.ID,
 		CustomerProfileID: 1,
 		Label:             "New",
@@ -195,16 +196,16 @@ func TestDeleteAddress(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
-	created, err := uc.CreateAddress(dto.CreateAddressInput{CustomerProfileID: 1, Label: "Temp"})
+	created, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{CustomerProfileID: 1, Label: "Temp"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	if err := uc.DeleteAddress(created.ID); err != nil {
+	if err := uc.DeleteAddress(context.Background(), created.ID); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	_, err = uc.GetAddress(created.ID)
+	_, err = uc.GetAddress(context.Background(), created.ID)
 	if err == nil {
 		t.Error("expected error getting deleted address")
 	}
@@ -216,7 +217,7 @@ func TestBindAddressToLine(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
-	addr, err := uc.CreateAddress(dto.CreateAddressInput{
+	addr, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 		CustomerProfileID: 1,
 		Label:             "Home",
 		ValidationStatus:  "valid",
@@ -227,11 +228,11 @@ func TestBindAddressToLine(t *testing.T) {
 
 	// create a fulfillment line in the mock
 	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1}
-	if err := fulfillRepo.Create(fl); err != nil {
+	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create line: %v", err)
 	}
 
-	bound, err := uc.BindAddressToLine(dto.BindAddressInput{
+	bound, err := uc.BindAddressToLine(context.Background(), dto.BindAddressInput{
 		FulfillmentLineID: fl.ID,
 		CustomerAddressID: addr.ID,
 	})
@@ -242,7 +243,7 @@ func TestBindAddressToLine(t *testing.T) {
 		t.Error("wrong address returned")
 	}
 
-	line, _ := fulfillRepo.FindByID(fl.ID)
+	line, _ := fulfillRepo.FindByID(context.Background(), fl.ID)
 	if line.CustomerAddressID == nil || *line.CustomerAddressID != addr.ID {
 		t.Error("address not bound to line")
 	}
@@ -257,7 +258,7 @@ func TestBindInvalidAddressToLine(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
-	addr, err := uc.CreateAddress(dto.CreateAddressInput{
+	addr, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 		CustomerProfileID: 1,
 		Label:             "BadAddr",
 		ValidationStatus:  "invalid",
@@ -267,18 +268,18 @@ func TestBindInvalidAddressToLine(t *testing.T) {
 	}
 
 	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1}
-	if err := fulfillRepo.Create(fl); err != nil {
+	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create line: %v", err)
 	}
 
-	if _, err := uc.BindAddressToLine(dto.BindAddressInput{
+	if _, err := uc.BindAddressToLine(context.Background(), dto.BindAddressInput{
 		FulfillmentLineID: fl.ID,
 		CustomerAddressID: addr.ID,
 	}); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
 
-	line, _ := fulfillRepo.FindByID(fl.ID)
+	line, _ := fulfillRepo.FindByID(context.Background(), fl.ID)
 	if line.AddressState != "invalid" {
 		t.Errorf("expected address_state=invalid for invalid address, got %q", line.AddressState)
 	}
@@ -290,7 +291,7 @@ func TestUnbindAddressFromLine(t *testing.T) {
 	fulfillRepo := newMockFulfillRepo()
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
-	addr, err := uc.CreateAddress(dto.CreateAddressInput{
+	addr, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 		CustomerProfileID: 1,
 		Label:             "Home",
 		ValidationStatus:  "valid",
@@ -300,22 +301,22 @@ func TestUnbindAddressFromLine(t *testing.T) {
 	}
 
 	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1}
-	if err := fulfillRepo.Create(fl); err != nil {
+	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create line: %v", err)
 	}
 
-	if _, err := uc.BindAddressToLine(dto.BindAddressInput{
+	if _, err := uc.BindAddressToLine(context.Background(), dto.BindAddressInput{
 		FulfillmentLineID: fl.ID,
 		CustomerAddressID: addr.ID,
 	}); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
 
-	if err := uc.UnbindAddressFromLine(fl.ID); err != nil {
+	if err := uc.UnbindAddressFromLine(context.Background(), fl.ID); err != nil {
 		t.Fatalf("unbind: %v", err)
 	}
 
-	line, _ := fulfillRepo.FindByID(fl.ID)
+	line, _ := fulfillRepo.FindByID(context.Background(), fl.ID)
 	if line.CustomerAddressID != nil {
 		t.Error("address should be nil after unbind")
 	}
@@ -347,7 +348,7 @@ func TestListAddressesByProfile(t *testing.T) {
 	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
 
 	for i := 0; i < 3; i++ {
-		if _, err := uc.CreateAddress(dto.CreateAddressInput{
+		if _, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
 			CustomerProfileID: 1,
 			Label:             fmt.Sprintf("Addr %d", i),
 		}); err != nil {
@@ -355,9 +356,9 @@ func TestListAddressesByProfile(t *testing.T) {
 		}
 	}
 	// different profile
-	uc.CreateAddress(dto.CreateAddressInput{CustomerProfileID: 2, Label: "Other"})
+	uc.CreateAddress(context.Background(), dto.CreateAddressInput{CustomerProfileID: 2, Label: "Other"})
 
-	list, err := uc.ListAddressesByProfile(1)
+	list, err := uc.ListAddressesByProfile(context.Background(), 1)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

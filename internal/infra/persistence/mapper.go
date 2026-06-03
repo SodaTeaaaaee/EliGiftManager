@@ -2,56 +2,15 @@ package persistence
 
 import (
 	"encoding/json"
-	"log"
-	"time"
+	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"gorm.io/gorm"
 )
 
-// ---- helper functions ----
-
-func parseTime(s string) time.Time {
-	if s == "" {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		log.Printf("WARNING: failed to parse time %q: %v", s, err)
-		return time.Time{}
-	}
-	return t
-}
-
-func formatTime(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return t.Format(time.RFC3339)
-}
-
-func parseTimePtr(s string) *time.Time {
-	if s == "" {
-		return nil
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		log.Printf("WARNING: failed to parse time %q: %v", s, err)
-		return nil
-	}
-	return &t
-}
-
-func formatTimePtr(t *time.Time) string {
-	if t == nil || t.IsZero() {
-		return ""
-	}
-	return t.Format(time.RFC3339)
-}
-
 // ---- CustomerProfile ----
 
-func ToPersistenceCustomerProfile(d *domain.CustomerProfile) *CustomerProfile {
+func CustomerProfileFromDomain(d *domain.CustomerProfile) *CustomerProfile {
 	return &CustomerProfile{
 		DisplayName: d.DisplayName,
 		ProfileType: ProfileType(d.ProfileType),
@@ -59,20 +18,20 @@ func ToPersistenceCustomerProfile(d *domain.CustomerProfile) *CustomerProfile {
 	}
 }
 
-func FromPersistenceCustomerProfile(p *CustomerProfile) *domain.CustomerProfile {
+func CustomerProfileToDomain(p *CustomerProfile) *domain.CustomerProfile {
 	return &domain.CustomerProfile{
 		ID:          p.ID,
 		DisplayName: p.DisplayName,
 		ProfileType: string(p.ProfileType),
 		ExtraData:   p.ExtraData,
-		CreatedAt:   formatTime(p.CreatedAt),
-		UpdatedAt:   formatTime(p.UpdatedAt),
+		CreatedAt:   p.CreatedAt,
+		UpdatedAt:   p.UpdatedAt,
 	}
 }
 
 // ---- CustomerIdentity ----
 
-func ToPersistenceCustomerIdentity(d *domain.CustomerIdentity) *CustomerIdentity {
+func CustomerIdentityFromDomain(d *domain.CustomerIdentity) *CustomerIdentity {
 	return &CustomerIdentity{
 		CustomerProfileID: d.CustomerProfileID,
 		IdentityPlatform:  d.IdentityPlatform,
@@ -83,7 +42,7 @@ func ToPersistenceCustomerIdentity(d *domain.CustomerIdentity) *CustomerIdentity
 	}
 }
 
-func FromPersistenceCustomerIdentity(p *CustomerIdentity) *domain.CustomerIdentity {
+func CustomerIdentityToDomain(p *CustomerIdentity) *domain.CustomerIdentity {
 	return &domain.CustomerIdentity{
 		ID:                p.ID,
 		CustomerProfileID: p.CustomerProfileID,
@@ -92,14 +51,14 @@ func FromPersistenceCustomerIdentity(p *CustomerIdentity) *domain.CustomerIdenti
 		IdentityType:      string(p.IdentityType),
 		IsPrimary:         p.IsPrimary,
 		ExtraData:         p.ExtraData,
-		CreatedAt:         formatTime(p.CreatedAt),
-		UpdatedAt:         formatTime(p.UpdatedAt),
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
 // ---- CustomerAddress ----
 
-func ToPersistenceCustomerAddress(d *domain.CustomerAddress) *CustomerAddress {
+func CustomerAddressFromDomain(d *domain.CustomerAddress) *CustomerAddress {
 	return &CustomerAddress{
 		CustomerProfileID: d.CustomerProfileID,
 		Label:             d.Label,
@@ -120,7 +79,7 @@ func ToPersistenceCustomerAddress(d *domain.CustomerAddress) *CustomerAddress {
 	}
 }
 
-func FromPersistenceCustomerAddress(p *CustomerAddress) *domain.CustomerAddress {
+func CustomerAddressToDomain(p *CustomerAddress) *domain.CustomerAddress {
 	return &domain.CustomerAddress{
 		ID:                p.ID,
 		CustomerProfileID: p.CustomerProfileID,
@@ -139,14 +98,14 @@ func FromPersistenceCustomerAddress(p *CustomerAddress) *domain.CustomerAddress 
 		ValidationStatus:  string(p.ValidationStatus),
 		ValidationDetail:  p.ValidationDetail,
 		ExtraData:         p.ExtraData,
-		CreatedAt:         formatTime(p.CreatedAt),
-		UpdatedAt:         formatTime(p.UpdatedAt),
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
 // ---- DemandDocument ----
 
-func ToPersistenceDemandDocument(d *domain.DemandDocument) *DemandDocument {
+func DemandDocumentFromDomain(d *domain.DemandDocument) *DemandDocument {
 	return &DemandDocument{
 		Kind:                 DemandKind(d.Kind),
 		CaptureMode:          CaptureMode(d.CaptureMode),
@@ -156,17 +115,17 @@ func ToPersistenceDemandDocument(d *domain.DemandDocument) *DemandDocument {
 		SourceDocumentNo:     d.SourceDocumentNo,
 		SourceCustomerRef:    d.SourceCustomerRef,
 		CustomerProfileID:    d.CustomerProfileID,
-		SourceCreatedAt:      parseTimePtr(d.SourceCreatedAt),
-		SourcePaidAt:         parseTimePtr(d.SourcePaidAt),
+		SourceCreatedAt:      d.SourceCreatedAt,
+		SourcePaidAt:         d.SourcePaidAt,
 		Currency:             d.Currency,
-		AuthoritySnapshotAt:  parseTimePtr(d.AuthoritySnapshotAt),
+		AuthoritySnapshotAt:  d.AuthoritySnapshotAt,
 		RawPayload:           d.RawPayload,
 		ExtraData:            d.ExtraData,
 		BoundProfileSnapshot: d.BoundProfileSnapshot,
 	}
 }
 
-func FromPersistenceDemandDocument(p *DemandDocument) *domain.DemandDocument {
+func DemandDocumentToDomain(p *DemandDocument) *domain.DemandDocument {
 	return &domain.DemandDocument{
 		ID:                   p.ID,
 		Kind:                 string(p.Kind),
@@ -177,21 +136,21 @@ func FromPersistenceDemandDocument(p *DemandDocument) *domain.DemandDocument {
 		SourceDocumentNo:     p.SourceDocumentNo,
 		SourceCustomerRef:    p.SourceCustomerRef,
 		CustomerProfileID:    p.CustomerProfileID,
-		SourceCreatedAt:      formatTimePtr(p.SourceCreatedAt),
-		SourcePaidAt:         formatTimePtr(p.SourcePaidAt),
+		SourceCreatedAt:      p.SourceCreatedAt,
+		SourcePaidAt:         p.SourcePaidAt,
 		Currency:             p.Currency,
-		AuthoritySnapshotAt:  formatTimePtr(p.AuthoritySnapshotAt),
+		AuthoritySnapshotAt:  p.AuthoritySnapshotAt,
 		RawPayload:           p.RawPayload,
 		ExtraData:            p.ExtraData,
 		BoundProfileSnapshot: p.BoundProfileSnapshot,
-		CreatedAt:            formatTime(p.CreatedAt),
-		UpdatedAt:            formatTime(p.UpdatedAt),
+		CreatedAt:            p.CreatedAt,
+		UpdatedAt:            p.UpdatedAt,
 	}
 }
 
 // ---- DemandLine ----
 
-func ToPersistenceDemandLine(d *domain.DemandLine) *DemandLine {
+func DemandLineFromDomain(d *domain.DemandLine) *DemandLine {
 	return &DemandLine{
 		DemandDocumentID:      d.DemandDocumentID,
 		SourceLineNo:          d.SourceLineNo,
@@ -213,7 +172,7 @@ func ToPersistenceDemandLine(d *domain.DemandLine) *DemandLine {
 	}
 }
 
-func FromPersistenceDemandLine(p *DemandLine) *domain.DemandLine {
+func DemandLineToDomain(p *DemandLine) *domain.DemandLine {
 	return &domain.DemandLine{
 		ID:                    p.ID,
 		DemandDocumentID:      p.DemandDocumentID,
@@ -233,14 +192,14 @@ func FromPersistenceDemandLine(p *DemandLine) *domain.DemandLine {
 		RecipientInputPayload: p.RecipientInputPayload,
 		RawPayload:            p.RawPayload,
 		ExtraData:             p.ExtraData,
-		CreatedAt:             formatTime(p.CreatedAt),
-		UpdatedAt:             formatTime(p.UpdatedAt),
+		CreatedAt:             p.CreatedAt,
+		UpdatedAt:             p.UpdatedAt,
 	}
 }
 
 // ---- Wave ----
 
-func ToPersistenceWave(d *domain.Wave) *Wave {
+func WaveFromDomain(d *domain.Wave) *Wave {
 	return &Wave{
 		WaveNo:           d.WaveNo,
 		Name:             d.Name,
@@ -252,7 +211,7 @@ func ToPersistenceWave(d *domain.Wave) *Wave {
 	}
 }
 
-func FromPersistenceWave(p *Wave) *domain.Wave {
+func WaveToDomain(p *Wave) *domain.Wave {
 	return &domain.Wave{
 		ID:               p.ID,
 		WaveNo:           p.WaveNo,
@@ -262,14 +221,14 @@ func FromPersistenceWave(p *Wave) *domain.Wave {
 		ProgressSnapshot: p.ProgressSnapshot,
 		Notes:            p.Notes,
 		LevelTags:        p.LevelTags,
-		CreatedAt:        formatTime(p.CreatedAt),
-		UpdatedAt:        formatTime(p.UpdatedAt),
+		CreatedAt:        p.CreatedAt,
+		UpdatedAt:        p.UpdatedAt,
 	}
 }
 
 // ---- WaveParticipantSnapshot ----
 
-func ToPersistenceWaveParticipantSnapshot(d *domain.WaveParticipantSnapshot) *WaveParticipantSnapshot {
+func WaveParticipantSnapshotFromDomain(d *domain.WaveParticipantSnapshot) *WaveParticipantSnapshot {
 	return &WaveParticipantSnapshot{
 		ID:                 d.ID,
 		WaveID:             d.WaveID,
@@ -285,7 +244,7 @@ func ToPersistenceWaveParticipantSnapshot(d *domain.WaveParticipantSnapshot) *Wa
 	}
 }
 
-func FromPersistenceWaveParticipantSnapshot(p *WaveParticipantSnapshot) *domain.WaveParticipantSnapshot {
+func WaveParticipantSnapshotToDomain(p *WaveParticipantSnapshot) *domain.WaveParticipantSnapshot {
 	return &domain.WaveParticipantSnapshot{
 		ID:                 p.ID,
 		WaveID:             p.WaveID,
@@ -298,13 +257,13 @@ func FromPersistenceWaveParticipantSnapshot(p *WaveParticipantSnapshot) *domain.
 		SourceDocumentRefs: p.SourceDocumentRefs,
 		SourceProfileRefs:  p.SourceProfileRefs,
 		ExtraData:          p.ExtraData,
-		CreatedAt:          formatTime(p.CreatedAt),
+		CreatedAt:          p.CreatedAt,
 	}
 }
 
 // ---- FulfillmentLine ----
 
-func ToPersistenceFulfillmentLine(d *domain.FulfillmentLine) *FulfillmentLine {
+func FulfillmentLineFromDomain(d *domain.FulfillmentLine) *FulfillmentLine {
 	return &FulfillmentLine{
 		WaveID:                    d.WaveID,
 		CustomerProfileID:         d.CustomerProfileID,
@@ -324,7 +283,7 @@ func ToPersistenceFulfillmentLine(d *domain.FulfillmentLine) *FulfillmentLine {
 	}
 }
 
-func FromPersistenceFulfillmentLine(p *FulfillmentLine) *domain.FulfillmentLine {
+func FulfillmentLineToDomain(p *FulfillmentLine) *domain.FulfillmentLine {
 	return &domain.FulfillmentLine{
 		ID:                        p.ID,
 		WaveID:                    p.WaveID,
@@ -342,15 +301,18 @@ func FromPersistenceFulfillmentLine(p *FulfillmentLine) *domain.FulfillmentLine 
 		LineReason:                string(p.LineReason),
 		GeneratedBy:               p.GeneratedBy,
 		ExtraData:                 p.ExtraData,
-		CreatedAt:                 formatTime(p.CreatedAt),
-		UpdatedAt:                 formatTime(p.UpdatedAt),
+		CreatedAt:                 p.CreatedAt,
+		UpdatedAt:                 p.UpdatedAt,
 	}
 }
 
 // ---- AllocationPolicyRule ----
 
-func ToPersistenceAllocationPolicyRule(d *domain.AllocationPolicyRule) *AllocationPolicyRule {
-	selectorJSON, _ := json.Marshal(d.SelectorPayload)
+func AllocationPolicyRuleFromDomain(d *domain.AllocationPolicyRule) (*AllocationPolicyRule, error) {
+	selectorJSON, err := json.Marshal(d.SelectorPayload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal selector payload: %w", err)
+	}
 	return &AllocationPolicyRule{
 		WaveID:               d.WaveID,
 		ProductID:            d.ProductID,
@@ -360,10 +322,10 @@ func ToPersistenceAllocationPolicyRule(d *domain.AllocationPolicyRule) *Allocati
 		RuleKind:             d.RuleKind,
 		Priority:             d.Priority,
 		Active:               d.Active,
-	}
+	}, nil
 }
 
-func FromPersistenceAllocationPolicyRule(p *AllocationPolicyRule) *domain.AllocationPolicyRule {
+func AllocationPolicyRuleToDomain(p *AllocationPolicyRule) *domain.AllocationPolicyRule {
 	var selector domain.SelectorPayload
 	if p.SelectorPayload != "" {
 		_ = json.Unmarshal([]byte(p.SelectorPayload), &selector)
@@ -378,14 +340,14 @@ func FromPersistenceAllocationPolicyRule(p *AllocationPolicyRule) *domain.Alloca
 		RuleKind:             p.RuleKind,
 		Priority:             p.Priority,
 		Active:               p.Active,
-		CreatedAt:            formatTime(p.CreatedAt),
-		UpdatedAt:            formatTime(p.UpdatedAt),
+		CreatedAt:            p.CreatedAt,
+		UpdatedAt:            p.UpdatedAt,
 	}
 }
 
 // ---- SupplierOrder ----
 
-func ToPersistenceSupplierOrder(d *domain.SupplierOrder) *SupplierOrder {
+func SupplierOrderFromDomain(d *domain.SupplierOrder) *SupplierOrder {
 	return &SupplierOrder{
 		WaveID:               d.WaveID,
 		SupplierPlatform:     d.SupplierPlatform,
@@ -393,7 +355,7 @@ func ToPersistenceSupplierOrder(d *domain.SupplierOrder) *SupplierOrder {
 		BatchNo:              d.BatchNo,
 		ExternalOrderNo:      d.ExternalOrderNo,
 		SubmissionMode:       SubmissionMode(d.SubmissionMode),
-		SubmittedAt:          parseTimePtr(d.SubmittedAt),
+		SubmittedAt:          d.SubmittedAt,
 		Status:               SupplierOrderStatus(d.Status),
 		RequestPayload:       d.RequestPayload,
 		ResponsePayload:      d.ResponsePayload,
@@ -404,7 +366,7 @@ func ToPersistenceSupplierOrder(d *domain.SupplierOrder) *SupplierOrder {
 	}
 }
 
-func FromPersistenceSupplierOrder(p *SupplierOrder) *domain.SupplierOrder {
+func SupplierOrderToDomain(p *SupplierOrder) *domain.SupplierOrder {
 	return &domain.SupplierOrder{
 		ID:                   p.ID,
 		WaveID:               p.WaveID,
@@ -413,7 +375,7 @@ func FromPersistenceSupplierOrder(p *SupplierOrder) *domain.SupplierOrder {
 		BatchNo:              p.BatchNo,
 		ExternalOrderNo:      p.ExternalOrderNo,
 		SubmissionMode:       string(p.SubmissionMode),
-		SubmittedAt:          formatTimePtr(p.SubmittedAt),
+		SubmittedAt:          p.SubmittedAt,
 		Status:               string(p.Status),
 		RequestPayload:       p.RequestPayload,
 		ResponsePayload:      p.ResponsePayload,
@@ -421,14 +383,14 @@ func FromPersistenceSupplierOrder(p *SupplierOrder) *domain.SupplierOrder {
 		BasisProjectionHash:  p.BasisProjectionHash,
 		BasisPayloadSnapshot: p.BasisPayloadSnapshot,
 		ExtraData:            p.ExtraData,
-		CreatedAt:            formatTime(p.CreatedAt),
-		UpdatedAt:            formatTime(p.UpdatedAt),
+		CreatedAt:            p.CreatedAt,
+		UpdatedAt:            p.UpdatedAt,
 	}
 }
 
 // ---- SupplierOrderLine ----
 
-func ToPersistenceSupplierOrderLine(d *domain.SupplierOrderLine) *SupplierOrderLine {
+func SupplierOrderLineFromDomain(d *domain.SupplierOrderLine) *SupplierOrderLine {
 	return &SupplierOrderLine{
 		SupplierOrderID:   d.SupplierOrderID,
 		FulfillmentLineID: d.FulfillmentLineID,
@@ -441,7 +403,7 @@ func ToPersistenceSupplierOrderLine(d *domain.SupplierOrderLine) *SupplierOrderL
 	}
 }
 
-func FromPersistenceSupplierOrderLine(p *SupplierOrderLine) *domain.SupplierOrderLine {
+func SupplierOrderLineToDomain(p *SupplierOrderLine) *domain.SupplierOrderLine {
 	return &domain.SupplierOrderLine{
 		ID:                p.ID,
 		SupplierOrderID:   p.SupplierOrderID,
@@ -452,39 +414,39 @@ func FromPersistenceSupplierOrderLine(p *SupplierOrderLine) *domain.SupplierOrde
 		AcceptedQuantity:  p.AcceptedQuantity,
 		Status:            p.Status,
 		ExtraData:         p.ExtraData,
-		CreatedAt:         formatTime(p.CreatedAt),
-		UpdatedAt:         formatTime(p.UpdatedAt),
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
 // ---- WaveDemandAssignment ----
 
-func ToPersistenceWaveDemandAssignment(d *domain.WaveDemandAssignment) *WaveDemandAssignment {
+func WaveDemandAssignmentFromDomain(d *domain.WaveDemandAssignment) *WaveDemandAssignment {
 	return &WaveDemandAssignment{
 		WaveID:           d.WaveID,
 		DemandDocumentID: d.DemandDocumentID,
-		AcceptedAt:       parseTimePtr(d.AcceptedAt),
+		AcceptedAt:       d.AcceptedAt,
 		AcceptedBy:       d.AcceptedBy,
 		ExtraData:        d.ExtraData,
 	}
 }
 
-func FromPersistenceWaveDemandAssignment(p *WaveDemandAssignment) *domain.WaveDemandAssignment {
+func WaveDemandAssignmentToDomain(p *WaveDemandAssignment) *domain.WaveDemandAssignment {
 	return &domain.WaveDemandAssignment{
 		ID:               p.ID,
 		WaveID:           p.WaveID,
 		DemandDocumentID: p.DemandDocumentID,
-		AcceptedAt:       formatTimePtr(p.AcceptedAt),
+		AcceptedAt:       p.AcceptedAt,
 		AcceptedBy:       p.AcceptedBy,
 		ExtraData:        p.ExtraData,
-		CreatedAt:        formatTime(p.CreatedAt),
-		UpdatedAt:        formatTime(p.UpdatedAt),
+		CreatedAt:        p.CreatedAt,
+		UpdatedAt:        p.UpdatedAt,
 	}
 }
 
 // ---- Shipment ----
 
-func ToPersistenceShipment(d *domain.Shipment) *Shipment {
+func ShipmentFromDomain(d *domain.Shipment) *Shipment {
 	return &Shipment{
 		SupplierOrderID:      d.SupplierOrderID,
 		SupplierPlatform:     d.SupplierPlatform,
@@ -494,7 +456,7 @@ func ToPersistenceShipment(d *domain.Shipment) *Shipment {
 		CarrierName:          d.CarrierName,
 		TrackingNo:           d.TrackingNo,
 		Status:               ShipmentStatus(d.Status),
-		ShippedAt:            parseTimePtr(d.ShippedAt),
+		ShippedAt:            d.ShippedAt,
 		BasisHistoryNodeID:   d.BasisHistoryNodeID,
 		BasisProjectionHash:  d.BasisProjectionHash,
 		BasisPayloadSnapshot: d.BasisPayloadSnapshot,
@@ -502,7 +464,7 @@ func ToPersistenceShipment(d *domain.Shipment) *Shipment {
 	}
 }
 
-func FromPersistenceShipment(p *Shipment) *domain.Shipment {
+func ShipmentToDomain(p *Shipment) *domain.Shipment {
 	return &domain.Shipment{
 		ID:                   p.ID,
 		SupplierOrderID:      p.SupplierOrderID,
@@ -513,19 +475,19 @@ func FromPersistenceShipment(p *Shipment) *domain.Shipment {
 		CarrierName:          p.CarrierName,
 		TrackingNo:           p.TrackingNo,
 		Status:               string(p.Status),
-		ShippedAt:            formatTimePtr(p.ShippedAt),
+		ShippedAt:            p.ShippedAt,
 		BasisHistoryNodeID:   p.BasisHistoryNodeID,
 		BasisProjectionHash:  p.BasisProjectionHash,
 		BasisPayloadSnapshot: p.BasisPayloadSnapshot,
 		ExtraData:            p.ExtraData,
-		CreatedAt:            formatTime(p.CreatedAt),
-		UpdatedAt:            formatTime(p.UpdatedAt),
+		CreatedAt:            p.CreatedAt,
+		UpdatedAt:            p.UpdatedAt,
 	}
 }
 
 // ---- ShipmentLine ----
 
-func ToPersistenceShipmentLine(d *domain.ShipmentLine) *ShipmentLine {
+func ShipmentLineFromDomain(d *domain.ShipmentLine) *ShipmentLine {
 	return &ShipmentLine{
 		ShipmentID:          d.ShipmentID,
 		SupplierOrderLineID: d.SupplierOrderLineID,
@@ -534,20 +496,20 @@ func ToPersistenceShipmentLine(d *domain.ShipmentLine) *ShipmentLine {
 	}
 }
 
-func FromPersistenceShipmentLine(p *ShipmentLine) *domain.ShipmentLine {
+func ShipmentLineToDomain(p *ShipmentLine) *domain.ShipmentLine {
 	return &domain.ShipmentLine{
 		ID:                  p.ID,
 		ShipmentID:          p.ShipmentID,
 		SupplierOrderLineID: p.SupplierOrderLineID,
 		FulfillmentLineID:   p.FulfillmentLineID,
 		Quantity:            p.Quantity,
-		CreatedAt:           formatTime(p.CreatedAt),
+		CreatedAt:           p.CreatedAt,
 	}
 }
 
 // ---- ChannelSyncJob ----
 
-func ToPersistenceChannelSyncJob(d *domain.ChannelSyncJob) *ChannelSyncJob {
+func ChannelSyncJobFromDomain(d *domain.ChannelSyncJob) *ChannelSyncJob {
 	return &ChannelSyncJob{
 		WaveID:               d.WaveID,
 		IntegrationProfileID: d.IntegrationProfileID,
@@ -559,12 +521,12 @@ func ToPersistenceChannelSyncJob(d *domain.ChannelSyncJob) *ChannelSyncJob {
 		RequestPayload:       d.RequestPayload,
 		ResponsePayload:      d.ResponsePayload,
 		ErrorMessage:         d.ErrorMessage,
-		StartedAt:            parseTimePtr(d.StartedAt),
-		FinishedAt:           parseTimePtr(d.FinishedAt),
+		StartedAt:            d.StartedAt,
+		FinishedAt:           d.FinishedAt,
 	}
 }
 
-func FromPersistenceChannelSyncJob(p *ChannelSyncJob) *domain.ChannelSyncJob {
+func ChannelSyncJobToDomain(p *ChannelSyncJob) *domain.ChannelSyncJob {
 	return &domain.ChannelSyncJob{
 		ID:                   p.ID,
 		WaveID:               p.WaveID,
@@ -577,16 +539,16 @@ func FromPersistenceChannelSyncJob(p *ChannelSyncJob) *domain.ChannelSyncJob {
 		RequestPayload:       p.RequestPayload,
 		ResponsePayload:      p.ResponsePayload,
 		ErrorMessage:         p.ErrorMessage,
-		StartedAt:            formatTimePtr(p.StartedAt),
-		FinishedAt:           formatTimePtr(p.FinishedAt),
-		CreatedAt:            formatTime(p.CreatedAt),
-		UpdatedAt:            formatTime(p.UpdatedAt),
+		StartedAt:            p.StartedAt,
+		FinishedAt:           p.FinishedAt,
+		CreatedAt:            p.CreatedAt,
+		UpdatedAt:            p.UpdatedAt,
 	}
 }
 
 // ---- ChannelSyncItem ----
 
-func ToPersistenceChannelSyncItem(d *domain.ChannelSyncItem) *ChannelSyncItem {
+func ChannelSyncItemFromDomain(d *domain.ChannelSyncItem) *ChannelSyncItem {
 	return &ChannelSyncItem{
 		ChannelSyncJobID:   d.ChannelSyncJobID,
 		FulfillmentLineID:  d.FulfillmentLineID,
@@ -600,7 +562,7 @@ func ToPersistenceChannelSyncItem(d *domain.ChannelSyncItem) *ChannelSyncItem {
 	}
 }
 
-func FromPersistenceChannelSyncItem(p *ChannelSyncItem) *domain.ChannelSyncItem {
+func ChannelSyncItemToDomain(p *ChannelSyncItem) *domain.ChannelSyncItem {
 	return &domain.ChannelSyncItem{
 		ID:                 p.ID,
 		ChannelSyncJobID:   p.ChannelSyncJobID,
@@ -612,14 +574,14 @@ func FromPersistenceChannelSyncItem(p *ChannelSyncItem) *domain.ChannelSyncItem 
 		CarrierCode:        p.CarrierCode,
 		Status:             string(p.Status),
 		ErrorMessage:       p.ErrorMessage,
-		CreatedAt:          formatTime(p.CreatedAt),
-		UpdatedAt:          formatTime(p.UpdatedAt),
+		CreatedAt:          p.CreatedAt,
+		UpdatedAt:          p.UpdatedAt,
 	}
 }
 
 // ---- IntegrationProfile ----
 
-func ToPersistenceIntegrationProfile(d *domain.IntegrationProfile) *IntegrationProfile {
+func IntegrationProfileFromDomain(d *domain.IntegrationProfile) *IntegrationProfile {
 	return &IntegrationProfile{
 		ProfileKey:                d.ProfileKey,
 		SourceChannel:             d.SourceChannel,
@@ -645,7 +607,7 @@ func ToPersistenceIntegrationProfile(d *domain.IntegrationProfile) *IntegrationP
 	}
 }
 
-func FromPersistenceIntegrationProfile(p *IntegrationProfile) *domain.IntegrationProfile {
+func IntegrationProfileToDomain(p *IntegrationProfile) *domain.IntegrationProfile {
 	return &domain.IntegrationProfile{
 		ID:                        p.ID,
 		ProfileKey:                p.ProfileKey,
@@ -669,14 +631,14 @@ func FromPersistenceIntegrationProfile(p *IntegrationProfile) *domain.Integratio
 		SupportedLocales:          p.SupportedLocales,
 		DefaultLocale:             p.DefaultLocale,
 		ExtraData:                 p.ExtraData,
-		CreatedAt:                 formatTime(p.CreatedAt),
-		UpdatedAt:                 formatTime(p.UpdatedAt),
+		CreatedAt:                 p.CreatedAt,
+		UpdatedAt:                 p.UpdatedAt,
 	}
 }
 
 // ---- ChannelClosureDecisionRecord ----
 
-func ToPersistenceChannelClosureDecisionRecord(d *domain.ChannelClosureDecisionRecord) *ChannelClosureDecisionRecord {
+func ChannelClosureDecisionRecordFromDomain(d *domain.ChannelClosureDecisionRecord) *ChannelClosureDecisionRecord {
 	return &ChannelClosureDecisionRecord{
 		WaveID:               d.WaveID,
 		IntegrationProfileID: d.IntegrationProfileID,
@@ -689,7 +651,7 @@ func ToPersistenceChannelClosureDecisionRecord(d *domain.ChannelClosureDecisionR
 	}
 }
 
-func FromPersistenceChannelClosureDecisionRecord(p *ChannelClosureDecisionRecord) *domain.ChannelClosureDecisionRecord {
+func ChannelClosureDecisionRecordToDomain(p *ChannelClosureDecisionRecord) *domain.ChannelClosureDecisionRecord {
 	return &domain.ChannelClosureDecisionRecord{
 		ID:                   p.ID,
 		WaveID:               p.WaveID,
@@ -700,8 +662,8 @@ func FromPersistenceChannelClosureDecisionRecord(p *ChannelClosureDecisionRecord
 		Note:                 p.Note,
 		EvidenceRef:          p.EvidenceRef,
 		OperatorID:           p.OperatorID,
-		CreatedAt:            formatTime(p.CreatedAt),
-		UpdatedAt:            formatTime(p.UpdatedAt),
+		CreatedAt:            p.CreatedAt,
+		UpdatedAt:            p.UpdatedAt,
 	}
 }
 
@@ -722,8 +684,8 @@ func FulfillmentAdjustmentToDomain(p *FulfillmentAdjustment) *domain.Fulfillment
 		OperatorID:                p.OperatorID,
 		Note:                      p.Note,
 		EvidenceRef:               p.EvidenceRef,
-		CreatedAt:                 formatTime(p.CreatedAt),
-		UpdatedAt:                 formatTime(p.UpdatedAt),
+		CreatedAt:                 p.CreatedAt,
+		UpdatedAt:                 p.UpdatedAt,
 	}
 }
 
@@ -755,8 +717,8 @@ func DocumentTemplateToDomain(p *DocumentTemplate) *domain.DocumentTemplate {
 		Format:       p.Format,
 		MappingRules: p.MappingRules,
 		ExtraData:    p.ExtraData,
-		CreatedAt:    formatTime(p.CreatedAt),
-		UpdatedAt:    formatTime(p.UpdatedAt),
+		CreatedAt:    p.CreatedAt,
+		UpdatedAt:    p.UpdatedAt,
 	}
 }
 
@@ -780,7 +742,7 @@ func ProfileTemplateBindingToDomain(p *IntegrationProfileTemplateBinding) *domai
 		DocumentType:         p.DocumentType,
 		TemplateID:           p.TemplateID,
 		IsDefault:            p.IsDefault,
-		CreatedAt:            formatTime(p.CreatedAt),
+		CreatedAt:            p.CreatedAt,
 	}
 }
 
@@ -802,8 +764,8 @@ func HistoryScopeToDomain(p *HistoryScope) *domain.HistoryScope {
 		ScopeType:         p.ScopeType,
 		ScopeKey:          p.ScopeKey,
 		CurrentHeadNodeID: p.CurrentHeadNodeID,
-		CreatedAt:         formatTime(p.CreatedAt),
-		UpdatedAt:         formatTime(p.UpdatedAt),
+		CreatedAt:         p.CreatedAt,
+		UpdatedAt:         p.UpdatedAt,
 	}
 }
 
@@ -831,7 +793,7 @@ func HistoryNodeToDomain(p *HistoryNode) *domain.HistoryNode {
 		CheckpointHint:       p.CheckpointHint,
 		ProjectionHash:       p.ProjectionHash,
 		CreatedBy:            p.CreatedBy,
-		CreatedAt:            formatTime(p.CreatedAt),
+		CreatedAt:            p.CreatedAt,
 	}
 }
 
@@ -860,7 +822,7 @@ func HistoryCheckpointToDomain(p *HistoryCheckpoint) *domain.HistoryCheckpoint {
 		HistoryNodeID:   p.HistoryNodeID,
 		SnapshotPayload: p.SnapshotPayload,
 		SchemaVersion:   p.SchemaVersion,
-		CreatedAt:       formatTime(p.CreatedAt),
+		CreatedAt:       p.CreatedAt,
 	}
 }
 
@@ -883,7 +845,7 @@ func HistoryPinToDomain(p *HistoryPin) *domain.HistoryPin {
 		PinKind:       p.PinKind,
 		RefType:       p.RefType,
 		RefID:         p.RefID,
-		CreatedAt:     formatTime(p.CreatedAt),
+		CreatedAt:     p.CreatedAt,
 	}
 }
 
@@ -899,7 +861,7 @@ func HistoryPinFromDomain(d *domain.HistoryPin) *HistoryPin {
 
 // ---- ProductMaster ----
 
-func ToPersistenceProductMaster(d *domain.ProductMaster) *ProductMaster {
+func ProductMasterFromDomain(d *domain.ProductMaster) *ProductMaster {
 	p := &ProductMaster{
 		SupplierPlatform:   d.SupplierPlatform,
 		FactorySKU:         d.FactorySKU,
@@ -915,7 +877,7 @@ func ToPersistenceProductMaster(d *domain.ProductMaster) *ProductMaster {
 	return p
 }
 
-func FromPersistenceProductMaster(p *ProductMaster) *domain.ProductMaster {
+func ProductMasterToDomain(p *ProductMaster) *domain.ProductMaster {
 	return &domain.ProductMaster{
 		ID:                 p.ID,
 		SupplierPlatform:   p.SupplierPlatform,
@@ -925,14 +887,14 @@ func FromPersistenceProductMaster(p *ProductMaster) *domain.ProductMaster {
 		ProductKind:        domain.ProductKind(p.ProductKind),
 		Archived:           p.Archived,
 		ExtraData:          p.ExtraData,
-		CreatedAt:          formatTime(p.CreatedAt),
-		UpdatedAt:          formatTime(p.UpdatedAt),
+		CreatedAt:          p.CreatedAt,
+		UpdatedAt:          p.UpdatedAt,
 	}
 }
 
 // ---- Product ----
 
-func ToPersistenceProduct(d *domain.Product) *Product {
+func ProductFromDomain(d *domain.Product) *Product {
 	p := &Product{
 		WaveID:           d.WaveID,
 		ProductMasterID:  d.ProductMasterID,
@@ -947,7 +909,7 @@ func ToPersistenceProduct(d *domain.Product) *Product {
 	return p
 }
 
-func FromPersistenceProduct(p *Product) *domain.Product {
+func ProductToDomain(p *Product) *domain.Product {
 	return &domain.Product{
 		ID:               p.ID,
 		WaveID:           p.WaveID,
@@ -956,14 +918,14 @@ func FromPersistenceProduct(p *Product) *domain.Product {
 		FactorySKU:       p.FactorySKU,
 		Name:             p.Name,
 		ExtraData:        p.ExtraData,
-		CreatedAt:        formatTime(p.CreatedAt),
-		UpdatedAt:        formatTime(p.UpdatedAt),
+		CreatedAt:        p.CreatedAt,
+		UpdatedAt:        p.UpdatedAt,
 	}
 }
 
 // ---- CarrierMapping ----
 
-func ToPersistenceCarrierMapping(d *domain.CarrierMapping) *CarrierMapping {
+func CarrierMappingFromDomain(d *domain.CarrierMapping) *CarrierMapping {
 	p := &CarrierMapping{
 		IntegrationProfileID: d.IntegrationProfileID,
 		InternalCarrierCode:  d.InternalCarrierCode,
@@ -977,7 +939,7 @@ func ToPersistenceCarrierMapping(d *domain.CarrierMapping) *CarrierMapping {
 	return p
 }
 
-func FromPersistenceCarrierMapping(p *CarrierMapping) *domain.CarrierMapping {
+func CarrierMappingToDomain(p *CarrierMapping) *domain.CarrierMapping {
 	return &domain.CarrierMapping{
 		ID:                   p.ID,
 		IntegrationProfileID: p.IntegrationProfileID,
@@ -985,7 +947,7 @@ func FromPersistenceCarrierMapping(p *CarrierMapping) *domain.CarrierMapping {
 		ExternalCarrierCode:  p.ExternalCarrierCode,
 		ExternalCarrierName:  p.ExternalCarrierName,
 		IsDefault:            p.IsDefault,
-		CreatedAt:            formatTime(p.CreatedAt),
-		UpdatedAt:            formatTime(p.UpdatedAt),
+		CreatedAt:            p.CreatedAt,
+		UpdatedAt:            p.UpdatedAt,
 	}
 }

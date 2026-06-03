@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -8,11 +9,11 @@ import (
 )
 
 var validDocumentTypes = map[string]bool{
-	"import_entitlement":          true,
-	"import_sales_order":          true,
-	"import_product_catalog":      true,
-	"export_supplier_order":       true,
-	"import_supplier_shipment":    true,
+	"import_entitlement":            true,
+	"import_sales_order":            true,
+	"import_product_catalog":        true,
+	"export_supplier_order":         true,
+	"import_supplier_shipment":      true,
 	"export_source_tracking_update": true,
 }
 
@@ -41,7 +42,7 @@ func NewTemplateManagementUseCase(
 	}
 }
 
-func (uc *templateManagementUseCase) CreateDocumentTemplate(input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error) {
+func (uc *templateManagementUseCase) CreateDocumentTemplate(ctx context.Context, input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error) {
 	if input.TemplateKey == "" {
 		return nil, fmt.Errorf("templateKey must not be empty")
 	}
@@ -59,14 +60,14 @@ func (uc *templateManagementUseCase) CreateDocumentTemplate(input dto.CreateDocu
 		MappingRules: input.MappingRules,
 		ExtraData:    input.ExtraData,
 	}
-	if err := uc.templateRepo.Create(t); err != nil {
+	if err := uc.templateRepo.Create(ctx, t); err != nil {
 		return nil, err
 	}
 	return templateToDTO(t), nil
 }
 
-func (uc *templateManagementUseCase) ListDocumentTemplates() ([]dto.DocumentTemplateDTO, error) {
-	templates, err := uc.templateRepo.List()
+func (uc *templateManagementUseCase) ListDocumentTemplates(ctx context.Context) ([]dto.DocumentTemplateDTO, error) {
+	templates, err := uc.templateRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -77,14 +78,14 @@ func (uc *templateManagementUseCase) ListDocumentTemplates() ([]dto.DocumentTemp
 	return out, nil
 }
 
-func (uc *templateManagementUseCase) BindTemplateToProfile(input dto.BindTemplateToProfileInput) (*dto.ProfileTemplateBindingDTO, error) {
+func (uc *templateManagementUseCase) BindTemplateToProfile(ctx context.Context, input dto.BindTemplateToProfileInput) (*dto.ProfileTemplateBindingDTO, error) {
 	// Validate document type
 	if !validDocumentTypes[input.DocumentType] {
 		return nil, fmt.Errorf("invalid documentType: %q", input.DocumentType)
 	}
 
 	// Validate template exists.
-	t, err := uc.templateRepo.FindByID(input.TemplateID)
+	t, err := uc.templateRepo.FindByID(ctx, input.TemplateID)
 	if err != nil {
 		return nil, fmt.Errorf("look up template %d: %w", input.TemplateID, err)
 	}
@@ -98,7 +99,7 @@ func (uc *templateManagementUseCase) BindTemplateToProfile(input dto.BindTemplat
 	}
 
 	// Validate profile exists.
-	profile, err := uc.profileRepo.FindByID(input.IntegrationProfileID)
+	profile, err := uc.profileRepo.FindByID(ctx, input.IntegrationProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("look up integration profile %d: %w", input.IntegrationProfileID, err)
 	}
@@ -108,7 +109,7 @@ func (uc *templateManagementUseCase) BindTemplateToProfile(input dto.BindTemplat
 
 	// Enforce uniqueness: only one default binding per (profileID, documentType)
 	if input.IsDefault {
-		existing, err := uc.bindingRepo.FindDefaultByProfileAndType(input.IntegrationProfileID, input.DocumentType)
+		existing, err := uc.bindingRepo.FindDefaultByProfileAndType(ctx, input.IntegrationProfileID, input.DocumentType)
 		if err != nil {
 			return nil, fmt.Errorf("check existing default: %w", err)
 		}
@@ -123,14 +124,14 @@ func (uc *templateManagementUseCase) BindTemplateToProfile(input dto.BindTemplat
 		TemplateID:           input.TemplateID,
 		IsDefault:            input.IsDefault,
 	}
-	if err := uc.bindingRepo.Create(b); err != nil {
+	if err := uc.bindingRepo.Create(ctx, b); err != nil {
 		return nil, err
 	}
 	return bindingToDTO(b), nil
 }
 
-func (uc *templateManagementUseCase) ListBindingsByProfile(profileID uint) ([]dto.ProfileTemplateBindingDTO, error) {
-	bindings, err := uc.bindingRepo.ListByProfile(profileID)
+func (uc *templateManagementUseCase) ListBindingsByProfile(ctx context.Context, profileID uint) ([]dto.ProfileTemplateBindingDTO, error) {
+	bindings, err := uc.bindingRepo.ListByProfile(ctx, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +142,8 @@ func (uc *templateManagementUseCase) ListBindingsByProfile(profileID uint) ([]dt
 	return out, nil
 }
 
-func (uc *templateManagementUseCase) GetDefaultTemplateForProfile(profileID uint, docType string) (*dto.DocumentTemplateDTO, error) {
-	binding, err := uc.bindingRepo.FindDefaultByProfileAndType(profileID, docType)
+func (uc *templateManagementUseCase) GetDefaultTemplateForProfile(ctx context.Context, profileID uint, docType string) (*dto.DocumentTemplateDTO, error) {
+	binding, err := uc.bindingRepo.FindDefaultByProfileAndType(ctx, profileID, docType)
 	if err != nil {
 		return nil, fmt.Errorf("find default binding for profile %d / type %q: %w", profileID, docType, err)
 	}
@@ -150,7 +151,7 @@ func (uc *templateManagementUseCase) GetDefaultTemplateForProfile(profileID uint
 		return nil, nil
 	}
 
-	t, err := uc.templateRepo.FindByID(binding.TemplateID)
+	t, err := uc.templateRepo.FindByID(ctx, binding.TemplateID)
 	if err != nil {
 		return nil, fmt.Errorf("look up template %d: %w", binding.TemplateID, err)
 	}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -47,15 +48,15 @@ func validateProfileEnums(input dto.CreateProfileInput) error {
 		"demand_driven": true,
 	}
 	validTrackingSyncMode := map[string]bool{
-		"api_push":              true,
-		"document_export":       true,
-		"manual_confirmation":   true,
-		"unsupported":           true,
+		"api_push":            true,
+		"document_export":     true,
+		"manual_confirmation": true,
+		"unsupported":         true,
 	}
 	validClosurePolicy := map[string]bool{
-		"close_after_sync":                  true,
-		"close_after_manual_confirmation":   true,
-		"close_after_shipment":              true,
+		"close_after_sync":                true,
+		"close_after_manual_confirmation": true,
+		"close_after_shipment":            true,
 	}
 	validIdentityStrategy := map[string]bool{
 		"platform_uid":      true,
@@ -136,7 +137,7 @@ func validateExecutionReadiness(input dto.CreateProfileInput, executorProvider E
 	return nil
 }
 
-func (uc *profileManagementUseCase) CreateProfile(input dto.CreateProfileInput) (*dto.IntegrationProfileDTO, error) {
+func (uc *profileManagementUseCase) CreateProfile(ctx context.Context, input dto.CreateProfileInput) (*dto.IntegrationProfileDTO, error) {
 	if input.ProfileKey == "" {
 		return nil, fmt.Errorf("profile_key is required")
 	}
@@ -173,15 +174,15 @@ func (uc *profileManagementUseCase) CreateProfile(input dto.CreateProfileInput) 
 		ExtraData:                 input.ExtraData,
 	}
 
-	if err := uc.repo.Create(profile); err != nil {
+	if err := uc.repo.Create(ctx, profile); err != nil {
 		return nil, err
 	}
 	d := profileToDTO(profile)
 	return &d, nil
 }
 
-func (uc *profileManagementUseCase) UpdateProfile(input dto.UpdateProfileInput) (*dto.IntegrationProfileDTO, error) {
-	profile, err := uc.repo.FindByID(input.ID)
+func (uc *profileManagementUseCase) UpdateProfile(ctx context.Context, input dto.UpdateProfileInput) (*dto.IntegrationProfileDTO, error) {
+	profile, err := uc.repo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -228,15 +229,15 @@ func (uc *profileManagementUseCase) UpdateProfile(input dto.UpdateProfileInput) 
 	profile.DefaultLocale = input.DefaultLocale
 	profile.ExtraData = input.ExtraData
 
-	if err := uc.repo.Update(profile); err != nil {
+	if err := uc.repo.Update(ctx, profile); err != nil {
 		return nil, err
 	}
 	d := profileToDTO(profile)
 	return &d, nil
 }
 
-func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
-	count, err := uc.demandRepo.CountByIntegrationProfileID(id)
+func (uc *profileManagementUseCase) DeleteProfile(ctx context.Context, id uint) error {
+	count, err := uc.demandRepo.CountByIntegrationProfileID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to check profile references: %w", err)
 	}
@@ -244,7 +245,7 @@ func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
 		return fmt.Errorf("cannot delete profile: %d demand documents still reference it", count)
 	}
 
-	syncCount, err := uc.channelSyncRepo.CountJobsByProfileID(id)
+	syncCount, err := uc.channelSyncRepo.CountJobsByProfileID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to check channel sync references: %w", err)
 	}
@@ -252,7 +253,7 @@ func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
 		return fmt.Errorf("cannot delete profile: referenced by channel sync jobs")
 	}
 
-	bindingCount, err := uc.templateBindingRepo.CountByProfileID(id)
+	bindingCount, err := uc.templateBindingRepo.CountByProfileID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to check template binding references: %w", err)
 	}
@@ -260,7 +261,7 @@ func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
 		return fmt.Errorf("cannot delete profile: referenced by template bindings")
 	}
 
-	closureCount, err := uc.closureDecisionRepo.CountByProfileID(id)
+	closureCount, err := uc.closureDecisionRepo.CountByProfileID(ctx, id)
 	if err != nil {
 		return fmt.Errorf("failed to check closure decision references: %w", err)
 	}
@@ -268,11 +269,11 @@ func (uc *profileManagementUseCase) DeleteProfile(id uint) error {
 		return fmt.Errorf("cannot delete profile: referenced by closure decisions")
 	}
 
-	return uc.repo.Delete(id)
+	return uc.repo.Delete(ctx, id)
 }
 
-func (uc *profileManagementUseCase) GetProfile(id uint) (*dto.IntegrationProfileDTO, error) {
-	profile, err := uc.repo.FindByID(id)
+func (uc *profileManagementUseCase) GetProfile(ctx context.Context, id uint) (*dto.IntegrationProfileDTO, error) {
+	profile, err := uc.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -280,8 +281,8 @@ func (uc *profileManagementUseCase) GetProfile(id uint) (*dto.IntegrationProfile
 	return &d, nil
 }
 
-func (uc *profileManagementUseCase) ListProfiles() ([]dto.IntegrationProfileDTO, error) {
-	profiles, err := uc.repo.List()
+func (uc *profileManagementUseCase) ListProfiles(ctx context.Context) ([]dto.IntegrationProfileDTO, error) {
+	profiles, err := uc.repo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -292,7 +293,7 @@ func (uc *profileManagementUseCase) ListProfiles() ([]dto.IntegrationProfileDTO,
 	return result, nil
 }
 
-func (uc *profileManagementUseCase) SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error) {
+func (uc *profileManagementUseCase) SeedDefaultProfiles(ctx context.Context) ([]dto.IntegrationProfileDTO, error) {
 	defaults := []dto.CreateProfileInput{
 		{
 			ProfileKey:                "membership_default",
@@ -327,11 +328,11 @@ func (uc *profileManagementUseCase) SeedDefaultProfiles() ([]dto.IntegrationProf
 
 	var result []dto.IntegrationProfileDTO
 	for _, def := range defaults {
-		_, err := uc.repo.FindByProfileKey(def.ProfileKey)
+		_, err := uc.repo.FindByProfileKey(ctx, def.ProfileKey)
 		if err == nil {
 			continue
 		}
-		created, err := uc.CreateProfile(def)
+		created, err := uc.CreateProfile(ctx, def)
 		if err != nil {
 			return nil, fmt.Errorf("create default profile %q: %w", def.ProfileKey, err)
 		}

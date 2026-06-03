@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -25,7 +26,7 @@ func NewAdjustmentUseCase(
 	}
 }
 
-func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (*domain.FulfillmentAdjustment, error) {
+func (uc *adjustmentUseCase) RecordAdjustment(ctx context.Context, input dto.RecordAdjustmentInput) (*domain.FulfillmentAdjustment, error) {
 	// Default TargetKind for backward compatibility
 	targetKind := input.TargetKind
 	if targetKind == "" {
@@ -62,7 +63,7 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 			return nil, fmt.Errorf("fulfillment_line_id is required when target_kind is \"fulfillment_line\"")
 		}
 		// Validate fulfillment line exists and belongs to the wave
-		line, err := uc.fulfillRepo.FindByID(*input.FulfillmentLineID)
+		line, err := uc.fulfillRepo.FindByID(ctx, *input.FulfillmentLineID)
 		if err != nil {
 			return nil, fmt.Errorf("fulfillment line %d lookup failed: %w", *input.FulfillmentLineID, err)
 		}
@@ -84,7 +85,7 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		}
 		// Validate participant snapshot exists and belongs to the wave.
 		// Use WaveRepository.ListParticipantsByWave to verify ownership.
-		participants, err := uc.waveRepo.ListParticipantsByWave(input.WaveID)
+		participants, err := uc.waveRepo.ListParticipantsByWave(ctx, input.WaveID)
 		if err != nil {
 			return nil, fmt.Errorf("participant snapshot lookup failed: %w", err)
 		}
@@ -118,14 +119,14 @@ func (uc *adjustmentUseCase) RecordAdjustment(input dto.RecordAdjustmentInput) (
 		EvidenceRef:               input.EvidenceRef,
 	}
 
-	if err := uc.adjustmentRepo.Create(adj); err != nil {
+	if err := uc.adjustmentRepo.Create(ctx, adj); err != nil {
 		return nil, err
 	}
 	return adj, nil
 }
 
-func (uc *adjustmentUseCase) ListAdjustmentsByWave(waveID uint) ([]dto.FulfillmentAdjustmentDTO, error) {
-	adjs, err := uc.adjustmentRepo.ListByWave(waveID)
+func (uc *adjustmentUseCase) ListAdjustmentsByWave(ctx context.Context, waveID uint) ([]dto.FulfillmentAdjustmentDTO, error) {
+	adjs, err := uc.adjustmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}

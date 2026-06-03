@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -34,12 +35,12 @@ func NewChannelClosureUseCase(
 	}
 }
 
-func (uc *channelClosureUseCase) PlanChannelClosure(input dto.PlanChannelClosureInput) (*dto.PlanChannelClosureResult, error) {
+func (uc *channelClosureUseCase) PlanChannelClosure(ctx context.Context, input dto.PlanChannelClosureInput) (*dto.PlanChannelClosureResult, error) {
 	// Resolve the effective profile view for this wave.
 	// We first attempt to load a bound snapshot from any demand document in this wave
 	// that references the requested profile — this ensures closure planning uses the
 	// profile state that was active when the wave was assembled, not the current live state.
-	effectiveProfile, err := uc.resolveEffectiveProfileForWave(input.WaveID, input.IntegrationProfileID)
+	effectiveProfile, err := uc.resolveEffectiveProfileForWave(ctx, input.WaveID, input.IntegrationProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("integration profile %d not found: %w", input.IntegrationProfileID, err)
 	}
@@ -47,7 +48,7 @@ func (uc *channelClosureUseCase) PlanChannelClosure(input dto.PlanChannelClosure
 	// Candidates must be verified BEFORE any decision branch.
 	// If this wave/profile has no execution objects, the closure plan
 	// does not apply — regardless of tracking_sync_mode.
-	candidates, err := uc.planCandidates(input.WaveID, effectiveProfile)
+	candidates, err := uc.planCandidates(ctx, input.WaveID, effectiveProfile)
 	if err != nil {
 		return nil, fmt.Errorf("cannot plan channel sync candidates: %w", err)
 	}
@@ -68,7 +69,7 @@ func (uc *channelClosureUseCase) PlanChannelClosure(input dto.PlanChannelClosure
 			Direction:            "push_tracking",
 			Items:                candidates,
 		}
-		job, items, err := uc.channelSyncUC.CreateChannelSyncJob(lowLevelInput)
+		job, items, err := uc.channelSyncUC.CreateChannelSyncJob(ctx, lowLevelInput)
 		if err != nil {
 			return nil, fmt.Errorf("create channel sync job: %w", err)
 		}
@@ -96,9 +97,9 @@ func (uc *channelClosureUseCase) PlanChannelClosure(input dto.PlanChannelClosure
 // resolveEffectiveProfileForWave returns the bound snapshot from the first demand document
 // in the wave that references profileID. Falls back to a live profile lookup when no
 // snapshot is stored (backward compatibility for pre-binding data).
-func (uc *channelClosureUseCase) resolveEffectiveProfileForWave(waveID uint, profileID uint) (*dto.BoundProfileSnapshot, error) {
+func (uc *channelClosureUseCase) resolveEffectiveProfileForWave(ctx context.Context, waveID uint, profileID uint) (*dto.BoundProfileSnapshot, error) {
 	// Walk fulfillment lines to find a demand document with a bound snapshot for this profile.
-	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err == nil {
 		docCache := make(map[uint]*domain.DemandDocument)
 		for _, fl := range fulfillLines {
@@ -109,7 +110,7 @@ func (uc *channelClosureUseCase) resolveEffectiveProfileForWave(waveID uint, pro
 			if _, seen := docCache[docID]; seen {
 				continue
 			}
-			doc, docErr := uc.demandRepo.FindByID(docID)
+			doc, docErr := uc.demandRepo.FindByID(ctx, docID)
 			if docErr != nil {
 				continue
 			}
@@ -127,7 +128,7 @@ func (uc *channelClosureUseCase) resolveEffectiveProfileForWave(waveID uint, pro
 	}
 
 	// Fallback: live profile lookup.
-	profile, err := uc.profileRepo.FindByID(profileID)
+	profile, err := uc.profileRepo.FindByID(ctx, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,13 +146,13 @@ func (uc *channelClosureUseCase) resolveEffectiveProfileForWave(waveID uint, pro
 	}, nil
 }
 
-func (uc *channelClosureUseCase) planCandidates(waveID uint, profile *dto.BoundProfileSnapshot) ([]dto.CreateChannelSyncItemInput, error) {
-	shipments, err := uc.shipmentRepo.ListByWave(waveID)
+func (uc *channelClosureUseCase) planCandidates(ctx context.Context, waveID uint, profile *dto.BoundProfileSnapshot) ([]dto.CreateChannelSyncItemInput, error) {
+	shipments, err := uc.shipmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, fmt.Errorf("list shipments: %w", err)
 	}
 
-	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, fmt.Errorf("list fulfillment lines: %w", err)
 	}
@@ -164,7 +165,7 @@ func (uc *channelClosureUseCase) planCandidates(waveID uint, profile *dto.BoundP
 
 	var candidates []dto.CreateChannelSyncItemInput
 	for _, s := range shipments {
-		sLines, err := uc.shipmentRepo.ListLinesByShipment(s.ID)
+		sLines, err := uc.shipmentRepo.ListLinesByShipment(ctx, s.ID)
 		if err != nil {
 			return nil, fmt.Errorf("list shipment lines for shipment %d: %w", s.ID, err)
 		}
@@ -180,7 +181,7 @@ func (uc *channelClosureUseCase) planCandidates(waveID uint, profile *dto.BoundP
 			docID := *fl.DemandDocumentID
 			doc, ok := docCache[docID]
 			if !ok {
-				d, err := uc.demandRepo.FindByID(docID)
+				d, err := uc.demandRepo.FindByID(ctx, docID)
 				if err != nil {
 					return nil, fmt.Errorf("fulfillment line %d references demand document %d which was not found: %w", fl.ID, docID, err)
 				}
@@ -197,7 +198,7 @@ func (uc *channelClosureUseCase) planCandidates(waveID uint, profile *dto.BoundP
 			// because sending an unmapped code would silently corrupt the sync payload.
 			carrierCode := s.CarrierCode
 			if profile.RequiresCarrierMapping {
-				mapping, mappingErr := uc.carrierMappingRepo.FindByProfileAndInternal(profile.ProfileID, carrierCode)
+				mapping, mappingErr := uc.carrierMappingRepo.FindByProfileAndInternal(ctx, profile.ProfileID, carrierCode)
 				if mappingErr != nil || mapping == nil {
 					return nil, fmt.Errorf("profile %q requires_carrier_mapping but no mapping found for carrier %q (fulfillment line %d)", profile.ProfileKey, carrierCode, fl.ID)
 				}
@@ -213,7 +214,7 @@ func (uc *channelClosureUseCase) planCandidates(waveID uint, profile *dto.BoundP
 			}
 
 			if fl.DemandLineID != nil {
-				dl, err := uc.demandRepo.FindLineByID(*fl.DemandLineID)
+				dl, err := uc.demandRepo.FindLineByID(ctx, *fl.DemandLineID)
 				if err != nil {
 					return nil, fmt.Errorf("fulfillment line %d references demand line %d which was not found: %w", fl.ID, *fl.DemandLineID, err)
 				}

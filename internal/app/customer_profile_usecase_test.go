@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"os"
 	"testing"
 
@@ -76,7 +77,7 @@ func TestCustomerProfileUseCase_CRUD(t *testing.T) {
 		ProfileType: "member",
 		ExtraData:   `{"level":"gold"}`,
 	}
-	profile, err := uc.CreateCustomerProfile(input)
+	profile, err := uc.CreateCustomerProfile(context.Background(), input)
 	if err != nil {
 		t.Fatalf("CreateCustomerProfile failed: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestCustomerProfileUseCase_CRUD(t *testing.T) {
 	}
 
 	// Test Get
-	got, err := uc.GetCustomerProfile(profile.ID)
+	got, err := uc.GetCustomerProfile(context.Background(), profile.ID)
 	if err != nil {
 		t.Fatalf("GetCustomerProfile failed: %v", err)
 	}
@@ -103,7 +104,7 @@ func TestCustomerProfileUseCase_CRUD(t *testing.T) {
 		ProfileType: "buyer",
 		ExtraData:   `{"level":"gold","updated":true}`,
 	}
-	updated, err := uc.UpdateCustomerProfile(updateInput)
+	updated, err := uc.UpdateCustomerProfile(context.Background(), updateInput)
 	if err != nil {
 		t.Fatalf("UpdateCustomerProfile failed: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestCustomerProfileUseCase_CRUD(t *testing.T) {
 	}
 
 	// Test List
-	list, err := uc.ListCustomerProfiles("", "", false)
+	list, err := uc.ListCustomerProfiles(context.Background(), "", "", false)
 	if err != nil {
 		t.Fatalf("ListCustomerProfiles failed: %v", err)
 	}
@@ -124,13 +125,13 @@ func TestCustomerProfileUseCase_CRUD(t *testing.T) {
 	}
 
 	// Test Delete
-	err = uc.DeleteCustomerProfile(profile.ID)
+	err = uc.DeleteCustomerProfile(context.Background(), profile.ID)
 	if err != nil {
 		t.Fatalf("DeleteCustomerProfile failed: %v", err)
 	}
 
 	// Fetching should fail or return deleted profile depending on soft-delete
-	_, err = uc.GetCustomerProfile(profile.ID)
+	_, err = uc.GetCustomerProfile(context.Background(), profile.ID)
 	if err == nil {
 		t.Error("expected error retrieving soft-deleted profile, but got nil")
 	}
@@ -141,7 +142,7 @@ func TestCustomerProfileUseCase_Identities(t *testing.T) {
 	uc, _ := setupUsecase(t, db)
 
 	// Create profile
-	profile, err := uc.CreateCustomerProfile(dto.CreateCustomerProfileInput{
+	profile, err := uc.CreateCustomerProfile(context.Background(), dto.CreateCustomerProfileInput{
 		DisplayName: "Bob Jones",
 		ProfileType: "buyer",
 	})
@@ -157,7 +158,7 @@ func TestCustomerProfileUseCase_Identities(t *testing.T) {
 		IdentityType:      "platform_uid",
 		IsPrimary:         true,
 	}
-	ident, err := uc.AddCustomerIdentity(identInput)
+	ident, err := uc.AddCustomerIdentity(context.Background(), identInput)
 	if err != nil {
 		t.Fatalf("AddCustomerIdentity failed: %v", err)
 	}
@@ -166,7 +167,7 @@ func TestCustomerProfileUseCase_Identities(t *testing.T) {
 	}
 
 	// Reload and verify
-	p, err := uc.GetCustomerProfile(profile.ID)
+	p, err := uc.GetCustomerProfile(context.Background(), profile.ID)
 	if err != nil {
 		t.Fatalf("GetCustomerProfile failed: %v", err)
 	}
@@ -178,13 +179,13 @@ func TestCustomerProfileUseCase_Identities(t *testing.T) {
 	}
 
 	// Delete Identity
-	err = uc.DeleteCustomerIdentity(ident.ID)
+	err = uc.DeleteCustomerIdentity(context.Background(), ident.ID)
 	if err != nil {
 		t.Fatalf("DeleteCustomerIdentity failed: %v", err)
 	}
 
 	// Verify identity is deleted
-	p, err = uc.GetCustomerProfile(profile.ID)
+	p, err = uc.GetCustomerProfile(context.Background(), profile.ID)
 	if err != nil {
 		t.Fatalf("GetCustomerProfile failed: %v", err)
 	}
@@ -198,7 +199,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 	uc, mergeUC := setupUsecase(t, db)
 
 	// Configure settings
-	err := uc.SaveSettings(dto.SystemSettingsDTO{
+	err := uc.SaveSettings(context.Background(), dto.SystemSettingsDTO{
 		AutoMergeCrossPlatform: true,
 		AutoMergeByEmail:       true,
 		AutoMergeByPhone:       true,
@@ -208,7 +209,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 	}
 
 	// Create profile 1 (Older, target)
-	p1, err := uc.CreateCustomerProfile(dto.CreateCustomerProfileInput{
+	p1, err := uc.CreateCustomerProfile(context.Background(), dto.CreateCustomerProfileInput{
 		DisplayName: "P1 Target",
 		ProfileType: "mixed",
 	})
@@ -217,7 +218,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 	}
 
 	// Create profile 2 (Newer, source)
-	p2, err := uc.CreateCustomerProfile(dto.CreateCustomerProfileInput{
+	p2, err := uc.CreateCustomerProfile(context.Background(), dto.CreateCustomerProfileInput{
 		DisplayName: "P2 Source",
 		ProfileType: "buyer",
 	})
@@ -227,7 +228,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 
 	// 1. Test AutoMerge By Email
 	// Add identical emails to both profiles
-	_, err = uc.AddCustomerIdentity(dto.CreateCustomerIdentityInput{
+	_, err = uc.AddCustomerIdentity(context.Background(), dto.CreateCustomerIdentityInput{
 		CustomerProfileID: p1.ID,
 		IdentityPlatform:  "patreon",
 		IdentityValue:     "user@example.com",
@@ -237,7 +238,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 		t.Fatalf("AddCustomerIdentity for p1 failed: %v", err)
 	}
 
-	_, err = uc.AddCustomerIdentity(dto.CreateCustomerIdentityInput{
+	_, err = uc.AddCustomerIdentity(context.Background(), dto.CreateCustomerIdentityInput{
 		CustomerProfileID: p2.ID,
 		IdentityPlatform:  "gumroad",
 		IdentityValue:     "user@example.com",
@@ -249,7 +250,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 
 	// Auto-merge triggers on AddCustomerIdentity automatically!
 	// Retrieve suggestions
-	suggestions, err := uc.GetMergeSuggestions()
+	suggestions, err := uc.GetMergeSuggestions(context.Background())
 	if err != nil {
 		t.Fatalf("GetMergeSuggestions failed: %v", err)
 	}
@@ -264,7 +265,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 	}
 
 	// Perform merge using profileMergeUseCase
-	mergeRes, err := mergeUC.MergeProfiles(dto.MergeProfilesInput{
+	mergeRes, err := mergeUC.MergeProfiles(context.Background(), dto.MergeProfilesInput{
 		SourceProfileID: s.SourceProfileID,
 		TargetProfileID: s.TargetProfileID,
 	})
@@ -276,13 +277,13 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 	}
 
 	// Verify source profile was soft deleted
-	_, err = uc.profileRepo.FindByID(p2.ID)
+	_, err = uc.profileRepo.FindByID(context.Background(), p2.ID)
 	if err == nil {
 		t.Error("expected source profile to be deleted")
 	}
 
 	// Verify target profile now has both identities
-	targetProfile, err := uc.GetCustomerProfile(p1.ID)
+	targetProfile, err := uc.GetCustomerProfile(context.Background(), p1.ID)
 	if err != nil {
 		t.Fatalf("GetCustomerProfile failed: %v", err)
 	}
@@ -296,7 +297,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 	uc, _ := setupUsecase(t, db)
 
 	// Configure settings
-	err := uc.SaveSettings(dto.SystemSettingsDTO{
+	err := uc.SaveSettings(context.Background(), dto.SystemSettingsDTO{
 		AutoMergeCrossPlatform: true,
 		AutoMergeByEmail:       false,
 		AutoMergeByPhone:       true,
@@ -306,7 +307,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 	}
 
 	// Create profile 1 (Target)
-	p1, err := uc.CreateCustomerProfile(dto.CreateCustomerProfileInput{
+	p1, err := uc.CreateCustomerProfile(context.Background(), dto.CreateCustomerProfileInput{
 		DisplayName: "P1 Target",
 		ProfileType: "mixed",
 	})
@@ -315,7 +316,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 	}
 
 	// Create profile 2 (Source)
-	p2, err := uc.CreateCustomerProfile(dto.CreateCustomerProfileInput{
+	p2, err := uc.CreateCustomerProfile(context.Background(), dto.CreateCustomerProfileInput{
 		DisplayName: "P2 Source",
 		ProfileType: "buyer",
 	})
@@ -325,7 +326,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 
 	// Add identical phones to both profiles using the direct GORM DB or address repository
 	addrRepo := infra.NewAddressRepository(db)
-	err = addrRepo.Create(&domain.CustomerAddress{
+	err = addrRepo.Create(context.Background(), &domain.CustomerAddress{
 		CustomerProfileID: p1.ID,
 		Label:             "Home",
 		RecipientName:     "P1 Recipient",
@@ -336,7 +337,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 		t.Fatalf("create address 1 failed: %v", err)
 	}
 
-	err = addrRepo.Create(&domain.CustomerAddress{
+	err = addrRepo.Create(context.Background(), &domain.CustomerAddress{
 		CustomerProfileID: p2.ID,
 		Label:             "Work",
 		RecipientName:     "P2 Recipient",
@@ -348,7 +349,7 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 	}
 
 	// Retrieve suggestions (which triggers DetectMergeSuggestions)
-	suggestions, err := uc.GetMergeSuggestions()
+	suggestions, err := uc.GetMergeSuggestions(context.Background())
 	if err != nil {
 		t.Fatalf("GetMergeSuggestions failed: %v", err)
 	}
@@ -363,13 +364,13 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 	}
 
 	// Test DismissMergeSuggestion
-	err = uc.DismissMergeSuggestion(s.ID)
+	err = uc.DismissMergeSuggestion(context.Background(), s.ID)
 	if err != nil {
 		t.Fatalf("DismissMergeSuggestion failed: %v", err)
 	}
 
 	// Retrieve suggestions again - should be empty as it is dismissed
-	suggestions2, err := uc.GetMergeSuggestions()
+	suggestions2, err := uc.GetMergeSuggestions(context.Background())
 	if err != nil {
 		t.Fatalf("GetMergeSuggestions 2 failed: %v", err)
 	}

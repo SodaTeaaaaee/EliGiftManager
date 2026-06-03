@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,7 +26,7 @@ func newMockClosureDecisionRepo() *mockClosureDecisionRepo {
 
 func (m *mockClosureDecisionRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockClosureDecisionRepo) Create(record *domain.ChannelClosureDecisionRecord) error {
+func (m *mockClosureDecisionRepo) Create(ctx context.Context, record *domain.ChannelClosureDecisionRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	record.ID = m.next()
@@ -34,7 +35,7 @@ func (m *mockClosureDecisionRepo) Create(record *domain.ChannelClosureDecisionRe
 	return nil
 }
 
-func (m *mockClosureDecisionRepo) AtomicCreate(records []*domain.ChannelClosureDecisionRecord) error {
+func (m *mockClosureDecisionRepo) AtomicCreate(ctx context.Context, records []*domain.ChannelClosureDecisionRecord) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, r := range records {
@@ -45,7 +46,7 @@ func (m *mockClosureDecisionRepo) AtomicCreate(records []*domain.ChannelClosureD
 	return nil
 }
 
-func (m *mockClosureDecisionRepo) ListByFulfillmentLine(fulfillmentLineID uint) ([]domain.ChannelClosureDecisionRecord, error) {
+func (m *mockClosureDecisionRepo) ListByFulfillmentLine(ctx context.Context, fulfillmentLineID uint) ([]domain.ChannelClosureDecisionRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.ChannelClosureDecisionRecord
@@ -57,7 +58,7 @@ func (m *mockClosureDecisionRepo) ListByFulfillmentLine(fulfillmentLineID uint) 
 	return out, nil
 }
 
-func (m *mockClosureDecisionRepo) ListByWave(waveID uint) ([]domain.ChannelClosureDecisionRecord, error) {
+func (m *mockClosureDecisionRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.ChannelClosureDecisionRecord, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.ChannelClosureDecisionRecord
@@ -69,7 +70,7 @@ func (m *mockClosureDecisionRepo) ListByWave(waveID uint) ([]domain.ChannelClosu
 	return out, nil
 }
 
-func (m *mockClosureDecisionRepo) CountByProfileID(profileID uint) (int64, error) {
+func (m *mockClosureDecisionRepo) CountByProfileID(ctx context.Context, profileID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var count int64
@@ -88,7 +89,7 @@ func setupPendingJob(cs *mockChannelSyncRepo) (jobID uint, item1ID uint, item2ID
 		Direction:            "push_tracking",
 		Status:               "pending",
 	}
-	if err := cs.CreateJob(job); err != nil {
+	if err := cs.CreateJob(context.Background(), job); err != nil {
 		panic(fmt.Sprintf("setup: CreateJob: %v", err))
 	}
 	jobID = job.ID
@@ -104,10 +105,10 @@ func setupPendingJob(cs *mockChannelSyncRepo) (jobID uint, item1ID uint, item2ID
 		ShipmentID:        1,
 		Status:            "pending",
 	}
-	if err := cs.CreateItem(item1); err != nil {
+	if err := cs.CreateItem(context.Background(), item1); err != nil {
 		panic(fmt.Sprintf("setup: CreateItem 1: %v", err))
 	}
-	if err := cs.CreateItem(item2); err != nil {
+	if err := cs.CreateItem(context.Background(), item2); err != nil {
 		panic(fmt.Sprintf("setup: CreateItem 2: %v", err))
 	}
 	return jobID, item1.ID, item2.ID
@@ -128,17 +129,17 @@ func TestExecuteChannelSyncJobSuccess(t *testing.T) {
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	result, err := uc.ExecuteChannelSyncJob(jobID)
+	result, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result.JobStatus != "success" {
 		t.Errorf("JobStatus = %q, want success", result.JobStatus)
 	}
-	if result.StartedAt == "" {
+	if result.StartedAt == nil || result.StartedAt.IsZero() {
 		t.Error("StartedAt should be set")
 	}
-	if result.FinishedAt == "" {
+	if result.FinishedAt == nil || result.FinishedAt.IsZero() {
 		t.Error("FinishedAt should be set")
 	}
 	if len(result.Items) != 2 {
@@ -150,7 +151,7 @@ func TestExecuteChannelSyncJobSuccess(t *testing.T) {
 		}
 	}
 
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if job.Status != "success" {
 		t.Errorf("persisted status = %q, want success", job.Status)
 	}
@@ -165,7 +166,7 @@ func TestExecuteChannelSyncJobPartialSuccess(t *testing.T) {
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	result, err := uc.ExecuteChannelSyncJob(jobID)
+	result, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -183,7 +184,7 @@ func TestExecuteChannelSyncJobFailed(t *testing.T) {
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	result, err := uc.ExecuteChannelSyncJob(jobID)
+	result, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestExecuteChannelSyncJobPersistsRequestAndResponsePayload(t *testing.T) {
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	result, err := uc.ExecuteChannelSyncJob(jobID)
+	result, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -226,11 +227,11 @@ func TestExecuteChannelSyncJobRejectsNonPendingJob(t *testing.T) {
 	uc := NewExecuteSyncUseCase(cs, pr, ep(NewFakeExecutor()), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
-	_, err := uc.ExecuteChannelSyncJob(jobID)
+	_, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("first execute: %v", err)
 	}
-	_, err = uc.ExecuteChannelSyncJob(jobID)
+	_, err = uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error for re-executing non-pending job, got nil")
 	}
@@ -243,25 +244,25 @@ func TestExecuteChannelSyncJobFailsWhenNoExecutorIsAvailable(t *testing.T) {
 	cs := newMockChannelSyncRepo()
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{
-		ID:                1,
-		TrackingSyncMode:  "api_push",
-		ConnectorKey:      "unknown.connector",
-		ProfileKey:        "test.profile",
+		ID:               1,
+		TrackingSyncMode: "api_push",
+		ConnectorKey:     "unknown.connector",
+		ProfileKey:       "test.profile",
 	}
 	uc := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider(), nil)
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	_, err := uc.ExecuteChannelSyncJob(jobID)
+	_, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error when no executor is available, got nil")
 	}
 
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if job.Status != "failed" {
 		t.Errorf("job status = %q, want failed (not running)", job.Status)
 	}
-	if job.FinishedAt == "" {
+	if job.FinishedAt == nil || job.FinishedAt.IsZero() {
 		t.Error("job.FinishedAt should be set even on executor resolution failure")
 	}
 	if job.ErrorMessage == "" {
@@ -282,16 +283,16 @@ func TestExecuteChannelSyncJobPersistsFailedStateWhenExecutorReturnsError(t *tes
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	_, err := uc.ExecuteChannelSyncJob(jobID)
+	_, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if job.Status != "failed" {
 		t.Errorf("job status = %q, want failed", job.Status)
 	}
-	if job.FinishedAt == "" {
+	if job.FinishedAt == nil || job.FinishedAt.IsZero() {
 		t.Error("job.FinishedAt should be set")
 	}
 	if job.ErrorMessage == "" {
@@ -317,7 +318,7 @@ func TestRetryChannelSyncJobRetriesOnlyFailedItems(t *testing.T) {
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	res1, err := executeUC.ExecuteChannelSyncJob(jobID)
+	res1, err := executeUC.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("first execute: %v", err)
 	}
@@ -325,7 +326,7 @@ func TestRetryChannelSyncJobRetriesOnlyFailedItems(t *testing.T) {
 		t.Fatalf("expected partial_success, got %q", res1.JobStatus)
 	}
 
-	res2, err := retryUC.RetryChannelSyncJob(jobID)
+	res2, err := retryUC.RetryChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("retry: %v", err)
 	}
@@ -343,12 +344,12 @@ func TestRetryChannelSyncJobRejectsSuccessJob(t *testing.T) {
 	retryUC := NewRetrySyncUseCase(cs, pr, ep(NewFakeExecutor()))
 
 	jobID, _, _ := setupPendingJob(cs)
-	_, err := executeUC.ExecuteChannelSyncJob(jobID)
+	_, err := executeUC.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("execute: %v", err)
 	}
 
-	_, err = retryUC.RetryChannelSyncJob(jobID)
+	_, err = retryUC.RetryChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error for retrying success job, got nil")
 	}
@@ -363,7 +364,7 @@ func TestRetryChannelSyncJobRejectsPendingJob(t *testing.T) {
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	_, err := retryUC.RetryChannelSyncJob(jobID)
+	_, err := retryUC.RetryChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error for retrying pending job, got nil")
 	}
@@ -375,7 +376,7 @@ type hardErrorExecutor struct{}
 
 func NewHardErrorExecutor() ChannelSyncExecutor { return &hardErrorExecutor{} }
 
-func (e *hardErrorExecutor) Execute(job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
+func (e *hardErrorExecutor) Execute(_ context.Context, _ *domain.ChannelSyncJob, _ []domain.ChannelSyncItem, _ *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
 	return nil, fmt.Errorf("hard executor error")
 }
 
@@ -388,17 +389,17 @@ func TestExecuteChannelSyncJobMarksItemsFailedWhenExecutorProviderResolutionFail
 
 	jobID, item1ID, item2ID := setupPendingJob(cs)
 
-	_, err := uc.ExecuteChannelSyncJob(jobID)
+	_, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if job.Status != "failed" {
 		t.Errorf("job status = %q, want failed", job.Status)
 	}
 
-	items, _ := cs.ListItemsByJob(jobID)
+	items, _ := cs.ListItemsByJob(context.Background(), jobID)
 	if len(items) == 0 {
 		t.Fatal("expected items to exist")
 	}
@@ -424,17 +425,17 @@ func TestExecuteChannelSyncJobMarksItemsFailedWhenExecutorReturnsHardError(t *te
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	_, err := uc.ExecuteChannelSyncJob(jobID)
+	_, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if job.Status != "failed" {
 		t.Errorf("job status = %q, want failed", job.Status)
 	}
 
-	items, _ := cs.ListItemsByJob(jobID)
+	items, _ := cs.ListItemsByJob(context.Background(), jobID)
 	failedCount := 0
 	for _, it := range items {
 		if it.Status == "failed" && it.ErrorMessage != "" {
@@ -454,12 +455,12 @@ func TestRetryChannelSyncJobCanRetryAfterProviderResolutionFailure(t *testing.T)
 
 	failingUC := NewExecuteSyncUseCase(cs, pr, NewRuntimeExecutorProvider(), nil)
 	jobID, _, _ := setupPendingJob(cs)
-	_, err := failingUC.ExecuteChannelSyncJob(jobID)
+	_, err := failingUC.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error from failing provider, got nil")
 	}
 
-	items, _ := cs.ListItemsByJob(jobID)
+	items, _ := cs.ListItemsByJob(context.Background(), jobID)
 	failedCount := 0
 	for _, it := range items {
 		if it.Status == "failed" {
@@ -471,7 +472,7 @@ func TestRetryChannelSyncJobCanRetryAfterProviderResolutionFailure(t *testing.T)
 	}
 
 	retryUC := NewRetrySyncUseCase(cs, pr, ep(NewFakeExecutor()))
-	result, err := retryUC.RetryChannelSyncJob(jobID)
+	result, err := retryUC.RetryChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("retry after provider resolution failure: %v", err)
 	}
@@ -490,7 +491,7 @@ func TestRetryChannelSyncJobCanRetryAfterExecuteFailure(t *testing.T) {
 
 	failingUC := NewExecuteSyncUseCase(cs, pr, ep(NewFakeFailingExecutor()), nil)
 	jobID, _, _ := setupPendingJob(cs)
-	result1, err := failingUC.ExecuteChannelSyncJob(jobID)
+	result1, err := failingUC.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -498,13 +499,13 @@ func TestRetryChannelSyncJobCanRetryAfterExecuteFailure(t *testing.T) {
 		t.Fatalf("expected job status failed, got %q", result1.JobStatus)
 	}
 
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if job.Status != "failed" {
 		t.Fatalf("persisted job status = %q, want failed", job.Status)
 	}
 
 	retryUC := NewRetrySyncUseCase(cs, pr, ep(NewFakeExecutor()))
-	result2, err := retryUC.RetryChannelSyncJob(jobID)
+	result2, err := retryUC.RetryChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("retry after failure: %v", err)
 	}
@@ -542,7 +543,7 @@ func TestRecordChannelClosureDecisionUnsupportedPersistsRecord(t *testing.T) {
 		},
 	}
 
-	records, err := uc.RecordChannelClosureDecision(input)
+	records, err := uc.RecordChannelClosureDecision(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -580,7 +581,7 @@ func TestRecordChannelClosureDecisionManualCompletedPersistsRecord(t *testing.T)
 		},
 	}
 
-	records, err := uc.RecordChannelClosureDecision(input)
+	records, err := uc.RecordChannelClosureDecision(context.Background(), input)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -610,7 +611,7 @@ func TestRecordChannelClosureDecisionRejectsCrossProfileLine(t *testing.T) {
 		},
 	}
 
-	_, err := uc.RecordChannelClosureDecision(input)
+	_, err := uc.RecordChannelClosureDecision(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for cross-profile fulfillment line, got nil")
 	}
@@ -637,7 +638,7 @@ func TestRecordChannelClosureDecisionRejectsManualCompletedWithoutAllowsClosure(
 		},
 	}
 
-	_, err := uc.RecordChannelClosureDecision(input)
+	_, err := uc.RecordChannelClosureDecision(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for manual_completed with allows_manual_closure=false, got nil")
 	}
@@ -665,7 +666,7 @@ func TestRecordChannelClosureDecisionRejectsLineWithoutDemandDocument(t *testing
 		},
 	}
 
-	_, err := uc.RecordChannelClosureDecision(input)
+	_, err := uc.RecordChannelClosureDecision(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for line without DemandDocumentID, got nil")
 	}
@@ -695,7 +696,7 @@ func TestRecordChannelClosureDecisionDoesNotPersistPartialBatchOnValidationFailu
 		},
 	}
 
-	_, err := uc.RecordChannelClosureDecision(input)
+	_, err := uc.RecordChannelClosureDecision(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for cross-profile entry in batch, got nil")
 	}
@@ -726,7 +727,7 @@ func TestRecordChannelClosureDecisionRejectsLineWithoutIntegrationProfileID(t *t
 		},
 	}
 
-	_, err := uc.RecordChannelClosureDecision(input)
+	_, err := uc.RecordChannelClosureDecision(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for line without IntegrationProfileID, got nil")
 	}
@@ -755,7 +756,7 @@ func TestExecuteChannelSyncJobWithRegisteredDocumentExportExecutorSucceeds(t *te
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	result, err := uc.ExecuteChannelSyncJob(jobID)
+	result, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -823,12 +824,12 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testi
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	_, err := uc.ExecuteChannelSyncJob(jobID)
+	_, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error for unwritable output directory, got nil")
 	}
 
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if job.Status != "failed" {
 		t.Errorf("job status = %q, want failed", job.Status)
 	}
@@ -836,7 +837,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testi
 		t.Error("job.ErrorMessage should be set")
 	}
 
-	items, _ := cs.ListItemsByJob(jobID)
+	items, _ := cs.ListItemsByJob(context.Background(), jobID)
 	failedCount := 0
 	for _, it := range items {
 		if it.Status == "failed" {
@@ -854,7 +855,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testi
 		},
 	}
 	retryUC := NewRetrySyncUseCase(cs, pr, NewRuntimeExecutorProviderWith(fixedRegistry))
-	retryResult, err := retryUC.RetryChannelSyncJob(jobID)
+	retryResult, err := retryUC.RetryChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("retry after fix: %v", err)
 	}
@@ -912,7 +913,7 @@ func TestExecuteChannelSyncJobRejectsModeMismatchAtRuntime(t *testing.T) {
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	_, err := uc.ExecuteChannelSyncJob(jobID)
+	_, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err == nil {
 		t.Fatal("expected error for mode mismatch at execute time, got nil")
 	}
@@ -952,7 +953,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorPersistsRealRequestPaylo
 
 	jobID, _, _ := setupPendingJob(cs)
 
-	result, err := uc.ExecuteChannelSyncJob(jobID)
+	result, err := uc.ExecuteChannelSyncJob(context.Background(), jobID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -987,7 +988,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorPersistsRealRequestPaylo
 	}
 
 	// The persisted job must also have the real request payload
-	job, _ := cs.FindJobByID(jobID)
+	job, _ := cs.FindJobByID(context.Background(), jobID)
 	if !contains(job.RequestPayload, `"items"`) {
 		t.Error("persisted job.RequestPayload should contain real export content")
 	}

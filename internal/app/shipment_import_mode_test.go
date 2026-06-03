@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -23,7 +25,7 @@ func buildImportFixture() (
 	supplierRepo := newMockSupplierRepoForShipment()
 	fulfillRepo := newMockFulfillRepoForShipment()
 
-	now := "2026-01-01T00:00:00Z"
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	supplierRepo.orders[1] = &domain.SupplierOrder{
 		ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test",
 		CreatedAt: now, UpdatedAt: now,
@@ -55,7 +57,7 @@ func TestImportShipmentsSkipInvalidMode(t *testing.T) {
 	shipmentRepo, supplierRepo, fulfillRepo := buildImportFixture()
 	uc := NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
-	result, err := uc.ImportShipments(dto.ImportShipmentInput{
+	result, err := uc.ImportShipments(context.Background(), dto.ImportShipmentInput{
 		WaveID:     1,
 		ImportMode: "skip_invalid",
 		Entries:    threeGroupEntries(),
@@ -88,7 +90,7 @@ func TestImportShipmentsRejectAllMode(t *testing.T) {
 	shipmentRepo, supplierRepo, fulfillRepo := buildImportFixture()
 	uc := NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
-	result, err := uc.ImportShipments(dto.ImportShipmentInput{
+	result, err := uc.ImportShipments(context.Background(), dto.ImportShipmentInput{
 		WaveID:     1,
 		ImportMode: "reject_all",
 		Entries:    threeGroupEntries(),
@@ -131,7 +133,7 @@ func TestImportShipmentsRejectAllCleanOnAllValid(t *testing.T) {
 		{ExternalShipmentNo: "EXT-C", SupplierOrderLineID: 12, FulfillmentLineID: 102, Quantity: 1, CarrierCode: "SF", TrackingNo: "T-C"},
 	}
 
-	result, err := uc.ImportShipments(dto.ImportShipmentInput{
+	result, err := uc.ImportShipments(context.Background(), dto.ImportShipmentInput{
 		WaveID:     1,
 		ImportMode: "reject_all",
 		Entries:    entries,
@@ -158,7 +160,7 @@ func TestImportShipmentsDefaultModeIsSkipInvalid(t *testing.T) {
 	shipmentRepo, supplierRepo, fulfillRepo := buildImportFixture()
 	uc := NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
 
-	result, err := uc.ImportShipments(dto.ImportShipmentInput{
+	result, err := uc.ImportShipments(context.Background(), dto.ImportShipmentInput{
 		WaveID:     1,
 		ImportMode: "", // empty → default skip_invalid
 		Entries:    threeGroupEntries(),

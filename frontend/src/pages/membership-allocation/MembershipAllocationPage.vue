@@ -77,19 +77,19 @@ const rulesPagination = reactive({
 });
 
 const form = reactive<{
-  product_id: number | null;
-  selector_payload: SelectorPayload;
-  product_target_ref: string;
-  contribution_quantity: number;
-  rule_kind: string;
+  productId: number | null;
+  selectorPayload: SelectorPayload;
+  productTargetRef: string;
+  contributionQuantity: number;
+  ruleKind: string;
   priority: number;
   active: boolean;
 }>({
-  product_id: null,
-  selector_payload: { type: "wave_all" },
-  product_target_ref: "",
-  contribution_quantity: 1,
-  rule_kind: "standard",
+  productId: null,
+  selectorPayload: { type: "wave_all" },
+  productTargetRef: "",
+  contributionQuantity: 1,
+  ruleKind: "standard",
   priority: 0,
   active: true,
 });
@@ -116,7 +116,7 @@ const participantOptions = computed(() =>
 
 // Sandbox matches preview
 const sandboxMatchedParticipants = computed(() => {
-  const payload = form.selector_payload;
+  const payload = form.selectorPayload;
   if (!payload || !payload.type) return [];
   return participants.value.filter((p) => {
     if (payload.type === "wave_all") return true;
@@ -157,32 +157,32 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
   { title: t("allocation.columns.id"), key: "id", width: 65 },
   { 
     title: t("allocation.columns.product"), 
-    key: "product_id", 
+    key: "productId", 
     width: 150, 
     render: (row) => {
-      const option = productOptions.value.find(o => o.value === row.product_id);
-      return option ? option.label : `Product #${row.product_id}`;
+      const option = productOptions.value.find(o => o.value === row.productId);
+      return option ? option.label : `Product #${row.productId}`;
     }
   },
   { 
     title: t("allocation.columns.selector"), 
-    key: "selector_payload", 
+    key: "selectorPayload", 
     width: 220, 
     render: (row) => {
-      const typeText = selectorTypeText(row.selector_payload.type);
+      const typeText = selectorTypeText(row.selectorPayload.type);
       let details = "";
-      if (row.selector_payload.type === "platform_all") {
-        details = ` (${row.selector_payload.platform})`;
-      } else if (row.selector_payload.type === "identity_level") {
-        details = ` (${row.selector_payload.platform}: Lvl ${row.selector_payload.level})`;
-      } else if (row.selector_payload.type === "explicit_override") {
-        details = ` (${row.selector_payload.participant_ids?.length || 0} selected)`;
+      if (row.selectorPayload.type === "platform_all") {
+        details = ` (${row.selectorPayload.platform})`;
+      } else if (row.selectorPayload.type === "identity_level") {
+        details = ` (${row.selectorPayload.platform}: Lvl ${row.selectorPayload.level})`;
+      } else if (row.selectorPayload.type === "explicit_override") {
+        details = ` (${row.selectorPayload.participant_ids?.length || 0} selected)`;
       }
       return `${typeText}${details}`;
     } 
   },
-  { title: t("allocation.columns.targetRef"), key: "product_target_ref" },
-  { title: t("allocation.columns.qty"), key: "contribution_quantity", width: 80 },
+  { title: t("allocation.columns.targetRef"), key: "productTargetRef" },
+  { title: t("allocation.columns.qty"), key: "contributionQuantity", width: 80 },
   { title: t("allocation.columns.priority"), key: "priority", width: 80 },
   {
     title: t("allocation.columns.status"),
@@ -216,11 +216,11 @@ const columns = computed<DataTableColumns<AllocationPolicyRule>>(() => [
 ]);
 
 function resetForm() {
-  form.product_id = null;
-  form.selector_payload = { type: "wave_all" };
-  form.product_target_ref = "";
-  form.contribution_quantity = 1;
-  form.rule_kind = "standard";
+  form.productId = null;
+  form.selectorPayload = { type: "wave_all" };
+  form.productTargetRef = "";
+  form.contributionQuantity = 1;
+  form.ruleKind = "standard";
   form.priority = 0;
   form.active = true;
 }
@@ -233,11 +233,11 @@ function openCreateDrawer() {
 
 function openEditDrawer(rule: AllocationPolicyRule) {
   editingRule.value = rule;
-  form.product_id = rule.product_id;
-  form.selector_payload = { ...rule.selector_payload };
-  form.product_target_ref = rule.product_target_ref;
-  form.contribution_quantity = rule.contribution_quantity;
-  form.rule_kind = rule.rule_kind;
+  form.productId = rule.productId;
+  form.selectorPayload = { ...rule.selectorPayload };
+  form.productTargetRef = rule.productTargetRef;
+  form.contributionQuantity = rule.contributionQuantity;
+  form.ruleKind = rule.ruleKind;
   form.priority = rule.priority;
   form.active = rule.active;
   drawerVisible.value = true;
@@ -263,7 +263,7 @@ async function loadData() {
 }
 
 async function handleSave() {
-  if (!form.product_id) {
+  if (!form.productId) {
     message.warning(t("allocation.selectProductWarning"));
     return;
   }
@@ -272,23 +272,23 @@ async function handleSave() {
     if (editingRule.value) {
       const input: UpdateAllocationPolicyRuleInput = {
         id: editingRule.value.id,
-        product_id: form.product_id,
-        selector_payload: form.selector_payload,
-        product_target_ref: form.product_target_ref,
-        contribution_quantity: form.contribution_quantity,
-        rule_kind: form.rule_kind,
+        productId: form.productId,
+        selectorPayload: form.selectorPayload,
+        productTargetRef: form.productTargetRef,
+        contributionQuantity: form.contributionQuantity,
+        ruleKind: form.ruleKind,
         priority: form.priority,
         active: form.active,
       };
       await updateAllocationPolicyRule(input);
     } else {
       const input: CreateAllocationPolicyRuleInput = {
-        wave_id: waveId.value,
-        product_id: form.product_id,
-        selector_payload: form.selector_payload,
-        product_target_ref: form.product_target_ref,
-        contribution_quantity: form.contribution_quantity,
-        rule_kind: form.rule_kind,
+        waveId: waveId.value,
+        productId: form.productId,
+        selectorPayload: form.selectorPayload,
+        productTargetRef: form.productTargetRef,
+        contributionQuantity: form.contributionQuantity,
+        ruleKind: form.ruleKind,
         priority: form.priority,
         active: form.active,
       };
@@ -421,47 +421,47 @@ onMounted(loadData);
       <NDrawerContent :title="editingRule ? 'Edit Allocation Rule' : 'Create Allocation Rule'" closable>
         <NSpace vertical :size="16">
           <NFormItem :label="t('allocation.product')">
-            <NSelect v-model:value="form.product_id" :options="productOptions" filterable />
+            <NSelect v-model:value="form.productId" :options="productOptions" filterable />
           </NFormItem>
           <NFormItem :label="t('allocation.selectorType')">
             <NSelect
-              :value="form.selector_payload.type"
+              :value="form.selectorPayload.type"
               :options="selectorTypeOptions"
-              @update:value="(value) => form.selector_payload = { type: value as SelectorPayload['type'] }"
+              @update:value="(value) => form.selectorPayload = { type: value as SelectorPayload['type'] }"
             />
           </NFormItem>
           
-          <NFormItem v-if="form.selector_payload.type === 'platform_all'" :label="t('allocation.allocationPlatform')">
-            <NInput v-model:value="form.selector_payload.platform" placeholder="e.g. patreon, fanbox" />
+          <NFormItem v-if="form.selectorPayload.type === 'platform_all'" :label="t('allocation.allocationPlatform')">
+            <NInput v-model:value="form.selectorPayload.platform" placeholder="e.g. patreon, fanbox" />
           </NFormItem>
           
-          <template v-if="form.selector_payload.type === 'identity_level'">
+          <template v-if="form.selectorPayload.type === 'identity_level'">
             <NFormItem :label="t('allocation.allocationPlatform')">
-              <NInput v-model:value="form.selector_payload.platform" placeholder="e.g. patreon" />
+              <NInput v-model:value="form.selectorPayload.platform" placeholder="e.g. patreon" />
             </NFormItem>
             <NFormItem :label="t('allocation.allocationLevel')">
-              <NInput v-model:value="form.selector_payload.level" placeholder="e.g. Gold Tier" />
+              <NInput v-model:value="form.selectorPayload.level" placeholder="e.g. Gold Tier" />
             </NFormItem>
           </template>
           
-          <NFormItem v-if="form.selector_payload.type === 'explicit_override'" :label="t('allocation.participants')">
+          <NFormItem v-if="form.selectorPayload.type === 'explicit_override'" :label="t('allocation.participants')">
             <NSelect
               multiple
-              :value="form.selector_payload.participant_ids || []"
+              :value="form.selectorPayload.participant_ids || []"
               :options="participantOptions"
-              @update:value="(value) => form.selector_payload.participant_ids = value as number[]"
+              @update:value="(value) => form.selectorPayload.participant_ids = value as number[]"
               filterable
             />
           </NFormItem>
           
           <NFormItem :label="t('allocation.targetRef')">
-            <NInput v-model:value="form.product_target_ref" placeholder="Optional external tag reference" />
+            <NInput v-model:value="form.productTargetRef" placeholder="Optional external tag reference" />
           </NFormItem>
           <NFormItem :label="t('allocation.quantity')">
-            <NInputNumber v-model:value="form.contribution_quantity" :min="1" class="w-full" />
+            <NInputNumber v-model:value="form.contributionQuantity" :min="1" class="w-full" />
           </NFormItem>
           <NFormItem :label="t('allocation.ruleKind')">
-            <NSelect v-model:value="form.rule_kind" :options="ruleKindOptions" />
+            <NSelect v-model:value="form.ruleKind" :options="ruleKindOptions" />
           </NFormItem>
           <NFormItem :label="t('allocation.priority')">
             <NInputNumber v-model:value="form.priority" :min="0" class="w-full" />
@@ -480,7 +480,7 @@ onMounted(loadData);
             </div>
             
             <NScrollbar style="max-height: 160px; border: 1px solid rgba(148, 163, 184, 0.12); padding: 8px; border-radius: 8px;">
-              <div v-if="!form.product_id" class="text-xs text-slate-400 text-center py-4">
+              <div v-if="!form.productId" class="text-xs text-slate-400 text-center py-4">
                 Select a product to activate sandbox testing.
               </div>
               <div v-else-if="sandboxMatchedParticipants.length === 0" class="text-xs text-slate-400 text-center py-4">

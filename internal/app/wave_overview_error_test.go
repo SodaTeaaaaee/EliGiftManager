@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -15,7 +16,7 @@ type errorChannelSyncRepo struct {
 	*mockChannelSyncRepo
 }
 
-func (e *errorChannelSyncRepo) ListJobsByWave(_ uint) ([]domain.ChannelSyncJob, error) {
+func (e *errorChannelSyncRepo) ListJobsByWave(ctx context.Context, _ uint) ([]domain.ChannelSyncJob, error) {
 	return nil, fmt.Errorf("mock: channel sync repo unavailable")
 }
 
@@ -24,7 +25,7 @@ type errorClosureDecisionRepo struct {
 	*mockClosureDecisionRepo
 }
 
-func (e *errorClosureDecisionRepo) ListByWave(_ uint) ([]domain.ChannelClosureDecisionRecord, error) {
+func (e *errorClosureDecisionRepo) ListByWave(ctx context.Context, _ uint) ([]domain.ChannelClosureDecisionRecord, error) {
 	return nil, fmt.Errorf("mock: closure decision repo unavailable")
 }
 
@@ -38,7 +39,7 @@ func TestProjectWaveOverviewChannelSyncRepoErrorPropagates(t *testing.T) {
 	closureRepo := newMockClosureDecisionRepo()
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{})
 
-	_, err := uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	_, err := uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err == nil {
 		t.Fatal("expected error when channel sync repo fails, got nil")
 	}
@@ -52,7 +53,7 @@ func TestProjectWaveOverviewClosureRepoErrorPropagates(t *testing.T) {
 	closureRepo := &errorClosureDecisionRepo{newMockClosureDecisionRepo()}
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{})
 
-	_, err := uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	_, err := uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err == nil {
 		t.Fatal("expected error when closure decision repo fails, got nil")
 	}
@@ -66,7 +67,7 @@ func TestProjectWaveOverviewNoHistoryScopeReturnsEmptyDriftSignals(t *testing.T)
 
 	p := newProjTestSetup() // uses noopHistoryHeadUC and noopDriftUC
 
-	result, err := p.uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err != nil {
 		t.Fatalf("expected no error when no history scope exists, got: %v", err)
 	}
@@ -92,7 +93,7 @@ func TestProjectWaveOverviewHistoryHeadErrorPropagates(t *testing.T) {
 	errHeadUC := &errorHistoryHeadUC{}
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, errHeadUC)
 
-	_, err := uc.ProjectWaveOverview(baseOverview(1, "execution"))
+	_, err := uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
 	if err == nil {
 		t.Fatal("expected error when history head query fails, got nil")
 	}
@@ -101,10 +102,10 @@ func TestProjectWaveOverviewHistoryHeadErrorPropagates(t *testing.T) {
 // errorHistoryHeadUC always returns an error from GetCurrentProjectionHash.
 type errorHistoryHeadUC struct{}
 
-func (e *errorHistoryHeadUC) GetCurrentProjectionHash(_ uint) (string, error) {
+func (e *errorHistoryHeadUC) GetCurrentProjectionHash(ctx context.Context, _ uint) (string, error) {
 	return "", fmt.Errorf("mock: history head unavailable")
 }
-func (e *errorHistoryHeadUC) GetCurrentHeadNodeIDAndHash(_ uint) (uint, string, error) {
+func (e *errorHistoryHeadUC) GetCurrentHeadNodeIDAndHash(ctx context.Context, _ uint) (uint, string, error) {
 	return 0, "", fmt.Errorf("mock: history head unavailable")
 }
 
@@ -117,7 +118,7 @@ func TestGetWaveNotFoundReturnsError(t *testing.T) {
 	waveRepo := newMockWaveRepo()
 	uc := NewWaveUseCase(waveRepo, nil, nil)
 
-	_, err := uc.GetWave(9999)
+	_, err := uc.GetWave(context.Background(), 9999)
 	if err == nil {
 		t.Fatal("expected error for non-existent wave ID, got nil")
 	}
@@ -131,11 +132,11 @@ func TestGetWaveExistingReturnsWave(t *testing.T) {
 	uc := NewWaveUseCase(waveRepo, nil, nil)
 
 	wave := &domain.Wave{Name: "test wave"}
-	if err := uc.CreateWave(wave); err != nil {
+	if err := uc.CreateWave(context.Background(), wave); err != nil {
 		t.Fatalf("setup CreateWave: %v", err)
 	}
 
-	got, err := uc.GetWave(wave.ID)
+	got, err := uc.GetWave(context.Background(), wave.ID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -168,7 +169,7 @@ func TestProjectWaveOverviewPreservesBaseFields(t *testing.T) {
 		TrackedFulfillmentCount: 5,
 	}
 
-	result, err := p.uc.ProjectWaveOverview(base)
+	result, err := p.uc.ProjectWaveOverview(context.Background(), base)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

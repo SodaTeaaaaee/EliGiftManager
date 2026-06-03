@@ -24,6 +24,7 @@ func NewApp(cfg config.App) *App { return &App{cfg: cfg} }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	setAppContext(ctx)
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {
@@ -68,4 +69,3 @@ func (a *App) SaveZoom(zoomPercent float64) error {
 	}
 	return os.WriteFile(cfgPath, fmt.Appendf(nil, "%.2f", zoomPercent), 0o644)
 }
-

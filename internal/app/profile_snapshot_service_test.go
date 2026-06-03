@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -99,7 +100,7 @@ type mockProfileRepoForSnapshot struct {
 	profiles map[uint]*domain.IntegrationProfile
 }
 
-func (m *mockProfileRepoForSnapshot) FindByID(id uint) (*domain.IntegrationProfile, error) {
+func (m *mockProfileRepoForSnapshot) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfile, error) {
 	p, ok := m.profiles[id]
 	if !ok {
 		return nil, nil
@@ -107,19 +108,26 @@ func (m *mockProfileRepoForSnapshot) FindByID(id uint) (*domain.IntegrationProfi
 	cp := *p
 	return &cp, nil
 }
-func (m *mockProfileRepoForSnapshot) FindByProfileKey(_ string) (*domain.IntegrationProfile, error) {
+
+func (m *mockProfileRepoForSnapshot) FindByProfileKey(ctx context.Context, _ string) (*domain.IntegrationProfile, error) {
 	panic("not implemented")
 }
-func (m *mockProfileRepoForSnapshot) Create(_ *domain.IntegrationProfile) error {
+
+func (m *mockProfileRepoForSnapshot) Create(ctx context.Context, _ *domain.IntegrationProfile) error {
 	panic("not implemented")
 }
-func (m *mockProfileRepoForSnapshot) List() ([]domain.IntegrationProfile, error) {
+
+func (m *mockProfileRepoForSnapshot) List(ctx context.Context) ([]domain.IntegrationProfile, error) {
 	panic("not implemented")
 }
-func (m *mockProfileRepoForSnapshot) Update(_ *domain.IntegrationProfile) error {
+
+func (m *mockProfileRepoForSnapshot) Update(ctx context.Context, _ *domain.IntegrationProfile) error {
 	panic("not implemented")
 }
-func (m *mockProfileRepoForSnapshot) Delete(_ uint) error { panic("not implemented") }
+
+func (m *mockProfileRepoForSnapshot) Delete(ctx context.Context, _ uint) error {
+	panic("not implemented")
+}
 
 func TestResolveEffectiveProfileUsesBoundSnapshot(t *testing.T) {
 	t.Parallel()
@@ -148,7 +156,7 @@ func TestResolveEffectiveProfileUsesBoundSnapshot(t *testing.T) {
 		BoundProfileSnapshot: string(snapJSON),
 	}
 
-	result, err := ResolveEffectiveProfile(doc, profileRepo)
+	result, err := ResolveEffectiveProfile(context.Background(), doc, profileRepo)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -184,7 +192,7 @@ func TestResolveEffectiveProfileFallsBackToLive(t *testing.T) {
 		BoundProfileSnapshot: "", // no snapshot stored
 	}
 
-	result, err := ResolveEffectiveProfile(doc, profileRepo)
+	result, err := ResolveEffectiveProfile(context.Background(), doc, profileRepo)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -210,7 +218,7 @@ func TestResolveEffectiveProfileNoProfileIDReturnsNil(t *testing.T) {
 		BoundProfileSnapshot: "",
 	}
 
-	result, err := ResolveEffectiveProfile(doc, profileRepo)
+	result, err := ResolveEffectiveProfile(context.Background(), doc, profileRepo)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -239,7 +247,7 @@ func TestPlanChannelClosureUsesBoundSnapshotOverLiveProfile(t *testing.T) {
 	snapJSON, _ := json.Marshal(snapData)
 	s.demand.docs[10].BoundProfileSnapshot = string(snapJSON)
 
-	result, err := s.uc.PlanChannelClosure(dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
+	result, err := s.uc.PlanChannelClosure(context.Background(), dto.PlanChannelClosureInput{WaveID: 1, IntegrationProfileID: 1})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -1,6 +1,8 @@
 package app
 
 import (
+	"context"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
@@ -26,11 +28,11 @@ func NewBasisDriftDetectionUseCase(
 	}
 }
 
-func (uc *basisDriftDetectionUseCase) DetectWaveBasisDrift(waveID uint, currentProjectionHash string) ([]dto.BasisDriftSignalDTO, error) {
+func (uc *basisDriftDetectionUseCase) DetectWaveBasisDrift(ctx context.Context, waveID uint, currentProjectionHash string) ([]dto.BasisDriftSignalDTO, error) {
 	var signals []dto.BasisDriftSignalDTO
 
 	// Check supplier orders
-	orders, err := uc.supplierRepo.ListByWave(waveID)
+	orders, err := uc.supplierRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +43,7 @@ func (uc *basisDriftDetectionUseCase) DetectWaveBasisDrift(waveID uint, currentP
 	}
 
 	// Check shipments
-	shipments, err := uc.shipmentRepo.ListByWave(waveID)
+	shipments, err := uc.shipmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +54,7 @@ func (uc *basisDriftDetectionUseCase) DetectWaveBasisDrift(waveID uint, currentP
 	}
 
 	// Check channel sync jobs
-	jobs, err := uc.channelSyncRepo.ListJobsByWave(waveID)
+	jobs, err := uc.channelSyncRepo.ListJobsByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +66,7 @@ func (uc *basisDriftDetectionUseCase) DetectWaveBasisDrift(waveID uint, currentP
 
 	// Structural integrity check — detects target_deleted regardless of hash state.
 	// These signals carry ReviewRequirement "required" because safe replay is no longer possible.
-	structuralSignals := uc.detectStructuralUnsafety(waveID)
+	structuralSignals := uc.detectStructuralUnsafety(ctx, waveID)
 	signals = append(signals, structuralSignals...)
 
 	return signals, nil
@@ -76,11 +78,11 @@ func (uc *basisDriftDetectionUseCase) DetectWaveBasisDrift(waveID uint, currentP
 //
 // Graceful degradation: if any repo call fails, that check is skipped rather than
 // surfacing an error — hash-based signals are still returned to the caller.
-func (uc *basisDriftDetectionUseCase) detectStructuralUnsafety(waveID uint) []dto.BasisDriftSignalDTO {
+func (uc *basisDriftDetectionUseCase) detectStructuralUnsafety(ctx context.Context, waveID uint) []dto.BasisDriftSignalDTO {
 	var signals []dto.BasisDriftSignalDTO
 
 	// Build the set of fulfillment line IDs that currently exist in this wave.
-	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil // graceful degradation
 	}
@@ -90,13 +92,13 @@ func (uc *basisDriftDetectionUseCase) detectStructuralUnsafety(waveID uint) []dt
 	}
 
 	// Check supplier order lines — skip draft orders because they are rebuilt on re-export.
-	orders, err := uc.supplierRepo.ListByWave(waveID)
+	orders, err := uc.supplierRepo.ListByWave(ctx, waveID)
 	if err == nil {
 		for _, order := range orders {
 			if order.Status == "draft" {
 				continue
 			}
-			lines, err := uc.supplierRepo.ListLinesByOrder(order.ID)
+			lines, err := uc.supplierRepo.ListLinesByOrder(ctx, order.ID)
 			if err != nil {
 				continue // graceful degradation per order
 			}
@@ -115,10 +117,10 @@ func (uc *basisDriftDetectionUseCase) detectStructuralUnsafety(waveID uint) []dt
 	}
 
 	// Check shipment lines — all shipments are structural once created.
-	shipments, err := uc.shipmentRepo.ListByWave(waveID)
+	shipments, err := uc.shipmentRepo.ListByWave(ctx, waveID)
 	if err == nil {
 		for _, shipment := range shipments {
-			shipLines, err := uc.shipmentRepo.ListLinesByShipment(shipment.ID)
+			shipLines, err := uc.shipmentRepo.ListLinesByShipment(ctx, shipment.ID)
 			if err != nil {
 				continue // graceful degradation per shipment
 			}

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -31,7 +32,7 @@ func NewRecordClosureDecisionUseCase(
 	}
 }
 
-func (uc *recordClosureDecisionUseCase) RecordChannelClosureDecision(input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error) {
+func (uc *recordClosureDecisionUseCase) RecordChannelClosureDecision(ctx context.Context, input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error) {
 	if len(input.Entries) == 0 {
 		return nil, fmt.Errorf("at least one decision entry is required")
 	}
@@ -39,9 +40,9 @@ func (uc *recordClosureDecisionUseCase) RecordChannelClosureDecision(input dto.R
 	// Phase 1: validate every entry and build domain records.
 	// No side effects — validation errors leave zero traces.
 	var domainRecords []*domain.ChannelClosureDecisionRecord
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	for i, entry := range input.Entries {
-		fl, err := uc.fulfillRepo.FindByID(entry.FulfillmentLineID)
+		fl, err := uc.fulfillRepo.FindByID(ctx, entry.FulfillmentLineID)
 		if err != nil {
 			return nil, fmt.Errorf("entry %d: fulfillment line %d not found: %w", i, entry.FulfillmentLineID, err)
 		}
@@ -49,7 +50,7 @@ func (uc *recordClosureDecisionUseCase) RecordChannelClosureDecision(input dto.R
 			return nil, fmt.Errorf("entry %d: fulfillment line %d belongs to wave %d, not wave %d", i, entry.FulfillmentLineID, fl.WaveID, input.WaveID)
 		}
 
-		profile, err := uc.profileRepo.FindByID(input.IntegrationProfileID)
+		profile, err := uc.profileRepo.FindByID(ctx, input.IntegrationProfileID)
 		if err != nil {
 			return nil, fmt.Errorf("entry %d: profile %d not found: %w", i, input.IntegrationProfileID, err)
 		}
@@ -58,7 +59,7 @@ func (uc *recordClosureDecisionUseCase) RecordChannelClosureDecision(input dto.R
 		if fl.DemandDocumentID == nil {
 			return nil, fmt.Errorf("entry %d: fulfillment line %d has no DemandDocumentID; cannot establish profile ownership", i, entry.FulfillmentLineID)
 		}
-		doc, err := uc.demandRepo.FindByID(*fl.DemandDocumentID)
+		doc, err := uc.demandRepo.FindByID(ctx, *fl.DemandDocumentID)
 		if err != nil {
 			return nil, fmt.Errorf("entry %d: demand document %d not found: %w", i, *fl.DemandDocumentID, err)
 		}
@@ -94,7 +95,7 @@ func (uc *recordClosureDecisionUseCase) RecordChannelClosureDecision(input dto.R
 	}
 
 	// Phase 2: atomically persist all records — all-or-nothing.
-	if err := uc.decisionRepo.AtomicCreate(domainRecords); err != nil {
+	if err := uc.decisionRepo.AtomicCreate(ctx, domainRecords); err != nil {
 		return nil, fmt.Errorf("persist decision records: %w", err)
 	}
 
@@ -137,8 +138,8 @@ func NewRetrySyncUseCase(
 	}
 }
 
-func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncResult, error) {
-	job, err := uc.channelSyncRepo.FindJobByID(jobID)
+func (uc *retrySyncUseCase) RetryChannelSyncJob(ctx context.Context, jobID uint) (*dto.ExecuteSyncResult, error) {
+	job, err := uc.channelSyncRepo.FindJobByID(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("find job %d: %w", jobID, err)
 	}
@@ -147,12 +148,12 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncRes
 		return nil, fmt.Errorf("job %d has status %q; only failed or partial_success jobs can be retried", jobID, job.Status)
 	}
 
-	profile, err := uc.profileRepo.FindByID(job.IntegrationProfileID)
+	profile, err := uc.profileRepo.FindByID(ctx, job.IntegrationProfileID)
 	if err != nil {
 		return nil, fmt.Errorf("find profile %d: %w", job.IntegrationProfileID, err)
 	}
 
-	allItems, err := uc.channelSyncRepo.ListItemsByJob(jobID)
+	allItems, err := uc.channelSyncRepo.ListItemsByJob(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("list items for job %d: %w", jobID, err)
 	}
@@ -168,11 +169,10 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncRes
 		return nil, fmt.Errorf("job %d has no failed items to retry", jobID)
 	}
 
-	now := time.Now().Format(time.RFC3339)
-	job.Status = "running"
-	job.StartedAt = now
+	now := time.Now()
+	job.StartedAt = &now
 	job.UpdatedAt = now
-	if err := uc.channelSyncRepo.SaveJob(job); err != nil {
+	if err := uc.channelSyncRepo.SaveJob(ctx, job); err != nil {
 		return nil, fmt.Errorf("save job running state: %w", err)
 	}
 
@@ -180,18 +180,18 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncRes
 	if err != nil {
 		job.Status = "failed"
 		job.ErrorMessage = err.Error()
-		job.FinishedAt = now
+		job.FinishedAt = &now
 		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(job)
+		_ = uc.channelSyncRepo.SaveJob(ctx, job)
 		return nil, fmt.Errorf("resolve executor: %w", err)
 	}
-	result, err := executor.Execute(job, failedItems, profile)
+	result, err := executor.Execute(ctx, job, failedItems, profile)
 	if err != nil {
 		job.Status = "failed"
 		job.ErrorMessage = err.Error()
-		job.FinishedAt = now
+		job.FinishedAt = &now
 		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(job)
+		_ = uc.channelSyncRepo.SaveJob(ctx, job)
 		return nil, fmt.Errorf("executor failed: %w", err)
 	}
 
@@ -202,7 +202,7 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncRes
 				failedItems[i].Status = r.Status
 				failedItems[i].ErrorMessage = r.ErrorMessage
 				failedItems[i].UpdatedAt = now
-				if saveErr := uc.channelSyncRepo.SaveItem(&failedItems[i]); saveErr != nil {
+				if saveErr := uc.channelSyncRepo.SaveItem(ctx, &failedItems[i]); saveErr != nil {
 					return nil, fmt.Errorf("save item %d: %w", item.ID, saveErr)
 				}
 				break
@@ -211,7 +211,7 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncRes
 	}
 
 	// Recalculate job aggregate status
-	allItemsAfter, err := uc.channelSyncRepo.ListItemsByJob(jobID)
+	allItemsAfter, err := uc.channelSyncRepo.ListItemsByJob(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("list items after retry: %w", err)
 	}
@@ -236,9 +236,9 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncRes
 	job.RequestPayload = result.RequestPayload
 	job.ResponsePayload = result.ResponsePayload
 	job.ErrorMessage = result.ErrorMessage
-	job.FinishedAt = now
+	job.FinishedAt = &now
 	job.UpdatedAt = now
-	if err := uc.channelSyncRepo.SaveJob(job); err != nil {
+	if err := uc.channelSyncRepo.SaveJob(ctx, job); err != nil {
 		return nil, fmt.Errorf("save job final state: %w", err)
 	}
 

@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -20,19 +21,19 @@ func NewDemandIntakeUseCase(demandRepo domain.DemandDocumentRepository) DemandIn
 	return &demandIntakeUseCase{demandRepo: demandRepo}
 }
 
-func (uc *demandIntakeUseCase) ImportDemand(doc *domain.DemandDocument, lines []*domain.DemandLine) error {
+func (uc *demandIntakeUseCase) ImportDemand(ctx context.Context, doc *domain.DemandDocument, lines []*domain.DemandLine) error {
 	// NOTE: This operation is not fully transactional — the DemandDocumentRepository
 	// does not expose a Delete method, so if a line creation fails after the document
 	// is persisted, an orphaned document may remain. Callers that need atomicity
 	// (e.g. ImportDemandDocument in the controller) should wrap this call in a
 	// gorm.DB.Transaction to get full rollback semantics.
-	now := time.Now().Format(time.RFC3339)
-	if doc.CreatedAt == "" {
+	now := time.Now()
+	if doc.CreatedAt.IsZero() {
 		doc.CreatedAt = now
 	}
 	doc.UpdatedAt = now
 
-	if err := uc.demandRepo.Create(doc); err != nil {
+	if err := uc.demandRepo.Create(ctx, doc); err != nil {
 		return err
 	}
 
@@ -41,11 +42,11 @@ func (uc *demandIntakeUseCase) ImportDemand(doc *domain.DemandDocument, lines []
 			continue
 		}
 		line.DemandDocumentID = doc.ID
-		if line.CreatedAt == "" {
+		if line.CreatedAt.IsZero() {
 			line.CreatedAt = now
 		}
 		line.UpdatedAt = now
-		if err := uc.demandRepo.CreateLine(line); err != nil {
+		if err := uc.demandRepo.CreateLine(ctx, line); err != nil {
 			return err
 		}
 	}
@@ -64,7 +65,7 @@ func NewWaveUseCase(waveRepo domain.WaveRepository, demandRepo domain.DemandDocu
 	return &waveUseCase{waveRepo: waveRepo, demandRepo: demandRepo, assignmentRepo: assignmentRepo}
 }
 
-func (uc *waveUseCase) CreateWave(wave *domain.Wave) error {
+func (uc *waveUseCase) CreateWave(ctx context.Context, wave *domain.Wave) error {
 	// generate WaveNo (WAVE-YYYYMMDD-NNN), set defaults, persist.
 	datePrefix := time.Now().Format("20060102")
 	prefix := "WAVE-" + datePrefix + "-"
@@ -72,8 +73,8 @@ func (uc *waveUseCase) CreateWave(wave *domain.Wave) error {
 	if wave.LifecycleStage == "" {
 		wave.LifecycleStage = "intake"
 	}
-	now := time.Now().Format(time.RFC3339)
-	if wave.CreatedAt == "" {
+	now := time.Now()
+	if wave.CreatedAt.IsZero() {
 		wave.CreatedAt = now
 	}
 	wave.UpdatedAt = now
@@ -85,13 +86,13 @@ func (uc *waveUseCase) CreateWave(wave *domain.Wave) error {
 	// instead of a hard failure.
 	const maxAttempts = 5
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		count, err := uc.waveRepo.CountByDatePrefix(prefix)
+		count, err := uc.waveRepo.CountByDatePrefix(ctx, prefix)
 		if err != nil {
 			return err
 		}
 		wave.WaveNo = fmt.Sprintf("WAVE-%s-%03d", datePrefix, count+1)
 
-		err = uc.waveRepo.Create(wave)
+		err = uc.waveRepo.Create(ctx, wave)
 		if err == nil {
 			return nil
 		}
@@ -112,27 +113,27 @@ func isUniqueConstraintErr(err error) bool {
 	return strings.Contains(err.Error(), "UNIQUE constraint")
 }
 
-func (uc *waveUseCase) ListWaves() ([]domain.Wave, error) {
-	return uc.waveRepo.List()
+func (uc *waveUseCase) ListWaves(ctx context.Context) ([]domain.Wave, error) {
+	return uc.waveRepo.List(ctx)
 }
 
-func (uc *waveUseCase) ListWavesPaginated(offset, limit int) ([]domain.Wave, int64, error) {
-	return uc.waveRepo.ListPaginated(offset, limit)
+func (uc *waveUseCase) ListWavesPaginated(ctx context.Context, offset, limit int) ([]domain.Wave, int64, error) {
+	return uc.waveRepo.ListPaginated(ctx, offset, limit)
 }
 
-func (uc *waveUseCase) GetWave(id uint) (*domain.Wave, error) {
-	return uc.waveRepo.FindByID(id)
+func (uc *waveUseCase) GetWave(ctx context.Context, id uint) (*domain.Wave, error) {
+	return uc.waveRepo.FindByID(ctx, id)
 }
 
-func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
+func (uc *waveUseCase) GenerateParticipants(ctx context.Context, waveID uint) (int, error) {
 	// Get demand documents assigned to this wave
-	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(ctx, waveID)
 	if err != nil {
 		return 0, err
 	}
 
 	// Get existing participants for idempotency check
-	existingSnaps, err := uc.waveRepo.ListParticipantsByWave(waveID)
+	existingSnaps, err := uc.waveRepo.ListParticipantsByWave(ctx, waveID)
 	if err != nil {
 		return 0, err
 	}
@@ -162,7 +163,7 @@ func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
 		}
 
 		// Get demand lines for this document
-		lines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
+		lines, err := uc.demandRepo.ListLinesByDocument(ctx, doc.ID)
 		if err != nil {
 			return count, err
 		}
@@ -199,10 +200,10 @@ func (uc *waveUseCase) GenerateParticipants(waveID uint) (int, error) {
 			GiftLevel:          giftLevel,
 			SourceDocumentRefs: fmt.Sprintf("%d", doc.ID),
 			SourceProfileRefs:  "",
-			CreatedAt:          time.Now().Format(time.RFC3339),
+			CreatedAt:          time.Now(),
 		}
 
-		if err := uc.waveRepo.AddParticipant(&snap); err != nil {
+		if err := uc.waveRepo.AddParticipant(ctx, &snap); err != nil {
 			return count, err
 		}
 
@@ -242,11 +243,11 @@ func isEligibleForFulfillment(dl *domain.DemandLine) bool {
 	return dl.RecipientInputState == "ready" || dl.RecipientInputState == "not_required"
 }
 
-func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.DemandMappingResult, error) {
+func (uc *demandMappingUseCase) MapDemandToFulfillment(ctx context.Context, waveID uint) (*dto.DemandMappingResult, error) {
 	// NOTE: This method deletes then re-creates fulfillment lines. The controller
 	// (MapDemandLines) already wraps this call in gorm.DB.Transaction for atomicity.
 	// If called outside a transaction, a failure mid-loop leaves partial data.
-	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+	docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +255,7 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 	// Build profileID → snapshotID lookup for participant association
 	var profileToSnapshot map[uint]uint
 	if uc.waveRepo != nil {
-		participants, err := uc.waveRepo.ListParticipantsByWave(waveID)
+		participants, err := uc.waveRepo.ListParticipantsByWave(ctx, waveID)
 		if err != nil {
 			return nil, err
 		}
@@ -267,7 +268,7 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 	// Build FK → wave-scoped ProductID lookup for demand-line product mapping
 	productMasterToWaveProduct := make(map[uint]uint)
 	if uc.productRepo != nil {
-		waveProducts, err := uc.productRepo.ListByWave(waveID)
+		waveProducts, err := uc.productRepo.ListByWave(ctx, waveID)
 		if err != nil {
 			return nil, err
 		}
@@ -286,7 +287,7 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 		if doc.Kind != "retail_order" {
 			continue
 		}
-		hasEligible, err := uc.docHasEligibleLines(doc.ID)
+		hasEligible, err := uc.docHasEligibleLines(ctx, doc.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -311,11 +312,11 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 	}
 
 	// Pre-check passed — safe to rebuild
-	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(waveID, "allocation_demand_driven"); err != nil {
+	if err := uc.fulfillRepo.DeleteByWaveAndGeneratedBy(ctx, waveID, "allocation_demand_driven"); err != nil {
 		return nil, err
 	}
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	var createdLines []domain.FulfillmentLine
 	var blockedLines []dto.DemandMappingBlockedLine
 
@@ -327,7 +328,7 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 
 		snapID := profileToSnapshot[*doc.CustomerProfileID]
 
-		demandLines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
+		demandLines, err := uc.demandRepo.ListLinesByDocument(ctx, doc.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -358,7 +359,7 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 			// Address readiness gate: when addressRepo is wired, block lines whose
 			// profile has no valid addresses.
 			if uc.addressRepo != nil && doc.CustomerProfileID != nil {
-				addrs, addrErr := uc.addressRepo.ListByProfile(*doc.CustomerProfileID)
+				addrs, addrErr := uc.addressRepo.ListByProfile(ctx, *doc.CustomerProfileID)
 				if addrErr == nil && len(addrs) == 0 {
 					blockedLines = append(blockedLines, dto.DemandMappingBlockedLine{
 						DemandLineID:    dl.ID,
@@ -388,7 +389,7 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(waveID uint) (*dto.Demand
 				UpdatedAt:                 now,
 			}
 
-			if err := uc.fulfillRepo.Create(&fl); err != nil {
+			if err := uc.fulfillRepo.Create(ctx, &fl); err != nil {
 				return nil, err
 			}
 			createdLines = append(createdLines, fl)
@@ -432,8 +433,8 @@ func domainToFulfillmentLineDTO(fl *domain.FulfillmentLine) dto.FulfillmentLineD
 	}
 }
 
-func (uc *demandMappingUseCase) docHasEligibleLines(docID uint) (bool, error) {
-	demandLines, err := uc.demandRepo.ListLinesByDocument(docID)
+func (uc *demandMappingUseCase) docHasEligibleLines(ctx context.Context, docID uint) (bool, error) {
+	demandLines, err := uc.demandRepo.ListLinesByDocument(ctx, docID)
 	if err != nil {
 		return false, err
 	}
@@ -481,9 +482,9 @@ type supplierOrderGroupKey struct {
 	TemplateID           uint
 }
 
-func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrder, error) {
+func (uc *exportUseCase) ExportSupplierOrder(ctx context.Context, waveID uint) ([]*domain.SupplierOrder, error) {
 	// Delete only existing draft orders for this wave (rebuild pattern for idempotency)
-	if err := uc.supplierRepo.DeleteDraftsByWave(waveID); err != nil {
+	if err := uc.supplierRepo.DeleteDraftsByWave(ctx, waveID); err != nil {
 		return nil, err
 	}
 
@@ -492,7 +493,7 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrd
 	var pinNodeID uint
 	if uc.basisStamp != nil {
 		var err error
-		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(waveID)
+		basisNodeID, basisHash, err = uc.basisStamp.ResolveBasis(ctx, waveID)
 		if err != nil {
 			return nil, fmt.Errorf("resolve basis for supplier order: %w", err)
 		}
@@ -502,7 +503,7 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrd
 	}
 
 	// Get all fulfillment lines for the wave
-	fulfillLines, err := uc.fulfillRepo.ListByWave(waveID)
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +516,7 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrd
 	groups := make(map[supplierOrderGroupKey][]int) // key → indices into fulfillLines
 
 	for i := range fulfillLines {
-		key := uc.resolveGroupKey(&fulfillLines[i], docCache, profileCache)
+		key := uc.resolveGroupKey(ctx, &fulfillLines[i], docCache, profileCache)
 		groups[key] = append(groups[key], i)
 	}
 
@@ -531,7 +532,7 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrd
 		return sortedKeys[i].TemplateID < sortedKeys[j].TemplateID
 	})
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	var results []*domain.SupplierOrder
 
 	for batchIdx, key := range sortedKeys {
@@ -591,11 +592,11 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrd
 			}
 		}
 
-		if err := uc.supplierRepo.AtomicCreateSupplierOrder(order, lines, pin); err != nil {
+		if err := uc.supplierRepo.AtomicCreateSupplierOrder(ctx, order, lines, pin); err != nil {
 			return nil, err
 		}
 
-		if err := uc.projectSupplierStateFromOrder(order, lines); err != nil {
+		if err := uc.projectSupplierStateFromOrder(ctx, order, lines); err != nil {
 			return nil, err
 		}
 		results = append(results, order)
@@ -608,6 +609,7 @@ func (uc *exportUseCase) ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrd
 // walking DemandDocument → IntegrationProfile → template binding. Lines that
 // cannot be resolved fall into the catch-all group (zero-value key).
 func (uc *exportUseCase) resolveGroupKey(
+	ctx context.Context,
 	fl *domain.FulfillmentLine,
 	docCache map[uint]*domain.DemandDocument,
 	profileCache map[uint]*domain.IntegrationProfile,
@@ -619,7 +621,7 @@ func (uc *exportUseCase) resolveGroupKey(
 	docID := *fl.DemandDocumentID
 	doc, ok := docCache[docID]
 	if !ok {
-		found, err := uc.demandRepo.FindByID(docID)
+		found, err := uc.demandRepo.FindByID(ctx, docID)
 		if err != nil || found == nil {
 			return supplierOrderGroupKey{}
 		}
@@ -633,7 +635,7 @@ func (uc *exportUseCase) resolveGroupKey(
 
 	profileID := *doc.IntegrationProfileID
 	if _, ok := profileCache[profileID]; !ok && uc.profileRepo != nil {
-		found, err := uc.profileRepo.FindByID(profileID)
+		found, err := uc.profileRepo.FindByID(ctx, profileID)
 		if err != nil || found == nil {
 			// Profile ID known but not resolvable; still group by profile ID alone
 			return supplierOrderGroupKey{IntegrationProfileID: profileID}
@@ -644,7 +646,7 @@ func (uc *exportUseCase) resolveGroupKey(
 	// Resolve the default template binding for export_supplier_order
 	var templateID uint
 	if uc.bindingRepo != nil {
-		binding, err := uc.bindingRepo.FindDefaultByProfileAndType(profileID, "export_supplier_order")
+		binding, err := uc.bindingRepo.FindDefaultByProfileAndType(ctx, profileID, "export_supplier_order")
 		if err == nil && binding != nil {
 			templateID = binding.TemplateID
 		}
@@ -655,7 +657,7 @@ func (uc *exportUseCase) resolveGroupKey(
 
 // projectSupplierStateFromOrder maps a SupplierOrder.Status to the corresponding
 // SupplierState and bulk-updates the referenced FulfillmentLines.
-func (uc *exportUseCase) projectSupplierStateFromOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine) error {
+func (uc *exportUseCase) projectSupplierStateFromOrder(ctx context.Context, order *domain.SupplierOrder, lines []*domain.SupplierOrderLine) error {
 	projected := supplierOrderStatusToState(order.Status)
 	if projected == "" {
 		return nil
@@ -668,7 +670,7 @@ func (uc *exportUseCase) projectSupplierStateFromOrder(order *domain.SupplierOrd
 		})
 	}
 	if len(updates) > 0 {
-		if err := uc.fulfillRepo.BulkUpdateStates(updates); err != nil {
+		if err := uc.fulfillRepo.BulkUpdateStates(ctx, updates); err != nil {
 			return err
 		}
 	}

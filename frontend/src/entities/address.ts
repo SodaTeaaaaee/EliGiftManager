@@ -1,65 +1,14 @@
-export interface CustomerAddressDTO {
-  id: number
-  customerProfileId: number
-  label: string
-  recipientName: string
-  phone: string
-  country: string
-  province: string
-  city: string
-  district: string
-  addressLine1: string
-  addressLine2: string
-  postalCode: string
-  isDefault: boolean
-  isTest: boolean
-  validationStatus: string
-  validationDetail: string
-  extraData: string
-  createdAt: string
-  updatedAt: string
-}
+/**
+ * Address entity types — re-exported from generated Wails DTO.
+ *
+ * The generated `dto.*` classes (wailsjs/go/models.ts) are the authoritative
+ * definitions. This file re-exports them as type aliases so that existing
+ * `import type { CustomerAddressDTO } from '@/entities/address'` continues
+ * to work without importing from wailsjs directly.
+ */
+import type { dto } from '@/../wailsjs/go/models'
 
-export interface CreateAddressInput {
-  customerProfileId: number
-  label: string
-  recipientName: string
-  phone: string
-  country: string
-  province: string
-  city: string
-  district: string
-  addressLine1: string
-  addressLine2: string
-  postalCode: string
-  isDefault: boolean
-  isTest: boolean
-  validationStatus: string
-  validationDetail: string
-  extraData: string
-}
-
-export interface UpdateAddressInput {
-  id: number
-  customerProfileId: number
-  label: string
-  recipientName: string
-  phone: string
-  country: string
-  province: string
-  city: string
-  district: string
-  addressLine1: string
-  addressLine2: string
-  postalCode: string
-  isDefault: boolean
-  isTest: boolean
-  validationStatus: string
-  validationDetail: string
-  extraData: string
-}
-
-export interface BindAddressInput {
-  fulfillmentLineId: number
-  customerAddressId: number
-}
+export type CustomerAddressDTO = dto.CustomerAddressDTO
+export type CreateAddressInput = dto.CreateAddressInput
+export type UpdateAddressInput = dto.UpdateAddressInput
+export type BindAddressInput = dto.BindAddressInput

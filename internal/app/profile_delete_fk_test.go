@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -15,12 +16,12 @@ func TestDeleteProfileFKBlocking(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name          string
-		demandCount   int64
-		syncCount     int64
-		bindingCount  int64
-		closureCount  int64
-		wantErr       bool
+		name             string
+		demandCount      int64
+		syncCount        int64
+		bindingCount     int64
+		closureCount     int64
+		wantErr          bool
 		wantDeleteCalled bool
 	}{
 		{
@@ -97,7 +98,7 @@ func TestDeleteProfileFKBlocking(t *testing.T) {
 				nil,
 			)
 
-			err := uc.DeleteProfile(1)
+			err := uc.DeleteProfile(context.Background(), 1)
 
 			if tc.wantErr && err == nil {
 				t.Errorf("expected blocking error, got nil")
@@ -133,7 +134,7 @@ func TestDeleteProfileDemandErrorPropagates(t *testing.T) {
 		nil,
 	)
 
-	err := uc.DeleteProfile(1)
+	err := uc.DeleteProfile(context.Background(), 1)
 	if err == nil {
 		t.Fatal("expected error when demand count repo fails, got nil")
 	}
@@ -159,7 +160,7 @@ func TestDeleteProfileSyncErrorPropagates(t *testing.T) {
 		nil,
 	)
 
-	err := uc.DeleteProfile(1)
+	err := uc.DeleteProfile(context.Background(), 1)
 	if err == nil {
 		t.Fatal("expected error when channel sync count repo fails, got nil")
 	}
@@ -187,7 +188,7 @@ func TestDeleteProfileBindingErrorPropagates(t *testing.T) {
 		nil,
 	)
 
-	err := uc.DeleteProfile(1)
+	err := uc.DeleteProfile(context.Background(), 1)
 	if err == nil {
 		t.Fatal("expected error when template binding count repo fails, got nil")
 	}

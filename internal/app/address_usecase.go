@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -23,13 +24,13 @@ func NewAddressManagementUseCase(
 	}
 }
 
-func (uc *addressManagementUseCase) CreateAddress(input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error) {
+func (uc *addressManagementUseCase) CreateAddress(ctx context.Context, input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error) {
 	if input.Label == "" {
 		return nil, fmt.Errorf("address label is required")
 	}
 
 	if input.IsDefault {
-		if err := uc.addressRepo.ClearDefaultByProfile(input.CustomerProfileID); err != nil {
+		if err := uc.addressRepo.ClearDefaultByProfile(ctx, input.CustomerProfileID); err != nil {
 			return nil, fmt.Errorf("clear existing defaults: %w", err)
 		}
 	}
@@ -56,19 +57,19 @@ func (uc *addressManagementUseCase) CreateAddress(input dto.CreateAddressInput) 
 		ValidationStatus:  status,
 		ValidationDetail:  input.ValidationDetail,
 		ExtraData:         input.ExtraData,
-		CreatedAt:         time.Now().Format(time.RFC3339),
-		UpdatedAt:         time.Now().Format(time.RFC3339),
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
-	if err := uc.addressRepo.Create(addr); err != nil {
+	if err := uc.addressRepo.Create(ctx, addr); err != nil {
 		return nil, err
 	}
 	result := addressToDTO(addr)
 	return &result, nil
 }
 
-func (uc *addressManagementUseCase) UpdateAddress(input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error) {
-	existing, err := uc.addressRepo.FindByID(input.ID)
+func (uc *addressManagementUseCase) UpdateAddress(ctx context.Context, input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error) {
+	existing, err := uc.addressRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,7 @@ func (uc *addressManagementUseCase) UpdateAddress(input dto.UpdateAddressInput) 
 		existing.Label = input.Label
 	}
 	if input.IsDefault && !existing.IsDefault {
-		if err := uc.addressRepo.ClearDefaultByProfile(input.CustomerProfileID); err != nil {
+		if err := uc.addressRepo.ClearDefaultByProfile(ctx, input.CustomerProfileID); err != nil {
 			return nil, fmt.Errorf("clear existing defaults: %w", err)
 		}
 	}
@@ -97,21 +98,21 @@ func (uc *addressManagementUseCase) UpdateAddress(input dto.UpdateAddressInput) 
 	existing.ValidationStatus = input.ValidationStatus
 	existing.ValidationDetail = input.ValidationDetail
 	existing.ExtraData = input.ExtraData
-	existing.UpdatedAt = time.Now().Format(time.RFC3339)
+	existing.UpdatedAt = time.Now()
 
-	if err := uc.addressRepo.Update(existing); err != nil {
+	if err := uc.addressRepo.Update(ctx, existing); err != nil {
 		return nil, err
 	}
 	result := addressToDTO(existing)
 	return &result, nil
 }
 
-func (uc *addressManagementUseCase) DeleteAddress(id uint) error {
-	return uc.addressRepo.SoftDelete(id)
+func (uc *addressManagementUseCase) DeleteAddress(ctx context.Context, id uint) error {
+	return uc.addressRepo.SoftDelete(ctx, id)
 }
 
-func (uc *addressManagementUseCase) GetAddress(id uint) (*dto.CustomerAddressDTO, error) {
-	addr, err := uc.addressRepo.FindByID(id)
+func (uc *addressManagementUseCase) GetAddress(ctx context.Context, id uint) (*dto.CustomerAddressDTO, error) {
+	addr, err := uc.addressRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -119,8 +120,8 @@ func (uc *addressManagementUseCase) GetAddress(id uint) (*dto.CustomerAddressDTO
 	return &result, nil
 }
 
-func (uc *addressManagementUseCase) ListAddressesByProfile(profileID uint) ([]dto.CustomerAddressDTO, error) {
-	addrs, err := uc.addressRepo.ListByProfile(profileID)
+func (uc *addressManagementUseCase) ListAddressesByProfile(ctx context.Context, profileID uint) ([]dto.CustomerAddressDTO, error) {
+	addrs, err := uc.addressRepo.ListByProfile(ctx, profileID)
 	if err != nil {
 		return nil, err
 	}
@@ -131,13 +132,13 @@ func (uc *addressManagementUseCase) ListAddressesByProfile(profileID uint) ([]dt
 	return result, nil
 }
 
-func (uc *addressManagementUseCase) BindAddressToLine(input dto.BindAddressInput) (*dto.CustomerAddressDTO, error) {
-	addr, err := uc.addressRepo.FindByID(input.CustomerAddressID)
+func (uc *addressManagementUseCase) BindAddressToLine(ctx context.Context, input dto.BindAddressInput) (*dto.CustomerAddressDTO, error) {
+	addr, err := uc.addressRepo.FindByID(ctx, input.CustomerAddressID)
 	if err != nil {
 		return nil, fmt.Errorf("address not found: %w", err)
 	}
 
-	line, err := uc.fulfillmentRepo.FindByID(input.FulfillmentLineID)
+	line, err := uc.fulfillmentRepo.FindByID(ctx, input.FulfillmentLineID)
 	if err != nil {
 		return nil, fmt.Errorf("fulfillment line not found: %w", err)
 	}
@@ -145,7 +146,7 @@ func (uc *addressManagementUseCase) BindAddressToLine(input dto.BindAddressInput
 	line.CustomerAddressID = &addr.ID
 	line.AddressState = deriveAddressState(addr.ValidationStatus)
 
-	if err := uc.fulfillmentRepo.Update(line); err != nil {
+	if err := uc.fulfillmentRepo.Update(ctx, line); err != nil {
 		return nil, fmt.Errorf("bind address to line: %w", err)
 	}
 
@@ -153,8 +154,8 @@ func (uc *addressManagementUseCase) BindAddressToLine(input dto.BindAddressInput
 	return &result, nil
 }
 
-func (uc *addressManagementUseCase) UnbindAddressFromLine(fulfillmentLineID uint) error {
-	line, err := uc.fulfillmentRepo.FindByID(fulfillmentLineID)
+func (uc *addressManagementUseCase) UnbindAddressFromLine(ctx context.Context, fulfillmentLineID uint) error {
+	line, err := uc.fulfillmentRepo.FindByID(ctx, fulfillmentLineID)
 	if err != nil {
 		return fmt.Errorf("fulfillment line not found: %w", err)
 	}
@@ -162,7 +163,7 @@ func (uc *addressManagementUseCase) UnbindAddressFromLine(fulfillmentLineID uint
 	line.CustomerAddressID = nil
 	line.AddressState = "missing"
 
-	return uc.fulfillmentRepo.Update(line)
+	return uc.fulfillmentRepo.Update(ctx, line)
 }
 
 func deriveAddressState(validationStatus string) string {

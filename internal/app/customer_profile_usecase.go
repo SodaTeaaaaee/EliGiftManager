@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -31,20 +32,20 @@ func NewCustomerProfileUseCase(
 	}
 }
 
-func (uc *CustomerProfileUseCase) ListCustomerProfiles(keyword, platform string, missingAddressOnly bool) ([]dto.CustomerProfileDTO, error) {
-	profiles, err := uc.profileRepo.List()
+func (uc *CustomerProfileUseCase) ListCustomerProfiles(ctx context.Context, keyword, platform string, missingAddressOnly bool) ([]dto.CustomerProfileDTO, error) {
+	profiles, err := uc.profileRepo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	result := []dto.CustomerProfileDTO{}
 	for _, p := range profiles {
-		identities, err := uc.profileRepo.ListIdentitiesByProfile(p.ID)
+		identities, err := uc.profileRepo.ListIdentitiesByProfile(ctx, p.ID)
 		if err != nil {
 			return nil, err
 		}
 
-		addresses, err := uc.addressRepo.ListByProfile(p.ID)
+		addresses, err := uc.addressRepo.ListByProfile(ctx, p.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -90,7 +91,7 @@ func (uc *CustomerProfileUseCase) ListCustomerProfiles(keyword, platform string,
 		identDTOs := make([]dto.CustomerIdentityDTO, len(identities))
 		for i, ident := range identities {
 			identDTOs[i] = dto.CustomerIdentityDTO{
-				ID:               ident.ID,
+				ID:                ident.ID,
 				CustomerProfileID: ident.CustomerProfileID,
 				IdentityPlatform:  ident.IdentityPlatform,
 				IdentityValue:     ident.IdentityValue,
@@ -141,18 +142,18 @@ func (uc *CustomerProfileUseCase) ListCustomerProfiles(keyword, platform string,
 	return result, nil
 }
 
-func (uc *CustomerProfileUseCase) GetCustomerProfile(id uint) (*dto.CustomerProfileDTO, error) {
-	p, err := uc.profileRepo.FindByID(id)
+func (uc *CustomerProfileUseCase) GetCustomerProfile(ctx context.Context, id uint) (*dto.CustomerProfileDTO, error) {
+	p, err := uc.profileRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	identities, err := uc.profileRepo.ListIdentitiesByProfile(p.ID)
+	identities, err := uc.profileRepo.ListIdentitiesByProfile(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	addresses, err := uc.addressRepo.ListByProfile(p.ID)
+	addresses, err := uc.addressRepo.ListByProfile(ctx, p.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +161,7 @@ func (uc *CustomerProfileUseCase) GetCustomerProfile(id uint) (*dto.CustomerProf
 	identDTOs := make([]dto.CustomerIdentityDTO, len(identities))
 	for i, ident := range identities {
 		identDTOs[i] = dto.CustomerIdentityDTO{
-			ID:               ident.ID,
+			ID:                ident.ID,
 			CustomerProfileID: ident.CustomerProfileID,
 			IdentityPlatform:  ident.IdentityPlatform,
 			IdentityValue:     ident.IdentityValue,
@@ -208,8 +209,8 @@ func (uc *CustomerProfileUseCase) GetCustomerProfile(id uint) (*dto.CustomerProf
 	}, nil
 }
 
-func (uc *CustomerProfileUseCase) CreateCustomerProfile(input dto.CreateCustomerProfileInput) (*dto.CustomerProfileDTO, error) {
-	now := time.Now().Format(time.RFC3339)
+func (uc *CustomerProfileUseCase) CreateCustomerProfile(ctx context.Context, input dto.CreateCustomerProfileInput) (*dto.CustomerProfileDTO, error) {
+	now := time.Now()
 	p := &domain.CustomerProfile{
 		DisplayName: input.DisplayName,
 		ProfileType: input.ProfileType,
@@ -218,15 +219,15 @@ func (uc *CustomerProfileUseCase) CreateCustomerProfile(input dto.CreateCustomer
 		UpdatedAt:   now,
 	}
 
-	if err := uc.profileRepo.Create(p); err != nil {
+	if err := uc.profileRepo.Create(ctx, p); err != nil {
 		return nil, err
 	}
 
-	return uc.GetCustomerProfile(p.ID)
+	return uc.GetCustomerProfile(ctx, p.ID)
 }
 
-func (uc *CustomerProfileUseCase) UpdateCustomerProfile(input dto.UpdateCustomerProfileInput) (*dto.CustomerProfileDTO, error) {
-	p, err := uc.profileRepo.FindByID(input.ID)
+func (uc *CustomerProfileUseCase) UpdateCustomerProfile(ctx context.Context, input dto.UpdateCustomerProfileInput) (*dto.CustomerProfileDTO, error) {
+	p, err := uc.profileRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -234,21 +235,21 @@ func (uc *CustomerProfileUseCase) UpdateCustomerProfile(input dto.UpdateCustomer
 	p.DisplayName = input.DisplayName
 	p.ProfileType = input.ProfileType
 	p.ExtraData = input.ExtraData
-	p.UpdatedAt = time.Now().Format(time.RFC3339)
+	p.UpdatedAt = time.Now()
 
-	if err := uc.profileRepo.Update(p); err != nil {
+	if err := uc.profileRepo.Update(ctx, p); err != nil {
 		return nil, err
 	}
 
-	return uc.GetCustomerProfile(p.ID)
+	return uc.GetCustomerProfile(ctx, p.ID)
 }
 
-func (uc *CustomerProfileUseCase) DeleteCustomerProfile(id uint) error {
-	return uc.profileRepo.SoftDelete(id)
+func (uc *CustomerProfileUseCase) DeleteCustomerProfile(ctx context.Context, id uint) error {
+	return uc.profileRepo.SoftDelete(ctx, id)
 }
 
-func (uc *CustomerProfileUseCase) AddCustomerIdentity(input dto.CreateCustomerIdentityInput) (*dto.CustomerIdentityDTO, error) {
-	now := time.Now().Format(time.RFC3339)
+func (uc *CustomerProfileUseCase) AddCustomerIdentity(ctx context.Context, input dto.CreateCustomerIdentityInput) (*dto.CustomerIdentityDTO, error) {
+	now := time.Now()
 	ident := &domain.CustomerIdentity{
 		CustomerProfileID: input.CustomerProfileID,
 		IdentityPlatform:  input.IdentityPlatform,
@@ -260,15 +261,15 @@ func (uc *CustomerProfileUseCase) AddCustomerIdentity(input dto.CreateCustomerId
 		UpdatedAt:         now,
 	}
 
-	if err := uc.profileRepo.CreateIdentity(ident); err != nil {
+	if err := uc.profileRepo.CreateIdentity(ctx, ident); err != nil {
 		return nil, err
 	}
 
 	// Trigger suggestion detection when identity is added
-	_ = uc.DetectMergeSuggestions()
+	_ = uc.DetectMergeSuggestions(ctx)
 
 	return &dto.CustomerIdentityDTO{
-		ID:               ident.ID,
+		ID:                ident.ID,
 		CustomerProfileID: ident.CustomerProfileID,
 		IdentityPlatform:  ident.IdentityPlatform,
 		IdentityValue:     ident.IdentityValue,
@@ -278,23 +279,23 @@ func (uc *CustomerProfileUseCase) AddCustomerIdentity(input dto.CreateCustomerId
 	}, nil
 }
 
-func (uc *CustomerProfileUseCase) DeleteCustomerIdentity(id uint) error {
-	return uc.profileRepo.DeleteIdentity(id)
+func (uc *CustomerProfileUseCase) DeleteCustomerIdentity(ctx context.Context, id uint) error {
+	return uc.profileRepo.DeleteIdentity(ctx, id)
 }
 
-func (uc *CustomerProfileUseCase) GetMergeSuggestions() ([]dto.MergeSuggestionDTO, error) {
+func (uc *CustomerProfileUseCase) GetMergeSuggestions(ctx context.Context) ([]dto.MergeSuggestionDTO, error) {
 	// Detect fresh suggestions first
-	_ = uc.DetectMergeSuggestions()
+	_ = uc.DetectMergeSuggestions(ctx)
 
-	suggestions, err := uc.suggestionRepo.ListPending()
+	suggestions, err := uc.suggestionRepo.ListPending(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	result := []dto.MergeSuggestionDTO{}
 	for _, s := range suggestions {
-		srcDTO, srcErr := uc.GetCustomerProfile(s.SourceProfileID)
-		targetDTO, targetErr := uc.GetCustomerProfile(s.TargetProfileID)
+		srcDTO, srcErr := uc.GetCustomerProfile(ctx, s.SourceProfileID)
+		targetDTO, targetErr := uc.GetCustomerProfile(ctx, s.TargetProfileID)
 		if srcErr != nil || targetErr != nil {
 			continue // skip if either profile was deleted
 		}
@@ -313,11 +314,11 @@ func (uc *CustomerProfileUseCase) GetMergeSuggestions() ([]dto.MergeSuggestionDT
 	return result, nil
 }
 
-func (uc *CustomerProfileUseCase) DismissMergeSuggestion(id uint) error {
-	return uc.suggestionRepo.Dismiss(id)
+func (uc *CustomerProfileUseCase) DismissMergeSuggestion(ctx context.Context, id uint) error {
+	return uc.suggestionRepo.Dismiss(ctx, id)
 }
 
-func (uc *CustomerProfileUseCase) DetectMergeSuggestions() error {
+func (uc *CustomerProfileUseCase) DetectMergeSuggestions(ctx context.Context) error {
 	settings, err := uc.settingsSvc.Load()
 	if err != nil {
 		return err
@@ -328,20 +329,20 @@ func (uc *CustomerProfileUseCase) DetectMergeSuggestions() error {
 
 	// 1. If ByEmail is enabled, find duplicates by email
 	if settings.AutoMergeByEmail {
-		emailGroups, err := uc.suggestionRepo.FindEmailDuplicates()
+		emailGroups, err := uc.suggestionRepo.FindEmailDuplicates(ctx)
 		if err == nil {
 			for _, eg := range emailGroups {
-				uc.createSuggestionsFromIDs(eg.ProfileIDs, fmt.Sprintf("相同邮箱: %s", eg.Key))
+				uc.createSuggestionsFromIDs(ctx, eg.ProfileIDs, fmt.Sprintf("相同邮箱: %s", eg.Key))
 			}
 		}
 	}
 
 	// 2. If ByPhone is enabled, find duplicates by phone
 	if settings.AutoMergeByPhone {
-		phoneGroups, err := uc.suggestionRepo.FindPhoneDuplicates()
+		phoneGroups, err := uc.suggestionRepo.FindPhoneDuplicates(ctx)
 		if err == nil {
 			for _, pg := range phoneGroups {
-				uc.createSuggestionsFromIDs(pg.ProfileIDs, fmt.Sprintf("相同电话: %s", pg.Key))
+				uc.createSuggestionsFromIDs(ctx, pg.ProfileIDs, fmt.Sprintf("相同电话: %s", pg.Key))
 			}
 		}
 	}
@@ -349,7 +350,7 @@ func (uc *CustomerProfileUseCase) DetectMergeSuggestions() error {
 	return nil
 }
 
-func (uc *CustomerProfileUseCase) createSuggestionsFromIDs(idsStr, reason string) {
+func (uc *CustomerProfileUseCase) createSuggestionsFromIDs(ctx context.Context, idsStr, reason string) {
 	parts := strings.Split(idsStr, ",")
 	var profileIDs []uint
 	for _, p := range parts {
@@ -376,7 +377,7 @@ func (uc *CustomerProfileUseCase) createSuggestionsFromIDs(idsStr, reason string
 		}
 
 		// Check if suggestion already exists
-		existing, _ := uc.suggestionRepo.CountBySourceAndTarget(sourceID, targetID)
+		existing, _ := uc.suggestionRepo.CountBySourceAndTarget(ctx, sourceID, targetID)
 		if existing == 0 {
 			suggestion := domain.MergeSuggestion{
 				SourceProfileID: sourceID,
@@ -384,12 +385,12 @@ func (uc *CustomerProfileUseCase) createSuggestionsFromIDs(idsStr, reason string
 				Reason:          reason,
 				Status:          "pending",
 			}
-			_ = uc.suggestionRepo.Create(&suggestion)
+			_ = uc.suggestionRepo.Create(ctx, &suggestion)
 		}
 	}
 }
 
-func (uc *CustomerProfileUseCase) SaveSettings(settings dto.SystemSettingsDTO) error {
+func (uc *CustomerProfileUseCase) SaveSettings(ctx context.Context, settings dto.SystemSettingsDTO) error {
 	return uc.settingsSvc.Save(&service.SystemSettings{
 		AutoMergeCrossPlatform: settings.AutoMergeCrossPlatform,
 		AutoMergeByEmail:       settings.AutoMergeByEmail,
@@ -397,7 +398,7 @@ func (uc *CustomerProfileUseCase) SaveSettings(settings dto.SystemSettingsDTO) e
 	})
 }
 
-func (uc *CustomerProfileUseCase) GetSettings() (dto.SystemSettingsDTO, error) {
+func (uc *CustomerProfileUseCase) GetSettings(ctx context.Context) (dto.SystemSettingsDTO, error) {
 	s, err := uc.settingsSvc.Load()
 	if err != nil {
 		return dto.SystemSettingsDTO{}, err

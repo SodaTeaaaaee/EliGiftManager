@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -21,8 +22,8 @@ func NewHistoryHeadQueryUseCase(
 	}
 }
 
-func (uc *historyHeadQueryUseCase) GetCurrentProjectionHash(waveID uint) (string, error) {
-	scope, err := uc.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+func (uc *historyHeadQueryUseCase) GetCurrentProjectionHash(ctx context.Context, waveID uint) (string, error) {
+	scope, err := uc.scopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return "", err
 	}
@@ -30,7 +31,7 @@ func (uc *historyHeadQueryUseCase) GetCurrentProjectionHash(waveID uint) (string
 		return "", nil
 	}
 
-	node, err := uc.nodeRepo.FindByID(scope.CurrentHeadNodeID)
+	node, err := uc.nodeRepo.FindByID(ctx, scope.CurrentHeadNodeID)
 	if err != nil {
 		return "", err
 	}
@@ -40,8 +41,8 @@ func (uc *historyHeadQueryUseCase) GetCurrentProjectionHash(waveID uint) (string
 	return node.ProjectionHash, nil
 }
 
-func (uc *historyHeadQueryUseCase) GetCurrentHeadNodeIDAndHash(waveID uint) (uint, string, error) {
-	scope, err := uc.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+func (uc *historyHeadQueryUseCase) GetCurrentHeadNodeIDAndHash(ctx context.Context, waveID uint) (uint, string, error) {
+	scope, err := uc.scopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return 0, "", err
 	}
@@ -49,7 +50,7 @@ func (uc *historyHeadQueryUseCase) GetCurrentHeadNodeIDAndHash(waveID uint) (uin
 		return 0, "", nil
 	}
 
-	node, err := uc.nodeRepo.FindByID(scope.CurrentHeadNodeID)
+	node, err := uc.nodeRepo.FindByID(ctx, scope.CurrentHeadNodeID)
 	if err != nil {
 		return 0, "", err
 	}

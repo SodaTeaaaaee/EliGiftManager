@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,7 +72,7 @@ func newHistoryIntegrationFixture(t *testing.T) *historyIntegrationFixture {
 
 	snapshotSvc := NewWaveSnapshotService(db, ruleRepo, adjRepo, assignRepo, waveRepo, fulfillRepo)
 	patchExec := NewPatchExecutor(db, snapshotSvc)
-	recordingSvc := NewHistoryRecordingService(scopeRepo, nodeRepo, cpRepo, snapshotSvc)
+	recordingSvc := NewHistoryRecordingService(scopeRepo, nodeRepo, cpRepo, WithSnapshotService(snapshotSvc))
 	undoRedoUC := NewUndoRedoUseCase(scopeRepo, nodeRepo, patchExec)
 	projHashSvc := NewProjectionHashService(fulfillRepo, ruleRepo, adjRepo)
 
@@ -102,7 +103,7 @@ func mustCreateWave(t *testing.T, f *historyIntegrationFixture) uint {
 		WaveType:       "mixed",
 		LifecycleStage: "intake",
 	}
-	if err := f.waveRepo.Create(wave); err != nil {
+	if err := f.waveRepo.Create(context.Background(), wave); err != nil {
 		t.Fatalf("create wave: %v", err)
 	}
 	return wave.ID
@@ -111,7 +112,7 @@ func mustCreateWave(t *testing.T, f *historyIntegrationFixture) uint {
 // mustRecordNode is a thin wrapper that fails the test on error.
 func mustRecordNode(t *testing.T, f *historyIntegrationFixture, input RecordNodeInput) *domain.HistoryNode {
 	t.Helper()
-	node, err := f.recording.RecordNode(input)
+	node, err := f.recording.RecordNode(context.Background(), input)
 	if err != nil {
 		t.Fatalf("RecordNode: %v", err)
 	}
@@ -148,7 +149,7 @@ func TestIntegration_CreateRule_UndoRedo(t *testing.T) {
 		Priority:             1,
 		Active:               true,
 	}
-	if err := f.ruleRepo.Create(rule); err != nil {
+	if err := f.ruleRepo.Create(context.Background(), rule); err != nil {
 		t.Fatalf("create rule: %v", err)
 	}
 	ruleID := rule.ID
@@ -176,7 +177,7 @@ func TestIntegration_CreateRule_UndoRedo(t *testing.T) {
 	})
 
 	// 3. Verify rule exists.
-	rules, err := f.ruleRepo.ListByWave(waveID)
+	rules, err := f.ruleRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("list rules: %v", err)
 	}
@@ -185,10 +186,10 @@ func TestIntegration_CreateRule_UndoRedo(t *testing.T) {
 	}
 
 	// 4. Undo → rule must be deleted.
-	if _, err := f.undoRedo.Undo(waveID); err != nil {
+	if _, err := f.undoRedo.Undo(context.Background(), waveID); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
-	rules, err = f.ruleRepo.ListByWave(waveID)
+	rules, err = f.ruleRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("list rules after undo: %v", err)
 	}
@@ -197,10 +198,10 @@ func TestIntegration_CreateRule_UndoRedo(t *testing.T) {
 	}
 
 	// 5. Redo → rule must be restored with the same ID.
-	if _, err := f.undoRedo.Redo(waveID); err != nil {
+	if _, err := f.undoRedo.Redo(context.Background(), waveID); err != nil {
 		t.Fatalf("redo: %v", err)
 	}
-	rules, err = f.ruleRepo.ListByWave(waveID)
+	rules, err = f.ruleRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("list rules after redo: %v", err)
 	}
@@ -227,7 +228,7 @@ func TestIntegration_UpdateRule_UndoRedo(t *testing.T) {
 		Priority:             1,
 		Active:               true,
 	}
-	if err := f.ruleRepo.Create(rule); err != nil {
+	if err := f.ruleRepo.Create(context.Background(), rule); err != nil {
 		t.Fatalf("create rule: %v", err)
 	}
 	ruleID := rule.ID
@@ -245,7 +246,7 @@ func TestIntegration_UpdateRule_UndoRedo(t *testing.T) {
 	// 3. Update the rule: Priority=5, Active=false.
 	rule.Priority = 5
 	rule.Active = false
-	if err := f.ruleRepo.Update(rule); err != nil {
+	if err := f.ruleRepo.Update(context.Background(), rule); err != nil {
 		t.Fatalf("update rule: %v", err)
 	}
 
@@ -271,10 +272,10 @@ func TestIntegration_UpdateRule_UndoRedo(t *testing.T) {
 	})
 
 	// 5. Undo → rule should revert to Priority=1, Active=true.
-	if _, err := f.undoRedo.Undo(waveID); err != nil {
+	if _, err := f.undoRedo.Undo(context.Background(), waveID); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
-	fetched, err := f.ruleRepo.FindByID(ruleID)
+	fetched, err := f.ruleRepo.FindByID(context.Background(), ruleID)
 	if err != nil {
 		t.Fatalf("find rule after undo: %v", err)
 	}
@@ -286,10 +287,10 @@ func TestIntegration_UpdateRule_UndoRedo(t *testing.T) {
 	}
 
 	// 6. Redo → rule should advance back to Priority=5, Active=false.
-	if _, err := f.undoRedo.Redo(waveID); err != nil {
+	if _, err := f.undoRedo.Redo(context.Background(), waveID); err != nil {
 		t.Fatalf("redo: %v", err)
 	}
-	fetched, err = f.ruleRepo.FindByID(ruleID)
+	fetched, err = f.ruleRepo.FindByID(context.Background(), ruleID)
 	if err != nil {
 		t.Fatalf("find rule after redo: %v", err)
 	}
@@ -316,7 +317,7 @@ func TestIntegration_DeleteRule_UndoRedo(t *testing.T) {
 		Priority:             2,
 		Active:               true,
 	}
-	if err := f.ruleRepo.Create(rule); err != nil {
+	if err := f.ruleRepo.Create(context.Background(), rule); err != nil {
 		t.Fatalf("create rule: %v", err)
 	}
 	ruleID := rule.ID
@@ -339,7 +340,7 @@ func TestIntegration_DeleteRule_UndoRedo(t *testing.T) {
 	inversePayload := fmt.Sprintf(`{"op":"restore_rule","rule_id":%d,"wave_id":%d,"data":%s}`, ruleID, waveID, ruleJSON)
 
 	// Execute delete via PatchExecutor so the hard-delete path is taken.
-	if err := f.patchExec.ApplyPatch(forwardPayload); err != nil {
+	if err := f.patchExec.ApplyPatch(context.Background(), forwardPayload); err != nil {
 		t.Fatalf("apply delete_rule patch: %v", err)
 	}
 	mustRecordNode(t, f, RecordNodeInput{
@@ -351,16 +352,16 @@ func TestIntegration_DeleteRule_UndoRedo(t *testing.T) {
 	})
 
 	// Verify rule is gone.
-	rules, _ := f.ruleRepo.ListByWave(waveID)
+	rules, _ := f.ruleRepo.ListByWave(context.Background(), waveID)
 	if len(rules) != 0 {
 		t.Fatalf("expected 0 rules after delete, got %d", len(rules))
 	}
 
 	// 5. Undo → rule restored with same ID.
-	if _, err := f.undoRedo.Undo(waveID); err != nil {
+	if _, err := f.undoRedo.Undo(context.Background(), waveID); err != nil {
 		t.Fatalf("undo: %v", err)
 	}
-	rules, err := f.ruleRepo.ListByWave(waveID)
+	rules, err := f.ruleRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("list rules after undo: %v", err)
 	}
@@ -372,10 +373,10 @@ func TestIntegration_DeleteRule_UndoRedo(t *testing.T) {
 	}
 
 	// 6. Redo → rule deleted again.
-	if _, err := f.undoRedo.Redo(waveID); err != nil {
+	if _, err := f.undoRedo.Redo(context.Background(), waveID); err != nil {
 		t.Fatalf("redo: %v", err)
 	}
-	rules, _ = f.ruleRepo.ListByWave(waveID)
+	rules, _ = f.ruleRepo.ListByWave(context.Background(), waveID)
 	if len(rules) != 0 {
 		t.Fatalf("expected 0 rules after redo, got %d", len(rules))
 	}
@@ -401,10 +402,10 @@ func TestIntegration_CheckpointRestore_FullState(t *testing.T) {
 	ruleB := &domain.AllocationPolicyRule{
 		WaveID: waveID, ProductID: 101, ContributionQuantity: 2, RuleKind: "direct", Priority: 2, Active: true,
 	}
-	if err := f.ruleRepo.Create(ruleA); err != nil {
+	if err := f.ruleRepo.Create(context.Background(), ruleA); err != nil {
 		t.Fatalf("create ruleA: %v", err)
 	}
-	if err := f.ruleRepo.Create(ruleB); err != nil {
+	if err := f.ruleRepo.Create(context.Background(), ruleB); err != nil {
 		t.Fatalf("create ruleB: %v", err)
 	}
 
@@ -416,7 +417,7 @@ func TestIntegration_CheckpointRestore_FullState(t *testing.T) {
 		QuantityDelta:  3,
 		OperatorID:     "test_operator",
 	}
-	if err := f.adjRepo.Create(adj); err != nil {
+	if err := f.adjRepo.Create(context.Background(), adj); err != nil {
 		t.Fatalf("create adj: %v", err)
 	}
 	origAdjID := adj.ID
@@ -439,13 +440,13 @@ func TestIntegration_CheckpointRestore_FullState(t *testing.T) {
 		LineReason:      "retail_order",
 		GeneratedBy:     "test",
 	}
-	if err := f.fulfillRepo.Create(fl); err != nil {
+	if err := f.fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create fulfillment line: %v", err)
 	}
 	origFlID := fl.ID
 
 	// 4. Capture snapshot.
-	snapPayload, err := f.snapshot.CaptureSnapshot(waveID)
+	snapPayload, err := f.snapshot.CaptureSnapshot(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}
@@ -463,7 +464,7 @@ func TestIntegration_CheckpointRestore_FullState(t *testing.T) {
 	})
 
 	// 6. Modify state: delete ruleA, add a new adjustment.
-	if err := f.ruleRepo.Delete(ruleA.ID); err != nil {
+	if err := f.ruleRepo.Delete(context.Background(), ruleA.ID); err != nil {
 		t.Fatalf("delete ruleA: %v", err)
 	}
 	newAdj := &domain.FulfillmentAdjustment{
@@ -473,27 +474,27 @@ func TestIntegration_CheckpointRestore_FullState(t *testing.T) {
 		QuantityDelta:  99,
 		OperatorID:     "another_operator",
 	}
-	if err := f.adjRepo.Create(newAdj); err != nil {
+	if err := f.adjRepo.Create(context.Background(), newAdj); err != nil {
 		t.Fatalf("create new adj: %v", err)
 	}
 
 	// Verify state is dirty.
-	rules, _ := f.ruleRepo.ListByWave(waveID)
+	rules, _ := f.ruleRepo.ListByWave(context.Background(), waveID)
 	if len(rules) != 1 {
 		t.Fatalf("expected 1 rule after modification (ruleB only), got %d", len(rules))
 	}
-	adjs, _ := f.adjRepo.ListByWave(waveID)
+	adjs, _ := f.adjRepo.ListByWave(context.Background(), waveID)
 	if len(adjs) != 2 {
 		t.Fatalf("expected 2 adjustments after modification, got %d", len(adjs))
 	}
 
 	// 7. Undo → RestoreSnapshot must put pre-modification state back.
-	if _, err := f.undoRedo.Undo(waveID); err != nil {
+	if _, err := f.undoRedo.Undo(context.Background(), waveID); err != nil {
 		t.Fatalf("undo (restore checkpoint): %v", err)
 	}
 
 	// Verify rules: both ruleA and ruleB must exist with original IDs.
-	rules, err = f.ruleRepo.ListByWave(waveID)
+	rules, err = f.ruleRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("list rules after restore: %v", err)
 	}
@@ -512,7 +513,7 @@ func TestIntegration_CheckpointRestore_FullState(t *testing.T) {
 	}
 
 	// Verify adjustments: only original adj, new one must be gone.
-	adjs, err = f.adjRepo.ListByWave(waveID)
+	adjs, err = f.adjRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("list adjs after restore: %v", err)
 	}
@@ -524,7 +525,7 @@ func TestIntegration_CheckpointRestore_FullState(t *testing.T) {
 	}
 
 	// Verify fulfillment line restored with original ID.
-	lines, err := f.fulfillRepo.ListByWave(waveID)
+	lines, err := f.fulfillRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("list lines after restore: %v", err)
 	}
@@ -546,7 +547,7 @@ func TestIntegration_ProjectionHash_StableAcrossRestore(t *testing.T) {
 	rule := &domain.AllocationPolicyRule{
 		WaveID: waveID, ProductID: 50, ContributionQuantity: 4, RuleKind: "direct", Priority: 1, Active: true,
 	}
-	if err := f.ruleRepo.Create(rule); err != nil {
+	if err := f.ruleRepo.Create(context.Background(), rule); err != nil {
 		t.Fatalf("create rule: %v", err)
 	}
 
@@ -557,7 +558,7 @@ func TestIntegration_ProjectionHash_StableAcrossRestore(t *testing.T) {
 		LineReason:      "retail_order",
 		GeneratedBy:     "test",
 	}
-	if err := f.fulfillRepo.Create(fl); err != nil {
+	if err := f.fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create fulfillment line: %v", err)
 	}
 
@@ -568,12 +569,12 @@ func TestIntegration_ProjectionHash_StableAcrossRestore(t *testing.T) {
 		QuantityDelta:  1,
 		OperatorID:     "op",
 	}
-	if err := f.adjRepo.Create(adj); err != nil {
+	if err := f.adjRepo.Create(context.Background(), adj); err != nil {
 		t.Fatalf("create adj: %v", err)
 	}
 
 	// 2. Compute hash H1 before any restore cycle.
-	h1, err := f.projHash.ComputeHash(waveID)
+	h1, err := f.projHash.ComputeHash(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("compute hash H1: %v", err)
 	}
@@ -582,29 +583,29 @@ func TestIntegration_ProjectionHash_StableAcrossRestore(t *testing.T) {
 	}
 
 	// 3. Capture snapshot.
-	snapPayload, err := f.snapshot.CaptureSnapshot(waveID)
+	snapPayload, err := f.snapshot.CaptureSnapshot(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("capture snapshot: %v", err)
 	}
 
 	// 4. Delete everything.
-	if err := f.ruleRepo.DeleteByWave(waveID); err != nil {
+	if err := f.ruleRepo.DeleteByWave(context.Background(), waveID); err != nil {
 		t.Fatalf("delete rules: %v", err)
 	}
-	if err := f.adjRepo.DeleteByWave(waveID); err != nil {
+	if err := f.adjRepo.DeleteByWave(context.Background(), waveID); err != nil {
 		t.Fatalf("delete adjs: %v", err)
 	}
-	if err := f.fulfillRepo.DeleteByWave(waveID); err != nil {
+	if err := f.fulfillRepo.DeleteByWave(context.Background(), waveID); err != nil {
 		t.Fatalf("delete lines: %v", err)
 	}
 
 	// 5. Restore from snapshot.
-	if err := f.snapshot.RestoreSnapshot(snapPayload); err != nil {
+	if err := f.snapshot.RestoreSnapshot(context.Background(), snapPayload); err != nil {
 		t.Fatalf("restore snapshot: %v", err)
 	}
 
 	// 6. Compute hash H2.
-	h2, err := f.projHash.ComputeHash(waveID)
+	h2, err := f.projHash.ComputeHash(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("compute hash H2: %v", err)
 	}
@@ -628,7 +629,7 @@ func TestIntegration_MultiStepUndoChain(t *testing.T) {
 			WaveID: waveID, ProductID: productID, ContributionQuantity: 1,
 			RuleKind: "direct", Priority: priority, Active: true,
 		}
-		if err := f.ruleRepo.Create(r); err != nil {
+		if err := f.ruleRepo.Create(context.Background(), r); err != nil {
 			t.Fatalf("create rule productID=%d: %v", productID, err)
 		}
 		rJSON, _ := json.Marshal(r)
@@ -649,7 +650,7 @@ func TestIntegration_MultiStepUndoChain(t *testing.T) {
 
 	assertRuleCount := func(expected int, label string) {
 		t.Helper()
-		rules, err := f.ruleRepo.ListByWave(waveID)
+		rules, err := f.ruleRepo.ListByWave(context.Background(), waveID)
 		if err != nil {
 			t.Fatalf("%s: list rules: %v", label, err)
 		}
@@ -662,25 +663,25 @@ func TestIntegration_MultiStepUndoChain(t *testing.T) {
 	assertRuleCount(3, "after 3 creates")
 
 	// 5. Undo → C deleted, 2 rules remain.
-	if _, err := f.undoRedo.Undo(waveID); err != nil {
+	if _, err := f.undoRedo.Undo(context.Background(), waveID); err != nil {
 		t.Fatalf("undo 1: %v", err)
 	}
 	assertRuleCount(2, "after undo 1")
 
 	// 6. Undo → B deleted, 1 rule remains.
-	if _, err := f.undoRedo.Undo(waveID); err != nil {
+	if _, err := f.undoRedo.Undo(context.Background(), waveID); err != nil {
 		t.Fatalf("undo 2: %v", err)
 	}
 	assertRuleCount(1, "after undo 2")
 
 	// 7. Redo → B restored, 2 rules.
-	if _, err := f.undoRedo.Redo(waveID); err != nil {
+	if _, err := f.undoRedo.Redo(context.Background(), waveID); err != nil {
 		t.Fatalf("redo 1: %v", err)
 	}
 	assertRuleCount(2, "after redo 1")
 
 	// 8. Redo → C restored, 3 rules.
-	if _, err := f.undoRedo.Redo(waveID); err != nil {
+	if _, err := f.undoRedo.Redo(context.Background(), waveID); err != nil {
 		t.Fatalf("redo 2: %v", err)
 	}
 	assertRuleCount(3, "after redo 2")
@@ -692,19 +693,23 @@ func TestIntegration_MultiStepUndoChain(t *testing.T) {
 // Used only in Test 7 which specifically exercises the error-propagation path.
 type failingScopeRepo struct{}
 
-func (r *failingScopeRepo) Create(scope *domain.HistoryScope) error {
+func (r *failingScopeRepo) Create(ctx context.Context, scope *domain.HistoryScope) error {
 	return errors.New("injected scope error")
 }
-func (r *failingScopeRepo) FindByID(id uint) (*domain.HistoryScope, error) {
+
+func (r *failingScopeRepo) FindByID(ctx context.Context, id uint) (*domain.HistoryScope, error) {
 	return nil, nil
 }
-func (r *failingScopeRepo) FindByScopeTypeAndKey(scopeType, scopeKey string) (*domain.HistoryScope, error) {
+
+func (r *failingScopeRepo) FindByScopeTypeAndKey(ctx context.Context, scopeType, scopeKey string) (*domain.HistoryScope, error) {
 	return nil, errors.New("injected scope error")
 }
-func (r *failingScopeRepo) UpdateHead(scopeID uint, headNodeID uint) error {
+
+func (r *failingScopeRepo) UpdateHead(ctx context.Context, scopeID uint, headNodeID uint) error {
 	return errors.New("injected scope error")
 }
-func (r *failingScopeRepo) FindOrCreate(scopeType, scopeKey string) (*domain.HistoryScope, error) {
+
+func (r *failingScopeRepo) FindOrCreate(ctx context.Context, scopeType, scopeKey string) (*domain.HistoryScope, error) {
 	return nil, errors.New("injected scope error: FindOrCreate")
 }
 
@@ -732,7 +737,7 @@ func TestIntegration_RecordNodeError_NotSilent(t *testing.T) {
 	badScopeRepo := &failingScopeRepo{}
 	svc := NewHistoryRecordingService(badScopeRepo, nodeRepo, cpRepo)
 
-	_, err = svc.RecordNode(RecordNodeInput{
+	_, err = svc.RecordNode(context.Background(), RecordNodeInput{
 		WaveID:         999,
 		CommandKind:    "create_rule",
 		CommandSummary: "create rule",
@@ -765,7 +770,7 @@ func TestIntegration_FirstRecordedActionHasUndoableBaselineParent(t *testing.T) 
 		Priority:             1,
 		Active:               true,
 	}
-	if err := f.ruleRepo.Create(rule); err != nil {
+	if err := f.ruleRepo.Create(context.Background(), rule); err != nil {
 		t.Fatalf("create rule: %v", err)
 	}
 	payload, err := BuildRuleRestorePatch("restore_rule", rule)
@@ -773,7 +778,7 @@ func TestIntegration_FirstRecordedActionHasUndoableBaselineParent(t *testing.T) 
 		t.Fatalf("build restore payload: %v", err)
 	}
 
-	node, err := f.recording.RecordNode(RecordNodeInput{
+	node, err := f.recording.RecordNode(context.Background(), RecordNodeInput{
 		WaveID:              waveID,
 		CommandKind:         domain.CmdCreateRule,
 		CommandSummary:      "first user action",
@@ -787,7 +792,7 @@ func TestIntegration_FirstRecordedActionHasUndoableBaselineParent(t *testing.T) 
 		t.Fatal("expected first user action to be parented to system baseline, got parent 0")
 	}
 
-	parent, err := f.nodeRepo.FindByID(node.ParentNodeID)
+	parent, err := f.nodeRepo.FindByID(context.Background(), node.ParentNodeID)
 	if err != nil {
 		t.Fatalf("FindByID baseline parent: %v", err)
 	}
@@ -795,10 +800,10 @@ func TestIntegration_FirstRecordedActionHasUndoableBaselineParent(t *testing.T) 
 		t.Fatalf("expected parent command kind %q, got %+v", domain.CmdSystemBaseline, parent)
 	}
 
-	if _, err := f.undoRedo.Undo(waveID); err != nil {
+	if _, err := f.undoRedo.Undo(context.Background(), waveID); err != nil {
 		t.Fatalf("Undo first user action: %v", err)
 	}
-	rules, err := f.ruleRepo.ListByWave(waveID)
+	rules, err := f.ruleRepo.ListByWave(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ListByWave after undo: %v", err)
 	}

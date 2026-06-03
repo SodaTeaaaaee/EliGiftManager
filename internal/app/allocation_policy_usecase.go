@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -42,11 +43,11 @@ func NewAllocationPolicyUseCase(
 	}
 }
 
-func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileResultDTO, error) {
+func (uc *allocationPolicyUseCase) ReconcileWave(ctx context.Context, waveID uint) (*dto.ReconcileResultDTO, error) {
 	// ---- Phase 1: Load all inputs (no mutations yet) ----
 
 	// Load old policy-driven lines BEFORE deletion — needed for stable target hints.
-	oldLines, err := uc.fulfillRepo.ListByWave(waveID)
+	oldLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -66,13 +67,13 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	}
 
 	// Load active rules (sorted by Priority ASC via repo).
-	rules, err := uc.ruleRepo.ListByWave(waveID)
+	rules, err := uc.ruleRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
 
 	// Load all participants for this wave.
-	allParticipants, err := uc.waveRepo.ListParticipantsByWave(waveID)
+	allParticipants, err := uc.waveRepo.ListParticipantsByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +85,7 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	var participants []domain.WaveParticipantSnapshot
 	if uc.assignmentRepo != nil && uc.demandRepo != nil {
 		eligibleProfileIDs := make(map[uint]bool)
-		docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(waveID)
+		docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(ctx, waveID)
 		if err != nil {
 			return nil, err
 		}
@@ -92,7 +93,7 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 			if doc.CustomerProfileID == nil {
 				continue
 			}
-			lines, err := uc.demandRepo.ListLinesByDocument(doc.ID)
+			lines, err := uc.demandRepo.ListLinesByDocument(ctx, doc.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -115,7 +116,7 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	}
 
 	// Load adjustments for replay (sorted by created_at ASC via repo).
-	adjustments, err := uc.adjustmentRepo.ListByWave(waveID)
+	adjustments, err := uc.adjustmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +147,7 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	}
 
 	// Generate FulfillmentLines from contribution map.
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	var newLines []domain.FulfillmentLine
 
 	for key, sum := range contributionMap {
@@ -239,14 +240,14 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 		persistLines = append(persistLines, newLines[i])
 	}
 
-	if err := uc.fulfillRepo.ReplaceByWaveAndGeneratedBy(waveID, "allocation_policy_driven", persistLines); err != nil {
+	if err := uc.fulfillRepo.ReplaceByWaveAndGeneratedBy(ctx, waveID, "allocation_policy_driven", persistLines); err != nil {
 		return nil, err
 	}
 
 	// After an ID-breaking rebuild, re-anchor fulfillment_line adjustments to the
 	// newly persisted line IDs so the next reconcile can resolve them directly.
 	if len(adjustmentLineTargets) > 0 {
-		currentLines, err := uc.fulfillRepo.ListByWave(waveID)
+		currentLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 		if err != nil {
 			return nil, err
 		}
@@ -275,7 +276,7 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 			}
 			if matchCount == 1 && matchedID != *adj.FulfillmentLineID {
 				adj.FulfillmentLineID = &matchedID
-				if err := uc.adjustmentRepo.Update(adj); err != nil {
+				if err := uc.adjustmentRepo.Update(ctx, adj); err != nil {
 					return nil, err
 				}
 			}
@@ -290,14 +291,14 @@ func (uc *allocationPolicyUseCase) ReconcileWave(waveID uint) (*dto.ReconcileRes
 	}, nil
 }
 
-func (uc *allocationPolicyUseCase) CreateRule(input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
+func (uc *allocationPolicyUseCase) CreateRule(ctx context.Context, input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
 	if input.ProductID != 0 && uc.productRepo != nil {
-		if _, err := uc.productRepo.FindByWaveAndID(input.WaveID, input.ProductID); err != nil {
+		if _, err := uc.productRepo.FindByWaveAndID(ctx, input.WaveID, input.ProductID); err != nil {
 			return nil, fmt.Errorf("product %d does not exist in wave %d", input.ProductID, input.WaveID)
 		}
 	}
 
-	now := time.Now().Format(time.RFC3339)
+	now := time.Now()
 	var selectorPayload domain.SelectorPayload
 	if len(input.SelectorPayload) > 0 {
 		if err := json.Unmarshal(input.SelectorPayload, &selectorPayload); err != nil {
@@ -316,21 +317,21 @@ func (uc *allocationPolicyUseCase) CreateRule(input dto.CreateAllocationPolicyRu
 		CreatedAt:            now,
 		UpdatedAt:            now,
 	}
-	if err := uc.ruleRepo.Create(rule); err != nil {
+	if err := uc.ruleRepo.Create(ctx, rule); err != nil {
 		return nil, err
 	}
 	d := ruleToDTO(rule)
 	return &d, nil
 }
 
-func (uc *allocationPolicyUseCase) UpdateRule(input dto.UpdateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
-	rule, err := uc.ruleRepo.FindByID(input.ID)
+func (uc *allocationPolicyUseCase) UpdateRule(ctx context.Context, input dto.UpdateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
+	rule, err := uc.ruleRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
 	}
 
 	if input.ProductID != nil && *input.ProductID != 0 && uc.productRepo != nil {
-		if _, err := uc.productRepo.FindByWaveAndID(rule.WaveID, *input.ProductID); err != nil {
+		if _, err := uc.productRepo.FindByWaveAndID(ctx, rule.WaveID, *input.ProductID); err != nil {
 			return nil, fmt.Errorf("product %d does not exist in wave %d", *input.ProductID, rule.WaveID)
 		}
 	}
@@ -360,21 +361,21 @@ func (uc *allocationPolicyUseCase) UpdateRule(input dto.UpdateAllocationPolicyRu
 	if input.Active != nil {
 		rule.Active = *input.Active
 	}
-	rule.UpdatedAt = time.Now().Format(time.RFC3339)
+	rule.UpdatedAt = time.Now()
 
-	if err := uc.ruleRepo.Update(rule); err != nil {
+	if err := uc.ruleRepo.Update(ctx, rule); err != nil {
 		return nil, err
 	}
 	d := ruleToDTO(rule)
 	return &d, nil
 }
 
-func (uc *allocationPolicyUseCase) DeleteRule(ruleID uint) error {
-	return uc.ruleRepo.Delete(ruleID)
+func (uc *allocationPolicyUseCase) DeleteRule(ctx context.Context, ruleID uint) error {
+	return uc.ruleRepo.Delete(ctx, ruleID)
 }
 
-func (uc *allocationPolicyUseCase) ListRulesByWave(waveID uint) ([]dto.AllocationPolicyRuleDTO, error) {
-	rules, err := uc.ruleRepo.ListByWave(waveID)
+func (uc *allocationPolicyUseCase) ListRulesByWave(ctx context.Context, waveID uint) ([]dto.AllocationPolicyRuleDTO, error) {
+	rules, err := uc.ruleRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err
 	}

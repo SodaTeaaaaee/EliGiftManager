@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -30,23 +31,23 @@ func NewHistoryGCService(
 
 // CollectGarbageForWave runs GC for the history scope of the given wave.
 // Returns the number of deleted nodes, or 0 if no history scope exists yet.
-func (s *HistoryGCService) CollectGarbageForWave(waveID uint, keepCount int) (int, error) {
-	scope, err := s.scopeRepo.FindByScopeTypeAndKey("wave", fmt.Sprintf("%d", waveID))
+func (s *HistoryGCService) CollectGarbageForWave(ctx context.Context, waveID uint, keepCount int) (int, error) {
+	scope, err := s.scopeRepo.FindByScopeTypeAndKey(ctx, "wave", fmt.Sprintf("%d", waveID))
 	if err != nil {
 		return 0, fmt.Errorf("history gc: find scope for wave %d: %w", waveID, err)
 	}
 	if scope == nil {
 		return 0, nil
 	}
-	return s.CollectGarbage(scope.ID, keepCount)
+	return s.CollectGarbage(ctx, scope.ID, keepCount)
 }
 
 // CollectGarbage removes unreachable, unpinned nodes beyond keepCount positions from head.
 // Reachable = on the parent chain from current head, or is a preferredRedoChild of a reachable node.
 // Pinned nodes are always preserved regardless of position.
 // Returns the number of deleted nodes.
-func (s *HistoryGCService) CollectGarbage(scopeID uint, keepCount int) (int, error) {
-	scope, err := s.scopeRepo.FindByID(scopeID)
+func (s *HistoryGCService) CollectGarbage(ctx context.Context, scopeID uint, keepCount int) (int, error) {
+	scope, err := s.scopeRepo.FindByID(ctx, scopeID)
 	if err != nil {
 		return 0, fmt.Errorf("history gc: load scope: %w", err)
 	}
@@ -54,7 +55,7 @@ func (s *HistoryGCService) CollectGarbage(scopeID uint, keepCount int) (int, err
 		return 0, fmt.Errorf("history gc: scope %d not found", scopeID)
 	}
 
-	allNodes, err := s.nodeRepo.ListByScope(scopeID)
+	allNodes, err := s.nodeRepo.ListByScope(ctx, scopeID)
 	if err != nil {
 		return 0, fmt.Errorf("history gc: list nodes: %w", err)
 	}
@@ -69,7 +70,7 @@ func (s *HistoryGCService) CollectGarbage(scopeID uint, keepCount int) (int, err
 	}
 
 	// Collect pinned node IDs
-	pinnedIDs, err := s.pinRepo.ListPinnedNodeIDsByScope(scopeID)
+	pinnedIDs, err := s.pinRepo.ListPinnedNodeIDsByScope(ctx, scopeID)
 	if err != nil {
 		return 0, fmt.Errorf("history gc: list pinned nodes: %w", err)
 	}
@@ -152,10 +153,10 @@ func (s *HistoryGCService) CollectGarbage(scopeID uint, keepCount int) (int, err
 	// Delete collected nodes: checkpoints first, then nodes
 	deleted := 0
 	for _, nodeID := range toDelete {
-		if err := s.checkpointRepo.DeleteByNodeID(nodeID); err != nil {
+		if err := s.checkpointRepo.DeleteByNodeID(ctx, nodeID); err != nil {
 			return deleted, fmt.Errorf("history gc: delete checkpoint for node %d: %w", nodeID, err)
 		}
-		if err := s.nodeRepo.DeleteByID(nodeID); err != nil {
+		if err := s.nodeRepo.DeleteByID(ctx, nodeID); err != nil {
 			return deleted, fmt.Errorf("history gc: delete node %d: %w", nodeID, err)
 		}
 		deleted++

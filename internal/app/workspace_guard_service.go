@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -32,8 +33,8 @@ func NewWorkspaceGuardService(
 
 // GuardAllocationRequiresDemandIntake checks that at least one demand document
 // is assigned before entering the allocation step.
-func (s *WorkspaceGuardService) GuardAllocationRequiresDemandIntake(waveID uint) error {
-	assignments, err := s.assignmentRepo.ListByWave(waveID)
+func (s *WorkspaceGuardService) GuardAllocationRequiresDemandIntake(ctx context.Context, waveID uint) error {
+	assignments, err := s.assignmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return fmt.Errorf("check demand intake: %w", err)
 	}
@@ -44,8 +45,8 @@ func (s *WorkspaceGuardService) GuardAllocationRequiresDemandIntake(waveID uint)
 }
 
 // GuardReviewRequiresFulfillment checks that fulfillment lines exist before review.
-func (s *WorkspaceGuardService) GuardReviewRequiresFulfillment(waveID uint) error {
-	lines, err := s.fulfillRepo.ListByWave(waveID)
+func (s *WorkspaceGuardService) GuardReviewRequiresFulfillment(ctx context.Context, waveID uint) error {
+	lines, err := s.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return fmt.Errorf("check fulfillment: %w", err)
 	}
@@ -56,8 +57,8 @@ func (s *WorkspaceGuardService) GuardReviewRequiresFulfillment(waveID uint) erro
 }
 
 // GuardExecutionRequiresReview checks that supplier orders exist.
-func (s *WorkspaceGuardService) GuardExecutionRequiresReview(waveID uint) error {
-	orders, err := s.supplierRepo.ListByWave(waveID)
+func (s *WorkspaceGuardService) GuardExecutionRequiresReview(ctx context.Context, waveID uint) error {
+	orders, err := s.supplierRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return fmt.Errorf("check supplier orders: %w", err)
 	}
@@ -68,13 +69,13 @@ func (s *WorkspaceGuardService) GuardExecutionRequiresReview(waveID uint) error 
 }
 
 // GuardShipmentRequiresSupplierOrder checks that supplier orders exist before shipment intake.
-func (s *WorkspaceGuardService) GuardShipmentRequiresSupplierOrder(waveID uint) error {
-	return s.GuardExecutionRequiresReview(waveID)
+func (s *WorkspaceGuardService) GuardShipmentRequiresSupplierOrder(ctx context.Context, waveID uint) error {
+	return s.GuardExecutionRequiresReview(ctx, waveID)
 }
 
 // GuardSyncRequiresShipment checks that shipments exist before channel sync.
-func (s *WorkspaceGuardService) GuardSyncRequiresShipment(waveID uint) error {
-	shipments, err := s.shipmentRepo.ListByWave(waveID)
+func (s *WorkspaceGuardService) GuardSyncRequiresShipment(ctx context.Context, waveID uint) error {
+	shipments, err := s.shipmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return fmt.Errorf("check shipments: %w", err)
 	}

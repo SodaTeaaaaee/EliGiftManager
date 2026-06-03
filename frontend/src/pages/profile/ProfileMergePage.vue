@@ -66,7 +66,7 @@ import {
 } from "naive-ui";
 import { useI18n } from "@/shared/i18n";
 import { listProfiles, mergeProfiles } from "@/shared/lib/wails/app";
-import type { MergeProfilesResult } from "@/entities/merge";
+import { dto } from '@/../wailsjs/go/models'
 
 const { t } = useI18n();
 const message = useMessage();
@@ -76,7 +76,7 @@ const sourceId = ref<number | null>(null);
 const targetId = ref<number | null>(null);
 const showConfirm = ref(false);
 const merging = ref(false);
-const result = ref<MergeProfilesResult | null>(null);
+const result = ref<dto.MergeProfilesResult | null>(null)
 
 function profileLabel(id: number | null): string {
   const p = profileOptions.value.find(o => o.value === id);

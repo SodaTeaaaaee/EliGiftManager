@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"sync"
 	"testing"
 
@@ -45,7 +46,7 @@ func (m *mockSupplierRepoForDrift) addLine(orderID uint, line domain.SupplierOrd
 	m.orderLines[orderID] = append(m.orderLines[orderID], line)
 }
 
-func (m *mockSupplierRepoForDrift) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
+func (m *mockSupplierRepoForDrift) ListByWave(ctx context.Context, waveID uint) ([]domain.SupplierOrder, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if waveID != m.waveID {
@@ -57,16 +58,22 @@ func (m *mockSupplierRepoForDrift) ListByWave(waveID uint) ([]domain.SupplierOrd
 }
 
 // Stubs — unused by drift tests
-func (m *mockSupplierRepoForDrift) Create(order *domain.SupplierOrder) error { panic("not implemented") }
-func (m *mockSupplierRepoForDrift) FindByID(id uint) (*domain.SupplierOrder, error) {
+func (m *mockSupplierRepoForDrift) Create(ctx context.Context, order *domain.SupplierOrder) error {
 	panic("not implemented")
 }
-func (m *mockSupplierRepoForDrift) List() ([]domain.SupplierOrder, error) { panic("not implemented") }
-func (m *mockSupplierRepoForDrift) DeleteDraftsByWave(waveID uint) error  { panic("not implemented") }
-func (m *mockSupplierRepoForDrift) CreateLine(line *domain.SupplierOrderLine) error {
+func (m *mockSupplierRepoForDrift) FindByID(ctx context.Context, id uint) (*domain.SupplierOrder, error) {
 	panic("not implemented")
 }
-func (m *mockSupplierRepoForDrift) ListLinesByOrder(orderID uint) ([]domain.SupplierOrderLine, error) {
+func (m *mockSupplierRepoForDrift) List(ctx context.Context) ([]domain.SupplierOrder, error) {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForDrift) DeleteDraftsByWave(ctx context.Context, waveID uint) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForDrift) CreateLine(ctx context.Context, line *domain.SupplierOrderLine) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForDrift) ListLinesByOrder(ctx context.Context, orderID uint) ([]domain.SupplierOrderLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	lines := m.orderLines[orderID]
@@ -74,12 +81,16 @@ func (m *mockSupplierRepoForDrift) ListLinesByOrder(orderID uint) ([]domain.Supp
 	copy(out, lines)
 	return out, nil
 }
-func (m *mockSupplierRepoForDrift) FindLineByID(id uint) (*domain.SupplierOrderLine, error) {
+func (m *mockSupplierRepoForDrift) FindLineByID(ctx context.Context, id uint) (*domain.SupplierOrderLine, error) {
 	panic("not implemented")
 }
-func (m *mockSupplierRepoForDrift) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
-func (m *mockSupplierRepoForDrift) Update(order *domain.SupplierOrder) error { panic("not implemented") }
-func (m *mockSupplierRepoForDrift) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
+func (m *mockSupplierRepoForDrift) DeleteLinesByOrder(ctx context.Context, orderID uint) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForDrift) Update(ctx context.Context, order *domain.SupplierOrder) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForDrift) AtomicCreateSupplierOrder(ctx context.Context, order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
 	panic("not implemented")
 }
 
@@ -143,7 +154,7 @@ func (d *driftTestSetup) addSupplierOrderWithStatus(nodeID, storedHash, status s
 // addFulfillmentLine adds a fulfillment line to the wave and returns its ID.
 func (d *driftTestSetup) addFulfillmentLine() uint {
 	fl := domain.FulfillmentLine{WaveID: d.waveID}
-	if err := d.fulfillRepo.Create(&fl); err != nil {
+	if err := d.fulfillRepo.Create(context.Background(), &fl); err != nil {
 		panic("driftTestSetup.addFulfillmentLine: " + err.Error())
 	}
 	return fl.ID
@@ -170,7 +181,7 @@ func (d *driftTestSetup) addSyncJob(nodeID, storedHash string) {
 		BasisHistoryNodeID:  nodeID,
 		BasisProjectionHash: storedHash,
 	}
-	if err := d.channelSyncRepo.CreateJob(job); err != nil {
+	if err := d.channelSyncRepo.CreateJob(context.Background(), job); err != nil {
 		panic("driftTestSetup.addSyncJob: " + err.Error())
 	}
 }
@@ -181,7 +192,7 @@ func TestBasisDriftNoExternalObjects(t *testing.T) {
 	t.Parallel()
 	d := newDriftTestSetup()
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -199,7 +210,7 @@ func TestBasisDriftObjectWithoutBasisNodeSkipped(t *testing.T) {
 	d.addShipment("", "some-hash")
 	d.addSyncJob("", "some-hash")
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "current-hash")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "current-hash")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -215,7 +226,7 @@ func TestBasisDriftProjectionHashMismatch(t *testing.T) {
 	// Supplier order with a stored hash that differs from the current projection hash
 	d.addSupplierOrder("node-abc", "hash-old")
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "hash-new")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "hash-new")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -241,7 +252,7 @@ func TestBasisDriftEmptyProjectionHash(t *testing.T) {
 	// Shipment has a node ID but no stored hash — basis infra not yet populating hashes
 	d.addShipment("node-xyz", "")
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "current-hash")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "current-hash")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -267,7 +278,7 @@ func TestBasisDriftAllInSync(t *testing.T) {
 	const hash = "hash-v42"
 	d.addSyncJob("node-sync-1", hash)
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, hash)
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, hash)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -297,7 +308,7 @@ func TestBasisDriftCurrentHashUnavailable(t *testing.T) {
 	// This is the active production path today
 	d.addSupplierOrder("node-abc", "hash-stored")
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -331,7 +342,7 @@ func TestBasisDriftTargetDeletedTriggersRequired(t *testing.T) {
 		FulfillmentLineID: 999,
 	})
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "hash-current")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "hash-current")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -371,7 +382,7 @@ func TestBasisDriftDraftOrdersSkipped(t *testing.T) {
 		FulfillmentLineID: 999,
 	})
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "hash-current")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "hash-current")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -399,7 +410,7 @@ func TestBasisDriftNoStructuralIssueStaysRecommended(t *testing.T) {
 		FulfillmentLineID: flID,
 	})
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, "hash-new")
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, "hash-new")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -442,7 +453,7 @@ func TestBasisDriftInSyncPlusRequiredCannotOccur(t *testing.T) {
 		FulfillmentLineID: 999, // does not exist in wave
 	})
 
-	signals, err := d.uc.DetectWaveBasisDrift(d.waveID, hash)
+	signals, err := d.uc.DetectWaveBasisDrift(context.Background(), d.waveID, hash)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

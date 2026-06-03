@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -29,7 +30,7 @@ func newMockChannelSyncRepo() *mockChannelSyncRepo {
 
 func (m *mockChannelSyncRepo) next() uint { m.lastID++; return m.lastID }
 
-func (m *mockChannelSyncRepo) CreateJob(job *domain.ChannelSyncJob) error {
+func (m *mockChannelSyncRepo) CreateJob(ctx context.Context, job *domain.ChannelSyncJob) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	job.ID = m.next()
@@ -38,7 +39,7 @@ func (m *mockChannelSyncRepo) CreateJob(job *domain.ChannelSyncJob) error {
 	return nil
 }
 
-func (m *mockChannelSyncRepo) FindJobByID(id uint) (*domain.ChannelSyncJob, error) {
+func (m *mockChannelSyncRepo) FindJobByID(ctx context.Context, id uint) (*domain.ChannelSyncJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	j, ok := m.jobs[id]
@@ -49,7 +50,7 @@ func (m *mockChannelSyncRepo) FindJobByID(id uint) (*domain.ChannelSyncJob, erro
 	return &cp, nil
 }
 
-func (m *mockChannelSyncRepo) SaveJob(job *domain.ChannelSyncJob) error {
+func (m *mockChannelSyncRepo) SaveJob(ctx context.Context, job *domain.ChannelSyncJob) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cp := *job
@@ -57,7 +58,7 @@ func (m *mockChannelSyncRepo) SaveJob(job *domain.ChannelSyncJob) error {
 	return nil
 }
 
-func (m *mockChannelSyncRepo) SaveItem(item *domain.ChannelSyncItem) error {
+func (m *mockChannelSyncRepo) SaveItem(ctx context.Context, item *domain.ChannelSyncItem) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	cp := *item
@@ -70,7 +71,7 @@ func (m *mockChannelSyncRepo) SaveItem(item *domain.ChannelSyncItem) error {
 	return fmt.Errorf("item %d not found in job %d", item.ID, item.ChannelSyncJobID)
 }
 
-func (m *mockChannelSyncRepo) ListJobsByWave(waveID uint) ([]domain.ChannelSyncJob, error) {
+func (m *mockChannelSyncRepo) ListJobsByWave(ctx context.Context, waveID uint) ([]domain.ChannelSyncJob, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.ChannelSyncJob
@@ -82,7 +83,7 @@ func (m *mockChannelSyncRepo) ListJobsByWave(waveID uint) ([]domain.ChannelSyncJ
 	return out, nil
 }
 
-func (m *mockChannelSyncRepo) CreateItem(item *domain.ChannelSyncItem) error {
+func (m *mockChannelSyncRepo) CreateItem(ctx context.Context, item *domain.ChannelSyncItem) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	item.ID = m.next()
@@ -91,7 +92,7 @@ func (m *mockChannelSyncRepo) CreateItem(item *domain.ChannelSyncItem) error {
 	return nil
 }
 
-func (m *mockChannelSyncRepo) AtomicCreateChannelSync(job *domain.ChannelSyncJob, items []*domain.ChannelSyncItem, _ *domain.BasisPinParam) error {
+func (m *mockChannelSyncRepo) AtomicCreateChannelSync(ctx context.Context, job *domain.ChannelSyncJob, items []*domain.ChannelSyncItem, _ *domain.BasisPinParam) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -125,7 +126,7 @@ func (m *mockChannelSyncRepo) AtomicCreateChannelSync(job *domain.ChannelSyncJob
 	return nil
 }
 
-func (m *mockChannelSyncRepo) ListItemsByJob(jobID uint) ([]domain.ChannelSyncItem, error) {
+func (m *mockChannelSyncRepo) ListItemsByJob(ctx context.Context, jobID uint) ([]domain.ChannelSyncItem, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ll, ok := m.jobItems[jobID]
@@ -139,7 +140,7 @@ func (m *mockChannelSyncRepo) ListItemsByJob(jobID uint) ([]domain.ChannelSyncIt
 	return out, nil
 }
 
-func (m *mockChannelSyncRepo) CountJobsByProfileID(profileID uint) (int64, error) {
+func (m *mockChannelSyncRepo) CountJobsByProfileID(ctx context.Context, profileID uint) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var count int64
@@ -173,7 +174,7 @@ func (m *mockShipmentRepoForSync) setSupplierOrderWave(supplierOrderID, waveID u
 	m.supplierOrderWave[supplierOrderID] = waveID
 }
 
-func (m *mockShipmentRepoForSync) FindByID(id uint) (*domain.Shipment, error) {
+func (m *mockShipmentRepoForSync) FindByID(ctx context.Context, id uint) (*domain.Shipment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.shipments[id]
@@ -184,7 +185,7 @@ func (m *mockShipmentRepoForSync) FindByID(id uint) (*domain.Shipment, error) {
 	return &cp, nil
 }
 
-func (m *mockShipmentRepoForSync) ListLinesByShipment(shipmentID uint) ([]domain.ShipmentLine, error) {
+func (m *mockShipmentRepoForSync) ListLinesByShipment(ctx context.Context, shipmentID uint) ([]domain.ShipmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	ll, ok := m.lines[shipmentID]
@@ -208,11 +209,13 @@ func (m *mockShipmentRepoForSync) addLine(line domain.ShipmentLine) {
 }
 
 // Stubs
-func (m *mockShipmentRepoForSync) Create(shipment *domain.Shipment) error          { panic("not implemented") }
-func (m *mockShipmentRepoForSync) ListBySupplierOrder(supplierOrderID uint) ([]domain.Shipment, error) {
+func (m *mockShipmentRepoForSync) Create(ctx context.Context, shipment *domain.Shipment) error {
 	panic("not implemented")
 }
-func (m *mockShipmentRepoForSync) ListByWave(waveID uint) ([]domain.Shipment, error) {
+func (m *mockShipmentRepoForSync) ListBySupplierOrder(ctx context.Context, supplierOrderID uint) ([]domain.Shipment, error) {
+	panic("not implemented")
+}
+func (m *mockShipmentRepoForSync) ListByWave(ctx context.Context, waveID uint) ([]domain.Shipment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.Shipment
@@ -223,11 +226,13 @@ func (m *mockShipmentRepoForSync) ListByWave(waveID uint) ([]domain.Shipment, er
 	}
 	return out, nil
 }
-func (m *mockShipmentRepoForSync) CreateLine(line *domain.ShipmentLine) error { panic("not implemented") }
-func (m *mockShipmentRepoForSync) AtomicCreateShipment(shipment *domain.Shipment, lines []*domain.ShipmentLine, _ *domain.BasisPinParam) error {
+func (m *mockShipmentRepoForSync) CreateLine(ctx context.Context, line *domain.ShipmentLine) error {
 	panic("not implemented")
 }
-func (m *mockShipmentRepoForSync) SumShippedQuantityBySOL(supplierOrderLineID uint) (int, error) {
+func (m *mockShipmentRepoForSync) AtomicCreateShipment(ctx context.Context, shipment *domain.Shipment, lines []*domain.ShipmentLine, _ *domain.BasisPinParam) error {
+	panic("not implemented")
+}
+func (m *mockShipmentRepoForSync) SumShippedQuantityBySOL(ctx context.Context, supplierOrderLineID uint) (int, error) {
 	return 0, nil
 }
 
@@ -244,7 +249,7 @@ func newMockSupplierRepoForSync() *mockSupplierRepoForSync {
 	}
 }
 
-func (m *mockSupplierRepoForSync) FindByID(id uint) (*domain.SupplierOrder, error) {
+func (m *mockSupplierRepoForSync) FindByID(ctx context.Context, id uint) (*domain.SupplierOrder, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	o, ok := m.orders[id]
@@ -256,22 +261,34 @@ func (m *mockSupplierRepoForSync) FindByID(id uint) (*domain.SupplierOrder, erro
 }
 
 // Stubs
-func (m *mockSupplierRepoForSync) Create(order *domain.SupplierOrder) error          { panic("not implemented") }
-func (m *mockSupplierRepoForSync) List() ([]domain.SupplierOrder, error)              { panic("not implemented") }
-func (m *mockSupplierRepoForSync) ListByWave(waveID uint) ([]domain.SupplierOrder, error) {
+func (m *mockSupplierRepoForSync) Create(ctx context.Context, order *domain.SupplierOrder) error {
 	panic("not implemented")
 }
-func (m *mockSupplierRepoForSync) DeleteDraftsByWave(waveID uint) error { panic("not implemented") }
-func (m *mockSupplierRepoForSync) CreateLine(line *domain.SupplierOrderLine) error { panic("not implemented") }
-func (m *mockSupplierRepoForSync) ListLinesByOrder(orderID uint) ([]domain.SupplierOrderLine, error) {
+func (m *mockSupplierRepoForSync) List(ctx context.Context) ([]domain.SupplierOrder, error) {
 	panic("not implemented")
 }
-func (m *mockSupplierRepoForSync) FindLineByID(id uint) (*domain.SupplierOrderLine, error) {
+func (m *mockSupplierRepoForSync) ListByWave(ctx context.Context, waveID uint) ([]domain.SupplierOrder, error) {
 	panic("not implemented")
 }
-func (m *mockSupplierRepoForSync) DeleteLinesByOrder(orderID uint) error { panic("not implemented") }
-func (m *mockSupplierRepoForSync) Update(order *domain.SupplierOrder) error { panic("not implemented") }
-func (m *mockSupplierRepoForSync) AtomicCreateSupplierOrder(order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
+func (m *mockSupplierRepoForSync) DeleteDraftsByWave(ctx context.Context, waveID uint) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForSync) CreateLine(ctx context.Context, line *domain.SupplierOrderLine) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForSync) ListLinesByOrder(ctx context.Context, orderID uint) ([]domain.SupplierOrderLine, error) {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForSync) FindLineByID(ctx context.Context, id uint) (*domain.SupplierOrderLine, error) {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForSync) DeleteLinesByOrder(ctx context.Context, orderID uint) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForSync) Update(ctx context.Context, order *domain.SupplierOrder) error {
+	panic("not implemented")
+}
+func (m *mockSupplierRepoForSync) AtomicCreateSupplierOrder(ctx context.Context, order *domain.SupplierOrder, lines []*domain.SupplierOrderLine, pin *domain.BasisPinParam) error {
 	panic("not implemented")
 }
 
@@ -286,7 +303,7 @@ func newMockFulfillRepoForSync() *mockFulfillRepoForSync {
 	return &mockFulfillRepoForSync{lines: make(map[uint]*domain.FulfillmentLine)}
 }
 
-func (m *mockFulfillRepoForSync) FindByID(id uint) (*domain.FulfillmentLine, error) {
+func (m *mockFulfillRepoForSync) FindByID(ctx context.Context, id uint) (*domain.FulfillmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	l, ok := m.lines[id]
@@ -298,8 +315,10 @@ func (m *mockFulfillRepoForSync) FindByID(id uint) (*domain.FulfillmentLine, err
 }
 
 // Stubs
-func (m *mockFulfillRepoForSync) Create(line *domain.FulfillmentLine) error { panic("not implemented") }
-func (m *mockFulfillRepoForSync) ListByWave(waveID uint) ([]domain.FulfillmentLine, error) {
+func (m *mockFulfillRepoForSync) Create(ctx context.Context, line *domain.FulfillmentLine) error {
+	panic("not implemented")
+}
+func (m *mockFulfillRepoForSync) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentLine, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.FulfillmentLine
@@ -310,21 +329,24 @@ func (m *mockFulfillRepoForSync) ListByWave(waveID uint) ([]domain.FulfillmentLi
 	}
 	return out, nil
 }
-func (m *mockFulfillRepoForSync) DeleteByWaveAndGeneratedBy(waveID uint, generatedBy string) error {
+func (m *mockFulfillRepoForSync) DeleteByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string) error {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForSync) ReplaceByWaveAndGeneratedBy(_ uint, _ string, _ []domain.FulfillmentLine) error {
+func (m *mockFulfillRepoForSync) ReplaceByWaveAndGeneratedBy(ctx context.Context, _ uint, _ string, _ []domain.FulfillmentLine) error {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForSync) DeleteByWave(waveID uint) error {
+func (m *mockFulfillRepoForSync) DeleteByWave(ctx context.Context, waveID uint) error {
 	panic("not implemented")
 }
-func (m *mockFulfillRepoForSync) BulkUpdateStates(updates []domain.FulfillmentLineStateUpdate) error { return nil }
-func (m *mockFulfillRepoForSync) Update(line *domain.FulfillmentLine) error { panic("not implemented") }
-func (m *mockFulfillRepoForSync) BulkUpdateCustomerProfileID(_, _ uint) (int64, error) {
+func (m *mockFulfillRepoForSync) BulkUpdateStates(ctx context.Context, updates []domain.FulfillmentLineStateUpdate) error {
+	return nil
+}
+func (m *mockFulfillRepoForSync) Update(ctx context.Context, line *domain.FulfillmentLine) error {
+	panic("not implemented")
+}
+func (m *mockFulfillRepoForSync) BulkUpdateCustomerProfileID(ctx context.Context, _, _ uint) (int64, error) {
 	return 0, nil
 }
-
 
 // ── helper: build valid setup ──
 
@@ -390,7 +412,7 @@ func TestCreateChannelSyncJobPersistsJobAndItems(t *testing.T) {
 	t.Parallel()
 	s := newSyncTestSetup()
 
-	job, items, err := s.uc.CreateChannelSyncJob(s.validInput())
+	job, items, err := s.uc.CreateChannelSyncJob(context.Background(), s.validInput())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -415,7 +437,7 @@ func TestCreateChannelSyncJobRejectsEmptyItems(t *testing.T) {
 	input := s.validInput()
 	input.Items = nil
 
-	job, items, err := s.uc.CreateChannelSyncJob(input)
+	job, items, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for empty items, got nil")
 	}
@@ -431,7 +453,7 @@ func TestCreateChannelSyncJobRejectsZeroIntegrationProfileID(t *testing.T) {
 	input := s.validInput()
 	input.IntegrationProfileID = 0
 
-	_, _, err := s.uc.CreateChannelSyncJob(input)
+	_, _, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for zero integration_profile_id, got nil")
 	}
@@ -454,7 +476,7 @@ func TestCreateChannelSyncJobRejectsInvalidDirection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			input := s.validInput()
 			input.Direction = tt.direction
-			_, _, err := s.uc.CreateChannelSyncJob(input)
+			_, _, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 			if err == nil {
 				t.Errorf("expected error for direction %q, got nil", tt.direction)
 			}
@@ -469,7 +491,7 @@ func TestCreateChannelSyncJobRejectsNonexistentShipment(t *testing.T) {
 	input := s.validInput()
 	input.Items[0].ShipmentID = 999
 
-	_, _, err := s.uc.CreateChannelSyncJob(input)
+	_, _, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for nonexistent shipment, got nil")
 	}
@@ -482,7 +504,7 @@ func TestCreateChannelSyncJobRejectsNonexistentFulfillmentLine(t *testing.T) {
 	input := s.validInput()
 	input.Items[0].FulfillmentLineID = 999
 
-	_, _, err := s.uc.CreateChannelSyncJob(input)
+	_, _, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for nonexistent fulfillment line, got nil")
 	}
@@ -501,7 +523,7 @@ func TestCreateChannelSyncJobRejectsShipmentOutsideWave(t *testing.T) {
 	input := s.validInput()
 	input.Items[0].ShipmentID = 2
 
-	_, _, err := s.uc.CreateChannelSyncJob(input)
+	_, _, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for shipment outside wave, got nil")
 	}
@@ -518,7 +540,7 @@ func TestCreateChannelSyncJobRejectsFulfillmentLineOutsideWave(t *testing.T) {
 	input := s.validInput()
 	input.Items[0].FulfillmentLineID = 2
 
-	_, _, err := s.uc.CreateChannelSyncJob(input)
+	_, _, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for fulfillment line outside wave, got nil")
 	}
@@ -534,7 +556,7 @@ func TestCreateChannelSyncJobRejectsUnlinkedShipmentAndFulfillmentLine(t *testin
 	input := s.validInput()
 	input.Items[0].FulfillmentLineID = 2
 
-	_, _, err := s.uc.CreateChannelSyncJob(input)
+	_, _, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for unlinked shipment/fulfillment, got nil")
 	}
@@ -553,7 +575,7 @@ func TestCreateChannelSyncJobRollsBackWhenItemPersistenceFails(t *testing.T) {
 		CarrierCode:       "SF",
 	})
 
-	job, items, err := s.uc.CreateChannelSyncJob(input)
+	job, items, err := s.uc.CreateChannelSyncJob(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -573,19 +595,19 @@ func TestListChannelSyncJobsByWaveReturnsCorrectSets(t *testing.T) {
 	s := newSyncTestSetup()
 
 	j1 := &domain.ChannelSyncJob{WaveID: 1, Direction: "push_tracking", Status: "pending"}
-	if err := s.channelSync.CreateJob(j1); err != nil {
+	if err := s.channelSync.CreateJob(context.Background(), j1); err != nil {
 		t.Fatalf("CreateJob 1: %v", err)
 	}
 	j2 := &domain.ChannelSyncJob{WaveID: 2, Direction: "push_tracking", Status: "pending"}
-	if err := s.channelSync.CreateJob(j2); err != nil {
+	if err := s.channelSync.CreateJob(context.Background(), j2); err != nil {
 		t.Fatalf("CreateJob 2: %v", err)
 	}
 
-	w1, _ := s.channelSync.ListJobsByWave(1)
+	w1, _ := s.channelSync.ListJobsByWave(context.Background(), 1)
 	if len(w1) != 1 {
 		t.Errorf("expected 1 job for wave 1, got %d", len(w1))
 	}
-	w3, _ := s.channelSync.ListJobsByWave(3)
+	w3, _ := s.channelSync.ListJobsByWave(context.Background(), 3)
 	if len(w3) != 0 {
 		t.Errorf("expected 0 jobs for wave 3, got %d", len(w3))
 	}

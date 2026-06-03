@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -48,7 +49,7 @@ type ChannelSyncExecutionResult struct {
 
 // ChannelSyncExecutor drives the actual sync action for a job.
 type ChannelSyncExecutor interface {
-	Execute(job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error)
+	Execute(ctx context.Context, job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error)
 }
 
 // ExecutorProvider resolves a ChannelSyncExecutor from an IntegrationProfile at runtime.
@@ -106,7 +107,7 @@ func (p *StaticExecutorProvider) Resolve(profile *domain.IntegrationProfile) (Ch
 	return p.Executor, nil
 }
 
-func (e *fakeExecutor) Execute(job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
+func (e *fakeExecutor) Execute(ctx context.Context, job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
 	results := make([]ChannelSyncItemResult, len(items))
 	for i, it := range items {
 		results[i] = ChannelSyncItemResult{
@@ -128,7 +129,7 @@ type fakePartialExecutor struct{}
 
 func NewFakePartialExecutor() ChannelSyncExecutor { return &fakePartialExecutor{} }
 
-func (e *fakePartialExecutor) Execute(job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
+func (e *fakePartialExecutor) Execute(ctx context.Context, job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
 	results := make([]ChannelSyncItemResult, len(items))
 	hasSuccess := false
 	hasFailure := false
@@ -161,7 +162,7 @@ type fakeFailingExecutor struct{}
 
 func NewFakeFailingExecutor() ChannelSyncExecutor { return &fakeFailingExecutor{} }
 
-func (e *fakeFailingExecutor) Execute(job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
+func (e *fakeFailingExecutor) Execute(ctx context.Context, job *domain.ChannelSyncJob, items []domain.ChannelSyncItem, profile *domain.IntegrationProfile) (*ChannelSyncExecutionResult, error) {
 	results := make([]ChannelSyncItemResult, len(items))
 	for i, it := range items {
 		results[i] = ChannelSyncItemResult{ItemID: it.ID, Status: "failed", ErrorMessage: "mock failure"}

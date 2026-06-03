@@ -73,10 +73,10 @@ func main() {
 			NewAllocationPolicyController(),
 			NewProductController(),
 			NewProfileController(),
-				NewAddressController(),
-				NewMergeController(),
-				NewCustomerProfileController(),
-			},
+			NewAddressController(),
+			NewMergeController(),
+			NewCustomerProfileController(),
+		},
 	})
 	if err != nil {
 		logger.Error("run wails application", "error", err)

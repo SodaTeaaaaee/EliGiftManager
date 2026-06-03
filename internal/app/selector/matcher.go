@@ -9,8 +9,8 @@ import (
 // strategyMap dispatches selector matching by SelectorPayload.Type.
 var strategyMap = map[string]func(domain.SelectorPayload, []domain.WaveParticipantSnapshot) []domain.WaveParticipantSnapshot{
 	"wave_all":          matchWaveAll,
-	"platform_all":     matchPlatformAll,
-	"identity_level":   matchIdentityLevel,
+	"platform_all":      matchPlatformAll,
+	"identity_level":    matchIdentityLevel,
 	"explicit_override": matchExplicitOverride,
 }
 

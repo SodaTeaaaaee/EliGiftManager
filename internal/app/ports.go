@@ -1,32 +1,34 @@
 package app
 
 import (
+	"context"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
 // DemandIntakeUseCase handles importing demand documents and their lines.
 type DemandIntakeUseCase interface {
-	ImportDemand(doc *domain.DemandDocument, lines []*domain.DemandLine) error
+	ImportDemand(ctx context.Context, doc *domain.DemandDocument, lines []*domain.DemandLine) error
 }
 
 // WaveUseCase handles wave lifecycle operations.
 type WaveUseCase interface {
-	CreateWave(wave *domain.Wave) error
-	ListWaves() ([]domain.Wave, error)
-	ListWavesPaginated(offset, limit int) ([]domain.Wave, int64, error)
-	GetWave(id uint) (*domain.Wave, error)
-	GenerateParticipants(waveID uint) (int, error)
+	CreateWave(ctx context.Context, wave *domain.Wave) error
+	ListWaves(ctx context.Context) ([]domain.Wave, error)
+	ListWavesPaginated(ctx context.Context, offset, limit int) ([]domain.Wave, int64, error)
+	GetWave(ctx context.Context, id uint) (*domain.Wave, error)
+	GenerateParticipants(ctx context.Context, waveID uint) (int, error)
 }
 
 type WaveOverviewQueryUseCase interface {
-	BuildBaseOverview(waveID uint) (dto.WaveOverviewDTO, error)
-	GetWaveOverview(waveID uint) (dto.WaveOverviewDTO, error)
-	GetWaveWorkspaceSnapshot(waveID uint) (dto.WaveWorkspaceSnapshotDTO, error)
-	ListWaveFulfillmentRows(waveID uint) ([]dto.WaveFulfillmentRowDTO, error)
-	ListWaveParticipantRows(waveID uint) ([]dto.WaveParticipantRowDTO, error)
-	ListDashboardRows() ([]dto.WaveDashboardRowDTO, error)
-	ListRecentHistory(waveID uint, limit int) ([]dto.HistoryNodeDTO, error)
+	BuildBaseOverview(ctx context.Context, waveID uint) (dto.WaveOverviewDTO, error)
+	GetWaveOverview(ctx context.Context, waveID uint) (dto.WaveOverviewDTO, error)
+	GetWaveWorkspaceSnapshot(ctx context.Context, waveID uint) (dto.WaveWorkspaceSnapshotDTO, error)
+	ListWaveFulfillmentRows(ctx context.Context, waveID uint) ([]dto.WaveFulfillmentRowDTO, error)
+	ListWaveParticipantRows(ctx context.Context, waveID uint) ([]dto.WaveParticipantRowDTO, error)
+	ListDashboardRows(ctx context.Context) ([]dto.WaveDashboardRowDTO, error)
+	ListRecentHistory(ctx context.Context, waveID uint, limit int) ([]dto.HistoryNodeDTO, error)
 }
 
 // DemandMappingUseCase handles demand-driven mapping: converts accepted, input-ready
@@ -34,128 +36,128 @@ type WaveOverviewQueryUseCase interface {
 // Demand lines that require product mapping but cannot be resolved are reported as
 // blocked rather than silently entering the execution layer without a ProductID.
 type DemandMappingUseCase interface {
-	MapDemandToFulfillment(waveID uint) (*dto.DemandMappingResult, error)
+	MapDemandToFulfillment(ctx context.Context, waveID uint) (*dto.DemandMappingResult, error)
 }
 
 // ExportUseCase handles exporting supplier orders from a wave.
 type ExportUseCase interface {
-	ExportSupplierOrder(waveID uint) ([]*domain.SupplierOrder, error)
+	ExportSupplierOrder(ctx context.Context, waveID uint) ([]*domain.SupplierOrder, error)
 }
 
 // ShipmentUseCase handles shipment creation and lifecycle.
 type ShipmentUseCase interface {
-	CreateShipment(input dto.CreateShipmentInput) (*domain.Shipment, []domain.ShipmentLine, error)
+	CreateShipment(ctx context.Context, input dto.CreateShipmentInput) (*domain.Shipment, []domain.ShipmentLine, error)
 }
 
 // ShipmentImportUseCase handles bulk shipment import from factory return data.
 type ShipmentImportUseCase interface {
-	ImportShipments(input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error)
+	ImportShipments(ctx context.Context, input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error)
 }
 
 // ChannelSyncUseCase handles channel sync job creation.
 type ChannelSyncUseCase interface {
-	CreateChannelSyncJob(input dto.CreateChannelSyncJobInput) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error)
+	CreateChannelSyncJob(ctx context.Context, input dto.CreateChannelSyncJobInput) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error)
 }
 
 // ChannelClosureUseCase handles profile-driven channel closure orchestration.
 type ChannelClosureUseCase interface {
-	PlanChannelClosure(input dto.PlanChannelClosureInput) (*dto.PlanChannelClosureResult, error)
+	PlanChannelClosure(ctx context.Context, input dto.PlanChannelClosureInput) (*dto.PlanChannelClosureResult, error)
 }
 
 // ExecuteSyncUseCase handles executing a pending ChannelSyncJob.
 type ExecuteSyncUseCase interface {
-	ExecuteChannelSyncJob(jobID uint) (*dto.ExecuteSyncResult, error)
+	ExecuteChannelSyncJob(ctx context.Context, jobID uint) (*dto.ExecuteSyncResult, error)
 }
 
 // RecordClosureDecisionUseCase handles persisting manual closure decisions.
 type RecordClosureDecisionUseCase interface {
-	RecordChannelClosureDecision(input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error)
+	RecordChannelClosureDecision(ctx context.Context, input dto.RecordClosureDecisionInput) ([]dto.ClosureDecisionRecordDTO, error)
 }
 
 // RetrySyncUseCase handles retrying failed items in a ChannelSyncJob.
 type RetrySyncUseCase interface {
-	RetryChannelSyncJob(jobID uint) (*dto.ExecuteSyncResult, error)
+	RetryChannelSyncJob(ctx context.Context, jobID uint) (*dto.ExecuteSyncResult, error)
 }
 
 type WaveOverviewProjectionUseCase interface {
-	ProjectWaveOverview(base dto.WaveOverviewDTO) (dto.WaveOverviewDTO, error)
+	ProjectWaveOverview(ctx context.Context, base dto.WaveOverviewDTO) (dto.WaveOverviewDTO, error)
 }
 
 type BasisDriftDetectionUseCase interface {
-	DetectWaveBasisDrift(waveID uint, currentProjectionHash string) ([]dto.BasisDriftSignalDTO, error)
+	DetectWaveBasisDrift(ctx context.Context, waveID uint, currentProjectionHash string) ([]dto.BasisDriftSignalDTO, error)
 }
 
 type HistoryHeadQueryUseCase interface {
-	GetCurrentProjectionHash(waveID uint) (string, error)
-	GetCurrentHeadNodeIDAndHash(waveID uint) (nodeID uint, projectionHash string, err error)
+	GetCurrentProjectionHash(ctx context.Context, waveID uint) (string, error)
+	GetCurrentHeadNodeIDAndHash(ctx context.Context, waveID uint) (nodeID uint, projectionHash string, err error)
 }
 
 type AdjustmentUseCase interface {
-	RecordAdjustment(input dto.RecordAdjustmentInput) (*domain.FulfillmentAdjustment, error)
-	ListAdjustmentsByWave(waveID uint) ([]dto.FulfillmentAdjustmentDTO, error)
+	RecordAdjustment(ctx context.Context, input dto.RecordAdjustmentInput) (*domain.FulfillmentAdjustment, error)
+	ListAdjustmentsByWave(ctx context.Context, waveID uint) ([]dto.FulfillmentAdjustmentDTO, error)
 }
 
 type UndoRedoUseCase interface {
-	Undo(waveID uint) (commandSummary string, err error)
-	Redo(waveID uint) (commandSummary string, err error)
+	Undo(ctx context.Context, waveID uint) (commandSummary string, err error)
+	Redo(ctx context.Context, waveID uint) (commandSummary string, err error)
 }
 
 // AllocationPolicyUseCase handles policy-driven allocation: reconcile wave (idempotent rebuild + adjustment replay) and rule CRUD.
 type AllocationPolicyUseCase interface {
-	ReconcileWave(waveID uint) (*dto.ReconcileResultDTO, error)
-	CreateRule(input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error)
-	UpdateRule(input dto.UpdateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error)
-	DeleteRule(ruleID uint) error
-	ListRulesByWave(waveID uint) ([]dto.AllocationPolicyRuleDTO, error)
+	ReconcileWave(ctx context.Context, waveID uint) (*dto.ReconcileResultDTO, error)
+	CreateRule(ctx context.Context, input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error)
+	UpdateRule(ctx context.Context, input dto.UpdateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error)
+	DeleteRule(ctx context.Context, ruleID uint) error
+	ListRulesByWave(ctx context.Context, waveID uint) ([]dto.AllocationPolicyRuleDTO, error)
 }
 
 type TemplateManagementUseCase interface {
-	CreateDocumentTemplate(input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error)
-	ListDocumentTemplates() ([]dto.DocumentTemplateDTO, error)
-	BindTemplateToProfile(input dto.BindTemplateToProfileInput) (*dto.ProfileTemplateBindingDTO, error)
-	ListBindingsByProfile(profileID uint) ([]dto.ProfileTemplateBindingDTO, error)
-	GetDefaultTemplateForProfile(profileID uint, docType string) (*dto.DocumentTemplateDTO, error)
+	CreateDocumentTemplate(ctx context.Context, input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error)
+	ListDocumentTemplates(ctx context.Context) ([]dto.DocumentTemplateDTO, error)
+	BindTemplateToProfile(ctx context.Context, input dto.BindTemplateToProfileInput) (*dto.ProfileTemplateBindingDTO, error)
+	ListBindingsByProfile(ctx context.Context, profileID uint) ([]dto.ProfileTemplateBindingDTO, error)
+	GetDefaultTemplateForProfile(ctx context.Context, profileID uint, docType string) (*dto.DocumentTemplateDTO, error)
 }
 
 // ProductUseCase handles product master CRUD and wave-scoped product snapshots.
 type ProductUseCase interface {
-	CreateProductMaster(input dto.CreateProductMasterInput) (*dto.ProductMasterDTO, error)
-	ListProductMasters() ([]dto.ProductMasterDTO, error)
-	UpdateProductMaster(input dto.UpdateProductMasterInput) (*dto.ProductMasterDTO, error)
-	SnapshotProductsForWave(input dto.SnapshotProductsInput) ([]dto.ProductDTO, error)
-	ListProductsByWave(waveID uint) ([]dto.ProductDTO, error)
+	CreateProductMaster(ctx context.Context, input dto.CreateProductMasterInput) (*dto.ProductMasterDTO, error)
+	ListProductMasters(ctx context.Context) ([]dto.ProductMasterDTO, error)
+	UpdateProductMaster(ctx context.Context, input dto.UpdateProductMasterInput) (*dto.ProductMasterDTO, error)
+	SnapshotProductsForWave(ctx context.Context, input dto.SnapshotProductsInput) ([]dto.ProductDTO, error)
+	ListProductsByWave(ctx context.Context, waveID uint) ([]dto.ProductDTO, error)
 }
 
 // AddressManagementUseCase handles CustomerAddress CRUD, binding, and derivation.
 type AddressManagementUseCase interface {
-	CreateAddress(input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error)
-	UpdateAddress(input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error)
-	DeleteAddress(id uint) error
-	GetAddress(id uint) (*dto.CustomerAddressDTO, error)
-	ListAddressesByProfile(profileID uint) ([]dto.CustomerAddressDTO, error)
-	BindAddressToLine(input dto.BindAddressInput) (*dto.CustomerAddressDTO, error)
-	UnbindAddressFromLine(fulfillmentLineID uint) error
+	CreateAddress(ctx context.Context, input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error)
+	UpdateAddress(ctx context.Context, input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error)
+	DeleteAddress(ctx context.Context, id uint) error
+	GetAddress(ctx context.Context, id uint) (*dto.CustomerAddressDTO, error)
+	ListAddressesByProfile(ctx context.Context, profileID uint) ([]dto.CustomerAddressDTO, error)
+	BindAddressToLine(ctx context.Context, input dto.BindAddressInput) (*dto.CustomerAddressDTO, error)
+	UnbindAddressFromLine(ctx context.Context, fulfillmentLineID uint) error
 }
 
 // ProfileManagementUseCase handles IntegrationProfile CRUD and seeding.
 type ProfileManagementUseCase interface {
-	CreateProfile(input dto.CreateProfileInput) (*dto.IntegrationProfileDTO, error)
-	UpdateProfile(input dto.UpdateProfileInput) (*dto.IntegrationProfileDTO, error)
-	DeleteProfile(id uint) error
-	GetProfile(id uint) (*dto.IntegrationProfileDTO, error)
-	ListProfiles() ([]dto.IntegrationProfileDTO, error)
-	SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error)
+	CreateProfile(ctx context.Context, input dto.CreateProfileInput) (*dto.IntegrationProfileDTO, error)
+	UpdateProfile(ctx context.Context, input dto.UpdateProfileInput) (*dto.IntegrationProfileDTO, error)
+	DeleteProfile(ctx context.Context, id uint) error
+	GetProfile(ctx context.Context, id uint) (*dto.IntegrationProfileDTO, error)
+	ListProfiles(ctx context.Context) ([]dto.IntegrationProfileDTO, error)
+	SeedDefaultProfiles(ctx context.Context) ([]dto.IntegrationProfileDTO, error)
 }
 
 // ProfileMergeUseCase handles merging a source profile into a target profile,
 // migrating all identities, addresses, and references.
 type ProfileMergeUseCase interface {
-	MergeProfiles(input dto.MergeProfilesInput) (*dto.MergeProfilesResult, error)
+	MergeProfiles(ctx context.Context, input dto.MergeProfilesInput) (*dto.MergeProfilesResult, error)
 }
 
 // EntitlementRoutingUseCase handles demand line routing disposition and input state management.
 type EntitlementRoutingUseCase interface {
-	UpdateDemandLineRouting(input dto.UpdateDemandLineRoutingInput) error
-	BatchUpdateDemandLineRouting(input dto.BatchUpdateDemandLineRoutingInput) (*dto.BatchUpdateDemandLineRoutingResult, error)
-	GetWaveRoutingStats(waveID uint) (*dto.WaveRoutingStatsDTO, error)
+	UpdateDemandLineRouting(ctx context.Context, input dto.UpdateDemandLineRoutingInput) error
+	BatchUpdateDemandLineRouting(ctx context.Context, input dto.BatchUpdateDemandLineRoutingInput) (*dto.BatchUpdateDemandLineRoutingResult, error)
+	GetWaveRoutingStats(ctx context.Context, waveID uint) (*dto.WaveRoutingStatsDTO, error)
 }
