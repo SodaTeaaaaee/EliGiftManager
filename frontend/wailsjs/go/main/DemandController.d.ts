@@ -8,16 +8,20 @@ export function GetDemandDocument(arg1:number):Promise<dto.DemandDocumentDTO>;
 
 export function GetWaveRoutingStats(arg1:number):Promise<dto.WaveRoutingStatsDTO>;
 
+export function ImportDemandCSV(arg1:dto.ImportDemandCSVInput):Promise<dto.ImportDemandCSVResult>;
+
 export function ImportDemandDocument(arg1:dto.CreateDemandInput):Promise<dto.DemandDocumentDTO>;
 
 export function ImportDemandFromCSV(arg1:dto.ImportDemandTemplateInput):Promise<dto.DemandDocumentDTO>;
 
 export function ListDemandDocuments():Promise<Array<dto.DemandDocumentDTO>>;
 
-export function ListDemandInboxRows(arg1:dto.DemandInboxFilterInput):Promise<Array<dto.DemandInboxRowDTO>>;
+export function ListDemandInboxRows(arg1:dto.DemandInboxFilterInput,arg2:dto.PaginationInput):Promise<dto.DemandInboxRowListDTO>;
 
 export function ListDemandLines(arg1:number):Promise<Array<dto.DemandLineDTO>>;
 
 export function ListUnassignedDemandDocuments():Promise<Array<dto.DemandDocumentDTO>>;
+
+export function ParseCSVFile(arg1:string):Promise<dto.CSVFilePreviewDTO>;
 
 export function UpdateDemandLineRouting(arg1:dto.UpdateDemandLineRoutingInput):Promise<void>;

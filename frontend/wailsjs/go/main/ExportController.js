@@ -6,6 +6,10 @@ export function ExportSupplierOrder(arg1) {
   return window['go']['main']['ExportController']['ExportSupplierOrder'](arg1);
 }
 
+export function GenerateSupplierOrderFile(arg1) {
+  return window['go']['main']['ExportController']['GenerateSupplierOrderFile'](arg1);
+}
+
 export function GetSupplierOrderByWave(arg1) {
   return window['go']['main']['ExportController']['GetSupplierOrderByWave'](arg1);
 }
@@ -16,4 +20,12 @@ export function ListLinesBySupplierOrder(arg1) {
 
 export function ListSupplierOrders() {
   return window['go']['main']['ExportController']['ListSupplierOrders']();
+}
+
+export function MarkSupplierOrderSubmitted(arg1) {
+  return window['go']['main']['ExportController']['MarkSupplierOrderSubmitted'](arg1);
+}
+
+export function RecordSupplierOrderAcceptance(arg1) {
+  return window['go']['main']['ExportController']['RecordSupplierOrderAcceptance'](arg1);
 }

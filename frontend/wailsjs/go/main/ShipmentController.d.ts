@@ -7,3 +7,7 @@ export function CreateShipment(arg1:dto.CreateShipmentInput):Promise<dto.Shipmen
 export function ImportShipments(arg1:dto.ImportShipmentInput):Promise<dto.ImportShipmentResult>;
 
 export function ListShipmentsByWave(arg1:number):Promise<Array<dto.ShipmentDTO>>;
+
+export function UpdateShipment(arg1:dto.UpdateShipmentInput):Promise<dto.ShipmentDTO>;
+
+export function VoidShipment(arg1:dto.VoidShipmentInput):Promise<dto.ShipmentDTO>;

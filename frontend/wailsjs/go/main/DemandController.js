@@ -14,6 +14,10 @@ export function GetWaveRoutingStats(arg1) {
   return window['go']['main']['DemandController']['GetWaveRoutingStats'](arg1);
 }
 
+export function ImportDemandCSV(arg1) {
+  return window['go']['main']['DemandController']['ImportDemandCSV'](arg1);
+}
+
 export function ImportDemandDocument(arg1) {
   return window['go']['main']['DemandController']['ImportDemandDocument'](arg1);
 }
@@ -26,8 +30,8 @@ export function ListDemandDocuments() {
   return window['go']['main']['DemandController']['ListDemandDocuments']();
 }
 
-export function ListDemandInboxRows(arg1) {
-  return window['go']['main']['DemandController']['ListDemandInboxRows'](arg1);
+export function ListDemandInboxRows(arg1, arg2) {
+  return window['go']['main']['DemandController']['ListDemandInboxRows'](arg1, arg2);
 }
 
 export function ListDemandLines(arg1) {
@@ -36,6 +40,10 @@ export function ListDemandLines(arg1) {
 
 export function ListUnassignedDemandDocuments() {
   return window['go']['main']['DemandController']['ListUnassignedDemandDocuments']();
+}
+
+export function ParseCSVFile(arg1) {
+  return window['go']['main']['DemandController']['ParseCSVFile'](arg1);
 }
 
 export function UpdateDemandLineRouting(arg1) {

@@ -207,7 +207,9 @@ func resolveFailureReason(
 // applyAdjustment mutates the target line's Quantity based on the adjustment kind.
 func applyAdjustment(line *domain.FulfillmentLine, adj domain.FulfillmentAdjustment) {
 	switch adj.AdjustmentKind {
-	case "add", "compensation", "reduce":
+	case "add", "compensation", "reduce", string(domain.AdjustmentKindReissue):
+		// reissue is a positive re-send (sibling to compensation, decision #15):
+		// it applies as a quantity delta just like add/compensation.
 		line.Quantity += adj.QuantityDelta
 	case "remove":
 		line.Quantity = 0

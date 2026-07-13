@@ -10,4 +10,6 @@ export function ListProductsByWave(arg1:number):Promise<Array<dto.ProductDTO>>;
 
 export function SnapshotProductsForWave(arg1:dto.SnapshotProductsInput):Promise<Array<dto.ProductDTO>>;
 
+export function SnapshotProductsForWaveDetailed(arg1:dto.SnapshotProductsInput):Promise<dto.SnapshotProductsDetailedResult>;
+
 export function UpdateProductMaster(arg1:dto.UpdateProductMasterInput):Promise<dto.ProductMasterDTO>;

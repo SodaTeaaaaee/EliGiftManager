@@ -37,6 +37,10 @@ func (uc *adjustmentUseCase) RecordAdjustment(ctx context.Context, input dto.Rec
 	switch input.AdjustmentKind {
 	case "add", "reduce", "compensation", "remove":
 		// valid
+	case string(domain.AdjustmentKindReissue):
+		// valid — a positive re-send of a previously-sent item, sibling to
+		// compensation (decision #15): requires target_kind "participant" so the
+		// source lineage stays truthful (validated below under target kind).
 	case "replace":
 		// valid — requires FromProductID and ToProductID (validated below under target kind)
 	default:
@@ -46,8 +50,9 @@ func (uc *adjustmentUseCase) RecordAdjustment(ctx context.Context, input dto.Rec
 	// Validate target kind and enforce kind-target constraints
 	switch targetKind {
 	case "fulfillment_line":
-		// compensation is only allowed with participant target
-		if input.AdjustmentKind == "compensation" {
+		// compensation and reissue are only allowed with participant target
+		switch input.AdjustmentKind {
+		case "compensation", string(domain.AdjustmentKindReissue):
 			return nil, fmt.Errorf("adjustment kind %q requires target_kind \"participant\"", input.AdjustmentKind)
 		}
 		// replace requires FromProductID and ToProductID

@@ -6,6 +6,14 @@ export function AssignDemandToWave(arg1, arg2) {
   return window['go']['main']['WaveController']['AssignDemandToWave'](arg1, arg2);
 }
 
+export function BatchAssignDemandToWave(arg1) {
+  return window['go']['main']['WaveController']['BatchAssignDemandToWave'](arg1);
+}
+
+export function CloseWave(arg1) {
+  return window['go']['main']['WaveController']['CloseWave'](arg1);
+}
+
 export function CreateWave(arg1) {
   return window['go']['main']['WaveController']['CreateWave'](arg1);
 }
@@ -46,12 +54,20 @@ export function ListWaveFulfillmentRows(arg1) {
   return window['go']['main']['WaveController']['ListWaveFulfillmentRows'](arg1);
 }
 
+export function ListWaveFulfillmentRowsFiltered(arg1) {
+  return window['go']['main']['WaveController']['ListWaveFulfillmentRowsFiltered'](arg1);
+}
+
 export function ListWaveParticipantRows(arg1) {
   return window['go']['main']['WaveController']['ListWaveParticipantRows'](arg1);
 }
 
 export function ListWaves() {
   return window['go']['main']['WaveController']['ListWaves']();
+}
+
+export function ListWavesFiltered(arg1) {
+  return window['go']['main']['WaveController']['ListWavesFiltered'](arg1);
 }
 
 export function ListWavesPaginated(arg1) {
@@ -70,8 +86,16 @@ export function RunHistoryGC(arg1) {
   return window['go']['main']['WaveController']['RunHistoryGC'](arg1);
 }
 
+export function UnassignDemandFromWave(arg1) {
+  return window['go']['main']['WaveController']['UnassignDemandFromWave'](arg1);
+}
+
 export function UndoWaveAction(arg1) {
   return window['go']['main']['WaveController']['UndoWaveAction'](arg1);
+}
+
+export function UpdateWave(arg1) {
+  return window['go']['main']['WaveController']['UpdateWave'](arg1);
 }
 
 export function ValidateStepAccess(arg1, arg2) {

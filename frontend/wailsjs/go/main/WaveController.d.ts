@@ -4,6 +4,10 @@ import {dto} from '../models';
 
 export function AssignDemandToWave(arg1:number,arg2:number):Promise<void>;
 
+export function BatchAssignDemandToWave(arg1:dto.BatchAssignDemandInput):Promise<dto.BatchAssignDemandResult>;
+
+export function CloseWave(arg1:dto.CloseWaveInput):Promise<dto.CloseWaveResult>;
+
 export function CreateWave(arg1:dto.CreateWaveInput):Promise<dto.WaveDTO>;
 
 export function GenerateParticipants(arg1:number):Promise<number>;
@@ -24,9 +28,13 @@ export function ListWaveDashboardRows():Promise<Array<dto.WaveDashboardRowDTO>>;
 
 export function ListWaveFulfillmentRows(arg1:number):Promise<Array<dto.WaveFulfillmentRowDTO>>;
 
+export function ListWaveFulfillmentRowsFiltered(arg1:dto.WaveFulfillmentFilterInput):Promise<dto.WaveFulfillmentRowsPage>;
+
 export function ListWaveParticipantRows(arg1:number):Promise<Array<dto.WaveParticipantRowDTO>>;
 
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
+
+export function ListWavesFiltered(arg1:dto.PaginationInput):Promise<dto.WavesPage>;
 
 export function ListWavesPaginated(arg1:dto.PaginationInput):Promise<Record<string, any>>;
 
@@ -36,6 +44,10 @@ export function RedoWaveAction(arg1:number):Promise<string>;
 
 export function RunHistoryGC(arg1:number):Promise<number>;
 
+export function UnassignDemandFromWave(arg1:dto.UnassignDemandInput):Promise<void>;
+
 export function UndoWaveAction(arg1:number):Promise<string>;
+
+export function UpdateWave(arg1:dto.UpdateWaveInput):Promise<dto.WaveDTO>;
 
 export function ValidateStepAccess(arg1:number,arg2:string):Promise<void>;

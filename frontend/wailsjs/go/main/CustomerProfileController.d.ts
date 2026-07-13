@@ -12,6 +12,8 @@ export function DeleteCustomerProfile(arg1:number):Promise<void>;
 
 export function DismissMergeSuggestion(arg1:number):Promise<void>;
 
+export function GetCustomerFulfillmentHistory(arg1:number):Promise<Array<dto.CustomerFulfillmentHistoryRowDTO>>;
+
 export function GetCustomerProfile(arg1:number):Promise<dto.CustomerProfileDTO>;
 
 export function GetMergeSuggestions():Promise<Array<dto.MergeSuggestionDTO>>;

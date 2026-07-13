@@ -3,3 +3,5 @@
 import {dto} from '../models';
 
 export function MergeProfiles(arg1:dto.MergeProfilesInput):Promise<dto.MergeProfilesResult>;
+
+export function PreviewMergeProfiles(arg1:number,arg2:number):Promise<dto.MergeProfilesPreviewResult>;

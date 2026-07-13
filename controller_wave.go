@@ -85,6 +85,19 @@ func (c *WaveController) persistLifecycle(waveID uint) {
 // CreateWave creates a new wave.
 func (c *WaveController) CreateWave(input dto.CreateWaveInput) (dto.WaveDTO, error) {
 	ctx := appContext
+	// WaveType is optional. Leave it blank when unset so the persistence-layer
+	// default ('mixed', internal/infra/persistence/models.go) still applies —
+	// this preserves backward compatibility with existing name-only callers.
+	// When provided, it must be one of the domain whitelist values.
+	if input.WaveType != "" {
+		switch domain.WaveType(input.WaveType) {
+		case domain.WaveTypeMembership, domain.WaveTypeRetail, domain.WaveTypeMixed:
+			// valid
+		default:
+			return dto.WaveDTO{}, fmt.Errorf("invalid wave type: %s", input.WaveType)
+		}
+	}
+
 	var wave domain.Wave
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
 		repos := infra.NewTxRepos(tx)
@@ -92,7 +105,12 @@ func (c *WaveController) CreateWave(input dto.CreateWaveInput) (dto.WaveDTO, err
 		demandRepo := repos.DemandRepo
 		assignmentRepo := repos.AssignmentRepo
 		waveUC := app.NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
-		w := domain.Wave{Name: input.Name}
+		w := domain.Wave{
+			Name:      input.Name,
+			WaveType:  input.WaveType,
+			Notes:     input.Notes,
+			LevelTags: input.LevelTags,
+		}
 		if err := waveUC.CreateWave(ctx, &w); err != nil {
 			return err
 		}

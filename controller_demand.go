@@ -21,6 +21,8 @@ type DemandController struct {
 	waveRepo             domain.WaveRepository
 	identityResolution   *app.IdentityResolutionService
 	templateMapping      *app.TemplateMappingService
+	inboxAssignmentRepo  domain.DemandInboxAssignmentRepository
+	inboxLineRepo        domain.DemandInboxLineRepository
 }
 
 func NewDemandController() *DemandController {
@@ -42,6 +44,8 @@ func NewDemandController() *DemandController {
 		waveRepo:             waveRepo,
 		identityResolution:   app.NewIdentityResolutionService(profileRepo),
 		templateMapping:      app.NewTemplateMappingService(templateRepo, bindingRepo, integrationProfileRepo),
+		inboxAssignmentRepo:  infra.NewDemandInboxAssignmentRepository(gdb),
+		inboxLineRepo:        infra.NewDemandInboxLineRepository(gdb),
 	}
 }
 
@@ -222,88 +226,123 @@ func (c *DemandController) GetDemandDocument(id uint) (dto.DemandDocumentDTO, er
 	return domainToDemandDTO(doc), nil
 }
 
-func (c *DemandController) ListDemandInboxRows(input dto.DemandInboxFilterInput) ([]dto.DemandInboxRowDTO, error) {
+// ListDemandInboxRows returns a paginated, server-filtered page of demand inbox rows.
+//
+// Prefetch strategy (fixes the former N+1 pattern, which issued one
+// assignmentRepo.ListByDemandDocument + one demandRepo.ListLinesByDocument +
+// one integrationProfile.FindByID call PER document inside the loop):
+//  1. Load all documents, all waves, and all integration profiles once; index waves/profiles
+//     into maps (same pattern as the pre-existing waveMap prefetch below).
+//  2. Apply doc-level filters (demandKind, integrationProfileId) in memory.
+//  3. Bulk-fetch assignment state for the filtered doc IDs in a single query, to evaluate the
+//     assignment filter and compute TotalCount for pagination.
+//  4. Slice the filtered+assignment-filtered set to the requested page.
+//  5. Bulk-fetch demand lines for ONLY the current page's doc IDs in a single query, then
+//     assemble rows from the prefetched maps — no further per-row DB calls.
+func (c *DemandController) ListDemandInboxRows(input dto.DemandInboxFilterInput, pageInput dto.PaginationInput) (dto.DemandInboxRowListDTO, error) {
 	ctx := appContext
+	pageInput = dto.NormalizePagination(pageInput)
+
 	docs, err := c.demandRepo.List(ctx)
 	if err != nil {
-		return nil, err
+		return dto.DemandInboxRowListDTO{}, err
 	}
 	waves, err := c.waveRepo.List(ctx)
 	if err != nil {
-		return nil, err
+		return dto.DemandInboxRowListDTO{}, err
 	}
-	waveMap := make(map[uint]domain.Wave, len(waves))
-	for _, w := range waves {
-		waveMap[w.ID] = w
+	profiles, err := c.integrationProfile.List(ctx)
+	if err != nil {
+		return dto.DemandInboxRowListDTO{}, err
 	}
 
-	rows := make([]dto.DemandInboxRowDTO, 0, len(docs))
+	// Stage 1: doc-level filters (demandKind, server-side integrationProfileId filter).
+	filtered := make([]domain.DemandDocument, 0, len(docs))
 	for _, doc := range docs {
 		if input.DemandKind != "" && doc.Kind != input.DemandKind {
 			continue
 		}
-
-		assignments, err := c.assignmentRepo.ListByDemandDocument(ctx, doc.ID)
-		if err != nil {
-			return nil, err
+		if input.IntegrationProfileID != nil {
+			if doc.IntegrationProfileID == nil || *doc.IntegrationProfileID != *input.IntegrationProfileID {
+				continue
+			}
 		}
-		assigned := len(assignments) > 0
+		filtered = append(filtered, doc)
+	}
+	filteredIDs := make([]uint, len(filtered))
+	for i, doc := range filtered {
+		filteredIDs[i] = doc.ID
+	}
+
+	// Stage 2: bulk-fetch assignment state for the filtered set (single query, replaces the
+	// former per-document ListByDemandDocument call).
+	assignments, err := c.inboxAssignmentRepo.ListByDemandDocumentIDs(ctx, filteredIDs)
+	if err != nil {
+		return dto.DemandInboxRowListDTO{}, err
+	}
+	assignmentsByDoc := make(map[uint][]domain.WaveDemandAssignment, len(filteredIDs))
+	for _, a := range assignments {
+		assignmentsByDoc[a.DemandDocumentID] = append(assignmentsByDoc[a.DemandDocumentID], a)
+	}
+
+	// Stage 3: assignment-state filter.
+	final := make([]domain.DemandDocument, 0, len(filtered))
+	for _, doc := range filtered {
+		docAssignments := assignmentsByDoc[doc.ID]
+		assigned := len(docAssignments) > 0
 		if input.Assignment == "assigned" && !assigned {
 			continue
 		}
 		if input.Assignment == "unassigned" && assigned {
 			continue
 		}
-
-		lines, err := c.demandRepo.ListLinesByDocument(ctx, doc.ID)
-		if err != nil {
-			return nil, err
-		}
-
-		row := dto.DemandInboxRowDTO{
-			DemandDocumentID:     doc.ID,
-			Kind:                 doc.Kind,
-			CaptureMode:          doc.CaptureMode,
-			SourceChannel:        doc.SourceChannel,
-			SourceSurface:        doc.SourceSurface,
-			SourceDocumentNo:     doc.SourceDocumentNo,
-			CustomerProfileID:    doc.CustomerProfileID,
-			IntegrationProfileID: doc.IntegrationProfileID,
-			Assigned:             assigned,
-			CreatedAt:            doc.CreatedAt,
-		}
-		if doc.IntegrationProfileID != nil {
-			if profile, profileErr := c.integrationProfile.FindByID(ctx, *doc.IntegrationProfileID); profileErr == nil && profile != nil {
-				row.IntegrationProfileLabel = fmt.Sprintf("%s (%s)", profile.ProfileKey, profile.SourceChannel)
-			}
-		}
-		if assigned {
-			waveID := assignments[0].WaveID
-			row.AssignedWaveID = &waveID
-			if wave, ok := waveMap[waveID]; ok {
-				row.AssignedWaveLabel = fmt.Sprintf("%s — %s", wave.WaveNo, wave.Name)
-			}
-		}
-		for _, line := range lines {
-			row.TotalLineCount++
-			switch line.RoutingDisposition {
-			case "accepted":
-				row.AcceptedCount++
-				if line.RecipientInputState == "ready" || line.RecipientInputState == "not_required" {
-					row.ReadyAcceptedCount++
+		if input.WaveID != nil {
+			matchesWave := false
+			for _, assignment := range docAssignments {
+				if assignment.WaveID == *input.WaveID {
+					matchesWave = true
+					break
 				}
-				if line.RecipientInputState == "waiting_for_input" || line.RecipientInputState == "partially_collected" {
-					row.WaitingInputCount++
-				}
-			case "deferred":
-				row.DeferredCount++
-			case "excluded_manual", "excluded_duplicate", "excluded_revoked":
-				row.ExcludedCount++
+			}
+			if !matchesWave {
+				continue
 			}
 		}
-		rows = append(rows, row)
+		final = append(final, doc)
 	}
-	return rows, nil
+
+	result := dto.DemandInboxRowListDTO{
+		Pagination: dto.PaginationResult{
+			Page:       pageInput.Page,
+			PageSize:   pageInput.PageSize,
+			TotalCount: len(final),
+		},
+	}
+	result.Pagination.ComputePages()
+
+	start := (pageInput.Page - 1) * pageInput.PageSize
+	if start >= len(final) {
+		result.Rows = []dto.DemandInboxRowDTO{}
+		return result, nil
+	}
+	end := start + pageInput.PageSize
+	if end > len(final) {
+		end = len(final)
+	}
+	pageSlice := final[start:end]
+	pageIDs := make([]uint, len(pageSlice))
+	for i, doc := range pageSlice {
+		pageIDs[i] = doc.ID
+	}
+
+	// Stage 4: bulk-fetch demand lines for only the current page's documents (single query,
+	// replaces the former per-document ListLinesByDocument call).
+	lines, err := c.inboxLineRepo.ListLinesByDocumentIDs(ctx, pageIDs)
+	if err != nil {
+		return dto.DemandInboxRowListDTO{}, err
+	}
+	result.Rows = app.AssembleDemandInboxRows(pageSlice, assignments, lines, waves, profiles)
+	return result, nil
 }
 
 // domainToDemandDTO converts a domain DemandDocument to a DTO.

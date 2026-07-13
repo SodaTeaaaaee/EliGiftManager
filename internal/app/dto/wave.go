@@ -16,7 +16,10 @@ type WaveDTO struct {
 }
 
 type CreateWaveInput struct {
-	Name string `json:"name"`
+	Name      string `json:"name"`
+	WaveType  string `json:"waveType"`
+	Notes     string `json:"notes"`
+	LevelTags string `json:"levelTags"`
 }
 
 type WaveDashboardRowDTO struct {

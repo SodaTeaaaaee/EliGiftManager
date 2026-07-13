@@ -5,3 +5,7 @@
 export function MergeProfiles(arg1) {
   return window['go']['main']['MergeController']['MergeProfiles'](arg1);
 }
+
+export function PreviewMergeProfiles(arg1, arg2) {
+  return window['go']['main']['MergeController']['PreviewMergeProfiles'](arg1, arg2);
+}

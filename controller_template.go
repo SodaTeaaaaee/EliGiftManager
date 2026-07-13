@@ -49,14 +49,16 @@ func (c *TemplateController) ListBindingsByProfile(profileID uint) ([]dto.Profil
 	return c.templateUC.ListBindingsByProfile(ctx, profileID)
 }
 
-func (c *TemplateController) GetDefaultTemplateForProfile(profileID uint, docType string) (dto.DocumentTemplateDTO, error) {
+// GetDefaultTemplateForProfile returns the default template bound to the given
+// profile/docType, or nil if no default binding exists. Returning a typed nil
+// pointer (instead of a zero-value DTO) lets the JSON response serialize to a
+// real `null`, so the frontend can distinguish "no default template" from "a
+// template whose fields all happen to be empty" (plan 5.5).
+func (c *TemplateController) GetDefaultTemplateForProfile(profileID uint, docType string) (*dto.DocumentTemplateDTO, error) {
 	ctx := appContext
 	result, err := c.templateUC.GetDefaultTemplateForProfile(ctx, profileID, docType)
 	if err != nil {
-		return dto.DocumentTemplateDTO{}, err
+		return nil, err
 	}
-	if result == nil {
-		return dto.DocumentTemplateDTO{}, nil
-	}
-	return *result, nil
+	return result, nil
 }

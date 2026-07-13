@@ -149,6 +149,7 @@ const (
 	ShipmentStatusDelivered ShipmentStatus = "delivered"
 	ShipmentStatusException ShipmentStatus = "exception"
 	ShipmentStatusReturned  ShipmentStatus = "returned"
+	ShipmentStatusVoided    ShipmentStatus = "voided"
 )
 
 // ChannelSyncJob: Direction
@@ -260,13 +261,18 @@ const (
 )
 
 // ---- AdjustmentKind ----
+// Corrected to mirror internal/domain/enums.go AdjustmentKind values (the prior
+// add_send/reduce_send/replace/remove/supplement set was dead, drifted code
+// referenced nowhere in the codebase).
+// ReasonCode remains free-text pending product sign-off on its controlled vocabulary (plan 5.2 / open item).
 
 const (
-	AdjustmentKindAddSend    = "add_send"
-	AdjustmentKindReduceSend = "reduce_send"
-	AdjustmentKindReplace    = "replace"
-	AdjustmentKindRemove     = "remove"
-	AdjustmentKindSupplement = "supplement"
+	AdjustmentKindAdd          = "add"
+	AdjustmentKindReduce       = "reduce"
+	AdjustmentKindCompensation = "compensation"
+	AdjustmentKindRemove       = "remove"
+	AdjustmentKindReplace      = "replace"
+	AdjustmentKindReissue      = "reissue"
 )
 
 // ---- DocumentType ----

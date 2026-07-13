@@ -13,3 +13,11 @@ export function ImportShipments(arg1) {
 export function ListShipmentsByWave(arg1) {
   return window['go']['main']['ShipmentController']['ListShipmentsByWave'](arg1);
 }
+
+export function UpdateShipment(arg1) {
+  return window['go']['main']['ShipmentController']['UpdateShipment'](arg1);
+}
+
+export function VoidShipment(arg1) {
+  return window['go']['main']['ShipmentController']['VoidShipment'](arg1);
+}

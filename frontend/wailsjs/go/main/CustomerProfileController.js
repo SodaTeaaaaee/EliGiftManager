@@ -22,6 +22,10 @@ export function DismissMergeSuggestion(arg1) {
   return window['go']['main']['CustomerProfileController']['DismissMergeSuggestion'](arg1);
 }
 
+export function GetCustomerFulfillmentHistory(arg1) {
+  return window['go']['main']['CustomerProfileController']['GetCustomerFulfillmentHistory'](arg1);
+}
+
 export function GetCustomerProfile(arg1) {
   return window['go']['main']['CustomerProfileController']['GetCustomerProfile'](arg1);
 }

@@ -1,5 +1,171 @@
 export namespace dto {
 	
+	export class ActionCenterBucketFilterDTO {
+	    stepKey?: string;
+	    allocationState?: string;
+	    addressState?: string;
+	    supplierState?: string;
+	    channelSyncState?: string;
+	    reviewRequirement?: string;
+	    drift?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionCenterBucketFilterDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.stepKey = source["stepKey"];
+	        this.allocationState = source["allocationState"];
+	        this.addressState = source["addressState"];
+	        this.supplierState = source["supplierState"];
+	        this.channelSyncState = source["channelSyncState"];
+	        this.reviewRequirement = source["reviewRequirement"];
+	        this.drift = source["drift"];
+	    }
+	}
+	export class ActionCenterNavBadgeDTO {
+	    navKey: string;
+	    count: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionCenterNavBadgeDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.navKey = source["navKey"];
+	        this.count = source["count"];
+	    }
+	}
+	export class ActionCenterWaveBucketDTO {
+	    waveId: number;
+	    bucketKind: string;
+	    count: number;
+	    filter: ActionCenterBucketFilterDTO;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionCenterWaveBucketDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.bucketKind = source["bucketKind"];
+	        this.count = source["count"];
+	        this.filter = this.convertValues(source["filter"], ActionCenterBucketFilterDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ActionCenterWaveSummaryDTO {
+	    waveId: number;
+	    waveNo: string;
+	    waveName: string;
+	    buckets: ActionCenterWaveBucketDTO[];
+	    totalBlockedCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionCenterWaveSummaryDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.waveNo = source["waveNo"];
+	        this.waveName = source["waveName"];
+	        this.buckets = this.convertValues(source["buckets"], ActionCenterWaveBucketDTO);
+	        this.totalBlockedCount = source["totalBlockedCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ActionCenterSummaryDTO {
+	    waves: ActionCenterWaveSummaryDTO[];
+	    inboxPendingIntakeCount: number;
+	    navBadges: ActionCenterNavBadgeDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ActionCenterSummaryDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waves = this.convertValues(source["waves"], ActionCenterWaveSummaryDTO);
+	        this.inboxPendingIntakeCount = source["inboxPendingIntakeCount"];
+	        this.navBadges = this.convertValues(source["navBadges"], ActionCenterNavBadgeDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	export class AddressBatchItemResult {
+	    fulfillmentLineId: number;
+	    customerAddressId?: number;
+	    success: boolean;
+	    errorMessage?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new AddressBatchItemResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.customerAddressId = source["customerAddressId"];
+	        this.success = source["success"];
+	        this.errorMessage = source["errorMessage"];
+	    }
+	}
 	export class AllocationPolicyRuleDTO {
 	    id: number;
 	    waveId: number;
@@ -49,6 +215,244 @@ export namespace dto {
 	        this.reviewRequirement = source["reviewRequirement"];
 	        this.driftReasonCodes = source["driftReasonCodes"];
 	    }
+	}
+	export class FulfillmentAdjustmentDTO {
+	    id: number;
+	    waveId: number;
+	    targetKind: string;
+	    fulfillmentLineId?: number;
+	    waveParticipantSnapshotId?: number;
+	    adjustmentKind: string;
+	    quantityDelta: number;
+	    fromProductId?: number;
+	    toProductId?: number;
+	    reasonCode: string;
+	    operatorId: string;
+	    note: string;
+	    evidenceRef: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FulfillmentAdjustmentDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveId = source["waveId"];
+	        this.targetKind = source["targetKind"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
+	        this.adjustmentKind = source["adjustmentKind"];
+	        this.quantityDelta = source["quantityDelta"];
+	        this.fromProductId = source["fromProductId"];
+	        this.toProductId = source["toProductId"];
+	        this.reasonCode = source["reasonCode"];
+	        this.operatorId = source["operatorId"];
+	        this.note = source["note"];
+	        this.evidenceRef = source["evidenceRef"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class BatchAdjustmentItemResult {
+	    index: number;
+	    success: boolean;
+	    adjustment?: FulfillmentAdjustmentDTO;
+	    error: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchAdjustmentItemResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.index = source["index"];
+	        this.success = source["success"];
+	        this.adjustment = this.convertValues(source["adjustment"], FulfillmentAdjustmentDTO);
+	        this.error = source["error"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class BatchAssignDemandInput {
+	    waveId: number;
+	    docIds: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchAssignDemandInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.docIds = source["docIds"];
+	    }
+	}
+	export class BatchAssignDemandItemResult {
+	    demandDocumentId: number;
+	    success: boolean;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchAssignDemandItemResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.demandDocumentId = source["demandDocumentId"];
+	        this.success = source["success"];
+	        this.error = source["error"];
+	    }
+	}
+	export class BatchAssignDemandResult {
+	    results: BatchAssignDemandItemResult[];
+	    successCount: number;
+	    failureCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchAssignDemandResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.results = this.convertValues(source["results"], BatchAssignDemandItemResult);
+	        this.successCount = source["successCount"];
+	        this.failureCount = source["failureCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class RecordAdjustmentInput {
+	    waveId: number;
+	    targetKind: string;
+	    fulfillmentLineId?: number;
+	    waveParticipantSnapshotId?: number;
+	    adjustmentKind: string;
+	    quantityDelta: number;
+	    fromProductId?: number;
+	    toProductId?: number;
+	    reasonCode: string;
+	    operatorId: string;
+	    note: string;
+	    evidenceRef: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordAdjustmentInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.targetKind = source["targetKind"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
+	        this.adjustmentKind = source["adjustmentKind"];
+	        this.quantityDelta = source["quantityDelta"];
+	        this.fromProductId = source["fromProductId"];
+	        this.toProductId = source["toProductId"];
+	        this.reasonCode = source["reasonCode"];
+	        this.operatorId = source["operatorId"];
+	        this.note = source["note"];
+	        this.evidenceRef = source["evidenceRef"];
+	    }
+	}
+	export class BatchRecordAdjustmentsInput {
+	    entries: RecordAdjustmentInput[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchRecordAdjustmentsInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entries = this.convertValues(source["entries"], RecordAdjustmentInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class BatchRecordAdjustmentsResult {
+	    results: BatchAdjustmentItemResult[];
+	    successCount: number;
+	    failureCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchRecordAdjustmentsResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.results = this.convertValues(source["results"], BatchAdjustmentItemResult);
+	        this.successCount = source["successCount"];
+	        this.failureCount = source["failureCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class UpdateDemandLineRoutingInput {
 	    demandLineId: number;
@@ -143,6 +547,20 @@ export namespace dto {
 		    }
 		    return a;
 		}
+	}
+	export class BindAddressEntry {
+	    fulfillmentLineId: number;
+	    customerAddressId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BindAddressEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.customerAddressId = source["customerAddressId"];
+	    }
 	}
 	export class BindAddressInput {
 	    fulfillmentLineId: number;
@@ -276,6 +694,86 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	        this.items = this.convertValues(source["items"], ChannelSyncItemDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CloseWaveInput {
+	    waveId: number;
+	    note: string;
+	    force: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloseWaveInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.note = source["note"];
+	        this.force = source["force"];
+	    }
+	}
+	export class WaveDTO {
+	    id: number;
+	    waveNo: string;
+	    name: string;
+	    waveType: string;
+	    lifecycleStage: string;
+	    progressSnapshot: string;
+	    notes: string;
+	    levelTags: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.waveNo = source["waveNo"];
+	        this.name = source["name"];
+	        this.waveType = source["waveType"];
+	        this.lifecycleStage = source["lifecycleStage"];
+	        this.progressSnapshot = source["progressSnapshot"];
+	        this.notes = source["notes"];
+	        this.levelTags = source["levelTags"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class CloseWaveResult {
+	    wave: WaveDTO;
+	    forced: boolean;
+	    residualItemCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CloseWaveResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.wave = this.convertValues(source["wave"], WaveDTO);
+	        this.forced = source["forced"];
+	        this.residualItemCount = source["residualItemCount"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -754,6 +1252,9 @@ export namespace dto {
 	
 	export class CreateWaveInput {
 	    name: string;
+	    waveType: string;
+	    notes: string;
+	    levelTags: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new CreateWaveInput(source);
@@ -762,6 +1263,9 @@ export namespace dto {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
+	        this.waveType = source["waveType"];
+	        this.notes = source["notes"];
+	        this.levelTags = source["levelTags"];
 	    }
 	}
 	export class CustomerAddressDTO {
@@ -810,6 +1314,50 @@ export namespace dto {
 	        this.extraData = source["extraData"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class CustomerFulfillmentHistoryRowDTO {
+	    fulfillmentLineId: number;
+	    waveId: number;
+	    waveNo: string;
+	    waveName: string;
+	    productId?: number;
+	    productName: string;
+	    productSku: string;
+	    quantity: number;
+	    allocationState: string;
+	    addressState: string;
+	    supplierState: string;
+	    channelSyncState: string;
+	    shipmentId?: number;
+	    shipmentStatus: string;
+	    trackingNo: string;
+	    carrierName: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerFulfillmentHistoryRowDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.waveId = source["waveId"];
+	        this.waveNo = source["waveNo"];
+	        this.waveName = source["waveName"];
+	        this.productId = source["productId"];
+	        this.productName = source["productName"];
+	        this.productSku = source["productSku"];
+	        this.quantity = source["quantity"];
+	        this.allocationState = source["allocationState"];
+	        this.addressState = source["addressState"];
+	        this.supplierState = source["supplierState"];
+	        this.channelSyncState = source["channelSyncState"];
+	        this.shipmentId = source["shipmentId"];
+	        this.shipmentStatus = source["shipmentStatus"];
+	        this.trackingNo = source["trackingNo"];
+	        this.carrierName = source["carrierName"];
+	        this.createdAt = source["createdAt"];
 	    }
 	}
 	export class CustomerIdentityDTO {
@@ -933,6 +1481,7 @@ export namespace dto {
 	export class DemandInboxFilterInput {
 	    assignment: string;
 	    demandKind: string;
+	    integrationProfileId?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new DemandInboxFilterInput(source);
@@ -942,6 +1491,7 @@ export namespace dto {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.assignment = source["assignment"];
 	        this.demandKind = source["demandKind"];
+	        this.integrationProfileId = source["integrationProfileId"];
 	    }
 	}
 	export class DemandInboxRowDTO {
@@ -991,6 +1541,56 @@ export namespace dto {
 	        this.excludedCount = source["excludedCount"];
 	        this.createdAt = source["createdAt"];
 	    }
+	}
+	export class PaginationResult {
+	    page: number;
+	    pageSize: number;
+	    totalCount: number;
+	    totalPages: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PaginationResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.page = source["page"];
+	        this.pageSize = source["pageSize"];
+	        this.totalCount = source["totalCount"];
+	        this.totalPages = source["totalPages"];
+	    }
+	}
+	export class DemandInboxRowListDTO {
+	    rows: DemandInboxRowDTO[];
+	    pagination: PaginationResult;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandInboxRowListDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rows = this.convertValues(source["rows"], DemandInboxRowDTO);
+	        this.pagination = this.convertValues(source["pagination"], PaginationResult);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class DemandLineDTO {
 	    id: number;
@@ -1207,46 +1807,7 @@ export namespace dto {
 		    return a;
 		}
 	}
-	export class FulfillmentAdjustmentDTO {
-	    id: number;
-	    waveId: number;
-	    targetKind: string;
-	    fulfillmentLineId?: number;
-	    waveParticipantSnapshotId?: number;
-	    adjustmentKind: string;
-	    quantityDelta: number;
-	    fromProductId?: number;
-	    toProductId?: number;
-	    reasonCode: string;
-	    operatorId: string;
-	    note: string;
-	    evidenceRef: string;
-	    createdAt: string;
-	    updatedAt: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new FulfillmentAdjustmentDTO(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.waveId = source["waveId"];
-	        this.targetKind = source["targetKind"];
-	        this.fulfillmentLineId = source["fulfillmentLineId"];
-	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
-	        this.adjustmentKind = source["adjustmentKind"];
-	        this.quantityDelta = source["quantityDelta"];
-	        this.fromProductId = source["fromProductId"];
-	        this.toProductId = source["toProductId"];
-	        this.reasonCode = source["reasonCode"];
-	        this.operatorId = source["operatorId"];
-	        this.note = source["note"];
-	        this.evidenceRef = source["evidenceRef"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
-	    }
-	}
 	
 	export class HistoryGraphNodeDTO {
 	    id: number;
@@ -1643,6 +2204,130 @@ export namespace dto {
 	        this.allowsManualClosure = source["allowsManualClosure"];
 	    }
 	}
+	export class MarkSupplierOrderSubmittedInput {
+	    orderId: number;
+	    externalOrderNo: string;
+	    submittedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MarkSupplierOrderSubmittedInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.orderId = source["orderId"];
+	        this.externalOrderNo = source["externalOrderNo"];
+	        this.submittedAt = source["submittedAt"];
+	    }
+	}
+	export class MergePreviewAddress {
+	    id: number;
+	    label: string;
+	    recipientName: string;
+	    phone: string;
+	    country: string;
+	    province: string;
+	    city: string;
+	    district: string;
+	    addressLine1: string;
+	    addressLine2: string;
+	    postalCode: string;
+	    isDefault: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergePreviewAddress(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.label = source["label"];
+	        this.recipientName = source["recipientName"];
+	        this.phone = source["phone"];
+	        this.country = source["country"];
+	        this.province = source["province"];
+	        this.city = source["city"];
+	        this.district = source["district"];
+	        this.addressLine1 = source["addressLine1"];
+	        this.addressLine2 = source["addressLine2"];
+	        this.postalCode = source["postalCode"];
+	        this.isDefault = source["isDefault"];
+	    }
+	}
+	export class MergePreviewConflict {
+	    field: string;
+	    sourceValue: string;
+	    targetValue: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergePreviewConflict(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.field = source["field"];
+	        this.sourceValue = source["sourceValue"];
+	        this.targetValue = source["targetValue"];
+	    }
+	}
+	export class MergePreviewIdentity {
+	    id: number;
+	    identityPlatform: string;
+	    identityValue: string;
+	    identityType: string;
+	    isPrimary: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergePreviewIdentity(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.identityPlatform = source["identityPlatform"];
+	        this.identityValue = source["identityValue"];
+	        this.identityType = source["identityType"];
+	        this.isPrimary = source["isPrimary"];
+	    }
+	}
+	export class MergePreviewProfileSide {
+	    profileId: number;
+	    displayName: string;
+	    profileType: string;
+	    identities: MergePreviewIdentity[];
+	    addresses: MergePreviewAddress[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MergePreviewProfileSide(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.displayName = source["displayName"];
+	        this.profileType = source["profileType"];
+	        this.identities = this.convertValues(source["identities"], MergePreviewIdentity);
+	        this.addresses = this.convertValues(source["addresses"], MergePreviewAddress);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class MergeProfilesInput {
 	    sourceProfileId: number;
 	    targetProfileId: number;
@@ -1656,6 +2341,46 @@ export namespace dto {
 	        this.sourceProfileId = source["sourceProfileId"];
 	        this.targetProfileId = source["targetProfileId"];
 	    }
+	}
+	export class MergeProfilesPreviewResult {
+	    source: MergePreviewProfileSide;
+	    target: MergePreviewProfileSide;
+	    conflicts: MergePreviewConflict[];
+	    movedIdentityCount: number;
+	    movedAddressCount: number;
+	    duplicateIdentityValues: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeProfilesPreviewResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = this.convertValues(source["source"], MergePreviewProfileSide);
+	        this.target = this.convertValues(source["target"], MergePreviewProfileSide);
+	        this.conflicts = this.convertValues(source["conflicts"], MergePreviewConflict);
+	        this.movedIdentityCount = source["movedIdentityCount"];
+	        this.movedAddressCount = source["movedAddressCount"];
+	        this.duplicateIdentityValues = source["duplicateIdentityValues"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class MergeProfilesResult {
 	    migratedIdentityCount: number;
@@ -1737,6 +2462,7 @@ export namespace dto {
 	        this.sortDesc = source["sortDesc"];
 	    }
 	}
+	
 	export class PlanChannelClosureInput {
 	    waveId: number;
 	    integrationProfileId: number;
@@ -1921,40 +2647,7 @@ export namespace dto {
 		    return a;
 		}
 	}
-	export class RecordAdjustmentInput {
-	    waveId: number;
-	    targetKind: string;
-	    fulfillmentLineId?: number;
-	    waveParticipantSnapshotId?: number;
-	    adjustmentKind: string;
-	    quantityDelta: number;
-	    fromProductId?: number;
-	    toProductId?: number;
-	    reasonCode: string;
-	    operatorId: string;
-	    note: string;
-	    evidenceRef: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new RecordAdjustmentInput(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.waveId = source["waveId"];
-	        this.targetKind = source["targetKind"];
-	        this.fulfillmentLineId = source["fulfillmentLineId"];
-	        this.waveParticipantSnapshotId = source["waveParticipantSnapshotId"];
-	        this.adjustmentKind = source["adjustmentKind"];
-	        this.quantityDelta = source["quantityDelta"];
-	        this.fromProductId = source["fromProductId"];
-	        this.toProductId = source["toProductId"];
-	        this.reasonCode = source["reasonCode"];
-	        this.operatorId = source["operatorId"];
-	        this.note = source["note"];
-	        this.evidenceRef = source["evidenceRef"];
-	    }
-	}
 	export class RecordClosureDecisionEntry {
 	    fulfillmentLineId: number;
 	    decisionKind: string;
@@ -2011,9 +2704,123 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class SupplierOrderLineAcceptanceEntry {
+	    lineId: number;
+	    acceptedQuantity: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SupplierOrderLineAcceptanceEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.lineId = source["lineId"];
+	        this.acceptedQuantity = source["acceptedQuantity"];
+	    }
+	}
+	export class RecordSupplierOrderAcceptanceInput {
+	    orderId: number;
+	    lines: SupplierOrderLineAcceptanceEntry[];
+	
+	    static createFrom(source: any = {}) {
+	        return new RecordSupplierOrderAcceptanceInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.orderId = source["orderId"];
+	        this.lines = this.convertValues(source["lines"], SupplierOrderLineAcceptanceEntry);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	
 	
 	
+	export class SnapshotProductDetailItem {
+	    masterId: number;
+	    product: ProductDTO;
+	    alreadyExisted: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SnapshotProductDetailItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.masterId = source["masterId"];
+	        this.product = this.convertValues(source["product"], ProductDTO);
+	        this.alreadyExisted = source["alreadyExisted"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SnapshotProductsDetailedResult {
+	    items: SnapshotProductDetailItem[];
+	    createdCount: number;
+	    skippedCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SnapshotProductsDetailedResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], SnapshotProductDetailItem);
+	        this.createdCount = source["createdCount"];
+	        this.skippedCount = source["skippedCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SnapshotProductsInput {
 	    waveId: number;
 	    masterIds: number[];
@@ -2072,6 +2879,25 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class SupplierOrderFileResultDTO {
+	    orderId: number;
+	    filePath: string;
+	    lineCount: number;
+	    generatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SupplierOrderFileResultDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.orderId = source["orderId"];
+	        this.filePath = source["filePath"];
+	        this.lineCount = source["lineCount"];
+	        this.generatedAt = source["generatedAt"];
+	    }
+	}
+	
 	export class SupplierOrderLineDTO {
 	    id: number;
 	    supplierOrderId: number;
@@ -2118,6 +2944,20 @@ export namespace dto {
 	        this.autoMergeCrossPlatform = source["autoMergeCrossPlatform"];
 	        this.autoMergeByEmail = source["autoMergeByEmail"];
 	        this.autoMergeByPhone = source["autoMergeByPhone"];
+	    }
+	}
+	export class UnassignDemandInput {
+	    waveId: number;
+	    demandDocumentId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UnassignDemandInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.demandDocumentId = source["demandDocumentId"];
 	    }
 	}
 	export class UpdateAddressInput {
@@ -2287,36 +3127,67 @@ export namespace dto {
 	        this.extraData = source["extraData"];
 	    }
 	}
-	export class WaveDTO {
+	export class UpdateShipmentInput {
 	    id: number;
-	    waveNo: string;
-	    name: string;
-	    waveType: string;
-	    lifecycleStage: string;
-	    progressSnapshot: string;
-	    notes: string;
-	    levelTags: string;
-	    createdAt: string;
-	    updatedAt: string;
+	    supplierPlatform: string;
+	    shipmentNo: string;
+	    externalShipmentNo: string;
+	    carrierCode: string;
+	    carrierName: string;
+	    trackingNo: string;
+	    shippedAt?: string;
 	
 	    static createFrom(source: any = {}) {
-	        return new WaveDTO(source);
+	        return new UpdateShipmentInput(source);
 	    }
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
-	        this.waveNo = source["waveNo"];
-	        this.name = source["name"];
-	        this.waveType = source["waveType"];
-	        this.lifecycleStage = source["lifecycleStage"];
-	        this.progressSnapshot = source["progressSnapshot"];
-	        this.notes = source["notes"];
-	        this.levelTags = source["levelTags"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.shipmentNo = source["shipmentNo"];
+	        this.externalShipmentNo = source["externalShipmentNo"];
+	        this.carrierCode = source["carrierCode"];
+	        this.carrierName = source["carrierName"];
+	        this.trackingNo = source["trackingNo"];
+	        this.shippedAt = source["shippedAt"];
 	    }
 	}
+	export class UpdateWaveInput {
+	    waveId: number;
+	    name: string;
+	    notes: string;
+	    levelTags: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateWaveInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.name = source["name"];
+	        this.notes = source["notes"];
+	        this.levelTags = source["levelTags"];
+	    }
+	}
+	export class VoidShipmentInput {
+	    id: number;
+	    note: string;
+	    operatorId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VoidShipmentInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.note = source["note"];
+	        this.operatorId = source["operatorId"];
+	    }
+	}
+	
 	export class WaveDashboardRowDTO {
 	    id: number;
 	    waveNo: string;
@@ -2336,6 +3207,52 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.projectedLifecycleStage = source["projectedLifecycleStage"];
 	    }
+	}
+	export class WaveFulfillmentFilterInput {
+	    waveId: number;
+	    allocationStates: string[];
+	    addressStates: string[];
+	    supplierStates: string[];
+	    channelSyncStates: string[];
+	    reviewRequirements: string[];
+	    driftStatuses: string[];
+	    keyword: string;
+	    pagination: PaginationInput;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveFulfillmentFilterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.allocationStates = source["allocationStates"];
+	        this.addressStates = source["addressStates"];
+	        this.supplierStates = source["supplierStates"];
+	        this.channelSyncStates = source["channelSyncStates"];
+	        this.reviewRequirements = source["reviewRequirements"];
+	        this.driftStatuses = source["driftStatuses"];
+	        this.keyword = source["keyword"];
+	        this.pagination = this.convertValues(source["pagination"], PaginationInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class WaveFulfillmentRowDTO {
 	    fulfillmentLineId: number;
@@ -2392,6 +3309,38 @@ export namespace dto {
 	        this.reviewRequirement = source["reviewRequirement"];
 	        this.reviewReasonSummary = source["reviewReasonSummary"];
 	    }
+	}
+	export class WaveFulfillmentRowsPage {
+	    items: WaveFulfillmentRowDTO[];
+	    pagination: PaginationResult;
+	
+	    static createFrom(source: any = {}) {
+	        return new WaveFulfillmentRowsPage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], WaveFulfillmentRowDTO);
+	        this.pagination = this.convertValues(source["pagination"], PaginationResult);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class WaveOverviewDTO {
 	    wave: WaveDTO;
@@ -2659,6 +3608,38 @@ export namespace dto {
 	        this.historyHeadNodeId = source["historyHeadNodeId"];
 	        this.historyHeadProjectionHash = source["historyHeadProjectionHash"];
 	        this.recentHistory = this.convertValues(source["recentHistory"], HistoryNodeDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class WavesPage {
+	    items: WaveDTO[];
+	    pagination: PaginationResult;
+	
+	    static createFrom(source: any = {}) {
+	        return new WavesPage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], WaveDTO);
+	        this.pagination = this.convertValues(source["pagination"], PaginationResult);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

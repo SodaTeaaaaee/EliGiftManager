@@ -149,6 +149,20 @@ const (
 	ShipmentStatusDelivered ShipmentStatus = "delivered"
 	ShipmentStatusException ShipmentStatus = "exception"
 	ShipmentStatusReturned  ShipmentStatus = "returned"
+	ShipmentStatusVoided    ShipmentStatus = "voided"
+)
+
+// Adjustment: AdjustmentKind
+// ReasonCode remains free-text pending product sign-off on its controlled vocabulary (plan 5.2 / open item).
+type AdjustmentKind string
+
+const (
+	AdjustmentKindAdd          AdjustmentKind = "add"
+	AdjustmentKindReduce       AdjustmentKind = "reduce"
+	AdjustmentKindCompensation AdjustmentKind = "compensation"
+	AdjustmentKindRemove       AdjustmentKind = "remove"
+	AdjustmentKindReplace      AdjustmentKind = "replace"
+	AdjustmentKindReissue      AdjustmentKind = "reissue"
 )
 
 // FulfillmentLine: AllocationState

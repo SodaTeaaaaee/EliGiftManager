@@ -90,6 +90,21 @@ type DemandMappingResult struct {
 type DemandInboxFilterInput struct {
 	Assignment string `json:"assignment"`
 	DemandKind string `json:"demandKind"`
+	// IntegrationProfileID narrows results to documents bound to a specific integration
+	// profile. Server-side filter — added to eliminate client-side post-filtering of the
+	// full inbox result set.
+	IntegrationProfileID *uint  `json:"integrationProfileId"`
+	WaveID               *uint  `json:"waveId"`
+	SortBy               string `json:"sortBy"`
+	SortDir              string `json:"sortDir"`
+	Limit                int    `json:"limit"`
+	Offset               int    `json:"offset"`
+}
+
+// DemandInboxRowListDTO wraps a page of demand inbox rows with pagination metadata.
+type DemandInboxRowListDTO struct {
+	Rows       []DemandInboxRowDTO `json:"rows"`
+	Pagination PaginationResult    `json:"pagination"`
 }
 
 // UpdateDemandLineRoutingInput represents a request to update routing fields on a demand line.

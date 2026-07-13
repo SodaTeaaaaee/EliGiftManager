@@ -18,6 +18,10 @@ export function SnapshotProductsForWave(arg1) {
   return window['go']['main']['ProductController']['SnapshotProductsForWave'](arg1);
 }
 
+export function SnapshotProductsForWaveDetailed(arg1) {
+  return window['go']['main']['ProductController']['SnapshotProductsForWaveDetailed'](arg1);
+}
+
 export function UpdateProductMaster(arg1) {
   return window['go']['main']['ProductController']['UpdateProductMaster'](arg1);
 }

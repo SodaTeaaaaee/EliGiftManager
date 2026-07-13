@@ -27,6 +27,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 	// Migrate models
 	err = db.AutoMigrate(
 		&persistence.CustomerProfile{},
+		&persistence.CustomerMergeRecord{},
 		&persistence.CustomerIdentity{},
 		&persistence.CustomerAddress{},
 		&persistence.DemandDocument{},
@@ -34,6 +35,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&persistence.Wave{},
 		&persistence.WaveParticipantSnapshot{},
 		&persistence.FulfillmentLine{},
+		&persistence.WaveDemandAssignment{},
 		&persistence.MergeSuggestion{},
 	)
 	if err != nil {
@@ -52,17 +54,16 @@ func setupUsecase(t *testing.T, db *gorm.DB) (*CustomerProfileUseCase, ProfileMe
 		os.RemoveAll("data")
 	})
 
-	profileRepo := infra.NewProfileRepository(db)
-	addressRepo := infra.NewAddressRepository(db)
-	demandRepo := infra.NewDemandRepository(db)
-	waveRepo := infra.NewWaveRepository(db)
-	fulfillmentRepo := infra.NewFulfillmentRepository(db)
+	profileRepo := infra.NewCustomerMergeProfileRepository(db)
+	addressRepo := infra.NewCustomerMergeAddressRepository(db)
+	demandRepo := infra.NewCustomerMergeDemandRepository(db)
+	mergeRepo := infra.NewCustomerMergeRecordRepository(db)
 
 	settingsSvc := service.NewSettingsService()
 
 	suggestionRepo := infra.NewMergeSuggestionRepository(db)
 	cpUseCase := NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, suggestionRepo)
-	mergeUseCase := NewProfileMergeUseCase(profileRepo, addressRepo, demandRepo, waveRepo, fulfillmentRepo)
+	mergeUseCase := NewProfileMergeUseCase(profileRepo, addressRepo, demandRepo, mergeRepo)
 
 	return cpUseCase, mergeUseCase
 }
