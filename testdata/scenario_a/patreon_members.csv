@@ -1,0 +1,7 @@
+Patron Status,User ID,Full Name,Email,Current Tier,Entitlement Code,Quantity,Recipient Input State
+Active patron,pat_1001,Alice Chen,alice@example.test,Gold,JULY-MERCH,1,ready
+Active patron,pat_1002,Ben Ortiz,ben@example.test,Silver,JULY-MERCH,1,ready
+Active patron,pat_1003,Cara Singh,cara@example.test,Gold,JULY-MERCH,1,ready
+Active patron,pat_1004,Diego Park,diego@example.test,Silver,JULY-MERCH,1,ready
+Active patron,pat_1005,Erin Wu,erin@example.test,Gold,JULY-MERCH,1,ready
+Active patron,pat_1006,Faye Jones,faye@example.test,Silver,JULY-MERCH,1,ready
