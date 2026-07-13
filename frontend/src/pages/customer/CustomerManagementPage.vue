@@ -512,6 +512,7 @@ import type { DataTableColumns } from "naive-ui";
 import { useI18n } from "@/shared/i18n";
 import {
   listCustomerProfiles,
+  getCustomerProfile,
   createCustomerProfile,
   updateCustomerProfile,
   deleteCustomerProfile,

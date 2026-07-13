@@ -72,7 +72,7 @@ const form = reactive({
   identityStrategy: "platform_uid",
   entitlementAuthorityMode: "upstream_platform",
   recipientInputMode: "platform_claim",
-  referenceStrategy: "internal_only",
+  referenceStrategy: "member_level",
   trackingSyncMode: "manual_confirmation",
   closurePolicy: "close_after_manual_confirmation",
   supportsPartialShipment: false,
@@ -104,19 +104,18 @@ const identityStrategyOptions = [
 const entitlementAuthorityOptions = [
   { label: "Local Policy", value: "local_policy" },
   { label: "Upstream Platform", value: "upstream_platform" },
-  { label: "Manual Grant", value: "manual_grant" },
+  { label: "Manual Grant Only", value: "manual_grant_only" },
 ];
 const recipientInputModeOptions = [
   { label: "None", value: "none" },
   { label: "Platform Claim", value: "platform_claim" },
   { label: "External Form", value: "external_form" },
-  { label: "Negotiation", value: "negotiation" },
-  { label: "Manual Entry", value: "manual_entry" },
+  { label: "Manual Collection", value: "manual_collection" },
 ];
 const referenceStrategyOptions = [
-  { label: "Internal Only", value: "internal_only" },
-  { label: "External Order Required", value: "external_order_required" },
-  { label: "External Eligibility Context", value: "external_eligibility_context" },
+  { label: "Member Level", value: "member_level" },
+  { label: "Order Level", value: "order_level" },
+  { label: "Order Line Level", value: "order_line_level" },
 ];
 const trackingSyncModeOptions = [
   { label: "API Push", value: "api_push" },
@@ -131,9 +130,9 @@ const closurePolicyOptions = [
 ];
 
 const documentTypeOptions = [
-  { label: "Import Demand", value: "import_demand" },
-  { label: "Import Sales Order", value: "import_sales_order" },
   { label: "Import Entitlement", value: "import_entitlement" },
+  { label: "Import Sales Order", value: "import_sales_order" },
+  { label: "Import Product Catalog", value: "import_product_catalog" },
   { label: "Export Supplier Order", value: "export_supplier_order" },
   { label: "Import Supplier Shipment", value: "import_supplier_shipment" },
   { label: "Export Source Tracking Update", value: "export_source_tracking_update" },
@@ -230,7 +229,7 @@ function goBack() {
 const bindModalVisible = ref(false);
 const newBindModal = reactive({
   templateId: null as number | null,
-  documentType: "import_demand",
+  documentType: "import_entitlement",
 });
 
 async function submitBindTemplate() {
@@ -256,7 +255,7 @@ async function submitBindTemplate() {
 const newTemplateModalVisible = ref(false);
 const newTemplate = reactive({
   templateKey: "",
-  documentType: "import_demand",
+  documentType: "import_entitlement",
   format: "csv",
   mappingRules: "{}",
   extraData: "",
