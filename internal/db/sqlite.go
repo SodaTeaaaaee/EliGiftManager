@@ -58,6 +58,7 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	// AutoMigrate: V2 persistence models for the first vertical slice.
 	if err := db.AutoMigrate(
 		&persistence.CustomerProfile{},
+		&persistence.CustomerMergeRecord{},
 		&persistence.CustomerIdentity{},
 		&persistence.CustomerAddress{},
 		&persistence.DemandDocument{},

@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // CustomerProfileRepository defines persistence operations for CustomerProfile and CustomerIdentity.
 type CustomerProfileRepository interface {
@@ -18,6 +21,14 @@ type CustomerProfileRepository interface {
 	DeleteIdentity(ctx context.Context, id uint) error
 }
 
+// CustomerMergeProfileRepository adds integrity operations used only by merge flows.
+type CustomerMergeProfileRepository interface {
+	CustomerProfileRepository
+	ListIdentitiesByIDs(ctx context.Context, identityIDs []uint) ([]CustomerIdentity, error)
+	IsSoftDeleted(ctx context.Context, id uint) (bool, error)
+	RestoreSoftDeleted(ctx context.Context, id uint) error
+}
+
 // CustomerAddressRepository defines persistence operations for CustomerAddress.
 type CustomerAddressRepository interface {
 	Create(ctx context.Context, addr *CustomerAddress) error
@@ -27,6 +38,13 @@ type CustomerAddressRepository interface {
 	SoftDelete(ctx context.Context, id uint) error
 	ClearDefaultByProfile(ctx context.Context, profileID uint) error
 	BulkUpdateProfileID(ctx context.Context, oldProfileID, newProfileID uint) error
+}
+
+// CustomerMergeAddressRepository adds exact-row operations used by merge flows.
+type CustomerMergeAddressRepository interface {
+	CustomerAddressRepository
+	ListByIDs(ctx context.Context, addressIDs []uint) ([]CustomerAddress, error)
+	BulkUpdateProfileIDByIDs(ctx context.Context, addressIDs []uint, newProfileID uint) error
 }
 
 // DemandDocumentRepository defines persistence operations for DemandDocument and DemandLine.
@@ -50,6 +68,23 @@ type DemandDocumentRepository interface {
 	ListLinesByDocument(ctx context.Context, docID uint) ([]DemandLine, error)
 	UpdateLine(ctx context.Context, line *DemandLine) error
 	UpdateLineRoutingFields(ctx context.Context, lineID uint, routingDisposition string, recipientInputState string, routingReasonCode string) error
+}
+
+// CustomerMergeDemandRepository adds exact-row and assignment-aware operations
+// used by merge flows.
+type CustomerMergeDemandRepository interface {
+	DemandDocumentRepository
+	ListByIDs(ctx context.Context, documentIDs []uint) ([]DemandDocument, error)
+	ListUnassignedByCustomerProfileID(ctx context.Context, profileID uint) ([]DemandDocument, error)
+	BulkUpdateCustomerProfileIDByIDs(ctx context.Context, documentIDs []uint, newProfileID uint) error
+}
+
+// CustomerMergeRecordRepository persists reversible merge audit records.
+type CustomerMergeRecordRepository interface {
+	Create(ctx context.Context, record *CustomerMergeRecord) error
+	FindByID(ctx context.Context, id uint) (*CustomerMergeRecord, error)
+	ListActiveByTargetProfileID(ctx context.Context, targetProfileID uint) ([]CustomerMergeRecord, error)
+	MarkUndone(ctx context.Context, id uint, undoneAt time.Time) error
 }
 
 // WaveRepository defines persistence operations for Wave and WaveParticipantSnapshot.

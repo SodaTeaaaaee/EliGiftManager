@@ -16,6 +16,10 @@ func NewAddressRepository(db *gorm.DB) domain.CustomerAddressRepository {
 	return &addressRepository{db: db}
 }
 
+func NewCustomerMergeAddressRepository(db *gorm.DB) domain.CustomerMergeAddressRepository {
+	return &addressRepository{db: db}
+}
+
 func (r *addressRepository) Create(ctx context.Context, addr *domain.CustomerAddress) error {
 	p := persistence.CustomerAddressFromDomain(addr)
 	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
@@ -45,6 +49,21 @@ func (r *addressRepository) ListByProfile(ctx context.Context, profileID uint) (
 	return result, nil
 }
 
+func (r *addressRepository) ListByIDs(ctx context.Context, addressIDs []uint) ([]domain.CustomerAddress, error) {
+	if len(addressIDs) == 0 {
+		return []domain.CustomerAddress{}, nil
+	}
+	var ps []persistence.CustomerAddress
+	if err := r.db.WithContext(ctx).Where("id IN ?", addressIDs).Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.CustomerAddress, len(ps))
+	for i, p := range ps {
+		result[i] = *persistence.CustomerAddressToDomain(&p)
+	}
+	return result, nil
+}
+
 func (r *addressRepository) Update(ctx context.Context, addr *domain.CustomerAddress) error {
 	p := persistence.CustomerAddressFromDomain(addr)
 	p.ID = addr.ID
@@ -58,6 +77,15 @@ func (r *addressRepository) SoftDelete(ctx context.Context, id uint) error {
 func (r *addressRepository) BulkUpdateProfileID(ctx context.Context, oldProfileID, newProfileID uint) error {
 	return r.db.WithContext(ctx).Model(&persistence.CustomerAddress{}).
 		Where("customer_profile_id = ?", oldProfileID).
+		Update("customer_profile_id", newProfileID).Error
+}
+
+func (r *addressRepository) BulkUpdateProfileIDByIDs(ctx context.Context, addressIDs []uint, newProfileID uint) error {
+	if len(addressIDs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&persistence.CustomerAddress{}).
+		Where("id IN ?", addressIDs).
 		Update("customer_profile_id", newProfileID).Error
 }
 

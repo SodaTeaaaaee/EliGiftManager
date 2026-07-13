@@ -25,6 +25,19 @@ type CustomerProfile struct {
 
 func (CustomerProfile) TableName() string { return "customer_profiles" }
 
+// ---- CustomerMergeRecord ----
+
+type CustomerMergeRecord struct {
+	ID              uint       `gorm:"primaryKey;autoIncrement"`
+	SourceProfileID uint       `gorm:"not null;index"`
+	TargetProfileID uint       `gorm:"not null;index"`
+	Payload         string     `gorm:"type:text;not null"`
+	CreatedAt       time.Time  `gorm:"not null"`
+	UndoneAt        *time.Time `gorm:"index"`
+}
+
+func (CustomerMergeRecord) TableName() string { return "customer_merge_records" }
+
 // ---- CustomerIdentity ----
 
 type CustomerIdentity struct {

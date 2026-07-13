@@ -17,6 +17,10 @@ func NewDemandRepository(db *gorm.DB) domain.DemandDocumentRepository {
 	return &demandRepository{db: db}
 }
 
+func NewCustomerMergeDemandRepository(db *gorm.DB) domain.CustomerMergeDemandRepository {
+	return &demandRepository{db: db}
+}
+
 func (r *demandRepository) Create(ctx context.Context, doc *domain.DemandDocument) error {
 	p := persistence.DemandDocumentFromDomain(doc)
 	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
@@ -46,6 +50,21 @@ func (r *demandRepository) List(ctx context.Context) ([]domain.DemandDocument, e
 	return result, nil
 }
 
+func (r *demandRepository) ListByIDs(ctx context.Context, documentIDs []uint) ([]domain.DemandDocument, error) {
+	if len(documentIDs) == 0 {
+		return []domain.DemandDocument{}, nil
+	}
+	var ps []persistence.DemandDocument
+	if err := r.db.WithContext(ctx).Where("id IN ?", documentIDs).Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.DemandDocument, len(ps))
+	for i, p := range ps {
+		result[i] = *persistence.DemandDocumentToDomain(&p)
+	}
+	return result, nil
+}
+
 func (r *demandRepository) CountByIntegrationProfileID(ctx context.Context, profileID uint) (int64, error) {
 	var count int64
 	if err := r.db.WithContext(ctx).Model(&persistence.DemandDocument{}).Where("integration_profile_id = ?", profileID).Count(&count).Error; err != nil {
@@ -57,6 +76,21 @@ func (r *demandRepository) CountByIntegrationProfileID(ctx context.Context, prof
 func (r *demandRepository) ListUnassigned(ctx context.Context) ([]domain.DemandDocument, error) {
 	var ps []persistence.DemandDocument
 	if err := r.db.WithContext(ctx).Where("id NOT IN (?)", r.db.Table("wave_demand_assignments").Select("demand_document_id")).Find(&ps).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.DemandDocument, len(ps))
+	for i, p := range ps {
+		result[i] = *persistence.DemandDocumentToDomain(&p)
+	}
+	return result, nil
+}
+
+func (r *demandRepository) ListUnassignedByCustomerProfileID(ctx context.Context, profileID uint) ([]domain.DemandDocument, error) {
+	var ps []persistence.DemandDocument
+	if err := r.db.WithContext(ctx).
+		Where("customer_profile_id = ?", profileID).
+		Where("id NOT IN (?)", r.db.Table("wave_demand_assignments").Select("demand_document_id")).
+		Find(&ps).Error; err != nil {
 		return nil, err
 	}
 	result := make([]domain.DemandDocument, len(ps))
@@ -120,4 +154,13 @@ func (r *demandRepository) UpdateBoundProfileSnapshot(ctx context.Context, docID
 func (r *demandRepository) BulkUpdateCustomerProfileID(ctx context.Context, oldProfileID, newProfileID uint) (int64, error) {
 	res := r.db.WithContext(ctx).Model(&persistence.DemandDocument{}).Where("customer_profile_id = ?", oldProfileID).Update("customer_profile_id", newProfileID)
 	return res.RowsAffected, res.Error
+}
+
+func (r *demandRepository) BulkUpdateCustomerProfileIDByIDs(ctx context.Context, documentIDs []uint, newProfileID uint) error {
+	if len(documentIDs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).Model(&persistence.DemandDocument{}).
+		Where("id IN ?", documentIDs).
+		Update("customer_profile_id", newProfileID).Error
 }

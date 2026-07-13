@@ -61,6 +61,23 @@ type CustomerProfile struct {
 	UpdatedAt   time.Time
 }
 
+// CustomerMergePayload records the exact rows moved by a profile merge.
+type CustomerMergePayload struct {
+	IdentityIDs       []uint `json:"identityIds"`
+	AddressIDs        []uint `json:"addressIds"`
+	DemandDocumentIDs []uint `json:"demandDocumentIds"`
+}
+
+// CustomerMergeRecord is the durable audit record for a reversible profile merge.
+type CustomerMergeRecord struct {
+	ID              uint
+	SourceProfileID uint
+	TargetProfileID uint
+	Payload         string
+	CreatedAt       time.Time
+	UndoneAt        *time.Time
+}
+
 // ---- CustomerIdentity ----
 
 type CustomerIdentity struct {

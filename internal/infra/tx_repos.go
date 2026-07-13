@@ -13,7 +13,7 @@ type TxRepos struct {
 	FulfillRepo       domain.FulfillmentLineRepository
 	WaveRepo          domain.WaveRepository
 	AdjustmentRepo    domain.FulfillmentAdjustmentRepository
-	DemandRepo        domain.DemandDocumentRepository
+	DemandRepo        domain.CustomerMergeDemandRepository
 	AssignmentRepo    domain.WaveDemandAssignmentRepository
 	ProductRepo       domain.ProductRepository
 	ShipmentRepo      domain.ShipmentRepository
@@ -24,9 +24,10 @@ type TxRepos struct {
 	HistoryPin        domain.HistoryPinRepository
 	ClosureDecision   domain.ChannelClosureDecisionRepository
 	ChannelSync       domain.ChannelSyncRepository
-	CustomerProfile   domain.CustomerProfileRepository
+	CustomerProfile   domain.CustomerMergeProfileRepository
 	Profile           domain.IntegrationProfileRepository
-	Address           domain.CustomerAddressRepository
+	Address           domain.CustomerMergeAddressRepository
+	CustomerMerge     domain.CustomerMergeRecordRepository
 	Binding           domain.ProfileTemplateBindingRepository
 	Mapping           domain.CarrierMappingRepository
 }
@@ -39,7 +40,7 @@ func NewTxRepos(tx *gorm.DB) *TxRepos {
 		FulfillRepo:       NewFulfillmentRepository(tx),
 		WaveRepo:          NewWaveRepository(tx),
 		AdjustmentRepo:    NewFulfillmentAdjustmentRepository(tx),
-		DemandRepo:        NewDemandRepository(tx),
+		DemandRepo:        NewCustomerMergeDemandRepository(tx),
 		AssignmentRepo:    NewWaveDemandAssignmentRepository(tx),
 		ProductRepo:       NewProductRepository(tx),
 		ShipmentRepo:      NewShipmentRepository(tx),
@@ -50,9 +51,10 @@ func NewTxRepos(tx *gorm.DB) *TxRepos {
 		HistoryPin:        NewHistoryPinRepository(tx),
 		ClosureDecision:   NewClosureDecisionRepository(tx),
 		ChannelSync:       NewChannelSyncRepository(tx),
-		CustomerProfile:   NewProfileRepository(tx),
+		CustomerProfile:   NewCustomerMergeProfileRepository(tx),
 		Profile:           NewIntegrationProfileRepository(tx),
-		Address:           NewAddressRepository(tx),
+		Address:           NewCustomerMergeAddressRepository(tx),
+		CustomerMerge:     NewCustomerMergeRecordRepository(tx),
 		Binding:           NewProfileTemplateBindingRepository(tx),
 		Mapping:           NewCarrierMappingRepository(tx),
 	}

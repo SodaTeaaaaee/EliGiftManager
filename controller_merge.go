@@ -17,8 +17,8 @@ func NewMergeController() *MergeController {
 }
 
 // MergeProfiles merges the source profile into the target profile. The whole
-// operation (identity/address/demand/participant/fulfillment migration plus the
-// source soft-delete) runs in a single transaction so a partial failure rolls
+// operation (identity/address/unassigned-demand migration, source soft-delete,
+// and merge-record creation) runs in a single transaction so a partial failure rolls
 // back cleanly instead of leaving data half-migrated.
 func (c *MergeController) MergeProfiles(input dto.MergeProfilesInput) (*dto.MergeProfilesResult, error) {
 	var result *dto.MergeProfilesResult
@@ -29,8 +29,7 @@ func (c *MergeController) MergeProfiles(input dto.MergeProfilesInput) (*dto.Merg
 			repos.CustomerProfile,
 			repos.Address,
 			repos.DemandRepo,
-			repos.WaveRepo,
-			repos.FulfillRepo,
+			repos.CustomerMerge,
 		)
 		r, mergeErr := mergeUC.MergeProfiles(ctx, input)
 		if mergeErr != nil {
