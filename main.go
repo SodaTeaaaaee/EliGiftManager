@@ -63,6 +63,7 @@ func main() {
 		OnBeforeClose: app.beforeClose,
 		Bind: []any{
 			app,
+			NewListPaginationController(),
 			NewDemandController(),
 			NewWaveController(),
 			NewExportController(),
@@ -75,7 +76,10 @@ func main() {
 			NewProfileController(),
 			NewAddressController(),
 			NewMergeController(),
+			NewMergeUndoController(),
 			NewCustomerProfileController(),
+			NewActionCenterController(),
+			NewFileSystemController(),
 		},
 	})
 	if err != nil {
