@@ -58,3 +58,6 @@ $null
 -Force/
 env/
 /go/
+
+# agent/tooling output residue
+frontend-next/*_out.txt
