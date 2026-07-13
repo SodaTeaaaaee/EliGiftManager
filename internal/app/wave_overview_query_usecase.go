@@ -467,6 +467,10 @@ func (uc *waveOverviewQueryUseCase) ListWaveFulfillmentRows(ctx context.Context,
 	for _, p := range waveProducts {
 		productMap[p.ID] = p
 	}
+	// docCache prefetches each distinct DemandDocument at most once instead of
+	// calling demandRepo.FindByID per line (fixes N+1 — mirrors the same pattern
+	// used by ListWaveParticipantRows below).
+	docCache := make(map[uint]*domain.DemandDocument)
 
 	reviewRequirement := "none"
 	reviewReasonSummary := ""
@@ -512,8 +516,17 @@ func (uc *waveOverviewQueryUseCase) ListWaveFulfillmentRows(ctx context.Context,
 			}
 		}
 		if line.DemandDocumentID != nil {
-			doc, docErr := uc.demandRepo.FindByID(ctx, *line.DemandDocumentID)
-			if docErr == nil && doc != nil {
+			docID := *line.DemandDocumentID
+			doc, ok := docCache[docID]
+			if !ok {
+				var docErr error
+				doc, docErr = uc.demandRepo.FindByID(ctx, docID)
+				if docErr != nil {
+					doc = nil
+				}
+				docCache[docID] = doc
+			}
+			if doc != nil {
 				row.DemandKind = doc.Kind
 				row.DemandSourceSummary = fmt.Sprintf("%s · %s", doc.SourceChannel, doc.SourceDocumentNo)
 			}
@@ -607,6 +620,38 @@ func (uc *waveOverviewQueryUseCase) buildClosureCandidates(ctx context.Context, 
 
 	docCache := make(map[uint]*domain.DemandDocument)
 	profileCache := make(map[uint]*domain.IntegrationProfile)
+	var profileIDsByCustomer map[uint][]uint
+	loadProfileIDsByCustomer := func() error {
+		if profileIDsByCustomer != nil {
+			return nil
+		}
+		profileIDsByCustomer = make(map[uint][]uint)
+		if uc.assignmentRepo == nil {
+			return nil
+		}
+		docs, err := uc.assignmentRepo.ListDemandDocumentsByWave(ctx, waveID)
+		if err != nil {
+			return err
+		}
+		seen := make(map[uint]map[uint]struct{})
+		for i := range docs {
+			doc := &docs[i]
+			if doc.CustomerProfileID == nil || doc.IntegrationProfileID == nil {
+				continue
+			}
+			customerID := *doc.CustomerProfileID
+			profileID := *doc.IntegrationProfileID
+			if seen[customerID] == nil {
+				seen[customerID] = make(map[uint]struct{})
+			}
+			if _, ok := seen[customerID][profileID]; ok {
+				continue
+			}
+			seen[customerID][profileID] = struct{}{}
+			profileIDsByCustomer[customerID] = append(profileIDsByCustomer[customerID], profileID)
+		}
+		return nil
+	}
 	seenAuto := make(map[uint]struct{})
 	seenManual := make(map[uint]struct{})
 
@@ -617,35 +662,54 @@ func (uc *waveOverviewQueryUseCase) buildClosureCandidates(ctx context.Context, 
 		}
 		for _, sl := range shipLines {
 			fl := flMap[sl.FulfillmentLineID]
-			if fl == nil || fl.DemandDocumentID == nil {
+			if fl == nil {
 				continue
 			}
-			docID := *fl.DemandDocumentID
-			doc, ok := docCache[docID]
-			if !ok {
-				doc, err = uc.demandRepo.FindByID(ctx, docID)
-				if err != nil {
+
+			var profileIDs []uint
+			if fl.DemandDocumentID != nil {
+				docID := *fl.DemandDocumentID
+				doc, ok := docCache[docID]
+				if !ok {
+					doc, err = uc.demandRepo.FindByID(ctx, docID)
+					if err != nil {
+						return overviewClosureCandidates{}, err
+					}
+					docCache[docID] = doc
+				}
+				if doc.IntegrationProfileID == nil {
+					continue
+				}
+				profileIDs = []uint{*doc.IntegrationProfileID}
+			} else if fl.CustomerProfileID != nil {
+				if err := loadProfileIDsByCustomer(); err != nil {
 					return overviewClosureCandidates{}, err
 				}
-				docCache[docID] = doc
+				profileIDs = profileIDsByCustomer[*fl.CustomerProfileID]
 			}
-			if doc.IntegrationProfileID == nil {
-				continue
-			}
-			profileID := *doc.IntegrationProfileID
-			profile, ok := profileCache[profileID]
-			if !ok {
-				profile, err = uc.profileRepo.FindByID(ctx, profileID)
-				if err != nil {
-					return overviewClosureCandidates{}, err
+
+			// A documentless line without a resolvable integration profile must still
+			// reach closure. Manual review is the conservative default.
+			manual := len(profileIDs) == 0
+			for _, profileID := range profileIDs {
+				profile, ok := profileCache[profileID]
+				if !ok {
+					profile, err = uc.profileRepo.FindByID(ctx, profileID)
+					if err != nil {
+						return overviewClosureCandidates{}, err
+					}
+					profileCache[profileID] = profile
 				}
-				profileCache[profileID] = profile
+				if closureCandidateIsManual(profile) {
+					manual = true
+					break
+				}
 			}
-			switch profile.TrackingSyncMode {
-			case "api_push", "document_export":
-				seenAuto[fl.ID] = struct{}{}
-			case "manual_confirmation", "unsupported":
+			if manual {
 				seenManual[fl.ID] = struct{}{}
+				delete(seenAuto, fl.ID)
+			} else {
+				seenAuto[fl.ID] = struct{}{}
 			}
 		}
 	}
@@ -654,6 +718,30 @@ func (uc *waveOverviewQueryUseCase) buildClosureCandidates(ctx context.Context, 
 		AutoCandidateCount:   len(seenAuto),
 		ManualCandidateCount: len(seenManual),
 	}, nil
+}
+
+func closureCandidateIsManual(profile *domain.IntegrationProfile) bool {
+	if profile == nil {
+		return true
+	}
+	if profile.ClosurePolicy == "close_after_manual_confirmation" {
+		return true
+	}
+	// Only known automatic policies may fall back to the tracking sync mode.
+	// Unknown policies remain manual so projection cannot close prematurely.
+	switch profile.ClosurePolicy {
+	case "", "close_after_sync", "close_after_shipment":
+		switch profile.TrackingSyncMode {
+		case "api_push", "document_export":
+			return false
+		case "manual_confirmation", "unsupported":
+			return true
+		default:
+			return true
+		}
+	default:
+		return true
+	}
 }
 
 func toWaveDTO(w *domain.Wave) dto.WaveDTO {

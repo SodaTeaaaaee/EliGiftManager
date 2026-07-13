@@ -163,6 +163,65 @@ func TestListDashboardRowsUsesProjectedStage(t *testing.T) {
 	}
 }
 
+func TestBuildClosureCandidatesDocumentlessLineUsesManualClosurePolicy(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	fulfillRepo := newMockFulfillRepo()
+	shipmentRepo := newMockShipmentRepo()
+	profileRepo := newMockProfileRepo()
+	profileRepo.profiles[1] = &domain.IntegrationProfile{
+		ID:               1,
+		TrackingSyncMode: "document_export",
+		ClosurePolicy:    "close_after_manual_confirmation",
+	}
+
+	profileID := uint(1)
+	customerID := uint(10)
+	doc := &domain.DemandDocument{CustomerProfileID: &customerID, IntegrationProfileID: &profileID}
+	if err := demandRepo.Create(context.Background(), doc); err != nil {
+		t.Fatalf("create demand document: %v", err)
+	}
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{WaveID: 1, DemandDocumentID: doc.ID}); err != nil {
+		t.Fatalf("create assignment: %v", err)
+	}
+	line := &domain.FulfillmentLine{WaveID: 1, CustomerProfileID: &customerID, Quantity: 1}
+	if err := fulfillRepo.Create(context.Background(), line); err != nil {
+		t.Fatalf("create fulfillment line: %v", err)
+	}
+	shipmentRepo.shipments[1] = &domain.Shipment{ID: 1, SupplierOrderID: 1}
+	shipmentRepo.supplierOrderWave[1] = 1
+	shipmentRepo.shipmentLines[1] = []*domain.ShipmentLine{{ID: 1, ShipmentID: 1, FulfillmentLineID: line.ID, Quantity: 1}}
+
+	queryUC := &waveOverviewQueryUseCase{
+		fulfillRepo:    fulfillRepo,
+		assignmentRepo: assignmentRepo,
+		demandRepo:     demandRepo,
+		shipmentRepo:   shipmentRepo,
+		profileRepo:    profileRepo,
+	}
+	candidates, err := queryUC.buildClosureCandidates(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("buildClosureCandidates: %v", err)
+	}
+	if candidates.AutoCandidateCount != 0 || candidates.ManualCandidateCount != 1 {
+		t.Fatalf("closure candidates = %+v, want 0 auto and 1 manual", candidates)
+	}
+}
+
+func TestClosureCandidateClassificationFallsBackToTrackingModeForAutoPolicy(t *testing.T) {
+	t.Parallel()
+
+	profile := &domain.IntegrationProfile{
+		TrackingSyncMode: "document_export",
+		ClosurePolicy:    "close_after_sync",
+	}
+	if closureCandidateIsManual(profile) {
+		t.Fatal("document_export with close_after_sync classified as manual, want auto")
+	}
+}
+
 func TestGetWaveWorkspaceSnapshotIncludesRecentHistoryAndHead(t *testing.T) {
 	t.Parallel()
 
