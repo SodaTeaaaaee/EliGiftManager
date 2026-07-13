@@ -1,0 +1,77 @@
+/**
+ * ============================================================================
+ * TYPOGRAPHY — Latin display face + CJK system stack
+ * ============================================================================
+ *
+ * Latin display face: "Schibsted Grotesk" (SIL OFL 1.1, google/fonts repo).
+ * A characterful, slightly-condensed grotesque with warm, humanist details —
+ * deliberately NOT another neutral Inter/Roboto substitute. Bundled as static
+ * woff2 instances (Regular/Medium/SemiBold) in ../assets/fonts/, sourced by
+ * instancing the upstream variable font (see notes for the integrator on how
+ * these were produced — no build-time tooling required to consume them).
+ *
+ * It leads the font stack for Latin glyphs only. CJK glyphs fall through to
+ * the OS-native stack below (Schibsted Grotesk has no CJK coverage, so this
+ * is automatic per-codepoint fallback, not a manual switch) — zh-first app on
+ * Windows gets "Microsoft YaHei UI", macOS gets "PingFang SC", and anything
+ * else lands on "Noto Sans SC" or the final generic sans-serif.
+ *
+ * --font-mono is the OS-native monospace stack (no bundled mono face — used
+ * sparingly, e.g. order numbers / SKUs / debug surfaces).
+ *
+ * Consumers: components use `font-family: var(--font-body)` (or
+ * `var(--font-display)` for hero/headline moments) — never a literal
+ * font-family string.
+ * ============================================================================
+ */
+
+@font-face {
+  font-family: "Schibsted Grotesk";
+  src: url("../assets/fonts/SchibstedGrotesk-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Schibsted Grotesk";
+  src: url("../assets/fonts/SchibstedGrotesk-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Schibsted Grotesk";
+  src: url("../assets/fonts/SchibstedGrotesk-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* --- display: headlines, page titles, hero numerals --- */
+  --font-display:
+    "Schibsted Grotesk", "Segoe UI", "Microsoft YaHei UI", "PingFang SC",
+    "Noto Sans SC", sans-serif;
+
+  /* --- body: everything else (labels, table cells, form controls) --- */
+  --font-body:
+    "Schibsted Grotesk", "Segoe UI", "Microsoft YaHei UI", "PingFang SC",
+    "Noto Sans SC", sans-serif;
+
+  /* --- mono: order numbers, SKUs, debug/raw-data surfaces --- */
+  --font-mono:
+    "Cascadia Mono", "Consolas", "SF Mono", "Segoe UI Mono", ui-monospace,
+    monospace;
+}
+
+/**
+ * Data columns (quantities, prices, dates, IDs) must use tabular figures so
+ * stacked numbers align vertically. Apply to the cell/column container, not
+ * every span inside it.
+ */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}

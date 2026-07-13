@@ -1,0 +1,448 @@
+/**
+ * ============================================================================
+ * DESIGN TOKENS — the skin-authoring contract
+ * ============================================================================
+ *
+ * Charter: "warm light on a workbench". Paper-warm surfaces, ink-toned text,
+ * one persimmon/coral accent. Calm, warm productivity tool for creators —
+ * not a generic admin dashboard. No purple gradients, no blue-black dark
+ * mode, no cliche admin-blue.
+ *
+ * THREE LAYERS. Read this before writing or overriding a skin.
+ *
+ * ── Layer 1 · PRIMITIVES ────────────────────────────────────────────────
+ * Raw color ramps (paper/ink/persimmon + 5 status hues), and raw scales
+ * for radius/space/type/shadow/motion/z-index. Primitives carry NO meaning
+ * ("paper-500" does not mean anything by itself) — they are just a
+ * consistent, named palette to draw from. Declared once under `:root`,
+ * identical in light and dark (the ramp itself does not change; only which
+ * *stop* Layer 2 points to changes per theme).
+ *
+ * ── Layer 2 · SEMANTIC ──────────────────────────────────────────────────
+ * Theme-dependent roles (`--color-bg-app`, `--color-text-primary`,
+ * `--status-success-fg`, ...) that point at a primitive stop. Declared
+ * under `:root[data-theme="light"]` and `:root[data-theme="dark"]`.
+ * THIS is the layer a skin package overrides to reskin the app: swap which
+ * primitive stops the semantic roles resolve to (or replace whole
+ * primitive ramps in Layer 1 for a full hue change) — see
+ * `src/skins/default/tokens.css` for the override contract by example.
+ * Components must NEVER consume Layer 1 primitives directly.
+ *
+ * ── Layer 3 · COMPONENT ─────────────────────────────────────────────────
+ * Named tokens for a specific component family (`--card-*`, `--nav-*`,
+ * `--statusbadge-*`, ...), always defined in terms of Layer 2 semantic
+ * tokens (never raw primitives, never literal colors). Component code
+ * consumes ONLY Layer 3 (or Layer 2 general tokens like
+ * `--color-text-primary` for plain text). Skins rarely need to touch this
+ * layer — changing Layer 2 semantics cascades here automatically. Override
+ * it only for a structural change (e.g. a skin wants chunkier card
+ * padding), not for a color change.
+ *
+ * DENSITY: `:root[data-density="compact"]` overrides a handful of Layer 3
+ * sizing tokens (control/row heights, key spacing). Density is independent
+ * of theme and independent of skin.
+ *
+ * AA CONTRAST: every Layer 2 text-on-background and status fg-on-bg pair
+ * listed in the "verified pairs" comment block near the bottom of the
+ * light/dark sections has been checked against WCAG 2.1 with a relative-
+ * luminance contrast calculator (script kept in the PR/notes, not shipped).
+ * If you change a semantic color, re-check the pair it participates in.
+ * ============================================================================
+ */
+
+/* ============================================================================
+ * LAYER 1 — PRIMITIVES
+ * ============================================================================
+ * Ramps use the conventional 50 (lightest) -> 950 (darkest) stop naming so
+ * future skin authors can predict where a value lives. Stops are NOT
+ * evenly spaced in lightness — there is more resolution where surfaces
+ * actually sample the ramp (light end for paper/ink "light mode", dark end
+ * for "dark mode" elevation), less in the rarely-used middle.
+ * ============================================================================
+ */
+:root {
+  /* --- paper: warm surface family (cream -> warm umber charcoal) --- */
+  --paper-50: #ffffff;
+  --paper-100: #fefdfb;
+  --paper-200: #f9f6f1; /* ~ the charter's "#FAF6F0 base" */
+  --paper-300: #f1eadf;
+  --paper-400: #d9c9b5;
+  --paper-500: #b9a183;
+  --paper-600: #957a5b;
+  --paper-700: #44382c;
+  --paper-800: #2f261e;
+  --paper-900: #1e1814; /* ~ the charter's "#1E1915 base" for dark mode */
+  --paper-950: #15110e;
+
+  /* --- ink: warm text family (near-black ink -> warm off-white) --- */
+  --ink-50: #f7f3ee;
+  --ink-100: #ebe4db;
+  --ink-200: #d9cdbf;
+  --ink-300: #c5b4a0;
+  --ink-400: #ae957a;
+  --ink-500: #8f755b;
+  --ink-600: #6f5944;
+  --ink-700: #574433;
+  --ink-800: #413125;
+  --ink-900: #2f231b; /* ~ the charter's "#2B2118, never pure black" */
+  --ink-950: #211812;
+
+  /* --- persimmon: the one accent hue --- */
+  --persimmon-50: #fceee8;
+  --persimmon-100: #f8d9ce;
+  --persimmon-200: #f1b6a2;
+  --persimmon-300: #e89073;
+  --persimmon-400: #dd6f4b; /* dark-theme accent: brighter against dark bg */
+  --persimmon-500: #b64925; /* light-theme accent: ~#D9552F family, darkened for AA text use */
+  --persimmon-600: #9c3a1c;
+  --persimmon-700: #822e17;
+  --persimmon-800: #6c2513;
+  --persimmon-900: #49190e;
+  --persimmon-950: #2e100a;
+
+  /* --- status hue: success (moss green) --- */
+  --moss-50: #eef6ea;
+  --moss-100: #dcead2;
+  --moss-200: #c0d7ad;
+  --moss-300: #9fbf82;
+  --moss-400: #80ab54;
+  --moss-500: #698d3f;
+  --moss-600: #567231;
+  --moss-700: #455926;
+  --moss-800: #333f1c;
+  --moss-900: #222a14;
+  --moss-950: #171b0d;
+
+  /* --- status hue: warning (amber) --- */
+  --amber-50: #fbf3e0;
+  --amber-100: #f3e0ba;
+  --amber-200: #e8c587;
+  --amber-300: #dca656;
+  --amber-400: #d68b29;
+  --amber-500: #b46e1d;
+  --amber-600: #925416;
+  --amber-700: #6e3d12;
+  --amber-800: #4d2a0f;
+  --amber-900: #321b0b;
+  --amber-950: #211108;
+
+  /* --- status hue: error (rust red — deliberately cooler/brickier than accent) --- */
+  --rust-50: #fae7e5;
+  --rust-100: #f3cdc8;
+  --rust-200: #e8a29c;
+  --rust-300: #d7736a;
+  --rust-400: #c8483c;
+  --rust-500: #a5362c;
+  --rust-600: #872a22;
+  --rust-700: #66201a;
+  --rust-800: #491813;
+  --rust-900: #2f110e;
+  --rust-950: #1f0c0a;
+
+  /* --- status hue: info (slate blue) --- */
+  --slate-50: #ebeff4;
+  --slate-100: #d5dde7;
+  --slate-200: #b2c0d2;
+  --slate-300: #889fb9;
+  --slate-400: #5f81a5;
+  --slate-500: #47698a;
+  --slate-600: #365572;
+  --slate-700: #284158;
+  --slate-800: #1d303e;
+  --slate-900: #142029;
+  --slate-950: #0e151b;
+
+  /* --- status hue: neutral (warm gray) --- */
+  --warmgray-50: #f4f3f0;
+  --warmgray-100: #e6e4e0;
+  --warmgray-200: #cfcac4;
+  --warmgray-300: #b3aca2;
+  --warmgray-400: #948b7f;
+  --warmgray-500: #786f64;
+  --warmgray-600: #5f574e;
+  --warmgray-700: #4a433b;
+  --warmgray-800: #36302b;
+  --warmgray-900: #25211d;
+  --warmgray-950: #1a1714;
+
+  /* --- radius scale --- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 7px; /* controls, per charter */
+  --radius-lg: 10px; /* cards, per charter */
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+  --radius-full: 999px;
+
+  /* --- space scale (4px base) --- */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* --- type scale --- */
+  --font-size-xs: 0.75rem; /* 12px */
+  --font-size-sm: 0.8125rem; /* 13px */
+  --font-size-base: 0.9375rem; /* 15px */
+  --font-size-md: 1rem; /* 16px */
+  --font-size-lg: 1.125rem; /* 18px */
+  --font-size-xl: 1.25rem; /* 20px */
+  --font-size-2xl: 1.5rem; /* 24px */
+  --font-size-3xl: 1.875rem; /* 30px */
+  --font-size-4xl: 2.25rem; /* 36px */
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* --- shadow scale (tint applied per-theme in Layer 2 via --shadow-tint-rgb) --- */
+  --shadow-xs: 0 1px 2px rgba(var(--shadow-tint-rgb), 0.06);
+  --shadow-sm:
+    0 2px 4px rgba(var(--shadow-tint-rgb), 0.08),
+    0 1px 2px rgba(var(--shadow-tint-rgb), 0.06);
+  --shadow-md:
+    0 4px 8px rgba(var(--shadow-tint-rgb), 0.1),
+    0 2px 4px rgba(var(--shadow-tint-rgb), 0.06);
+  --shadow-lg:
+    0 8px 20px rgba(var(--shadow-tint-rgb), 0.14),
+    0 2px 6px rgba(var(--shadow-tint-rgb), 0.08);
+  --shadow-xl:
+    0 16px 40px rgba(var(--shadow-tint-rgb), 0.18),
+    0 4px 10px rgba(var(--shadow-tint-rgb), 0.1);
+
+  /* --- motion --- */
+  --duration-instant: 80ms;
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --duration-slow: 200ms;
+  --duration-slower: 320ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* staggered reveal moments only */
+
+  /* --- z-index scale --- */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-overlay: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-toast: 700;
+  --z-tooltip: 800;
+}
+
+/* ============================================================================
+ * LAYER 2 — SEMANTIC (theme-dependent)
+ * ============================================================================
+ * Verified pairs (WCAG 2.1 relative-luminance contrast, both themes):
+ *   text-primary/on bg-app & on surface     >= 4.5:1 (body text)   -> 14-16:1 actual
+ *   text-secondary/on bg-app & on surface   >= 4.5:1 (body text)   -> 8.5-11:1 actual
+ *   text-muted/on bg-app & on surface       >= 3:1   (large/meta)  -> 4-6:1 actual
+ *   color-accent used as text/link on bg-app & surface  >= 4.5:1   -> 4.9-5.4:1 actual
+ *   color-on-accent on color-accent (button label)      >= 4.5:1   -> 5.3-5.4:1 actual
+ *   color-on-accent on color-accent-hover                >= 4.5:1  -> 6.9-7.2:1 actual
+ *   border-strong vs bg-app (non-text UI)   >= 3:1                -> 3.7-10.9:1 actual
+ *   status-{x}-fg on status-{x}-bg (all 6, both themes)  >= 4.5:1  -> 5.4-9.9:1 actual
+ * ============================================================================
+ */
+:root[data-theme="light"] {
+  --color-bg-app: var(--paper-200);
+  --color-surface: var(--paper-100);
+  --color-surface-raised: var(--paper-50);
+  --color-inset: var(--paper-300);
+
+  --color-text-primary: var(--ink-900);
+  --color-text-secondary: var(--ink-700);
+  --color-text-muted: var(--ink-500);
+  --color-text-inverse: var(--paper-50);
+
+  --color-border: var(--paper-400);
+  --color-border-strong: var(--paper-600);
+
+  --color-accent: var(--persimmon-500);
+  --color-accent-hover: var(--persimmon-600);
+  --color-accent-subtle: var(--persimmon-100);
+  --color-on-accent: #ffffff;
+
+  --focus-ring-color: var(--color-accent);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  --shadow-tint-rgb: 47, 35, 27; /* ink-900 */
+
+  --status-success-fg: var(--moss-700);
+  --status-success-bg: var(--moss-50);
+  --status-success-border: var(--moss-300);
+
+  --status-warning-fg: var(--amber-700);
+  --status-warning-bg: var(--amber-50);
+  --status-warning-border: var(--amber-300);
+
+  --status-error-fg: var(--rust-700);
+  --status-error-bg: var(--rust-50);
+  --status-error-border: var(--rust-300);
+
+  --status-info-fg: var(--slate-700);
+  --status-info-bg: var(--slate-50);
+  --status-info-border: var(--slate-300);
+
+  --status-progress-fg: var(--persimmon-700);
+  --status-progress-bg: var(--persimmon-50);
+  --status-progress-border: var(--persimmon-300);
+
+  --status-neutral-fg: var(--warmgray-700);
+  --status-neutral-bg: var(--warmgray-50);
+  --status-neutral-border: var(--warmgray-300);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --color-bg-app: var(--paper-900);
+  --color-surface: var(--paper-800);
+  --color-surface-raised: var(--paper-700);
+  --color-inset: var(--paper-950);
+
+  --color-text-primary: var(--ink-50);
+  --color-text-secondary: var(--ink-200);
+  --color-text-muted: var(--ink-400);
+  --color-text-inverse: var(--ink-900);
+
+  --color-border: var(--paper-600);
+  --color-border-strong: var(--paper-400);
+
+  --color-accent: var(--persimmon-400);
+  --color-accent-hover: var(--persimmon-300);
+  --color-accent-subtle: var(--persimmon-900);
+  --color-on-accent: var(--ink-950);
+
+  --focus-ring-color: var(--color-accent);
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  --shadow-tint-rgb: 0, 0, 0; /* pure black reads better than warm tint on dark bg */
+
+  --status-success-fg: var(--moss-300);
+  --status-success-bg: var(--moss-900);
+  --status-success-border: var(--moss-700);
+
+  --status-warning-fg: var(--amber-300);
+  --status-warning-bg: var(--amber-900);
+  --status-warning-border: var(--amber-700);
+
+  --status-error-fg: var(--rust-300);
+  --status-error-bg: var(--rust-900);
+  --status-error-border: var(--rust-700);
+
+  --status-info-fg: var(--slate-300);
+  --status-info-bg: var(--slate-900);
+  --status-info-border: var(--slate-700);
+
+  --status-progress-fg: var(--persimmon-300);
+  --status-progress-bg: var(--persimmon-900);
+  --status-progress-border: var(--persimmon-700);
+
+  --status-neutral-fg: var(--warmgray-300);
+  --status-neutral-bg: var(--warmgray-900);
+  --status-neutral-border: var(--warmgray-700);
+
+  color-scheme: dark;
+}
+
+/* ============================================================================
+ * LAYER 3 — COMPONENT (derives from Layer 2 only; never a raw primitive)
+ * ============================================================================
+ */
+:root {
+  /* --- card (SectionCard / StatCard / GlassCard-successor) --- */
+  --card-bg: var(--color-surface);
+  --card-border-color: var(--color-border);
+  --card-radius: var(--radius-lg);
+  --card-padding: var(--space-5);
+  --card-shadow: var(--shadow-sm);
+  --card-gap: var(--space-4);
+
+  /* --- generic form control (input/select/button sizing) --- */
+  --control-height: 36px;
+  --control-height-sm: 28px;
+  --control-height-lg: 44px;
+  --control-radius: var(--radius-md);
+  --control-padding-x: var(--space-3);
+  --control-border-color: var(--color-border);
+  --control-border-color-focus: var(--color-accent);
+  --control-bg: var(--color-surface);
+  --control-bg-inset: var(--color-inset);
+
+  /* --- data grid row (DataGrid) --- */
+  --row-height: 44px;
+  --row-height-sm: 34px;
+  --row-border-color: var(--color-border);
+  --row-bg-hover: var(--color-inset);
+
+  /* --- StatusBadge / StatusDot (the ONLY legal status render surface) --- */
+  --statusbadge-radius: var(--radius-full);
+  --statusbadge-padding-x: var(--space-2);
+  --statusbadge-padding-y: 2px;
+  --statusbadge-font-size: var(--font-size-xs);
+  --statusbadge-font-weight: var(--font-weight-medium);
+  --statusbadge-gap: 4px;
+  --statusbadge-dot-size: 6px;
+
+  /* --- nav (SideNav / WorkspaceNav) --- */
+  --nav-width: 240px;
+  --nav-width-collapsed: 64px;
+  --nav-item-height: 40px;
+  --nav-item-radius: var(--radius-md);
+  --nav-bg: var(--color-surface);
+  --nav-item-fg: var(--color-text-secondary);
+  --nav-item-active-bg: var(--color-accent-subtle);
+  --nav-item-active-fg: var(--color-accent);
+
+  /* --- toast / feedback tray --- */
+  --toast-radius: var(--radius-lg);
+  --toast-bg: var(--color-surface-raised);
+  --toast-shadow: var(--shadow-lg);
+  --toast-min-width: 320px;
+  --toast-max-width: 420px;
+  --toast-padding: var(--space-4);
+}
+
+/* ============================================================================
+ * DENSITY — comfortable (default, no attribute needed) vs compact
+ * ============================================================================
+ */
+:root[data-density="compact"] {
+  --control-height: 30px;
+  --control-height-sm: 24px;
+  --control-height-lg: 36px;
+
+  --row-height: 34px;
+  --row-height-sm: 28px;
+
+  --nav-item-height: 32px;
+
+  /* Curated component-level tightening — deliberately does NOT touch the
+     Layer 1 --space-N primitives (those stay constant for anything that
+     should keep its comfortable rhythm even in compact mode, e.g. empty
+     state illustration margins). */
+  --card-padding: var(--space-4);
+  --card-gap: var(--space-3);
+  --toast-padding: var(--space-3);
+}

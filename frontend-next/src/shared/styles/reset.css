@@ -1,0 +1,75 @@
+/*
+ * Modern minimal CSS reset.
+ * Scope: box-sizing, margin/padding normalization, media defaults, form
+ * element inheritance. Deliberately does NOT set color/background/font —
+ * those come from the token system (see main.css [P0-INTEGRATION] markers).
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  overflow-wrap: break-word;
+}
+
+#app {
+  height: 100%;
+  isolation: isolate;
+}
+
+ul[role="list"],
+ol[role="list"] {
+  list-style: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}

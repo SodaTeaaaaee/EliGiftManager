@@ -1,0 +1,52 @@
+/**
+ * ============================================================================
+ * SKIN: "Workbench" (default) — override contract, by example
+ * ============================================================================
+ *
+ * This IS the base token set described in the charter ("warm light on a
+ * workbench") — the neutral baseline every other skin is a departure from.
+ * Because `shared/theme/tokens.css` already defines every Layer 1/2/3 value,
+ * this file is intentionally EMPTY of overrides: it exists to document, by
+ * example and in comments, what a skin package is allowed to touch.
+ *
+ * A skin's tokens.css is injected via `skin-loader.ts` as a
+ * `<style id="skin-tokens">` element placed AFTER the base tokens.css
+ * `<link>`/inline styles in the DOM, so any rule here wins on specificity
+ * ties through source order. Keep selectors scoped exactly like this:
+ *
+ *   :root[data-theme="light"] { --color-accent: #...; }
+ *   :root[data-theme="dark"]  { --color-accent: #...; }
+ *   :root                     { --radius-lg: 14px; }   (theme-independent)
+ *
+ * WHAT A SKIN MAY OVERRIDE
+ *   - Layer 1 primitives (`--paper-*`, `--ink-*`, `--persimmon-*`, the 6
+ *     status hue ramps, `--radius-*`, `--space-*`, `--shadow-*`) for a
+ *     structural/hue-wide change.
+ *   - Layer 2 semantic roles (`--color-bg-app`, `--color-accent`,
+ *     `--status-success-fg`, ...) for the common case: reskin by pointing
+ *     roles at different values while keeping the same role *meaning*.
+ *   - Layer 3 component tokens (`--card-*`, `--nav-*`, ...) ONLY for a
+ *     structural change (e.g. chunkier card padding for an illustrated
+ *     skin) — do not reach for this layer just to change a color; that
+ *     belongs in Layer 2 and will already cascade here.
+ *
+ * WHAT A SKIN MUST NOT DO
+ *   - Must not break the AA contrast pairs documented in
+ *     `shared/theme/tokens.css` (text-on-bg, status fg-on-bg, on-accent-on-
+ *     accent). Re-run the same contrast check for every value you change.
+ *   - Must not introduce new custom property NAMES — a skin only supplies
+ *     new VALUES for the existing token vocabulary. Components never look
+ *     for skin-specific variables; that would defeat the point of the
+ *     token contract.
+ *   - Must not select anything other than `:root` (optionally scoped by
+ *     `[data-theme=...]`) — no component classes, no descendant selectors.
+ *
+ * DECORATIVE ASSETS
+ *   Illustration slots (EmptyState scenes, task-center hero, side-nav
+ *   mascot) are NOT CSS — they are declared in this skin's entry in
+ *   `src/skins/index.ts` (`SkinDefinition.assets`) as image URLs. The
+ *   default skin deliberately ships none: components render their built-in
+ *   neutral placeholder (plain geometric shape or empty space) when a slot
+ *   is unset. See `src/skins/index.ts` for the registry entry.
+ * ============================================================================
+ */

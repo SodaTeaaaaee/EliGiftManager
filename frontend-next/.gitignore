@@ -1,0 +1,15 @@
+node_modules/
+node_modules/.tmp/
+dist/
+dist-ssr/
+.vite/
+.cache/
+coverage/
+*.local
+*.tsbuildinfo
+package.json.md5
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+.eslintcache
+.stylelintcache

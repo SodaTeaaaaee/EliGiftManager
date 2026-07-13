@@ -1,0 +1,88 @@
+/**
+ * ============================================================================
+ * SKIN: "Dusk" — sample color/token reskin
+ * ============================================================================
+ *
+ * Demonstrates the skin pipeline end-to-end (plan section 7): a cooler,
+ * dimmer evening departure from the default "warm workbench" (paper/ink/
+ * persimmon) palette. Same three ramps, same 50->950 stop structure, same
+ * semantic role meanings — only the hue/lightness values change.
+ *
+ * `shared/theme/tokens.css` Layer 2 (`:root[data-theme="light"|"dark"]`)
+ * and Layer 3 already resolve everything through `var(--paper-*)`,
+ * `var(--ink-*)`, `var(--persimmon-*)`. Because CSS custom property lookup
+ * is cascade-based (not compile-time substitution), redeclaring these
+ * Layer 1 primitives once under a theme-independent `:root` block is
+ * enough to reskin bg/surface/text/accent/status-progress across BOTH
+ * themes at once — no Layer 2 or Layer 3 overrides are needed. Status
+ * success/warning/error/info/neutral (moss/amber/rust/slate/warmgray
+ * ramps) are intentionally left untouched — they keep the base skin's
+ * already-verified AA pairings unchanged.
+ *
+ * Every text-on-bg / fg-on-bg / on-accent-on-accent pair listed in the
+ * "verified pairs" comment block of `shared/theme/tokens.css` has been
+ * re-checked (WCAG 2.1 relative-luminance contrast, both themes) for this
+ * palette and passes — see the aaChecks list in the build spec this file
+ * was generated from. `--persimmon-400`/`-600`/`-700`/`-900` were tuned
+ * specifically so accent-as-text and status-progress-fg/bg both clear
+ * their 4.5:1 thresholds against the new cool backgrounds.
+ *
+ * No illustrator assets: Dusk is a token-only reskin (illustrations are
+ * out of scope per the plan). Its `src/skins/index.ts` registry entry
+ * omits `assets` entirely, so every decorative slot (EmptyState
+ * illustration, action-center hero, side-nav mascot) falls back to its
+ * built-in neutral placeholder — identical to how the default skin
+ * behaves today.
+ * ============================================================================
+ */
+
+:root {
+  /* --- paper: dusk surface family (cool slate-blue, dimmer than default's
+     warm cream/umber) --- */
+  --paper-50: #f6f8fc;
+  --paper-100: #eef2f9;
+  --paper-200: #e3e9f4; /* bg-app (light) */
+  --paper-300: #d1dae9; /* inset (light) */
+  --paper-400: #a9b6d4; /* border (light) / border-strong (dark) */
+  --paper-500: #7c8ab0;
+  --paper-600: #5b6690; /* border-strong (light) / border (dark) */
+  --paper-700: #333d5c; /* surface-raised (dark) */
+  --paper-800: #212a42; /* surface (dark) */
+  --paper-900: #141a2c; /* bg-app (dark) */
+  --paper-950: #0d1120; /* inset (dark) */
+
+  /* --- ink: dusk text family (cool slate-blue-black -> cool off-white) --- */
+  --ink-50: #eef1f8; /* text-primary (dark) */
+  --ink-100: #dfe4f0;
+  --ink-200: #c7cfe4; /* text-secondary (dark) */
+  --ink-300: #adb8d6;
+  --ink-400: #8b98bf; /* text-muted (dark) */
+  --ink-500: #6c78a0;
+  --ink-600: #525c80;
+  --ink-700: #3a4266; /* text-secondary (light) */
+  --ink-800: #262c47;
+  --ink-900: #171b2e; /* text-primary (light) */
+  --ink-950: #0f1220; /* color-on-accent (dark) */
+
+  /* --- persimmon: repurposed as the dusk accent (violet twilight instead
+     of the default's orange-red) — same role/meaning (the one accent hue,
+     also the source of status-progress), only the hue departs --- */
+  --persimmon-50: #f1edfb; /* status-progress-bg (light) */
+  --persimmon-100: #e1d7f6; /* color-accent-subtle (light) */
+  --persimmon-200: #c7b3ec;
+  --persimmon-300: #a988df; /* accent-hover (dark) / status-progress-fg (dark) */
+  --persimmon-400: #a683e0; /* accent (dark) — tuned for >=4.5:1 as text on dark bg/surface */
+  --persimmon-500: #6d47ad; /* accent (light) */
+  --persimmon-600: #5b3993; /* accent-hover (light) */
+  --persimmon-700: #4a2e78; /* status-progress-fg (light) */
+  --persimmon-800: #3a2560;
+  --persimmon-900: #251840; /* status-progress-bg (dark) / color-accent-subtle (dark) */
+  --persimmon-950: #180f2b;
+}
+
+:root[data-theme="light"] {
+  /* Cool shadow tint matching the new ink-900 (23, 27, 46), replacing the
+     default skin's warm ink-900-derived tint. Dark theme's shadow tint is
+     already neutral black (0, 0, 0) and needs no override. */
+  --shadow-tint-rgb: 23, 27, 46;
+}

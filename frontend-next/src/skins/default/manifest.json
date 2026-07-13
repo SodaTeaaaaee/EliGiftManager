@@ -1,0 +1,9 @@
+{
+  "id": "default",
+  "name": "Workbench",
+  "author": "EliGiftManager",
+  "supports": {
+    "light": true,
+    "dark": true
+  }
+}

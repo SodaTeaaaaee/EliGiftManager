@@ -1,0 +1,3 @@
+[0m[32mTask[0m [0m[36mtypecheck[0m vue-tsc -b
+src/shared/api/bridge.ts(152,3): error TS2740: Type 'DemandInboxRowListDTO' is missing the following properties from type 'DemandInboxRowDTO[]': length, pop, push, concat, and 29 more.
+src/shared/api/bridge.ts(152,10): error TS2554: Expected 2 arguments, but got 1.

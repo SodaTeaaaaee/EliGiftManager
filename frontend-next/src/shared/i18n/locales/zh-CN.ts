@@ -1,0 +1,1929 @@
+/**
+ * zh-CN message bundle — the default locale.
+ *
+ * Namespaces:
+ * - `common`     shared action verbs reused across every page.
+ * - `nav`        top-level navigation labels (plan section 2.1).
+ * - `designLab`  design-lab showcase page copy.
+ * - `feedback`   generic toast/banner copy.
+ * - `glossary`   domain-terminology labels + one-sentence descriptions,
+ *                resolved through `useGlossary()` in `../glossary.ts`.
+ *
+ * `AppMessageSchema` (exported below, no `as const`) widens every leaf to
+ * `string` so `en-US.ts` can be typed against this shape without being forced
+ * to match the literal Chinese text — only the *keys* must line up.
+ */
+export const zhCN = {
+  common: {
+    save: '保存',
+    cancel: '取消',
+    refresh: '刷新',
+    create: '新建',
+    delete: '删除',
+    close: '关闭',
+    back: '返回',
+    confirm: '确认',
+    search: '搜索',
+    edit: '编辑',
+    submit: '提交',
+    clear: '清空',
+    reset: '重置',
+    apply: '应用',
+    export: '导出',
+    import: '导入',
+    loading: '加载中…',
+    retry: '重试',
+    more: '更多',
+    yes: '是',
+    no: '否',
+    locales: {
+      zhCN: '简体中文',
+      enUS: '英语',
+    },
+  },
+  nav: {
+    home: '任务中心',
+    waves: '波次',
+    inbox: '收件箱',
+    customers: '客户',
+    products: '商品',
+    integrations: '接入',
+    settings: '设置',
+    devSectionLabel: '开发工具',
+    placeholderDescription: '这个页面还在这次重设计里排队，敬请期待——先用左侧导航看看已经搭好的部分。',
+  },
+  designLab: {
+    title: '设计实验室',
+    subtitle: '集中查看 token、字体排印与动效的实时效果',
+    sections: {
+      colors: '色彩与状态',
+      typography: '字体排印',
+      spacing: '间距与圆角',
+      motion: '动效',
+      components: '组件速览',
+    },
+    controls: {
+      theme: '主题',
+      density: '密度',
+      locale: '语言',
+      skin: '皮肤',
+      themeOptions: {
+        system: '跟随系统',
+        light: '浅色',
+        dark: '深色',
+      },
+      densityOptions: {
+        comfortable: '宽松',
+        compact: '紧凑',
+      },
+    },
+    toc: {
+      title: '组件速览',
+      shell: '应用壳与导航',
+      status: '状态渲染',
+      dataGrid: '数据表格',
+      filterBar: '组合筛选',
+      cards: '卡片与引导',
+      feedback: '反馈系统',
+    },
+  },
+  feedback: {
+    success: '操作成功',
+    error: '出错了',
+    disconnected: '后端未连接',
+    toast: {
+      dismiss: '关闭提示',
+      showDetail: '查看详情',
+      hideDetail: '收起详情',
+      copyDetail: '复制详情',
+      detailCopied: '已复制到剪贴板',
+      politeRegionLabel: '消息提示',
+      assertiveRegionLabel: '错误提示',
+    },
+    receiptTray: {
+      buttonLabel: '操作记录',
+      title: '最近操作',
+      empty: '暂时没有可显示的操作记录',
+      kinds: {
+        undo: '撤销',
+        redo: '重做',
+        action: '操作',
+      },
+    },
+    time: {
+      justNow: '刚刚',
+      minutesAgo: '{n} 分钟前',
+      hoursAgo: '{n} 小时前',
+      daysAgo: '{n} 天前',
+    },
+    errorBanner: {
+      iconLabel: '错误',
+      retry: '重试',
+    },
+    disconnectedBanner: {
+      title: '无法连接到本地服务',
+      description: '看起来 Wails 后端没有响应，部分操作暂时不可用。',
+      recheck: '重新检测',
+      checking: '检测中…',
+    },
+    topProgressBar: {
+      loadingLabel: '页面加载中…',
+    },
+    demo: {
+      title: '反馈系统',
+      subtitle: 'Toast、操作记录、错误横幅与断线提示的完整示例',
+      toastGroupTitle: 'Toast 提示',
+      triggerSuccess: '触发成功提示',
+      triggerError: '触发错误提示',
+      triggerInfo: '触发信息提示',
+      successMessage: '波次 W-2024-11-Aki 已成功导出工厂订单',
+      infoMessage: '客户 佐藤あかり 的地址正在等待补充',
+      errorMessage: '同步渠道回填失败，波次 W-2024-11-Yui 未能完成回填',
+      errorDetail: 'ChannelSyncJob#8821 request timeout after 30000ms — endpoint https://api.example-shop.com/v2/fulfillments/8821/tracking',
+      receiptGroupTitle: '操作记录',
+      logUndo: '记录一次撤销',
+      logRedo: '记录一次重做',
+      logAction: '记录一次操作',
+      sampleUndo: '撤销：将 铃木 ひなた 从波次 W-2024-11-Aki 移除',
+      sampleRedo: '重做：为波次 W-2024-12-Sora 生成工厂订单',
+      sampleAction: '批量导入 32 条需求行到 收件箱',
+      bannerGroupTitle: '错误横幅',
+      bannerMessage: '波次 W-2024-11-Yui 的供应商同步失败，部分行未能生成工厂订单',
+      bannerDetail: 'SupplierOrder#5502 validation error: missing recipient postal code for 3 lines',
+      disconnectedGroupTitle: '断线横幅',
+      toggleDisconnected: '模拟后端断开',
+      toggleConnected: '恢复连接模拟',
+      liveDisconnectedGroupTitle: '真实桥接状态',
+      liveDisconnectedHint: '下方横幅读取真实的 useBridgeHealth() 状态；在 Wails 运行时之外预览时，会一直显示为已断开。',
+    },
+  },
+  glossary: {
+    lifecycleStage: {
+      intake: { label: '接入', desc: '波次正在接入需求，分配流程尚未开始。' },
+      allocation: { label: '分配', desc: '需求已接入，正在生成参与者并映射为履约明细行。' },
+      review: { label: '复核', desc: '履约明细行已生成，正在复核并准备工厂订单。' },
+      execution: { label: '执行', desc: '工厂订单已生成，正在生产、发货或登记物流。' },
+      syncing_back: { label: '回填中', desc: '正在生成或等待物流信息回填到发货记录。' },
+      awaiting_manual_closure: { label: '待人工收尾', desc: '回填未覆盖的行需要人工确认收尾。' },
+      closed: { label: '已关闭', desc: '波次已完成并关闭，不再变更。' },
+    },
+    routingDisposition: {
+      pending_intake: { label: '待分诊', desc: '需求已导入，等待分诊决定是否接收。' },
+      accepted: { label: '已接收', desc: '需求已被接收，进入分配流程。' },
+      deferred: { label: '暂缓', desc: '需求被暂缓处理，稍后再决定。' },
+      excluded_manual: { label: '手动排除', desc: '运营人工判断后主动排除该需求。' },
+      excluded_duplicate: { label: '重复排除', desc: '系统判定为重复需求并自动排除。' },
+      excluded_revoked: { label: '已撤销', desc: '上游已撤销该需求，因此排除处理。' },
+    },
+    recipientInputState: {
+      not_required: { label: '无需采集', desc: '该行不需要收件人补充任何信息。' },
+      waiting_for_input: { label: '等待填写', desc: '正在等待收件人填写所需信息。' },
+      partially_collected: { label: '部分填写', desc: '收件人已填写部分信息，仍有缺项。' },
+      ready: { label: '已就绪', desc: '所需的收件人信息均已收集完整。' },
+      waived: { label: '已豁免', desc: '已主动豁免该行的信息采集要求。' },
+      expired: { label: '已过期', desc: '收件人填写窗口已过期，需要人工处理。' },
+    },
+    addressState: {
+      missing: { label: '缺地址', desc: '该行尚未绑定任何收件地址。' },
+      ready: { label: '地址就绪', desc: '地址信息完整且可用于发货。' },
+      invalid: { label: '地址无效', desc: '地址信息存在问题，需要修正。' },
+    },
+    supplierState: {
+      not_submitted: { label: '未提交', desc: '尚未生成或提交工厂订单。' },
+      submitted: { label: '已提交工厂', desc: '工厂订单已生成并发送给供应商。' },
+      accepted: { label: '工厂已接单', desc: '供应商已确认接单。' },
+      producing: { label: '生产中', desc: '供应商正在生产中。' },
+      partially_shipped: { label: '部分发货', desc: '供应商已发出部分货物。' },
+      shipped: { label: '已发货', desc: '供应商订单已全部发货。' },
+      canceled: { label: '已取消', desc: '该供应商订单已取消。' },
+    },
+    channelSyncState: {
+      not_required: { label: '无需回填', desc: '该渠道不需要回填发货信息。' },
+      unsupported: { label: '平台不支持', desc: '该平台暂不支持自动回填。' },
+      pending: { label: '待回填', desc: '回填文件尚未生成或尚未确认。' },
+      synced: { label: '已回填', desc: '发货信息已成功回填到渠道。' },
+      manual_confirmed: { label: '人工确认', desc: '运营已人工确认回填结果。' },
+      skipped: { label: '已跳过', desc: '该行的回填已被主动跳过。' },
+      failed: { label: '回填失败', desc: '回填过程中出现错误，需要处理。' },
+    },
+    allocationState: {
+      draft: { label: '草稿', desc: '该行的分配结果仍是初步草案。' },
+      ready: { label: '已就绪', desc: '分配结果已确认，可用于后续流程。' },
+    },
+    shipmentStatus: {
+      pending: { label: '待发货', desc: '发货单已创建但尚未发出。' },
+      shipped: { label: '已发货', desc: '包裹已从供应商处发出。' },
+      in_transit: { label: '运输中', desc: '包裹正在物流运输途中。' },
+      delivered: { label: '已签收', desc: '包裹已由收件人签收。' },
+      exception: { label: '异常', desc: '物流过程中出现异常，需要关注。' },
+      returned: { label: '已退回', desc: '包裹被退回，需要后续处理。' },
+      voided: { label: '已作废', desc: '该发货记录已被作废，不再计入已发数量。' },
+    },
+    submissionMode: {
+      csv: { label: 'CSV 导入', desc: '该工厂订单通过 CSV 文件导入方式提交。' },
+      manual: { label: '手工录入', desc: '该工厂订单通过手工录入方式提交。' },
+      api: { label: 'API 提交', desc: '该工厂订单通过 API 接口方式提交。' },
+    },
+    demandKind: {
+      membership_entitlement: { label: '会员权益', desc: '来自会员周期性权益的赠礼需求。' },
+      retail_order: { label: '零售订单', desc: '来自零售商店订单的需求。' },
+    },
+    adjustmentKind: {
+      add: { label: '加赠', desc: '为该行追加赠送数量。' },
+      reduce: { label: '减赠', desc: '减少该行的赠送数量。' },
+      compensation: { label: '补发', desc: '为已知问题补发商品。' },
+      remove: { label: '移除', desc: '将该行从波次中移除。' },
+      replace: { label: '换货', desc: '将该行的商品替换为另一款商品。' },
+      reissue: { label: '重新发放', desc: '为该参与者重新生成一份赠礼。' },
+    },
+    productKind: {
+      badge: { label: '徽章', desc: '徽章类周边商品。' },
+      standee: { label: '立牌', desc: '立牌类周边商品。' },
+      charm: { label: '挂件', desc: '挂件/吊坠类周边商品。' },
+      postcard: { label: '明信片', desc: '明信片类周边商品。' },
+      print: { label: '印刷品', desc: '印刷品类周边商品，如海报、色纸。' },
+      bundle: { label: '套装', desc: '由多个单品组合而成的套装商品。' },
+      other: { label: '其他', desc: '未归入以上分类的其他商品形态。' },
+    },
+    profileType: {
+      member: { label: '会员', desc: '通过会员身份识别的客户档案。' },
+      buyer: { label: '买家', desc: '通过零售订单买家身份识别的客户档案。' },
+      mixed: { label: '混合', desc: '同时具备会员与买家身份的客户档案。' },
+      manual: { label: '手动创建', desc: '由运营手动创建、未关联任何来源身份的客户档案。' },
+    },
+    identityType: {
+      platform_uid: { label: '平台 UID', desc: '按来源平台的用户 ID 识别的身份。' },
+      email: { label: '邮箱', desc: '按邮箱地址识别的身份。' },
+      username: { label: '用户名', desc: '按用户名识别的身份。' },
+      external_buyer_id: { label: '外部买家 ID', desc: '按来源平台的订单买家 ID 识别的身份。' },
+    },
+    driftSummary: {
+      in_sync: { label: '无漂移', desc: '波次内容与上游事实/规则完全一致，没有检测到漂移。' },
+      drifted_none: { label: '有漂移', desc: '检测到少量漂移，但严重程度很低，暂不需要处理。' },
+      drifted_recommended: { label: '建议复查', desc: '检测到的漂移建议运营人工复查。' },
+      drifted_required: { label: '必须复查', desc: '检测到的漂移必须复查后才能继续推进。' },
+    },
+    reviewRequirement: {
+      none: { label: '无需复查', desc: '该波次当前无需人工复查。' },
+      recommended: { label: '建议复查', desc: '该波次存在漂移信号，建议人工复查后再继续。' },
+      required: { label: '必须复查', desc: '该波次存在必须人工复查的漂移信号，复查完成前不建议继续提交。' },
+    },
+    lineReason: {
+      entitlement: { label: '会员权益', desc: '该行来自会员周期性权益。' },
+      retail_order: { label: '零售订单', desc: '该行来自零售商店订单。' },
+      wave_adjustment: { label: '波次调整', desc: '该行由波次内的人工调整生成。' },
+    },
+    basisDriftStatus: {
+      drifted: { label: '已漂移', desc: '该波次的履约依据已相对上游事实发生漂移。' },
+      in_sync: { label: '无漂移', desc: '该波次的履约依据与上游事实保持一致。' },
+    },
+    allocationSelectorType: {
+      wave_all: { label: '全波次', desc: '该规则适用于波次内的所有参与者。' },
+      platform_all: { label: '按平台', desc: '该规则仅适用于来自指定平台的参与者。' },
+      identity_level: { label: '按会员等级', desc: '该规则仅适用于指定会员等级的参与者。' },
+      explicit_override: { label: '指定参与者', desc: '该规则仅适用于显式列出的参与者 ID。' },
+    },
+    demandMappingBlockedReason: {
+      wave_product_missing: { label: '商品未快照', desc: '该需求行引用的商品尚未在本波次生成商品快照。' },
+      address_unavailable: { label: '地址不可用', desc: '该客户档案下没有可用的收货地址。' },
+    },
+    initialAllocationStrategy: {
+      policy_driven: { label: '策略驱动', desc: '按分配规则自动为参与者分配商品。' },
+      demand_driven: { label: '需求驱动', desc: '按导入的需求行直接生成分配结果。' },
+    },
+    identityStrategy: {
+      platform_uid: { label: '平台 UID', desc: '按来源平台的用户 ID 识别并归并客户身份。' },
+      email: { label: '邮箱', desc: '按邮箱地址识别并归并客户身份。' },
+      external_buyer_id: { label: '外部买家 ID', desc: '按来源平台的订单买家 ID 识别客户身份。' },
+    },
+    entitlementAuthorityMode: {
+      local_policy: { label: '本地规则', desc: '权益是否成立由本地分配规则判定。' },
+      upstream_platform: { label: '上游平台', desc: '权益是否成立以上游平台的数据为准。' },
+      manual_grant_only: { label: '仅人工授予', desc: '权益必须由运营人工确认后才成立。' },
+    },
+    recipientInputMode: {
+      none: { label: '无需采集', desc: '该接入不需要额外采集收件人信息。' },
+      platform_claim: { label: '平台认领', desc: '收件人信息通过平台认领流程获取。' },
+      external_form: { label: '外部表单', desc: '收件人信息通过外部表单采集。' },
+      manual_collection: { label: '人工采集', desc: '收件人信息由运营人工采集录入。' },
+    },
+    referenceStrategy: {
+      member_level: { label: '会员级', desc: '需求以会员为单位关联来源。' },
+      order_level: { label: '订单级', desc: '需求以订单为单位关联来源。' },
+      order_line_level: { label: '订单行级', desc: '需求以订单行为单位关联来源。' },
+    },
+    trackingSyncMode: {
+      api_push: { label: 'API 推送', desc: '发货与物流信息通过 API 自动推送回平台。' },
+      document_export: { label: '文档导出', desc: '发货与物流信息通过导出文档回传给平台。' },
+      manual_confirmation: { label: '人工确认', desc: '发货与物流信息需要运营人工确认后回传。' },
+      unsupported: { label: '不支持回传', desc: '该平台不支持任何形式的发货信息回传。' },
+    },
+    closurePolicy: {
+      close_after_sync: { label: '回传后收尾', desc: '发货信息成功回传后自动收尾。' },
+      close_after_manual_confirmation: { label: '人工确认后收尾', desc: '需要运营人工确认后才能收尾。' },
+      close_after_shipment: { label: '发货后收尾', desc: '商品发货后即可收尾，无需等待回传。' },
+    },
+    documentType: {
+      import_entitlement: { label: '导入会员权益', desc: '导入会员周期性权益需求的文档类型。' },
+      import_sales_order: { label: '导入零售订单', desc: '导入零售商店订单需求的文档类型。' },
+      import_product_catalog: { label: '导入商品目录', desc: '导入商品主数据目录的文档类型。' },
+      export_supplier_order: { label: '导出工厂订单', desc: '导出给供应商的工厂订单文档类型。' },
+      import_supplier_shipment: { label: '导入供应商发货', desc: '导入供应商发货信息的文档类型。' },
+      export_source_tracking_update: { label: '导出物流回传', desc: '导出回传给来源平台的物流更新文档类型。' },
+    },
+    supplierOrderStatus: {
+      draft: { label: '草稿', desc: '工厂订单已创建但尚未提交给供应商。' },
+      submitted: { label: '已提交', desc: '工厂订单已提交给供应商，等待接单。' },
+      accepted: { label: '已接单', desc: '供应商已确认接单，全部订单行均已接受。' },
+      partially_shipped: { label: '部分发货', desc: '该订单已发出部分货物，其余仍在处理中。' },
+      shipped: { label: '已发货', desc: '该订单已全部发货。' },
+      canceled: { label: '已取消', desc: '该工厂订单已取消。' },
+    },
+    channelSyncJobStatus: {
+      pending: { label: '待执行', desc: '回填任务已创建，尚未执行。' },
+      running: { label: '执行中', desc: '回填任务正在执行。' },
+      success: { label: '成功', desc: '回填任务已全部成功完成。' },
+      failed: { label: '失败', desc: '回填任务执行失败，需要处理后重试。' },
+      partial_success: { label: '部分成功', desc: '回填任务部分条目成功、部分失败，可对失败部分重试。' },
+    },
+    channelSyncItemStatus: {
+      success: { label: '成功', desc: '该条明细已成功回填。' },
+      failed: { label: '失败', desc: '该条明细回填失败。' },
+    },
+    closureDecisionKind: {
+      mark_sync_unsupported: { label: '标记不支持回传', desc: '该行所属渠道不支持任何形式的发货信息回传。' },
+      mark_sync_skipped: { label: '标记跳过回传', desc: '主动跳过该行的回填，不再等待回传结果。' },
+      mark_sync_completed_manually: { label: '人工确认完成', desc: '运营已人工确认该行的回传/收尾工作已完成。' },
+    },
+    captureMode: {
+      document_import: { label: '文档导入', desc: '该需求单据通过导入结构化文档方式录入。' },
+      api_ingest: { label: 'API 接入', desc: '该需求单据通过 API 接口自动接入方式录入。' },
+      manual_entry: { label: '手动录入', desc: '该需求单据通过人工手动录入方式录入。' },
+    },
+  },
+  statusKit: {
+    badge: {
+      ariaLabel: '{label}：{desc}',
+    },
+    legend: {
+      title: '{dimension} 图例',
+      empty: '暂无状态可显示',
+    },
+    dimensionNames: {
+      lifecycleStage: '生命周期阶段',
+      routingDisposition: '分诊结果',
+      recipientInputState: '收件人信息状态',
+      addressState: '地址状态',
+      supplierState: '供应商状态',
+      channelSyncState: '渠道回填状态',
+      allocationState: '分配状态',
+      shipmentStatus: '发货状态',
+      submissionMode: '提交方式',
+      demandKind: '需求类型',
+      adjustmentKind: '调整类型',
+      productKind: '商品类型',
+      profileType: '客户档案类型',
+      identityType: '身份类型',
+      driftSummary: '漂移摘要',
+      reviewRequirement: '复查要求',
+      lineReason: '来源',
+      basisDriftStatus: '依据漂移状态',
+      allocationSelectorType: '匹配范围',
+      demandMappingBlockedReason: '映射阻塞原因',
+      initialAllocationStrategy: '初始分配策略',
+      identityStrategy: '身份识别策略',
+      entitlementAuthorityMode: '权益认定方式',
+      recipientInputMode: '收件人信息采集方式',
+      referenceStrategy: '关联粒度',
+      trackingSyncMode: '物流回传方式',
+      closurePolicy: '收尾策略',
+      documentType: '文档类型',
+      supplierOrderStatus: '工厂订单状态',
+      channelSyncJobStatus: '回填任务状态',
+      channelSyncItemStatus: '回填明细状态',
+      closureDecisionKind: '收尾决策类型',
+      captureMode: '采集方式',
+    },
+    demo: {
+      title: '状态渲染套件',
+      subtitle: 'StatusBadge / StatusDot / StatusLegend —— 唯一合法的状态展示出口，所有文案与色彩均查术语表。',
+      sampleColumn: '示例对象',
+      sizeSm: '小尺寸',
+      sizeMd: '中尺寸',
+      dotPlain: '仅圆点',
+      dotLabeled: '圆点 + 文案',
+      legendSectionTitle: '图例总览（悬浮说明）',
+    },
+  },
+  /**
+   * `shellKit` — copy owned by the app shell / navigation kit
+   * (`shared/ui/shell/**`: AppShell, SideNav, WorkspaceNav, NavBadge,
+   * ContentErrorBoundary, PageHeader). `demo` holds only design-lab
+   * showcase copy, never used by real pages.
+   */
+  shellKit: {
+    sideNav: {
+      rootAriaLabel: '主导航',
+      brandName: 'EliGiftManager',
+      itemAriaLabelWithCount: '{label}（{count} 项待处理）',
+      collapse: '收起侧边栏',
+      expand: '展开侧边栏',
+    },
+    workspaceNav: {
+      rootAriaLabel: '波次工作区导航',
+      itemAriaLabelWithCount: '{label}（{count} 项）',
+    },
+    errorBoundary: {
+      title: '这块内容出错了',
+      description: '导航仍然可用，你可以重试，或复制错误详情反馈给开发者。',
+      retry: '重试',
+      copyDetails: '复制错误详情',
+      copied: '已复制',
+      stackToggle: '查看技术细节',
+    },
+    demo: {
+      title: '应用壳与导航',
+      subtitle: 'SideNav / WorkspaceNav / ContentErrorBoundary / PageHeader / NavBadge —— 双层导航与内容区骨架的完整示例',
+      appShellGroupTitle: 'AppShell + SideNav（一级导航）',
+      appShellHint: '折叠状态会持久化到本地存储；下方是一个高度受限的预览容器，方便在设计实验室里查看。',
+      nav: {
+        sectionActionCenter: '行动中心',
+        sectionFulfillment: '履约工作流',
+        sectionMasterData: '主数据',
+        home: '任务中心',
+        waves: '波次',
+        inbox: '收件箱',
+        customers: '客户',
+        products: '商品',
+        integrations: '接入',
+        settings: '设置',
+      },
+      contentTitle: '内容区示例',
+      contentBody: '这里是路由视图会渲染的位置——AppShell 只提供壳，页面内容由 `<slot />` 传入。',
+      workspaceNavGroupTitle: 'WorkspaceNav（二级导航 · 波次工作区骨架）',
+      workspaceNavHint: 'P2 会接入真实的 stepStates / ValidateStepAccess；这里只演示视觉语言与状态点/计数的呈现。',
+      workspace: {
+        waveKicker: '波次工作区',
+        waveName: '2026-07 会员波 · July Membership Wave',
+        waveMeta: 'W-2026-0710 · 分配中',
+        sectionOverview: '总览',
+        overview: '总览 Overview',
+        sectionPrep: '准备',
+        intake: '需求接入 Intake',
+        allocation: '分配 Allocation',
+        sectionReview: '审查',
+        lines: '履约明细 Lines',
+        readiness: '就绪检查 Readiness',
+        sectionExecution: '执行',
+        factory: '工厂订单 Factory',
+        shipments: '发货回传 Shipments',
+        closure: '回填收尾 Closure',
+      },
+      pageHeaderGroupTitle: 'PageHeader',
+      pageHeader: {
+        kicker: '波次工作区 · 2026-07 会员波',
+        title: '履约明细网格',
+        description: '四维状态组合筛选 + 批量调整 + 补发——本次重设计的最高价值单体界面。',
+        actionExport: '导出 CSV',
+        actionAdjust: '批量调整',
+      },
+      navBadgeGroupTitle: 'NavBadge',
+      navBadgeHint: '徽章色彩查状态 token，数量超过 99 时显示 "99+"。',
+      errorBoundaryGroupTitle: 'ContentErrorBoundary',
+      errorBoundaryHint: '点击"触发错误"模拟子组件渲染崩溃；错误面板出现后，侧边栏 / 本页其余内容都不受影响。',
+      triggerError: '触发错误',
+      contentOk: '内容正常渲染 —— 波次 2026-07 会员波 共 128 行，其中 12 行缺地址。',
+    },
+  },
+  /**
+   * `uiKit` — copy owned by the shared/ui component kits (cards, empty
+   * states, funnel, guidance, drawer, ...). Sub-namespaced per kit so each
+   * kit's strings stay easy to find; the `*Demo` sub-namespaces hold only
+   * design-lab showcase copy, never used by real pages.
+   */
+  uiKit: {
+    funnel: {
+      groupLabel: '履约漏斗',
+      segmentAriaLabel: '{label}：{count} 行',
+    },
+    cardsDemo: {
+      heading: '波次总览示例',
+      subheading: '组合 StatCard / FunnelBar / GuidanceCard / CalloutBar / EmptyState / DetailDrawer 拼出的总览页观感',
+      stats: {
+        totalLines: '总行数',
+        addressReady: '地址就绪',
+        submittedToSupplier: '已提交工厂',
+        closureFailed: '回填失败',
+        deltaCaption: '较上周',
+      },
+      funnel: {
+        totalLines: '总行数',
+        addressReady: '地址就绪',
+        submittedToSupplier: '已提交工厂',
+        shipmentSynced: '已获物流',
+        syncedBack: '已回填',
+        manualClosure: '人工收尾',
+      },
+      guidance: {
+        title: '建议下一步',
+        reason: '「三月会员波」还有 12 行缺收件地址，先补全地址即可让波次继续推进。',
+        primary: '前往就绪检查',
+        secondaryFix: '改为跳过这些行',
+        secondaryRule: '调整分配规则',
+      },
+      callout: {
+        message: '本波次存在少量待复查的漂移信号，建议先查看详情再提交工厂。',
+        action: '查看漂移详情',
+      },
+      emptyState: {
+        title: '暂无需要处理的阻塞项',
+        description: '所有进行中的波次都在正常推进，任务中心里没有紧急待办。',
+        action: '刷新任务中心',
+      },
+      flatCard: {
+        title: '嵌套小节示例',
+        description: '这是一张 flat 变体的 SectionCard，用于在另一张卡片内部再分组内容。',
+      },
+      variants: {
+        totalLines: '总行数',
+        addressReady: '地址就绪',
+        addressBlocked: '地址阻塞',
+        closureFailed: '回填失败',
+        clickableTile: '可点击卡片',
+        vsLastWeek: '较上周',
+        toneNames: {
+          success: '成功',
+          warning: '警告',
+          error: '错误',
+          info: '信息',
+          progress: '进行中',
+          neutral: '中性',
+        },
+      },
+      reviewGrids: {
+        statCardTitle: 'StatCard 变体',
+        statCardDescription: '标签 + 表格数字大字号数值，可选增量与说明，覆盖全部 6 种状态色调',
+        calloutBarTitle: 'CalloutBar 变体',
+        emptyStateTitle: 'EmptyState 变体',
+        emptyStateDescription: 'md / sm 两种尺寸，默认几何图案与自定义图标插槽对比',
+      },
+      drawer: {
+        openLabel: '查看波次详情',
+        title: '波次总览详情',
+        participantLabel: '参与者',
+        participantValue: '星野・アイ（Ai Hoshino）',
+        productLabel: '商品',
+        productValue: '限定徽章套装 · 4 枚',
+        quantityLabel: '数量',
+        quantityValue: '4',
+        note: '这里展示 DetailDrawer 的头部 / 正文 / 底部结构；正文内容为设计实验室的静态演示数据。',
+        confirm: '确认收尾',
+      },
+    },
+    dataGrid: {
+      emptyFallback: {
+        title: '暂无数据',
+      },
+      selectionToolbar: {
+        countLabel: '已选择 {n} 行',
+        clear: '清除选择',
+      },
+      relativeTime: {
+        justNow: '刚刚',
+        minutesAgo: '{n} 分钟前',
+        hoursAgo: '{n} 小时前',
+        daysAgo: '{n} 天前',
+      },
+    },
+    dataGridDemo: {
+      title: '数据表格套件',
+      subtitle: 'DataGrid —— 包装 NDataTable，内置拼音/假名/谚文感知排序、状态列、分页与多选工具栏。',
+      controls: {
+        loadingLabel: '模拟加载中',
+        emptyLabel: '模拟空数据',
+      },
+      columns: {
+        name: '参与者',
+        wave: '所属波次',
+        productKind: '商品类型',
+        supplierState: '供应商状态',
+        shipmentStatus: '发货状态',
+        quantity: '数量',
+        updatedAt: '更新时间',
+        actions: '操作',
+      },
+      actions: {
+        viewDetail: '查看详情',
+      },
+      empty: {
+        title: '这一页没有参与者',
+        description: '试试关闭"模拟空数据"，或调整筛选条件。',
+      },
+      selectionToolbar: {
+        countLabel: '已选择 {n} 位参与者',
+        markShipped: '标记为已发货',
+      },
+      lastClicked: '上次点击：{name}',
+    },
+  },
+  /**
+   * `filterBar` — copy for the FilterBar 组合筛选套件 (shared/ui/filter-bar/**):
+   * FilterBar.vue（多维筛选 + 关键字 + 已选筛选条）与 SavedViews.vue（预置视图 +
+   * 我保存的视图）。`demo` 子命名空间仅用于设计实验室展示页。
+   */
+  filterBar: {
+    keywordPlaceholder: '搜索关键字…',
+    keywordChipLabel: '关键字：{value}',
+    clearAll: '清空筛选',
+    activeFilters: '当前筛选条件',
+    noActiveFilters: '还没有设置任何筛选条件',
+    removeFilter: '移除筛选：{label}',
+    optionsMenuLabel: '{dimension} 筛选选项',
+    savedViews: {
+      title: '保存的视图',
+      presetsGroup: '预置视图',
+      savedGroup: '我保存的视图',
+      saveCurrent: '保存当前筛选',
+      namePlaceholder: '给这个视图起个名字',
+      save: '保存',
+      cancel: '取消',
+      delete: '删除视图',
+      deleteConfirmContent: '删除后无法恢复，需要的话得重新保存一次。',
+      empty: '还没有保存过视图',
+    },
+    demo: {
+      title: 'FilterBar 组合筛选套件',
+      subtitle: '多维组合筛选 + URL 同步 + 保存视图 —— 地址状态 ∧ 供应商状态两次点击可达，深链可分享。',
+      resultCount: '共 {n} 条结果',
+      urlPreviewLabel: '当前 URL 查询（深链示例）',
+      tableHeaders: {
+        participant: '参与者',
+        product: '商品',
+        addressState: '地址状态',
+        supplierState: '供应商状态',
+      },
+      presets: {
+        blocked: '阻塞项',
+        readyToSubmit: '可提交工厂',
+        producing: '生产中',
+      },
+    },
+  },
+  /**
+   * `taskCenter` — copy for the Task Center default page (plan 3.1):
+   * `pages/home/HomePage.vue`（后续替换现有占位）。行动流（按波次分桶的阻塞项）
+   * + 进行中的波次卡片 + 空状态引导。
+   */
+  taskCenter: {
+    title: '任务中心',
+    subtitle: '现在该做什么——按紧急度排序的行动项，点击直达对应波次的预过滤视图。',
+    actionStream: {
+      title: '待办流',
+      empty: '暂时没有需要处理的阻塞项，所有进行中的波次都在正常推进。',
+    },
+    buckets: {
+      missingAddress: '缺地址',
+      waitingInput: '等待填写',
+      mappingBlocked: '映射阻塞',
+      channelSyncFailed: '回填失败',
+      awaitingManualClosure: '待人工收尾',
+      driftReview: '需复查漂移',
+    },
+    inbox: {
+      pendingIntake: '收件箱待分诊 {count} 单',
+    },
+    inProgress: {
+      title: '进行中的波次',
+      empty: '暂无进行中的波次。',
+    },
+    onboarding: {
+      title: '欢迎使用 EliGiftManager',
+      description: '还没有任何波次——完成接入 → 导入需求 → 创建波次三步，即可开始第一次赠礼履约。',
+      cta: '创建第一个波次',
+    },
+    refresh: '手动刷新',
+    lastActivity: '最近活动：{time}',
+  },
+  /**
+   * `wavesList` — copy for the Waves list page (plan 3.2):
+   * `pages/waves/WavesPage.vue`。表格 + 创建/改名/关闭对话框。
+   */
+  wavesList: {
+    title: '波次',
+    subtitle: '管理所有波次——创建、改名、按阶段筛选，点击进入工作区。',
+    truncationNotice: '仅显示最近 {shown} / {total} 个波次——请使用筛选缩小范围，服务端分页正在开发中。',
+    create: '新建波次',
+    filter: {
+      keywordPlaceholder: '搜索波次名称或编号…',
+      lifecycleStageLabel: '生命周期阶段',
+    },
+    columns: {
+      waveNo: '编号',
+      name: '名称',
+      type: '类型',
+      stage: '阶段',
+      createdAt: '创建时间',
+      updatedAt: '更新时间',
+      actions: '操作',
+    },
+    empty: {
+      title: '还没有任何波次',
+      description: '试试调整筛选条件，或创建一个新波次。',
+    },
+    rowActions: {
+      open: '进入工作区',
+      rename: '改名',
+      close: '关闭波次',
+    },
+    waveType: {
+      membership: '会员权益',
+      retail: '零售订单',
+      mixed: '混合',
+    },
+    createDialog: {
+      title: '新建波次',
+      nameLabel: '波次名称',
+      namePlaceholder: '例如：2026-07 会员波',
+      namePrefillHint: '建议命名：2026-07 会员波',
+      typeLabel: '波次类型',
+      notesLabel: '备注',
+      submit: '创建',
+      cancel: '取消',
+    },
+    renameDialog: {
+      title: '重命名波次',
+      submit: '保存',
+    },
+    closeDialog: {
+      title: '关闭波次',
+      confirmText: '关闭后波次将不再接受变更，请确认所有履约项均已收尾。',
+      forceLabel: '强制关闭（存在未收尾的残留项）',
+      noteLabel: '关闭说明',
+      notePlaceholder: '说明为何在残留项未清空的情况下关闭波次…',
+      noteRequired: '强制关闭必须填写说明',
+      residualWarning: '本波次仍有 {count} 项未收尾，强制关闭前请确认。',
+      submit: '关闭波次',
+    },
+    feedback: {
+      created: '波次已创建',
+      renamed: '波次已重命名',
+      closed: '波次已关闭',
+      closeForced: '波次已强制关闭，{count} 项残留待跟进',
+    },
+  },
+  /**
+   * `waveWorkspace` — copy owned by the wave-workspace shell + its shared
+   * chrome (plan section 7 / P2 foundations): `WaveWorkspaceShell.vue`,
+   * `WaveWorkspaceHeader.vue` (unit A), `WaveHistoryDrawer.vue` (unit A),
+   * `WaveDriftDrawer.vue` (unit B), `WaveTabPlaceholder.vue`, and
+   * `WorkspaceNav`'s group/step labels. Page-unit components consume these
+   * exact keys — they must NOT invent their own under this namespace
+   * (this file is foundations-owned; the two page units cannot edit it).
+   */
+  waveWorkspace: {
+    shell: {
+      loading: '正在加载波次工作区…',
+      notFound: '未找到该波次，或加载失败。',
+    },
+    placeholder: {
+      description: '该步骤的完整界面将在 P3-P5 阶段陆续接入，当前仅提供占位与门禁提示。',
+    },
+    nav: {
+      groups: {
+        prepare: '准备',
+        review: '审查',
+        execute: '执行',
+      },
+    },
+    steps: {
+      overview: '总览',
+      intake: '需求接入',
+      allocation: '分配',
+      lines: '履约明细',
+      readiness: '就绪检查',
+      factory: '工厂订单',
+      shipments: '发货回传',
+      closure: '回填收尾',
+    },
+    header: {
+      kicker: '波次工作区',
+      name: {
+        placeholder: '波次名称',
+        edit: '编辑名称',
+        save: '保存',
+        cancel: '取消',
+        saveSuccess: '波次名称已更新',
+        saveError: '波次名称更新失败',
+      },
+      undo: {
+        label: '撤销',
+        aria: '撤销上一步操作',
+        success: '已撤销：{summary}',
+        error: '撤销失败',
+      },
+      redo: {
+        label: '重做',
+        aria: '重做上一步操作',
+        success: '已重做：{summary}',
+        error: '重做失败',
+      },
+      history: {
+        label: '历史记录',
+      },
+      undoBoundaryNotice: '本波次已提交工厂订单，更早的操作可能已无法撤销。',
+    },
+    history: {
+      title: '操作历史',
+      empty: '暂无历史记录',
+      gcButton: '清理历史',
+      gcConfirm: '确定要清理该波次的历史记录吗？未被固定的旧节点可能会被永久删除。',
+      gcSuccess: '已清理 {count} 个历史节点',
+      gcError: '历史清理失败',
+      checkpointTag: '检查点',
+      pinnedTag: '已固定',
+      currentTag: '当前',
+      graphToggle: '查看历史关系图',
+    },
+    drift: {
+      title: '漂移详情',
+      drillDisabledHint: '逐行下钻将在履约明细网格（P3）上线后开放，目前仅展示汇总信号。',
+      reviewRequirement: {
+        none: '无需复查',
+        recommended: '建议复查',
+        required: '必须复查',
+      },
+      basisKind: {
+        supplier_order: '工厂订单',
+        shipment: '发货记录',
+        supplier_order_basis: '工厂订单依据',
+        shipment_basis: '发货记录依据',
+        channel_sync_basis: '渠道回填依据',
+        unknown: '未知依据类型',
+      },
+    },
+    gateHint: {
+      need_demand: '该步骤依赖需求接入——请先分配至少一份需求文档。',
+      need_fulfillment: '该步骤依赖履约明细——请先完成分配，生成履约明细行。',
+      need_supplier_order: '该步骤依赖工厂订单——请先在执行阶段生成并提交工厂订单。',
+      need_shipment: '该步骤依赖发货记录——请先录入至少一条发货信息。',
+      goFix: '前往处理',
+    },
+    /**
+     * `waveWorkspace.factory` — copy for the工厂订单 tab (plan 3.3.4 first
+     * bullet, P5, `WaveFactoryTab.vue` + `tabs/factory/*`).
+     */
+    factory: {
+      title: '工厂订单',
+      subtitle: '生成、提交并确认供应商工厂订单——多张订单并行、各自独立操作。',
+      generate: '生成/重新生成工厂订单',
+      regenerateConfirm: {
+        title: '确认重新生成工厂订单？',
+        content: '重新生成只会覆盖尚未提交的草稿订单；已提交或已接单的订单不受影响，但会为相同履约行再次生成新的草稿。',
+        confirm: '确认重新生成',
+        cancel: '取消',
+      },
+      empty: {
+        title: '尚未生成任何工厂订单',
+        description: '点击上方按钮，将履约明细行按接入配置分组生成工厂订单草稿。',
+      },
+      card: {
+        batchNo: '批次号',
+        externalOrderNo: '工厂单号',
+        submissionMode: '提交方式',
+        submittedAt: '提交时间',
+        basisNode: '依据历史节点',
+        lines: '订单行',
+      },
+      lineColumns: {
+        supplierLineNo: '行号',
+        supplierSku: '供应商 SKU',
+        submittedQuantity: '提交数量',
+        acceptedQuantity: '接受数量',
+        status: '状态',
+        fulfillmentLineId: '履约行 ID',
+      },
+      generateFile: {
+        action: '生成工厂文件',
+        result: '已生成：{path}',
+        lineCount: '共 {count} 行',
+        generatedAt: '生成时间：{time}',
+        openFolder: '打开所在文件夹',
+        openFolderError: '无法打开所在文件夹',
+        copyPath: '复制路径',
+        copySuccess: '路径已复制到剪贴板',
+        reconciliationHint: '该文件内嵌了行 ID 与批次号，作为发货回传阶段的对账依据。',
+      },
+      markSubmitted: {
+        action: '标记已提交',
+        disabledHint: '仅草稿状态的订单可标记已提交。',
+        dialogTitle: '标记已提交工厂',
+        externalOrderNo: '工厂单号',
+        externalOrderNoPlaceholder: '请填写工厂返回的订单号',
+        submittedAt: '提交时间（可选，默认取当前时间）',
+        submit: '确认提交',
+        cancel: '取消',
+        success: '已标记为已提交',
+        error: '标记已提交失败',
+      },
+      recordAcceptance: {
+        action: '记录接单',
+        disabledHint: '仅已提交状态的订单可记录接单。',
+        dialogTitle: '记录工厂接单',
+        hint: '请为该订单的每一行填写实际接受数量——提交后订单整体转为已接单，不支持分批确认。',
+        lineLabel: '第 {lineNo} 行 · {sku}',
+        acceptedQuantity: '接受数量',
+        submit: '确认接单',
+        cancel: '取消',
+        success: '已记录接单结果',
+        error: '记录接单失败',
+      },
+    },
+    /**
+     * `waveWorkspace.shipments` — copy for the发货回传 tab (plan 3.3.4
+     * second bullet, P5, shipment-backfill sub-area).
+     */
+    shipments: {
+      title: '发货回传',
+      subtitle: '导入工厂回传单，或手工录入发货记录——按对账键匹配，不要求工厂提供内部 ID。',
+      tabs: {
+        import: 'CSV 导入',
+        manual: '手工发货',
+        history: '发货记录',
+      },
+      import: {
+        steps: {
+          upload: '上传文件',
+          mapping: '列映射',
+          preview: '预览并提交',
+          result: '导入结果',
+        },
+        uploadHint: '选择工厂返回的发货回传 CSV 文件。',
+        pickFile: '选择文件',
+        supplierOrder: '所属供应商订单',
+        importMode: '导入模式',
+        importModeOptions: {
+          skip_invalid: '跳过无效行（部分成功）',
+          reject_all: '整单校验（任一行失败则全部不导入）',
+        },
+        mapping: {
+          title: '列映射',
+          hint: '将 CSV 列映射到下列对账字段之一——只需二选一即可定位到工厂订单行，无需我方数据库内部 ID。',
+          reconciliationKey: '对账方式',
+          byLineId: '按行 ID',
+          byBatchAndLineNo: '按批次号 + 行号',
+          lineId: '行 ID 列',
+          batchNo: '批次号列',
+          supplierLineNo: '行号列',
+          externalShipmentNo: '发货单号列',
+          trackingNo: '物流单号列',
+          carrierCode: '承运商代码列',
+          carrierName: '承运商名称列',
+          quantity: '数量列',
+          shippedAt: '发货时间列',
+          unresolved: '{count} 行无法匹配到工厂订单行，请检查映射或对账键是否正确。',
+          unresolvedRowReason: '未能匹配到工厂订单行（对账键无法定位）',
+        },
+        preview: {
+          title: '预览',
+          rowCount: '共 {count} 行待导入',
+          submit: '提交导入',
+        },
+        result: {
+          title: '导入结果',
+          summary: '共处理 {total} 行，成功 {success} 行，失败 {error} 行。',
+          errorsTitle: '错误详情',
+          errorRow: '第 {index} 行：{reason}',
+          newImport: '开始新的导入',
+          noErrors: '全部行均已成功导入。',
+        },
+      },
+      manual: {
+        title: '手工发货',
+        supplierOrder: '供应商订单',
+        supplierOrderPlaceholder: '选择要发货的供应商订单',
+        line: '订单行',
+        submittedQuantity: '提交数量',
+        shippedQuantity: '已发数量',
+        remainingQuantity: '剩余数量',
+        remainingPending: '已发/剩余数量加载中…',
+        overShipWarning: '发货数量超过剩余可发数量，提交后将被服务端拒绝。',
+        quantity: '本次发货数量',
+        externalShipmentNo: '发货单号',
+        carrierCode: '承运商代码',
+        carrierName: '承运商名称',
+        trackingNo: '物流单号',
+        shippedAt: '发货时间',
+        submit: '提交发货',
+        success: '发货记录已创建',
+        error: '创建发货记录失败',
+      },
+      history: {
+        title: '发货记录',
+        empty: '该波次暂无发货记录',
+        columns: {
+          shipmentNo: '发货单号',
+          supplierPlatform: '供应商平台',
+          externalShipmentNo: '外部发货单号',
+          carrier: '承运商',
+          trackingNo: '物流单号',
+          status: '状态',
+          shippedAt: '发货时间',
+          actions: '操作',
+        },
+        actions: {
+          correct: '修正',
+          void: '作废',
+          voidConfirmTitle: '确认作废该发货记录？',
+          voidConfirmContent: '作废后该记录不再计入已发数量，且此操作不可撤销（不进入撤销/重做历史）。',
+          voidReason: '作废原因',
+          voidOperator: '操作人',
+          voidSubmit: '确认作废',
+          voidSuccess: '发货记录已作废',
+          voidError: '作废失败',
+        },
+        correctDialog: {
+          title: '修正发货记录',
+          submit: '保存修正',
+          success: '发货记录已更新',
+          error: '修正失败',
+        },
+        outsideUndoNotice: '发货记录的修正与作废不进入撤销/重做历史，如需回退请使用补偿操作。',
+      },
+    },
+    /**
+     * `waveWorkspace.closure` — copy for the回填收尾 tab (plan 3.3.4 third
+     * bullet, P5, `WaveClosureTab.vue`). Copy deliberately frames the
+     * channel-sync mechanism as "generate backfill file" (更名如实), not
+     * "channel sync", per the plan's explicit rename instruction.
+     */
+    closure: {
+      title: '回填收尾',
+      subtitle: '生成回填文件、确认渠道回传结果，并在完成后关闭波次。',
+      health: {
+        jobCount: '回填任务数',
+        successCount: '成功',
+        failedCount: '失败',
+        runningCount: '进行中',
+        manualCandidateCount: '待人工收尾',
+        manualCompletedCount: '人工已完成',
+        manualUnsupportedCount: '人工标记不支持',
+        manualSkippedCount: '人工标记跳过',
+      },
+      plan: {
+        title: '生成回填文件',
+        profile: '接入配置',
+        profilePlaceholder: '选择要生成回填文件的接入配置',
+        action: '生成回填文件',
+        trackingSyncMode: '回传方式',
+        allowsManualClosure: '支持人工收尾',
+        closurePolicy: '收尾策略',
+        decisionAutoJob: '已自动创建回填任务，见下方任务表。',
+        decisionManual: '该接入需要人工确认收尾，请在下方表单中逐行处理。',
+        decisionUnsupported: '该接入不支持自动回传，请在下方表单中逐行标记处理方式。',
+      },
+      manualForm: {
+        title: '人工收尾决策',
+        line: '履约行 {id}',
+        decisionKind: '处理方式',
+        decisionKindPlaceholder: '选择处理方式',
+        reasonCode: '原因说明',
+        reasonCodePlaceholder: '请填写处理原因（自由文本）',
+        note: '备注',
+        evidenceRef: '证据引用',
+        operatorId: '操作人',
+        submit: '提交收尾决策',
+        success: '收尾决策已记录',
+        error: '提交收尾决策失败',
+        manualClosureDisabledHint: '该接入配置未开启人工收尾，不能选择“人工确认完成”。',
+      },
+      jobs: {
+        title: '回填任务',
+        empty: '暂无回填任务',
+        autoRefreshHint: '存在进行中的任务时，将每 {seconds} 秒自动刷新。',
+        refresh: '手动刷新',
+        columns: {
+          id: '任务 ID',
+          profile: '接入配置',
+          direction: '方向',
+          status: '状态',
+          outputPath: '输出文件路径',
+          error: '错误信息',
+          actions: '操作',
+        },
+        outputPathPending: '任务尚未执行，暂无输出文件',
+        outputPathUnavailable: '无法解析输出文件路径',
+        actions: {
+          run: '执行',
+          retry: '重试',
+          runSuccess: '任务执行完成',
+          runError: '任务执行失败',
+          retrySuccess: '任务重试完成',
+          retryError: '任务重试失败',
+        },
+        itemColumns: {
+          externalDocumentNo: '外部单据号',
+          externalLineNo: '外部行号',
+          carrierCode: '承运商代码',
+          trackingNo: '物流单号',
+          status: '状态',
+          error: '错误信息',
+        },
+      },
+      closeWave: {
+        title: '关闭波次',
+        description: '确认所有回填与收尾工作已完成后，关闭该波次——这是运营侧的最终完成动作。',
+        action: '关闭波次',
+      },
+    },
+  },
+  /**
+   * `overview` — copy for the wave-workspace overview tab (plan 3.3.1,
+   * `pages/waves/workspace/tabs/WaveOverviewTab.vue`, unit B). Foundations
+   * owns this namespace's keys (the two page units cannot edit locale
+   * files); the six-bucket StatCard row deliberately reuses
+   * `taskCenter.buckets.*` instead of a duplicate `overview.buckets.*` —
+   * the `ActionCenterWaveBucketDTO.bucketKind` set is identical.
+   */
+  overview: {
+    funnel: {
+      totalLines: '总行数',
+      addressReady: '地址就绪',
+      submittedToFactory: '已提交工厂',
+      tracked: '已获物流',
+      backfilled: '已回填',
+      manualClosureOrFailed: '人工收尾/失败',
+    },
+    suggestedNext: {
+      title: '建议下一步',
+    },
+    guidance: {
+      no_demands_assigned: '还没有分配任何需求文档——先完成需求接入，波次才能开始推进。',
+      no_fulfillment_lines: '尚未生成履约明细行——请先完成分配，将需求映射为具体的赠礼行。',
+      not_exported: '履约明细已就绪，但尚未生成工厂订单——前往执行阶段导出工厂订单吧。',
+      no_shipments: '工厂订单已提交，但还没有收到任何发货记录——等待或手动录入发货信息。',
+      pending_sync: '已有发货记录等待回填到销售渠道——前往回填收尾完成同步。',
+      all_steps_progressed: '本波次各步骤均已正常推进，暂无需要特别处理的下一步。',
+    },
+    blockingIssues: {
+      address_missing: '存在缺失收件地址的行，需要补全后才能继续。',
+      basis_drifted: '部分履约依据已发生漂移，建议复查后再继续推进。',
+      review_required: '存在必须人工复查的漂移信号，复查完成前不建议继续提交。',
+      mapping_blocked: '存在映射阻塞的需求行，需要人工处理映射关系。',
+      replay_failures_detected: '检测到重放校验失败，波次数据可能存在不一致，请尽快排查。',
+      unknown: '存在一个未在术语表中登记的阻塞项。',
+    },
+    drift: {
+      summaryLabel: '漂移摘要',
+      sectionTitle: '履约依据漂移',
+      reasonCodes: {
+        target_deleted: '对应的目标记录已被删除，原有依据不再有效。',
+        external_basis_stale: '外部依据的历史节点尚未记录哈希值，暂无法比对是否发生变化。',
+        projection_hash_unavailable: '当前投影哈希暂不可用，无法确认依据是否发生变化。',
+        projection_changed: '依据对应的投影内容已发生变化。',
+        unknown: '该漂移原因暂未在术语表中登记。',
+      },
+    },
+    driftCallout: {
+      message: '本波次存在 {count} 项待复查的漂移信号。',
+      action: '查看漂移详情',
+    },
+    sections: {
+      funnel: '履约漏斗',
+      buckets: '待处理事项',
+      blockingIssues: '阻塞项',
+      drift: '履约依据漂移',
+    },
+  },
+  /**
+   * `fulfillmentGrid` — copy for the履约明细网格 (plan 3.3.2/3.3.3,
+   * `pages/waves/workspace/tabs/WaveLinesTab.vue`, P3). Covers the grid
+   * columns/filters, batch-adjust dialog, address bind panel, row detail
+   * drawer, and the readiness-route footer gate widget. Foundations-owned —
+   * downstream Assembly/UI agents must not invent keys outside this namespace.
+   */
+  fulfillmentGrid: {
+    columns: {
+      participant: '参与者',
+      product: '商品',
+      quantity: '数量',
+      source: '来源',
+      allocationState: '分配状态',
+      addressState: '地址状态',
+      supplierState: '供应商状态',
+      channelSyncState: '渠道回填状态',
+      reviewRequirement: '复查要求',
+      trackingNo: '物流单号',
+    },
+    filters: {
+      allocationState: '分配状态',
+      addressState: '地址状态',
+      supplierState: '供应商状态',
+      channelSyncState: '渠道回填状态',
+      reviewRequirement: '复查要求',
+      driftStatus: '依据漂移状态',
+      keyword: '关键字',
+      driftCaveat: '漂移状态按整个波次计算，并非逐行独立判断——筛选该维度时，结果是"整波命中"或"整波不命中"。',
+    },
+    savedViews: {
+      blocked: '阻塞项',
+      submittable: '可提交工厂',
+      backfillFailed: '回填失败',
+      adjusted: '已调整',
+    },
+    batch: {
+      title: '批量操作',
+      adjust: '批量调整',
+      bindDefaultAddress: '一键绑定默认地址',
+      exportCsv: '导出 CSV',
+      selectedCount: '已选择 {n} 行',
+      done: '批量操作已完成',
+      someFailed: '部分条目处理失败，共 {count} 条，详情见结果列表',
+    },
+    adjustDialog: {
+      title: '记录调整',
+      kind: '调整类型',
+      quantityDelta: '数量变化',
+      fromProduct: '原商品',
+      toProduct: '目标商品',
+      reasonCode: '原因代码',
+      operatorId: '操作人',
+      note: '备注',
+      evidenceRef: '证据引用',
+      submit: '提交',
+      cancel: '取消',
+      reissueNeedsParticipant: '该行缺少参与者快照，无法执行补发/重新发放——请跳过该行。',
+      replaceNeedsSourceProduct: '该行缺少可替换的原商品（且未填写覆盖值），无法执行商品替换——请跳过该行。',
+    },
+    reasonCode: {
+      presets: {
+        out_of_stock_reissue: '缺货补发',
+        address_error: '地址错误',
+        customer_request: '客户要求',
+        quantity_correction: '数量修正',
+        product_replacement: '商品替换',
+        quality_issue: '质量问题',
+        other: '其他',
+      },
+    },
+    detail: {
+      title: '履约明细详情',
+      timeline: '时间线',
+      provenance: '来源与依据',
+      shipments: '发货记录',
+      adjustments: '调整历史',
+      noShipments: '暂无发货记录',
+      noAdjustments: '暂无调整历史',
+      customerHistory: '客户跨波次履约历史',
+      openCustomerHistory: '查看客户历史',
+    },
+    address: {
+      sectionTitle: '收件地址',
+      pickExisting: '选择已有地址',
+      createNew: '新建地址',
+      bind: '绑定',
+      bound: '已绑定',
+      noAddresses: '该客户暂无可用地址',
+      recipient: '收件人',
+      phone: '电话',
+      region: '地区',
+      detail: '详细地址',
+      save: '保存',
+    },
+    readiness: {
+      footerTitle: '就绪检查',
+      proceedToFactory: '前往工厂订单',
+      blockedReason: '该波次尚未满足进入执行阶段的条件，请先处理上方阻塞项。',
+      ready: '本波次已就绪，可以前往工厂订单阶段。',
+    },
+    empty: {
+      noRows: '没有符合条件的履约明细行',
+      noRowsHint: '试试调整筛选条件，或清空当前筛选。',
+    },
+  },
+  /**
+   * `integrations` — copy for the接入管理 page (plan P4,
+   * `pages/integrations/IntegrationsPage.vue`). Profile list/detail, capability
+   * toggles, template bindings, and the raw-JSON expert-mode editor.
+   */
+  integrations: {
+    title: '接入管理',
+    subtitle: '管理平台连接、能力开关与文档模板绑定。',
+    newIntegration: '新建接入',
+    empty: {
+      title: '还没有任何接入',
+      description: '通过接入向导连接第一个平台，开始导入需求。',
+      action: '新建接入',
+    },
+    groups: {
+      membership: '会员权益渠道',
+      retail: '零售订单渠道',
+    },
+    card: {
+      connector: '连接器',
+      capabilities: '能力',
+      templates: '模板',
+    },
+    detail: {
+      title: '接入详情',
+      sections: {
+        connector: '连接器配置',
+        capabilities: '能力开关',
+        templates: '文档模板',
+        bindings: '模板绑定',
+      },
+      fields: {
+        profileKey: '接入标识',
+        sourceChannel: '来源渠道',
+        sourceSurface: '来源业务面',
+        demandKind: '需求类型',
+        connectorKey: '连接器标识',
+        templateKey: '模板标识',
+        documentType: '文档类型',
+        isDefault: '默认绑定',
+        createdAt: '创建时间',
+      },
+      noTemplates: '该接入还没有任何模板。',
+      noBindings: '该接入还没有任何模板绑定。',
+      unbindDisabledHint: '当前后端暂不支持删除已有绑定；如需更换默认模板，请先确保该文档类型下还没有默认绑定。',
+    },
+    actions: {
+      rerunWizard: '重新运行向导',
+      editCapabilities: '编辑能力',
+      manageBindings: '管理绑定',
+      unbind: '解除绑定',
+      setDefault: '设为默认',
+    },
+    expertMode: {
+      title: '专家模式',
+      rawJsonLabel: '原始 JSON',
+      connectorKeyLabel: '连接器标识',
+      validate: '校验',
+      save: '保存',
+      invalidJson: 'JSON 格式无效',
+    },
+  },
+  /**
+   * `intakeWizard` — copy for the需求接入向导 (plan P4, launched from both
+   * `integrations` "new integration" CTA and the wave-workspace intake tab).
+   * `fields.*` documents the 12 canonical destFields accepted by
+   * `TemplateMappingRules.Columns`/`Defaults` (snake_case identifiers in the
+   * backend; see `internal/app/template_mapping_service.go`).
+   */
+  intakeWizard: {
+    title: '接入向导',
+    steps: {
+      platformPreset: { title: '选择平台', description: '选择一个预置平台模板，或从空白开始自定义接入。' },
+      businessSurface: { title: '业务形态', description: '这批需求属于会员周期性权益发放，还是零售商店订单？' },
+      sampleUpload: { title: '上传样例文件', description: '上传一份该平台导出的 CSV 样例，用于识别表头与预览数据。' },
+      capabilities: { title: '能力配置', description: '确认该接入支持的履约能力，决定后续流程中可用的操作。' },
+      confirm: { title: '确认创建', description: '确认接入配置、字段映射与模板绑定，完成后即可开始导入需求。' },
+    },
+    nav: {
+      next: '下一步',
+      back: '上一步',
+      finish: '完成',
+      cancel: '取消',
+    },
+    presets: {
+      patreon: { label: 'Patreon', description: '会员周期性权益发放，通常按 Reward/Tier 导出赞助者名单。' },
+      bilibili: { label: 'Bilibili', description: '大航海会员权益发放，按等级导出粉丝名单与收货地址。' },
+      gumroad: { label: 'Gumroad', description: '零售商店订单导出，按商品与收货地址逐单发放。' },
+      youtube: { label: 'YouTube', description: '会员周期性权益发放，按会员等级导出订阅者名单。' },
+      custom: { label: '自定义', description: '不匹配以上任何预置平台，从空白开始配置字段映射。' },
+    },
+    businessSurface: {
+      membership: { label: '会员权益', description: '来自平台会员周期性权益的赠礼需求。' },
+      retail: { label: '零售订单', description: '来自零售商店订单的赠礼需求。' },
+    },
+    profileFields: {
+      profileKeyLabel: '接入标识',
+      profileKeyPlaceholder: '例如 patreon-2026-07',
+      sourceChannelLabel: '来源渠道',
+      sourceChannelPlaceholder: '例如 patreon',
+      sourceSurfaceLabel: '来源业务面',
+      sourceSurfacePlaceholder: '例如 membership',
+    },
+    sampleUpload: {
+      pickButton: '选择 CSV 文件',
+      parsing: '正在解析文件…',
+      noFile: '还没有选择文件',
+      headersDetected: '已识别 {count} 个表头',
+      rowsDetected: '已识别 {count} 行数据',
+    },
+    mapping: {
+      destColumnHeader: '系统字段',
+      srcColumnHeader: 'CSV 表头',
+      previewTitle: '映射预览',
+      unmapped: '未映射',
+      invalidValue: '值无效',
+      requiredNotMapped: '必填字段尚未映射',
+    },
+    fields: {
+      lineType: { label: '行类型', tooltip: '标识该赠礼行的产生方式：权益规则、零售订单或人工录入。' },
+      obligationTriggerKind: { label: '触发原因', tooltip: '产生该行赠礼义务的具体原因，例如周期性会员、忠诚度会员或活动奖励。' },
+      entitlementAuthority: { label: '权益认定方', tooltip: '谁（或哪个系统）确认该权益成立：本地规则、上游平台，或人工授予。' },
+      recipientInputState: { label: '收件人信息状态', tooltip: '收件人所需信息（如地址）的采集进度，导入时通常留空由系统推导。' },
+      routingDisposition: { label: '分诊结果', tooltip: '该行是否被系统接收处理，还是被暂缓/排除。' },
+      routingReasonCode: { label: '分诊原因代码', tooltip: '当分诊结果为暂缓或排除时，记录具体原因的代码。' },
+      eligibilityContextRef: { label: '资格上下文引用', tooltip: '指向上游用于判定该行资格的原始凭据或记录标识。' },
+      entitlementCode: { label: '权益代码', tooltip: '该行对应的权益等级或档位标识，例如会员等级、赞助档位。' },
+      giftLevelSnapshot: { label: '赠礼等级快照', tooltip: '导入时刻的赠礼等级快照，用于后续追溯当时的判定依据。' },
+      recipientInputPayload: { label: '收件人信息', tooltip: '收件人提供的原始信息，例如地址、尺码等，将用于后续地址绑定。' },
+      externalTitle: { label: '外部标题', tooltip: '该行在来源平台上的原始名称，例如奖励名称或商品名称。' },
+      requestedQuantity: { label: '申请数量', tooltip: '该行申请赠送的商品数量。' },
+    },
+    capabilities: {
+      supportsPartialShipment: { label: '支持部分发货', hint: '允许一份需求分批次发货，而非要求一次性发齐。' },
+      supportsApiImport: { label: '支持 API 导入', hint: '该渠道可通过 API 自动拉取需求，而非仅能手动导入 CSV。' },
+      supportsApiExport: { label: '支持 API 回传', hint: '该渠道可通过 API 自动回传发货/物流信息。' },
+      requiresCarrierMapping: { label: '需要承运商映射', hint: '回传物流信息前，需要先配置内部承运商与平台承运商的映射关系。' },
+      requiresExternalOrderNo: { label: '需要外部订单号', hint: '生成工厂订单或回传时，必须提供来源平台的订单号。' },
+      allowsManualClosure: { label: '允许人工收尾', hint: '当自动回填无法覆盖全部行时，允许运营人工确认收尾。' },
+      connectorKeyLabel: '连接器标识',
+      connectorKeyPlaceholder: '选择一个已注册的连接器（可选）',
+      connectorKeyNone: '暂不绑定连接器',
+    },
+    confirm: {
+      summaryTitle: '配置摘要',
+      profileTitle: '接入配置',
+      strategyTitle: '推导的运营策略',
+      capabilitiesTitle: '能力开关',
+      mappingTitle: '字段映射',
+      remapNotice: '本次仅重新生成字段映射模板并设为默认，接入本身的配置保持不变。',
+      bindConflict: '模板已创建并绑定，但未能设为默认——该文档类型下已存在默认模板，当前后端暂不支持替换现有默认绑定。',
+      createProfile: '创建接入配置',
+      createTemplate: '创建字段映射模板',
+      bindTemplate: '绑定模板为默认',
+      done: '完成向导',
+    },
+  },
+  /**
+   * `inbox` — copy for the收件箱 page (plan P4, `pages/inbox/InboxPage.vue`).
+   * Server-paginated `DemandInboxRowDTO` grid + batch wave-assignment + CSV
+   * import modal. `assignment.*` is a bespoke (non-glossary) 3-value toggle —
+   * "assigned/unassigned" is not a status-token concept, so it does NOT live
+   * under `glossary.*`/`GlossaryDimension`.
+   */
+  inbox: {
+    title: '收件箱',
+    subtitle: '查看已导入的需求文档，分派到波次前先确认分诊结果。',
+    importFileButton: '导入 CSV',
+    manualEntryButton: '手动录入',
+    filters: {
+      assignment: '分派状态',
+      demandKind: '需求类型',
+    },
+    assignment: {
+      all: '全部',
+      assigned: '已分派',
+      unassigned: '未分派',
+    },
+    columns: {
+      profile: '接入配置',
+      kind: '需求类型',
+      captureMode: '采集方式',
+      sourceChannel: '来源渠道',
+      sourceDoc: '来源单号',
+      lineCount: '行数',
+      ready: '已就绪',
+      waiting: '等待填写',
+      deferred: '已暂缓',
+      excluded: '已排除',
+      assignedWave: '已分派波次',
+      createdAt: '导入时间',
+    },
+    batch: {
+      selected: '已选择 {n} 份需求',
+      assignToWave: '分派到波次',
+      chooseWave: '选择目标波次',
+      confirm: '确认分派',
+    },
+    detail: {
+      title: '需求文档详情',
+      routing: '分诊结果',
+      editRouting: '编辑分诊',
+      // 新增叶子（P4 单元 B）：详情侧板需要展示来源界面，行内批量分诊需要一个选中计数文案，
+      // 契约未预先声明这两个叶子，按规则在中英文件中同步补充，并在交接 deviations 中标注。
+      sourceSurface: '来源界面',
+      selectedLines: '已选择 {n} 行',
+    },
+    importModal: {
+      title: '导入需求 CSV',
+      step1SelectProfile: '选择接入配置',
+      step2PickFile: '选择 CSV 文件',
+      step3Preview: '预览与确认',
+      rowsRecognized: '已识别 {count} 行',
+      anomalies: '{count} 行存在异常',
+      modeLabel: '导入模式',
+      modeRejectAll: '整体拒绝（任意一行出错则全部不导入）',
+      modeSkipInvalid: '跳过错误行（仅导入通过校验的行）',
+      import: '开始导入',
+      resultTitle: '导入结果',
+      rowError: '第 {row} 行：{reason}',
+      successCount: '成功 {count} 行',
+      errorCount: '失败 {count} 行',
+    },
+    // 新增叶子（P4 单元 B）：手动录入表单字段，契约未预先声明，按规则同步补充并在 deviations 中标注。
+    manualEntry: {
+      title: '手动录入需求',
+      sourceCustomerRef: '来源客户标识（可选）',
+      customerProfileId: '客户档案 ID（可选）',
+      externalTitle: '需求标题',
+      requestedQuantity: '数量',
+    },
+    empty: {
+      noRows: '收件箱里还没有任何需求文档',
+      noneUnassigned: '所有需求文档都已分派到波次',
+      // 新增叶子（P4 单元 B）：WaveIntakeTab 的空态文案，语义是"这个波次还没有分派需求"，
+      // 与上面两条不同，契约未预先声明，按规则同步补充。
+      noneAssignedToWave: '该波次还没有分派任何需求文档',
+    },
+    openAssignedWave: '前往已分派的波次',
+    // 新增叶子（P4 单元 B）：WaveIntakeTab 的"取消分派"行操作，契约未预先声明，按规则同步补充。
+    unassign: '取消分派',
+    assignMoreFromInbox: '从收件箱分派更多',
+  },
+  /**
+   * `allocation` — copy for the wave-workspace分配 tab (plan P4,
+   * `pages/waves/workspace/tabs/WaveAllocationTab.vue`). Allocation-policy
+   * rules CRUD + reconcile, and the demand→fulfillment-line mapping run.
+   */
+  allocation: {
+    title: '需求分配',
+    subtitle: '配置分配规则，并将已分派的需求映射为具体的履约明细行。',
+    tabs: {
+      rules: '分配规则',
+      mapping: '映射执行',
+    },
+    participants: {
+      title: '参与者生成',
+      action: '生成参与者',
+      generateDone: '已生成 {count} 名新参与者',
+      currentCount: '当前波次共有 {count} 名参与者',
+      emptyHint: '该波次还没有生成参与者快照，请先生成参与者，再执行规则核算或映射。',
+    },
+    rules: {
+      empty: '还没有配置任何分配规则',
+      addRule: '新增规则',
+      editRule: '编辑规则',
+      deleteRule: '删除规则',
+      deleteConfirm: '确定要删除这条分配规则吗？此操作不可撤销。',
+      reconcile: '重新核算',
+      reconcileDone: '规则核算已完成',
+      reconcileSummary: '新增 {created} 项，移除 {deleted} 项，重放调整 {replayedCount} 条',
+      reconcileFailures: '{count} 条历史调整重放失败，请检查历史记录',
+      ruleName: '规则名称',
+      priority: '优先级',
+      criteria: '匹配条件',
+      product: '目标商品',
+      quantity: '数量',
+      active: '生效状态',
+      selectorType: '匹配范围',
+      platform: '平台',
+      level: '会员等级',
+      participantIds: '指定参与者 ID（逗号分隔）',
+      noProducts: '该波次还没有商品快照，请先在商品管理中为波次生成商品快照。',
+      needsParticipantsHint: '尚未生成参与者，核算不会产生任何结果，请先在上方生成参与者。',
+    },
+    mapping: {
+      run: '执行映射',
+      runDone: '映射执行完成',
+      createdLines: '已生成 {count} 条履约明细行',
+      blockedLines: '{count} 行因映射阻塞未生成',
+      noAssignedDemand: '该波次还没有分派任何需求文档，无法执行映射。',
+      assignedDemandCount: '已分派需求文档：{count} 份',
+      needsParticipantsHint: '尚未生成参与者，映射无法执行，请先在上方生成参与者。',
+    },
+    summary: {
+      title: '分配概览',
+      rulesCount: '规则数',
+      mappedLines: '已映射行数',
+      blockedLines: '阻塞行数',
+    },
+  },
+  /**
+   * `customerDetail` — copy for the unified customer detail page (plan
+   * §3.6, `pages/customers/CustomerDetailPage.vue`): the sole edit surface
+   * for profile fields, identities, addresses, and the cross-wave
+   * fulfillment-history section (acceptance question D-1).
+   */
+  customerDetail: {
+    title: '客户详情',
+    subtitle: '唯一编辑面——档案信息、身份、地址与跨波次履约历史都在这里维护。',
+    notFound: '未找到该客户档案',
+    backToList: '返回客户列表',
+    sections: {
+      profile: '档案信息',
+      identities: '身份',
+      addresses: '收货地址',
+      fulfillmentHistory: '履约历史',
+    },
+    profile: {
+      displayNameLabel: '显示名称',
+      profileTypeLabel: '档案类型',
+      extraDataLabel: '扩展信息',
+      createdAtLabel: '创建时间',
+      updatedAtLabel: '更新时间',
+      editAction: '编辑档案',
+      saveAction: '保存修改',
+      cancelAction: '取消编辑',
+      deleteAction: '删除档案',
+      deleteConfirm: '确定要删除这个客户档案吗？此操作不可撤销。',
+    },
+    identities: {
+      addAction: '新增身份',
+      createAction: '新增身份',
+      deleteAction: '删除',
+      deleteConfirm: '确定要删除这条身份记录吗？',
+      platformLabel: '来源平台',
+      valueLabel: '身份标识',
+      typeLabel: '身份类型',
+      isPrimaryLabel: '主身份',
+      empty: '还没有绑定任何身份',
+    },
+    addresses: {
+      addAction: '新增地址',
+      createAction: '新增地址',
+      editAction: '编辑地址',
+      deleteAction: '删除地址',
+      deleteConfirm: '确定要删除这个收货地址吗？',
+      empty: '还没有添加任何收货地址',
+      defaultBadge: '默认地址',
+      setDefaultAction: '设为默认',
+    },
+    fulfillmentHistory: {
+      title: '跨波次履约历史',
+      subtitle: '这个人到底发了没——一眼看清每个波次的分配、地址、供应商与回填状态。',
+      columns: {
+        wave: '波次',
+        product: '商品',
+        quantity: '数量',
+        allocationState: '分配状态',
+        addressState: '地址状态',
+        supplierState: '供应商状态',
+        channelSyncState: '回填状态',
+        tracking: '物流单号',
+        createdAt: '生成时间',
+      },
+      empty: '这个人还没有任何履约记录',
+      noTracking: '暂无物流信息',
+    },
+    merge: {
+      suggestedAction: '查看合并建议',
+      manualAction: '手动合并',
+    },
+    feedback: {
+      saved: '档案已保存',
+      identityAdded: '身份已添加',
+      identityDeleted: '身份已删除',
+      addressSaved: '地址已保存',
+      addressDeleted: '地址已删除',
+    },
+  },
+  /**
+   * `customerList` — copy for the customer list page (plan §3.6,
+   * `pages/customers/CustomersPage.vue`): search/filter table + read-only
+   * quick-preview drawer; row click navigates to `customerDetail`.
+   */
+  customerList: {
+    title: '客户',
+    subtitle: '管理所有客户档案——搜索、按平台筛选，点击进入详情。',
+    searchPlaceholder: '搜索姓名或身份标识…',
+    filter: {
+      platformLabel: '来源平台',
+      platformAll: '全部平台',
+      missingAddressOnlyLabel: '仅显示缺地址',
+    },
+    columns: {
+      displayName: '显示名称',
+      profileType: '档案类型',
+      identities: '身份数',
+      addresses: '地址数',
+      createdAt: '创建时间',
+      actions: '操作',
+    },
+    empty: {
+      title: '还没有任何客户档案',
+      description: '试试调整筛选条件，或从需求导入自动生成客户档案。',
+    },
+    createAction: '新建客户档案',
+    quickPreview: {
+      title: '快速预览',
+      viewDetail: '查看详情',
+    },
+  },
+  /**
+   * `merge` — copy for the merge-preview dialog (plan §3.6 line 255,
+   * `pages/customers/customer-detail/MergePreviewDialog.vue`): pre-merge
+   * side-by-side comparison + conflict/duplicate highlight, post-merge
+   * receipt, and merge undo.
+   */
+  merge: {
+    previewTitle: '合并预览',
+    previewSubtitle: '合并前请确认双方档案信息，冲突字段会高亮显示。',
+    sourceSide: '来源档案（将被合并）',
+    targetSide: '目标档案（保留）',
+    conflictsTitle: '字段冲突',
+    conflictField: {
+      displayName: '显示名称',
+      profileType: '档案类型',
+    },
+    duplicateIdentitiesTitle: '重复身份',
+    duplicateIdentitiesHint: '以下身份在合并后会出现重复，请确认是否继续。',
+    movedSummary: '将迁移 {identityCount} 个身份、{addressCount} 个地址',
+    noConflicts: '未检测到字段冲突',
+    noDuplicates: '未检测到重复身份',
+    confirmAction: '确认合并',
+    cancelAction: '取消',
+    executing: '合并中…',
+    receiptTitle: '合并结果',
+    receipt: {
+      migratedIdentityCount: '迁移身份数',
+      migratedAddressCount: '迁移地址数',
+      updatedDemandDocs: '更新需求文档数',
+      updatedParticipants: '更新参与者快照数',
+      updatedFulfillmentLines: '更新履约明细行数',
+    },
+    undoAction: '撤销合并',
+    undoing: '正在撤销…',
+    undoConfirmTitle: '撤销本次合并？',
+    undoConfirmBody: '来源档案及本次迁移的身份、地址和需求文档将被恢复。已生成的波次和外部事实不会被改写。',
+    undoSuccess: '合并已撤销',
+    undoError: '无法撤销合并',
+    undoUnavailable: '此合并当前无法撤销。',
+  },
+  /**
+   * `suggestedMerges` — copy for the system-detected merge-suggestion list
+   * (ported semantics from the old tree's CustomerManagementPage.vue tab 2).
+   */
+  suggestedMerges: {
+    title: '合并建议',
+    subtitle: '系统按跨平台/邮箱/手机号自动检测到的疑似重复档案。',
+    reasonLabel: '检测依据',
+    previewAction: '预览合并',
+    dismissAction: '忽略',
+    dismissConfirm: '确定要忽略这条合并建议吗？',
+    empty: '暂无待处理的合并建议',
+  },
+  /**
+   * `address` — copy for the customer address form (create/edit dialog),
+   * including the new region-cascade control (plan §3.6 line 256).
+   */
+  address: {
+    formTitle: '收货地址',
+    fields: {
+      label: '地址标签',
+      recipientName: '收件人',
+      phone: '联系电话',
+      province: '省',
+      city: '市',
+      district: '区/县',
+      addressLine1: '详细地址',
+      addressLine2: '补充地址',
+      postalCode: '邮编',
+      isDefault: '设为默认地址',
+    },
+    cascadeHint: '请先选择省份，再选择对应的市与区/县。',
+    cascadePlaceholder: {
+      province: '选择省份',
+      city: '选择城市',
+      district: '选择区/县',
+    },
+    validation: {
+      recipientRequired: '请填写收件人姓名',
+      phoneRequired: '请填写联系电话',
+      phoneInvalid: '请输入正确的手机号码',
+      provinceRequired: '请选择省份',
+      cityRequired: '请选择城市',
+      districtRequired: '请选择区/县',
+      addressLine1Required: '请填写详细地址',
+    },
+    saveAction: '保存地址',
+    cancelAction: '取消',
+  },
+  /**
+   * `products` — copy for the product-master list + batch-stock-to-wave
+   * flow (plan §3.7 first half, `pages/products/*.vue`).
+   */
+  products: {
+    title: '商品',
+    subtitle: '管理商品主档——搜索、筛选、批量备货到波次。',
+    searchPlaceholder: '搜索商品名称或货号…',
+    filter: {
+      kindLabel: '商品类型',
+      archiveViewLabel: '仅显示已归档',
+    },
+    columns: {
+      name: '名称',
+      supplierPlatform: '供应商平台',
+      factorySku: '工厂货号',
+      supplierProductRef: '供应商商品编号',
+      productKind: '商品类型',
+      archived: '归档状态',
+      actions: '操作',
+    },
+    archivedBadge: '已归档',
+    activeBadge: '在售',
+    createAction: '新建商品',
+    editAction: '编辑商品',
+    archiveAction: '归档',
+    unarchiveAction: '取消归档',
+    empty: {
+      title: '还没有任何商品主档',
+      description: '试试调整筛选条件，或新建一个商品。',
+    },
+    editDialog: {
+      createTitle: '新建商品',
+      editTitle: '编辑商品',
+      nameLabel: '商品名称',
+      supplierPlatformLabel: '供应商平台',
+      factorySkuLabel: '工厂货号',
+      supplierProductRefLabel: '供应商商品编号',
+      productKindLabel: '商品类型',
+      archivedLabel: '已归档',
+      submit: '保存',
+      cancel: '取消',
+    },
+    batchStock: {
+      action: '批量备货到波次',
+      dialogTitle: '批量备货到波次',
+      waveLabel: '目标波次',
+      wavePlaceholder: '选择要备货的波次…',
+      existingSnapshotTitle: '该波次已有快照',
+      existingSnapshotCount: '该波次已有 {count} 项商品快照',
+      dedupHint: '以下 {count} 项商品在该波次中已存在快照，将被跳过：',
+      noDedup: '所选商品在该波次中均无重复，全部会新建快照。',
+      confirmAction: '确认备货',
+      resultSummary: '{created} 项已创建，{skipped} 项已存在',
+      fromWaveWorkspaceHint: '已锁定当前波次，无需再次选择。',
+    },
+    pickFromMasterAction: '从主档挑选商品',
+  },
+  /**
+   * `settings` — copy for the settings page (plan §3.7 second half,
+   * `pages/settings/SettingsPage.vue`): appearance/language/operator
+   * roster/data directory/auto-merge.
+   */
+  settings: {
+    title: '设置',
+    subtitle: '外观、语言、操作员名单、数据目录与自动合并规则。',
+    sections: {
+      appearance: '外观',
+      language: '语言',
+      operatorRoster: '操作员名单',
+      dataDir: '数据目录',
+      autoMerge: '自动合并',
+    },
+    appearance: {
+      themeLabel: '主题',
+      themeOptions: {
+        system: '跟随系统',
+        light: '浅色',
+        dark: '深色',
+      },
+      densityLabel: '密度',
+      densityOptions: {
+        comfortable: '宽松',
+        compact: '紧凑',
+      },
+      skinLabel: '皮肤',
+      skinUnsupportedHint: '当前主题下不可用',
+    },
+    language: {
+      label: '界面语言',
+    },
+    operatorRoster: {
+      description: '维护常用操作员名单，供调整/收尾表单直接选择，替代自由文本输入。',
+      addPlaceholder: '输入操作员姓名或工号…',
+      addAction: '添加',
+      removeAction: '移除',
+      removeConfirm: '确定要从名单中移除"{name}"吗？',
+      empty: '还没有添加任何操作员',
+    },
+    dataDir: {
+      description: '所有数据文件（数据库、日志、生成文件）存放的目录。',
+      pathLabel: '当前路径',
+      openAction: '打开文件夹',
+      loadFailed: '数据目录解析失败',
+    },
+    autoMerge: {
+      crossPlatformLabel: '跨平台自动合并',
+      crossPlatformDesc: '这会做什么：当同一收件人在不同平台留下相同邮箱或手机号时，系统会自动生成合并建议，无需人工发起。',
+      byEmailLabel: '按邮箱自动合并',
+      byEmailDesc: '这会做什么：识别到相同邮箱地址的多个客户档案时，自动生成合并建议。',
+      byPhoneLabel: '按手机号自动合并',
+      byPhoneDesc: '这会做什么：识别到相同手机号的多个客户档案时，自动生成合并建议。',
+      saveHint: '开关变更会立即保存。',
+    },
+    feedback: {
+      settingsSaved: '设置已保存',
+    },
+  },
+}
+
+/**
+ * The message shape both locales must satisfy. Deliberately NOT `as const` —
+ * leaf values widen to `string`, so `en-US.ts` is checked for identical keys
+ * without being forced to match Chinese literal text.
+ */
+export type AppMessageSchema = typeof zhCN
