@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -88,6 +89,36 @@ func (m *mockDocumentTemplateRepo) ListByDocumentType(ctx context.Context, docTy
 	return out, nil
 }
 
+func (m *mockDocumentTemplateRepo) Update(ctx context.Context, t *domain.DocumentTemplate) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	existing, ok := m.records[t.ID]
+	if !ok {
+		return fmt.Errorf("mock: template %d not found", t.ID)
+	}
+	// Keep key/type immutable in the mock the same way the use case enforces.
+	t.TemplateKey = existing.TemplateKey
+	t.DocumentType = existing.DocumentType
+	t.CreatedAt = existing.CreatedAt
+	t.UpdatedAt = time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+	cp := *t
+	m.records[t.ID] = &cp
+	m.byKey[t.TemplateKey] = &cp
+	return nil
+}
+
+func (m *mockDocumentTemplateRepo) Delete(ctx context.Context, id uint) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	existing, ok := m.records[id]
+	if !ok {
+		return fmt.Errorf("mock: template %d not found", id)
+	}
+	delete(m.byKey, existing.TemplateKey)
+	delete(m.records, id)
+	return nil
+}
+
 // ── mock ProfileTemplateBindingRepository ──
 
 type mockProfileTemplateBindingRepo struct {
@@ -113,12 +144,35 @@ func (m *mockProfileTemplateBindingRepo) Create(ctx context.Context, b *domain.I
 	return nil
 }
 
+func (m *mockProfileTemplateBindingRepo) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfileTemplateBinding, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	b, ok := m.records[id]
+	if !ok {
+		return nil, nil
+	}
+	cp := *b
+	return &cp, nil
+}
+
 func (m *mockProfileTemplateBindingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []domain.IntegrationProfileTemplateBinding
 	for _, b := range m.records {
 		if b.IntegrationProfileID == profileID {
+			out = append(out, *b)
+		}
+	}
+	return out, nil
+}
+
+func (m *mockProfileTemplateBindingRepo) ListByTemplateID(ctx context.Context, templateID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.IntegrationProfileTemplateBinding
+	for _, b := range m.records {
+		if b.TemplateID == templateID {
 			out = append(out, *b)
 		}
 	}
@@ -135,6 +189,28 @@ func (m *mockProfileTemplateBindingRepo) FindDefaultByProfileAndType(ctx context
 		}
 	}
 	return nil, nil
+}
+
+func (m *mockProfileTemplateBindingRepo) ClearDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, b := range m.records {
+		if b.IntegrationProfileID == profileID && b.DocumentType == docType && b.IsDefault {
+			b.IsDefault = false
+		}
+	}
+	return nil
+}
+
+func (m *mockProfileTemplateBindingRepo) Update(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.records[b.ID]; !ok {
+		return fmt.Errorf("mock: binding %d not found", b.ID)
+	}
+	cp := *b
+	m.records[b.ID] = &cp
+	return nil
 }
 
 func (m *mockProfileTemplateBindingRepo) Delete(ctx context.Context, id uint) error {
@@ -228,7 +304,7 @@ func validCreateTemplateInput() dto.CreateDocumentTemplateInput {
 		TemplateKey:  "tmpl-001",
 		DocumentType: "import_entitlement",
 		Format:       "csv",
-		MappingRules: `{"col":"value"}`,
+		MappingRules: `{"columns":{"external_title":"Name","requested_quantity":"Qty"},"defaults":{"line_type":"sku_order"}}`,
 		ExtraData:    "",
 	}
 }
@@ -345,5 +421,191 @@ func TestGetDefaultTemplateForProfile(t *testing.T) {
 	}
 	if result.TemplateKey != "tmpl-001" {
 		t.Errorf("TemplateKey = %q, want tmpl-001", result.TemplateKey)
+	}
+}
+
+func TestUpdateDocumentTemplateSuccess(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	created, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
+	if err != nil {
+		t.Fatalf("setup: create template: %v", err)
+	}
+
+	updated, err := s.uc.UpdateDocumentTemplate(context.Background(), dto.UpdateDocumentTemplateInput{
+		ID:           created.ID,
+		Format:       "xlsx",
+		MappingRules: `{"columns":{"external_title":"Title","requested_quantity":"Amount"},"defaults":{"line_type":"sku_order"}}`,
+		ExtraData:    `{"note":"updated"}`,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if updated.Format != "xlsx" {
+		t.Errorf("Format = %q, want xlsx", updated.Format)
+	}
+	if updated.TemplateKey != created.TemplateKey {
+		t.Errorf("TemplateKey changed to %q, must stay %q", updated.TemplateKey, created.TemplateKey)
+	}
+	if updated.DocumentType != created.DocumentType {
+		t.Errorf("DocumentType changed to %q, must stay %q", updated.DocumentType, created.DocumentType)
+	}
+	if updated.ExtraData != `{"note":"updated"}` {
+		t.Errorf("ExtraData = %q, want updated note", updated.ExtraData)
+	}
+}
+
+func TestUpdateDocumentTemplateInvalidFormat(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	created, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
+	if err != nil {
+		t.Fatalf("setup: create template: %v", err)
+	}
+
+	_, err = s.uc.UpdateDocumentTemplate(context.Background(), dto.UpdateDocumentTemplateInput{
+		ID:     created.ID,
+		Format: "pdf",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid format, got nil")
+	}
+}
+
+func TestDeleteDocumentTemplateSuccess(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	created, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
+	if err != nil {
+		t.Fatalf("setup: create template: %v", err)
+	}
+
+	if err := s.uc.DeleteDocumentTemplate(context.Background(), created.ID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got, err := s.templateRepo.FindByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("lookup after delete: %v", err)
+	}
+	if got != nil {
+		t.Fatal("expected template to be gone after delete")
+	}
+}
+
+func TestDeleteDocumentTemplateRejectsWhenBound(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	created, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
+	if err != nil {
+		t.Fatalf("setup: create template: %v", err)
+	}
+	_, err = s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 1,
+		DocumentType:         "import_entitlement",
+		TemplateID:           created.ID,
+		IsDefault:            true,
+	})
+	if err != nil {
+		t.Fatalf("setup: bind template: %v", err)
+	}
+
+	err = s.uc.DeleteDocumentTemplate(context.Background(), created.ID)
+	if err == nil {
+		t.Fatal("expected delete to fail while bindings exist")
+	}
+	if !strings.Contains(err.Error(), "still referenced") {
+		t.Errorf("error = %q, want mention of still referenced", err.Error())
+	}
+}
+
+func TestUnbindTemplateSuccess(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	tmpl, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
+	if err != nil {
+		t.Fatalf("setup: create template: %v", err)
+	}
+	binding, err := s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 1,
+		DocumentType:         "import_entitlement",
+		TemplateID:           tmpl.ID,
+		IsDefault:            false,
+	})
+	if err != nil {
+		t.Fatalf("setup: bind template: %v", err)
+	}
+
+	if err := s.uc.UnbindTemplate(context.Background(), binding.ID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	list, err := s.uc.ListBindingsByProfile(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("list after unbind: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("expected 0 bindings after unbind, got %d", len(list))
+	}
+}
+
+func TestSetDefaultBindingSwitchesDefault(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	tmplA, err := s.uc.CreateDocumentTemplate(context.Background(), validCreateTemplateInput())
+	if err != nil {
+		t.Fatalf("setup: create template A: %v", err)
+	}
+	inputB := validCreateTemplateInput()
+	inputB.TemplateKey = "tmpl-002"
+	tmplB, err := s.uc.CreateDocumentTemplate(context.Background(), inputB)
+	if err != nil {
+		t.Fatalf("setup: create template B: %v", err)
+	}
+
+	bindingA, err := s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 1,
+		DocumentType:         "import_entitlement",
+		TemplateID:           tmplA.ID,
+		IsDefault:            true,
+	})
+	if err != nil {
+		t.Fatalf("setup: bind A: %v", err)
+	}
+	bindingB, err := s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 1,
+		DocumentType:         "import_entitlement",
+		TemplateID:           tmplB.ID,
+		IsDefault:            false,
+	})
+	if err != nil {
+		t.Fatalf("setup: bind B: %v", err)
+	}
+
+	if err := s.uc.SetDefaultBinding(context.Background(), bindingB.ID); err != nil {
+		t.Fatalf("SetDefaultBinding: %v", err)
+	}
+
+	defaultTmpl, err := s.uc.GetDefaultTemplateForProfile(context.Background(), 1, "import_entitlement")
+	if err != nil {
+		t.Fatalf("GetDefaultTemplateForProfile: %v", err)
+	}
+	if defaultTmpl == nil || defaultTmpl.ID != tmplB.ID {
+		t.Fatalf("expected default template %d, got %+v", tmplB.ID, defaultTmpl)
+	}
+
+	// Old default must no longer be default.
+	gotA, err := s.bindingRepo.FindByID(context.Background(), bindingA.ID)
+	if err != nil {
+		t.Fatalf("lookup binding A: %v", err)
+	}
+	if gotA == nil || gotA.IsDefault {
+		t.Fatalf("expected binding A IsDefault=false, got %+v", gotA)
 	}
 }

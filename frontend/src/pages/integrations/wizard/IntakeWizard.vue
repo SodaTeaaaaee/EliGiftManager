@@ -5,6 +5,10 @@
  * see `useIntakeWizardState.ts`'s `isRemapMode`). Owns nothing but the
  * composable instance + which step component to render; the actual persist
  * sequence lives in `state.finish()`.
+ *
+ * bindConflict / templatePartial / templateAllFailed are partial success:
+ * profile (and possibly some templates) created — still emit `done` with an
+ * info toast, not a hard failure after the profile already exists.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -63,9 +67,15 @@ function handleCancel(): void {
 async function handleFinish(): Promise<void> {
   try {
     const profile = await state.finish()
-    feedback.success(t('feedback.success'))
+    if (state.bindWarning.value) {
+      // Partial success: template created + bound non-default.
+      feedback.info(state.bindWarning.value)
+    } else {
+      feedback.success(t('feedback.success'))
+    }
     emit('done', profile)
   } catch (err) {
+    // persistError is also set for StepConfirm inline display.
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   }
 }

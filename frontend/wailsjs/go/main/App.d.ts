@@ -3,6 +3,10 @@
 
 export function PickCSVFile():Promise<string>;
 
+export function PickCatalogImportFile():Promise<string>;
+
+export function PickTabularFile():Promise<string>;
+
 export function PickZIPFile():Promise<string>;
 
 export function SaveZoom(arg1:number):Promise<void>;

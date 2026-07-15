@@ -166,6 +166,133 @@ func (uc *addressManagementUseCase) UnbindAddressFromLine(ctx context.Context, f
 	return uc.fulfillmentRepo.Update(ctx, line)
 }
 
+// UpsertAddressFromImport hybrid-matches an existing address on the customer profile:
+//   - primary key: RecipientName + Phone
+//   - fallback when Phone is empty: RecipientName + AddressLine1
+//
+// Hit → update non-empty draft fields onto the existing row.
+// Miss → create a new address (label defaults to "import"; IsDefault honouring draft).
+func (uc *addressManagementUseCase) UpsertAddressFromImport(ctx context.Context, customerProfileID uint, draft RecipientAddressDraft) (*dto.CustomerAddressDTO, error) {
+	if customerProfileID == 0 {
+		return nil, fmt.Errorf("upsert address from import: customerProfileID is required")
+	}
+	if draft.RecipientName == "" {
+		return nil, fmt.Errorf("upsert address from import: recipient name is required")
+	}
+
+	addrs, err := uc.addressRepo.ListByProfile(ctx, customerProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("list addresses for profile %d: %w", customerProfileID, err)
+	}
+
+	var match *domain.CustomerAddress
+	for i := range addrs {
+		a := &addrs[i]
+		if draft.Phone != "" {
+			if a.RecipientName == draft.RecipientName && a.Phone == draft.Phone {
+				match = a
+				break
+			}
+			continue
+		}
+		// Phone empty → Name + AddressLine1
+		if a.RecipientName == draft.RecipientName && a.AddressLine1 == draft.AddressLine1 {
+			match = a
+			break
+		}
+	}
+
+	now := time.Now()
+	if match != nil {
+		applyRecipientDraft(match, draft)
+		match.UpdatedAt = now
+		if draft.IsDefault && !match.IsDefault {
+			if err := uc.addressRepo.ClearDefaultByProfile(ctx, customerProfileID); err != nil {
+				return nil, fmt.Errorf("clear existing defaults: %w", err)
+			}
+			match.IsDefault = true
+		}
+		if err := uc.addressRepo.Update(ctx, match); err != nil {
+			return nil, fmt.Errorf("update matched address: %w", err)
+		}
+		result := addressToDTO(match)
+		return &result, nil
+	}
+
+	// Create path.
+	label := draft.Label
+	if label == "" {
+		label = "import"
+	}
+	if draft.IsDefault {
+		if err := uc.addressRepo.ClearDefaultByProfile(ctx, customerProfileID); err != nil {
+			return nil, fmt.Errorf("clear existing defaults: %w", err)
+		}
+	}
+	// First address for a profile becomes default when the draft does not opt out.
+	isDefault := draft.IsDefault
+	if !isDefault && len(addrs) == 0 {
+		isDefault = true
+	}
+
+	addr := &domain.CustomerAddress{
+		CustomerProfileID: customerProfileID,
+		Label:             label,
+		RecipientName:     draft.RecipientName,
+		Phone:             draft.Phone,
+		Country:           draft.Country,
+		Province:          draft.Province,
+		City:              draft.City,
+		District:          draft.District,
+		AddressLine1:      draft.AddressLine1,
+		AddressLine2:      draft.AddressLine2,
+		PostalCode:        draft.PostalCode,
+		IsDefault:         isDefault,
+		ValidationStatus:  "unvalidated",
+		CreatedAt:         now,
+		UpdatedAt:         now,
+	}
+	if err := uc.addressRepo.Create(ctx, addr); err != nil {
+		return nil, fmt.Errorf("create address from import: %w", err)
+	}
+	result := addressToDTO(addr)
+	return &result, nil
+}
+
+// applyRecipientDraft copies non-empty draft fields onto an existing address.
+func applyRecipientDraft(addr *domain.CustomerAddress, draft RecipientAddressDraft) {
+	if draft.RecipientName != "" {
+		addr.RecipientName = draft.RecipientName
+	}
+	if draft.Phone != "" {
+		addr.Phone = draft.Phone
+	}
+	if draft.Country != "" {
+		addr.Country = draft.Country
+	}
+	if draft.Province != "" {
+		addr.Province = draft.Province
+	}
+	if draft.City != "" {
+		addr.City = draft.City
+	}
+	if draft.District != "" {
+		addr.District = draft.District
+	}
+	if draft.AddressLine1 != "" {
+		addr.AddressLine1 = draft.AddressLine1
+	}
+	if draft.AddressLine2 != "" {
+		addr.AddressLine2 = draft.AddressLine2
+	}
+	if draft.PostalCode != "" {
+		addr.PostalCode = draft.PostalCode
+	}
+	if draft.Label != "" {
+		addr.Label = draft.Label
+	}
+}
+
 func deriveAddressState(validationStatus string) string {
 	switch validationStatus {
 	case "valid":

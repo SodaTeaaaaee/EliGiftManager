@@ -60,6 +60,11 @@ func NewChannelSyncController() *ChannelSyncController {
 	executorProvider := buildExecutorProvider()
 	registry := buildExecutorRegistry()
 	carrierMappingRepo := infra.NewCarrierMappingRepository(gdb)
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	mapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
+	carrierUC := app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo)
+	carrierUC = app.WithCarrierImportDeps(carrierUC, mapping)
 	return &ChannelSyncController{
 		channelSyncUC:       channelSyncUC,
 		channelSyncRepo:     channelSyncRepo,
@@ -73,7 +78,7 @@ func NewChannelSyncController() *ChannelSyncController {
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc)),
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo),
 		snapshotSvc:         snapshotSvc,
-		carrierMappingUC:    app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo),
+		carrierMappingUC:    carrierUC,
 		executorRegistry:    registry,
 	}
 }
@@ -495,12 +500,16 @@ func (c *ChannelSyncController) ListIntegrationProfiles() ([]dto.IntegrationProf
 	result := make([]dto.IntegrationProfileSummaryDTO, len(profiles))
 	for i, p := range profiles {
 		result[i] = dto.IntegrationProfileSummaryDTO{
-			ID:                  p.ID,
-			ProfileKey:          p.ProfileKey,
-			SourceChannel:       p.SourceChannel,
-			TrackingSyncMode:    p.TrackingSyncMode,
-			ClosurePolicy:       p.ClosurePolicy,
-			AllowsManualClosure: p.AllowsManualClosure,
+			ID:                             p.ID,
+			ProfileKey:                     p.ProfileKey,
+			SourceChannel:                  p.SourceChannel,
+			SourceSurface:                  p.SourceSurface,
+			TrackingSyncMode:               p.TrackingSyncMode,
+			ClosurePolicy:                  p.ClosurePolicy,
+			AllowsManualClosure:            p.AllowsManualClosure,
+			SupportsExportSupplierOrder:    p.SupportsExportSupplierOrder,
+			SupportsImportProductCatalog:   p.SupportsImportProductCatalog,
+			SupportsImportSupplierShipment: p.SupportsImportSupplierShipment,
 		}
 	}
 	return result, nil
@@ -561,9 +570,10 @@ func buildExecutorRegistry() *app.ExecutorRegistry {
 		log.Printf("[channel_sync] resolve exports dir for registry: %v — falling back to os.TempDir", err)
 		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
 	}
+	templates := buildTrackingTemplateSource()
 	registry := app.NewExecutorRegistry()
-	registry.Register(app.NewDocumentExportExecutor(exportsDir))
-	registry.Register(app.NewCSVExportExecutor(exportsDir))
+	registry.Register(app.NewDocumentExportExecutor(exportsDir, templates))
+	registry.Register(app.NewCSVExportExecutor(exportsDir, templates))
 	return registry
 }
 
@@ -575,8 +585,9 @@ func buildExecutorProvider() app.ExecutorProvider {
 		log.Printf("[channel_sync] resolve exports dir: %v — falling back to os.TempDir", err)
 		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
 	}
-	docExportExec := app.NewDocumentExportExecutor(exportsDir)
-	csvExportExec := app.NewCSVExportExecutor(exportsDir)
+	templates := buildTrackingTemplateSource()
+	docExportExec := app.NewDocumentExportExecutor(exportsDir, templates)
+	csvExportExec := app.NewCSVExportExecutor(exportsDir, templates)
 	registry := map[string]map[string]app.ChannelSyncExecutor{
 		"document_export": {
 			"eli.local_export": docExportExec,
@@ -584,6 +595,23 @@ func buildExecutorProvider() app.ExecutorProvider {
 		},
 	}
 	return app.NewRuntimeExecutorProviderWith(registry)
+}
+
+// buildTrackingTemplateSource wires profile→template resolution so tracking
+// executors can honour export_source_tracking_update MappingRules columnOrder,
+// and attaches CarrierUC for internal→external carrier translation on export.
+func buildTrackingTemplateSource() *app.TrackingTemplateSource {
+	gdb := db.GetDB()
+	if gdb == nil {
+		return nil
+	}
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	carrierRepo := infra.NewCarrierMappingRepository(gdb)
+	return &app.TrackingTemplateSource{
+		BindingRepo:  infra.NewProfileTemplateBindingRepository(gdb),
+		TemplateRepo: infra.NewDocumentTemplateRepository(gdb),
+		CarrierUC:    app.NewCarrierMappingUseCase(carrierRepo, profileRepo),
+	}
 }
 
 func domainToChannelSyncItemDTO(it *domain.ChannelSyncItem) dto.ChannelSyncItemDTO {
@@ -628,6 +656,16 @@ func (c *ChannelSyncController) ListCarrierMappings(profileID uint) ([]dto.Carri
 func (c *ChannelSyncController) DeleteCarrierMapping(id uint) error {
 	ctx := appContext
 	return c.carrierMappingUC.DeleteMapping(ctx, id)
+}
+
+// ImportCarrierMappings upserts carrier mappings from a template-mapped sheet.
+func (c *ChannelSyncController) ImportCarrierMappings(input dto.ImportCarrierMappingsInput) (dto.ImportCarrierMappingsResult, error) {
+	ctx := appContext
+	result, err := c.carrierMappingUC.ImportCarrierMappings(ctx, input)
+	if err != nil {
+		return dto.ImportCarrierMappingsResult{}, err
+	}
+	return *result, nil
 }
 
 // ListConnectorCapabilities returns capability metadata for all registered connectors.

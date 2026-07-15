@@ -219,3 +219,19 @@ export const productKindValues = [
 ] as const
 
 export type ProductKind = (typeof productKindValues)[number]
+
+export const businessSurfaceValues = [
+  'membership',
+  'retail',
+  'factory',
+] as const
+
+export type BusinessSurface = (typeof businessSurfaceValues)[number]
+
+export const sourceSurfaceValues = [
+  'membership',
+  'retail',
+  'factory',
+] as const
+
+export type SourceSurface = (typeof sourceSurfaceValues)[number]

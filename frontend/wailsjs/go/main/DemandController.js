@@ -46,6 +46,10 @@ export function ParseCSVFile(arg1) {
   return window['go']['main']['DemandController']['ParseCSVFile'](arg1);
 }
 
+export function ParseTabularFile(arg1, arg2) {
+  return window['go']['main']['DemandController']['ParseTabularFile'](arg1, arg2);
+}
+
 export function UpdateDemandLineRouting(arg1) {
   return window['go']['main']['DemandController']['UpdateDemandLineRouting'](arg1);
 }

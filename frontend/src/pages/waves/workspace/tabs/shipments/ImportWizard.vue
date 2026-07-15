@@ -11,34 +11,42 @@
  *    `useReconciliationIndex()` before `importShipments` is ever called.
  * 2. The import result is a SEPARATE, STICKY view (`ImportResultView`,
  *    rendered instead of the wizard once `importResult` is set) that is only
- *    cleared when the operator explicitly clicks "start a new import" — the
- *    old tree's `resetImportWizard()` wiped `importResult` immediately on
- *    partial success, discarding the very errors it had just collected.
+ *    cleared when the operator explicitly clicks "start a new import".
  *
- * A row that cannot be resolved to a supplier order line (bad/missing
- * reconciliation key) is never sent to the backend as a garbage entry —
- * it's folded into the persisted result as a client-side error row,
- * side-by-side with the backend's own per-row `errors[]`, so the operator
- * sees every row's outcome in one place regardless of which side rejected it.
+ * MappingRules v2: uses full FieldMappingValue (mode/hasHeader/columnOrder)
+ * and 4-arg `applyMapping`. Template-driven path hides the client editor.
+ * Dest catalog reuses `SHIPMENT_DEST_FIELDS` plus reconciliation keys.
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NSelect, NRadioGroup, NRadioButton } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { WizardFrame, type WizardStep } from '@/shared/ui/wizard'
-import { FieldMappingEditor, applyMapping, type FieldMappingDestField, type FieldMappingValue } from '@/shared/ui/field-mapping'
+import {
+  FieldMappingEditor,
+  applyMapping,
+  validateDestFieldValue,
+  emptyFieldMapping,
+  type FieldMappingDestField,
+  type FieldMappingValue,
+} from '@/shared/ui/field-mapping'
 import { CalloutBar } from '@/shared/ui/guidance'
 import { DataGrid, createColumns } from '@/shared/ui/data-grid'
 import { useFeedback } from '@/shared/ui/feedback'
 import { useGlossary } from '@/shared/i18n/glossary'
-import { pickCsvFile, parseCSVFile, importShipments } from '@/shared/api/bridge'
+import { pickTabularFile, parseTabularFile, importShipments, mapAndReconcileShipments, listProfiles } from '@/shared/api/bridge'
 import { useWaveWorkspaceContext } from '@/shared/lib/wave-workspace/useWaveWorkspace'
 import { useReconciliationIndex, batchLineNoKey, type ReconciliationLine } from './useReconciliationIndex'
 import ImportResultView from './ImportResultView.vue'
 import type { ImportResultViewData } from './ImportResultView.vue'
+import {
+  SHIPMENT_DEST_FIELDS,
+  destFieldLabelKey,
+  destFieldTooltipKey,
+} from '@/pages/integrations/wizard/destFields'
 import type { dto } from '@/../wailsjs/go/models'
 
-const { t } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
 const { label: glossaryLabel } = useGlossary()
 const ctx = useWaveWorkspaceContext()
@@ -60,13 +68,36 @@ const wizardSteps = computed<WizardStep[]>(() => [
 
 const picking = ref(false)
 const csvPreview = ref<dto.CSVFilePreviewDTO | null>(null)
+const tabularFilePath = ref('')
+/** When set, finish uses MapAndReconcileShipments (template-driven) instead of client mapping. */
+const templateProfileId = ref<number | null>(null)
+const profileOptions = ref<SelectOption[]>([])
+const profilesError = ref('')
+
+const isTemplateDriven = computed(() => !!templateProfileId.value && !!tabularFilePath.value)
+
+async function loadProfiles(): Promise<void> {
+  profilesError.value = ''
+  try {
+    const profiles = await listProfiles()
+    profileOptions.value = profiles.map((p) => ({
+      label: `${p.profileKey} (${p.sourceChannel})`,
+      value: p.id,
+    }))
+  } catch (err) {
+    profileOptions.value = []
+    profilesError.value = err instanceof Error ? err.message : String(err)
+  }
+}
+void loadProfiles()
 
 async function handlePickFile(): Promise<void> {
   picking.value = true
   try {
-    const path = await pickCsvFile()
+    const path = await pickTabularFile()
     if (!path) return
-    csvPreview.value = await parseCSVFile(path)
+    tabularFilePath.value = path
+    csvPreview.value = await parseTabularFile(path)
   } catch (err) {
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
@@ -94,16 +125,19 @@ watch(
   { immediate: true },
 )
 
-const mapping = ref<FieldMappingValue>({ columns: {}, defaults: {} })
+const mapping = ref<FieldMappingValue>(emptyFieldMapping())
 
 // Selecting a supplier order pre-fills a default `batchNo` so a single-order
 // CSV doesn't need its own batchNo column. A default always wins over a
-// column mapping for the same destField (see FieldMappingEditor's own doc
-// comment) — the operator can clear this default to fall back to a mapped
-// column for a multi-order CSV.
+// column mapping for the same destField.
 watch(selectedOrderId, (id) => {
   const order = reconciliation.index.value.orders.find((candidate) => candidate.id === id)
-  if (order) mapping.value = { ...mapping.value, defaults: { ...mapping.value.defaults, batchNo: order.batchNo } }
+  if (order) {
+    mapping.value = {
+      ...mapping.value,
+      defaults: { ...mapping.value.defaults, batchNo: order.batchNo },
+    }
+  }
 })
 
 const keyDestFields = computed<FieldMappingDestField[]>(() =>
@@ -115,32 +149,39 @@ const keyDestFields = computed<FieldMappingDestField[]>(() =>
       ],
 )
 
-const destFields = computed<FieldMappingDestField[]>(() => [
-  ...keyDestFields.value,
-  { key: 'externalShipmentNo', label: t('waveWorkspace.shipments.import.mapping.externalShipmentNo') },
-  { key: 'carrierCode', label: t('waveWorkspace.shipments.import.mapping.carrierCode') },
-  { key: 'carrierName', label: t('waveWorkspace.shipments.import.mapping.carrierName') },
-  { key: 'trackingNo', label: t('waveWorkspace.shipments.import.mapping.trackingNo') },
-  { key: 'quantity', label: t('waveWorkspace.shipments.import.mapping.quantity') },
-  { key: 'shippedAt', label: t('waveWorkspace.shipments.import.mapping.shippedAt') },
-])
-
-function validateShipmentField(destField: string, value: string): string | undefined {
-  if (destField === 'quantity') {
-    return /^\d+$/.test(value.trim()) && Number(value.trim()) > 0 ? undefined : 'invalid_quantity'
-  }
-  if (destField === 'supplierLineNo') {
-    return value.trim() === '' || /^\d+$/.test(value.trim()) ? undefined : 'invalid_integer'
-  }
-  return undefined
-}
+/** Client-mapping dest list: reconciliation keys + SHIPMENT_DEST_FIELDS catalog. */
+const destFields = computed<FieldMappingDestField[]>(() => {
+  const shipmentFields: FieldMappingDestField[] = SHIPMENT_DEST_FIELDS.map((field) => {
+    const labelKey = destFieldLabelKey(field)
+    const tooltipKey = destFieldTooltipKey(field)
+    return {
+      key: field,
+      label: te(labelKey) ? t(labelKey) : field,
+      tooltip: te(tooltipKey) ? t(tooltipKey) : undefined,
+    }
+  })
+  // Keep legacy unprefixed keys for client-side resolveLine (lineId/batchNo/…).
+  const legacyExtras: FieldMappingDestField[] = [
+    { key: 'externalShipmentNo', label: t('waveWorkspace.shipments.import.mapping.externalShipmentNo') },
+    { key: 'carrierCode', label: t('waveWorkspace.shipments.import.mapping.carrierCode') },
+    { key: 'carrierName', label: t('waveWorkspace.shipments.import.mapping.carrierName') },
+    { key: 'trackingNo', label: t('waveWorkspace.shipments.import.mapping.trackingNo') },
+    { key: 'quantity', label: t('waveWorkspace.shipments.import.mapping.quantity') },
+    { key: 'shippedAt', label: t('waveWorkspace.shipments.import.mapping.shippedAt') },
+  ]
+  return [...keyDestFields.value, ...legacyExtras, ...shipmentFields]
+})
 
 function mappingHasField(field: string): boolean {
-  return field in mapping.value.columns || field in mapping.value.defaults
+  return field in (mapping.value.columns ?? {}) || field in (mapping.value.defaults ?? {})
 }
 
 const canProceedFromMapping = computed(() => {
-  const hasKey = reconciliationKey.value === 'byLineId' ? mappingHasField('lineId') : mappingHasField('batchNo') && mappingHasField('supplierLineNo')
+  if (isTemplateDriven.value) return true
+  const hasKey =
+    reconciliationKey.value === 'byLineId'
+      ? mappingHasField('lineId')
+      : mappingHasField('batchNo') && mappingHasField('supplierLineNo')
   return hasKey && mappingHasField('quantity')
 })
 
@@ -176,9 +217,17 @@ function unresolvedRowReason(): string {
   return t('waveWorkspace.shipments.import.mapping.unresolvedRowReason')
 }
 
+function pickValue(values: Record<string, string>, ...keys: string[]): string {
+  for (const key of keys) {
+    const v = values[key]
+    if (v !== undefined && v !== '') return v
+  }
+  return ''
+}
+
 function resolveLine(values: Record<string, string>): ReconciliationLine | undefined {
   if (reconciliationKey.value === 'byLineId') {
-    const id = Number((values.lineId ?? '').trim())
+    const id = Number((values.lineId ?? values['shipment.fulfillment_line_id'] ?? '').trim())
     return Number.isFinite(id) ? reconciliation.index.value.byLineId.get(id) : undefined
   }
   const batchNo = (values.batchNo ?? '').trim()
@@ -188,13 +237,20 @@ function resolveLine(values: Record<string, string>): ReconciliationLine | undef
 }
 
 const parsedRows = computed<ParsedRow[]>(() => {
-  if (!csvPreview.value) return []
-  const mapped = applyMapping(csvPreview.value.rows, mapping.value.columns, mapping.value.defaults)
+  if (!csvPreview.value || isTemplateDriven.value) return []
+  // v2 4-arg applyMapping: full FieldMappingValue + sourceHeaders for positional mode.
+  const mapped = applyMapping(
+    csvPreview.value.rows,
+    mapping.value,
+    undefined,
+    csvPreview.value.headers,
+  )
   return mapped.map((row, index) => {
     const values = row.values
     const sol = resolveLine(values)
     if (!sol) return { originalRowIndex: index, ok: false, reason: unresolvedRowReason() }
-    const quantity = Number((values.quantity ?? '').trim())
+    const quantityRaw = pickValue(values, 'quantity', 'shipment.quantity')
+    const quantity = Number(quantityRaw.trim())
     return {
       originalRowIndex: index,
       ok: true,
@@ -202,18 +258,22 @@ const parsedRows = computed<ParsedRow[]>(() => {
       entry: {
         supplierOrderLineId: sol.lineId,
         fulfillmentLineId: sol.fulfillmentLineId,
-        externalShipmentNo: values.externalShipmentNo ?? '',
-        carrierCode: values.carrierCode ?? '',
-        carrierName: values.carrierName ?? '',
-        trackingNo: values.trackingNo ?? '',
+        externalShipmentNo: pickValue(values, 'externalShipmentNo', 'shipment.external_shipment_no'),
+        carrierCode: pickValue(values, 'carrierCode', 'shipment.carrier_code'),
+        carrierName: pickValue(values, 'carrierName', 'shipment.carrier_name'),
+        trackingNo: pickValue(values, 'trackingNo', 'shipment.tracking_no'),
         quantity: Number.isFinite(quantity) ? quantity : 0,
-        shippedAt: values.shippedAt ? values.shippedAt : undefined,
+        shippedAt: pickValue(values, 'shippedAt', 'shipment.shipped_at') || undefined,
       },
     }
   })
 })
 
-const resolvedRows = computed(() => parsedRows.value.filter((row): row is ParsedRow & { ok: true; entry: ResolvedEntry; sol: ReconciliationLine } => row.ok))
+const resolvedRows = computed(() =>
+  parsedRows.value.filter(
+    (row): row is ParsedRow & { ok: true; entry: ResolvedEntry; sol: ReconciliationLine } => row.ok,
+  ),
+)
 const unresolvedRows = computed(() => parsedRows.value.filter((row) => !row.ok))
 
 interface PreviewRow {
@@ -249,20 +309,54 @@ const previewColumns = computed(() =>
 const submitting = ref(false)
 const importResult = ref<ImportResultViewData | null>(null)
 
-const canSubmit = computed(() => resolvedRows.value.length > 0 && !submitting.value)
+const canSubmit = computed(() => {
+  if (isTemplateDriven.value) return !submitting.value && !!tabularFilePath.value
+  return resolvedRows.value.length > 0 && !submitting.value
+})
 
 async function handleSubmit(): Promise<void> {
+  // Template-driven path: profile + filePath → MapAndReconcileShipments.
+  if (isTemplateDriven.value && tabularFilePath.value && templateProfileId.value) {
+    submitting.value = true
+    try {
+      const result = await mapAndReconcileShipments({
+        waveId: ctx.waveId.value,
+        integrationProfileId: templateProfileId.value,
+        importMode: importMode.value,
+        filePath: tabularFilePath.value,
+      })
+      importResult.value = {
+        total: result.totalProcessed ?? result.successCount + result.errorCount,
+        successCount: result.successCount,
+        errorCount: result.errorCount,
+        rows: result.errors.map((err) => ({
+          rowNo: err.entryIndex + 1,
+          reason: err.reason,
+        })),
+        warnings: result.warnings ?? [],
+      }
+      if (result.successCount > 0) {
+        feedback.success(t('feedback.success'))
+        await ctx.refresh()
+        emit('imported')
+      } else {
+        feedback.error(t('feedback.error'))
+      }
+    } catch (err) {
+      feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+    } finally {
+      submitting.value = false
+    }
+    return
+  }
+
   if (!canSubmit.value || !csvPreview.value) return
   submitting.value = true
   try {
     const entries = resolvedRows.value.map((row) => row.entry)
     const result = await importShipments({
       waveId: ctx.waveId.value,
-      // ImportShipmentInput.integrationProfileId is part of the wire
-      // contract but never read by shipmentImportUseCase.ImportShipments
-      // (verified against internal/app/shipment_import_usecase.go) — no
-      // profile selector was built since nothing server-side consumes it.
-      integrationProfileId: 0,
+      integrationProfileId: templateProfileId.value ?? 0,
       importMode: importMode.value,
       entries,
     })
@@ -280,6 +374,7 @@ async function handleSubmit(): Promise<void> {
       successCount: result.successCount,
       errorCount: result.errorCount + unresolvedRows.value.length,
       rows,
+      warnings: result.warnings ?? [],
     }
 
     if (result.successCount > 0) {
@@ -299,7 +394,9 @@ async function handleSubmit(): Promise<void> {
 function resetWizard(): void {
   currentStep.value = 'upload'
   csvPreview.value = null
-  mapping.value = { columns: {}, defaults: {} }
+  tabularFilePath.value = ''
+  templateProfileId.value = null
+  mapping.value = emptyFieldMapping()
   reconciliationKey.value = 'byLineId'
   importMode.value = 'skip_invalid'
   importResult.value = null
@@ -308,7 +405,7 @@ function resetWizard(): void {
 // ── Nav ──
 
 const canNext = computed(() => {
-  if (currentStep.value === 'upload') return !!csvPreview.value
+  if (currentStep.value === 'upload') return !!csvPreview.value || isTemplateDriven.value
   if (currentStep.value === 'mapping') return canProceedFromMapping.value
   return canSubmit.value
 })
@@ -344,46 +441,75 @@ function handleBack(): void {
       <template v-if="currentStep === 'upload'">
         <div class="import-wizard__upload">
           <p class="import-wizard__hint">{{ t('waveWorkspace.shipments.import.uploadHint') }}</p>
+          <CalloutBar v-if="profilesError" tone="error" :message="profilesError" />
+          <div class="import-wizard__mapping-field">
+            <span class="import-wizard__mapping-label">{{ t('waveWorkspace.shipments.import.templateProfile') }}</span>
+            <NSelect
+              v-model:value="templateProfileId"
+              :options="profileOptions"
+              clearable
+              filterable
+              :placeholder="t('waveWorkspace.shipments.import.templateProfilePlaceholder')"
+              style="max-width: 360px"
+            />
+          </div>
           <NButton :loading="picking" @click="handlePickFile">{{ t('waveWorkspace.shipments.import.pickFile') }}</NButton>
           <span v-if="picking" class="import-wizard__status">{{ t('intakeWizard.sampleUpload.parsing') }}</span>
-          <span v-else-if="!csvPreview" class="import-wizard__status">{{ t('intakeWizard.sampleUpload.noFile') }}</span>
+          <span v-else-if="!csvPreview && !tabularFilePath" class="import-wizard__status">{{ t('intakeWizard.sampleUpload.noFile') }}</span>
           <span v-else class="import-wizard__status">
-            {{ t('intakeWizard.sampleUpload.headersDetected', { count: csvPreview.headers.length }) }}
+            <template v-if="tabularFilePath">{{ tabularFilePath.split(/[/\\]/).pop() }} · </template>
+            {{ t('intakeWizard.sampleUpload.headersDetected', { count: csvPreview?.headers.length ?? 0 }) }}
             ·
-            {{ t('intakeWizard.sampleUpload.rowsDetected', { count: csvPreview.rows.length }) }}
+            {{ t('intakeWizard.sampleUpload.rowsDetected', { count: csvPreview?.rows.length ?? 0 }) }}
           </span>
         </div>
       </template>
 
       <template v-else-if="currentStep === 'mapping'">
         <div class="import-wizard__mapping">
-          <div class="import-wizard__mapping-field">
-            <span class="import-wizard__mapping-label">{{ t('waveWorkspace.shipments.import.supplierOrder') }}</span>
-            <NSelect v-model:value="selectedOrderId" :options="orderOptions" filterable style="max-width: 360px" />
-          </div>
+          <!-- Template-driven: hide client mapping editor, show explanation. -->
+          <template v-if="isTemplateDriven">
+            <CalloutBar tone="info" :message="t('waveWorkspace.shipments.import.templateDrivenMappingHint')" />
+            <p class="import-wizard__hint">{{ t('waveWorkspace.shipments.import.templateDrivenMappingDetail') }}</p>
+          </template>
 
-          <div class="import-wizard__mapping-field">
-            <span class="import-wizard__mapping-label">{{ t('waveWorkspace.shipments.import.mapping.reconciliationKey') }}</span>
-            <NRadioGroup v-model:value="reconciliationKey">
-              <NRadioButton value="byLineId">{{ t('waveWorkspace.shipments.import.mapping.byLineId') }}</NRadioButton>
-              <NRadioButton value="byBatchAndLineNo">{{ t('waveWorkspace.shipments.import.mapping.byBatchAndLineNo') }}</NRadioButton>
-            </NRadioGroup>
-          </div>
+          <template v-else>
+            <div class="import-wizard__mapping-field">
+              <span class="import-wizard__mapping-label">{{ t('waveWorkspace.shipments.import.supplierOrder') }}</span>
+              <NSelect v-model:value="selectedOrderId" :options="orderOptions" filterable style="max-width: 360px" />
+            </div>
 
-          <CalloutBar tone="info" :message="t('waveWorkspace.shipments.import.mapping.hint')" />
+            <div class="import-wizard__mapping-field">
+              <span class="import-wizard__mapping-label">{{ t('waveWorkspace.shipments.import.mapping.reconciliationKey') }}</span>
+              <NRadioGroup v-model:value="reconciliationKey">
+                <NRadioButton value="byLineId">{{ t('waveWorkspace.shipments.import.mapping.byLineId') }}</NRadioButton>
+                <NRadioButton value="byBatchAndLineNo">{{ t('waveWorkspace.shipments.import.mapping.byBatchAndLineNo') }}</NRadioButton>
+              </NRadioGroup>
+            </div>
 
-          <FieldMappingEditor
-            v-if="csvPreview"
-            v-model:model-value="mapping"
-            :dest-fields="destFields"
-            :source-headers="csvPreview.headers"
-            :sample-rows="csvPreview.rows"
-            :dest-column-header="t('intakeWizard.mapping.destColumnHeader')"
-            :src-column-header="t('intakeWizard.mapping.srcColumnHeader')"
-            :preview-title="t('intakeWizard.mapping.previewTitle')"
-            :unmapped-label="t('intakeWizard.mapping.unmapped')"
-            :validate="validateShipmentField"
-          />
+            <CalloutBar tone="info" :message="t('waveWorkspace.shipments.import.mapping.hint')" />
+
+            <FieldMappingEditor
+              v-if="csvPreview"
+              v-model:model-value="mapping"
+              :dest-fields="destFields"
+              :source-headers="csvPreview.headers"
+              :sample-rows="csvPreview.rows"
+              :dest-column-header="t('intakeWizard.mapping.destColumnHeader')"
+              :src-column-header="t('intakeWizard.mapping.srcColumnHeader')"
+              :preview-title="t('intakeWizard.mapping.previewTitle')"
+              :unmapped-label="t('intakeWizard.mapping.unmapped')"
+              :fixed-value-placeholder="t('intakeWizard.mapping.fixedValuePlaceholder')"
+              :mode-label="t('intakeWizard.mapping.modeLabel')"
+              :mode-header-label="t('intakeWizard.mapping.modeHeader')"
+              :mode-positional-label="t('intakeWizard.mapping.modePositional')"
+              :has-header-label="t('intakeWizard.mapping.hasHeaderLabel')"
+              :position-placeholder="t('intakeWizard.mapping.positionPlaceholder')"
+              :column-order-label="t('intakeWizard.mapping.columnOrderLabel')"
+              :column-order-placeholder="t('intakeWizard.mapping.columnOrderPlaceholder')"
+              :validate="validateDestFieldValue"
+            />
+          </template>
         </div>
       </template>
 
@@ -394,15 +520,20 @@ function handleBack(): void {
             <NSelect v-model:value="importMode" :options="importModeOptions" style="max-width: 360px" />
           </div>
 
-          <CalloutBar
-            v-if="unresolvedRows.length > 0"
-            tone="warning"
-            :message="t('waveWorkspace.shipments.import.mapping.unresolved', { count: unresolvedRows.length })"
-          />
+          <template v-if="isTemplateDriven">
+            <CalloutBar tone="info" :message="t('waveWorkspace.shipments.import.templateDrivenPreviewHint')" />
+          </template>
+          <template v-else>
+            <CalloutBar
+              v-if="unresolvedRows.length > 0"
+              tone="warning"
+              :message="t('waveWorkspace.shipments.import.mapping.unresolved', { count: unresolvedRows.length })"
+            />
 
-          <p class="import-wizard__hint">{{ t('waveWorkspace.shipments.import.preview.rowCount', { count: previewGridRows.length }) }}</p>
+            <p class="import-wizard__hint">{{ t('waveWorkspace.shipments.import.preview.rowCount', { count: previewGridRows.length }) }}</p>
 
-          <DataGrid :columns="previewColumns" :rows="previewGridRows" row-key="__rowKey" pagination="client" />
+            <DataGrid :columns="previewColumns" :rows="previewGridRows" row-key="__rowKey" pagination="client" />
+          </template>
         </div>
       </template>
     </WizardFrame>

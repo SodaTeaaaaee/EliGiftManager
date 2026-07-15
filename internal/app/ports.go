@@ -52,6 +52,9 @@ type ShipmentUseCase interface {
 // ShipmentImportUseCase handles bulk shipment import from factory return data.
 type ShipmentImportUseCase interface {
 	ImportShipments(ctx context.Context, input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error)
+	// MapAndReconcileShipments maps external factory-return rows (template-driven)
+	// onto internal FulfillmentLine / SupplierOrderLine IDs, then delegates to ImportShipments.
+	MapAndReconcileShipments(ctx context.Context, input dto.MapAndReconcileShipmentsInput) (*dto.ImportShipmentResult, error)
 }
 
 // ChannelSyncUseCase handles channel sync job creation.
@@ -113,8 +116,12 @@ type AllocationPolicyUseCase interface {
 
 type TemplateManagementUseCase interface {
 	CreateDocumentTemplate(ctx context.Context, input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error)
+	UpdateDocumentTemplate(ctx context.Context, input dto.UpdateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error)
+	DeleteDocumentTemplate(ctx context.Context, id uint) error
 	ListDocumentTemplates(ctx context.Context) ([]dto.DocumentTemplateDTO, error)
 	BindTemplateToProfile(ctx context.Context, input dto.BindTemplateToProfileInput) (*dto.ProfileTemplateBindingDTO, error)
+	UnbindTemplate(ctx context.Context, bindingID uint) error
+	SetDefaultBinding(ctx context.Context, bindingID uint) error
 	ListBindingsByProfile(ctx context.Context, profileID uint) ([]dto.ProfileTemplateBindingDTO, error)
 	GetDefaultTemplateForProfile(ctx context.Context, profileID uint, docType string) (*dto.DocumentTemplateDTO, error)
 }
@@ -126,6 +133,8 @@ type ProductUseCase interface {
 	UpdateProductMaster(ctx context.Context, input dto.UpdateProductMasterInput) (*dto.ProductMasterDTO, error)
 	SnapshotProductsForWave(ctx context.Context, input dto.SnapshotProductsInput) ([]dto.ProductDTO, error)
 	ListProductsByWave(ctx context.Context, waveID uint) ([]dto.ProductDTO, error)
+	// ImportProductCatalog upserts ProductMaster rows from a template-mapped sheet.
+	ImportProductCatalog(ctx context.Context, input dto.ImportProductCatalogInput) (*dto.ImportProductCatalogResult, error)
 }
 
 // AddressManagementUseCase handles CustomerAddress CRUD, binding, and derivation.
@@ -137,6 +146,9 @@ type AddressManagementUseCase interface {
 	ListAddressesByProfile(ctx context.Context, profileID uint) ([]dto.CustomerAddressDTO, error)
 	BindAddressToLine(ctx context.Context, input dto.BindAddressInput) (*dto.CustomerAddressDTO, error)
 	UnbindAddressFromLine(ctx context.Context, fulfillmentLineID uint) error
+	// UpsertAddressFromImport hybrid-matches Name+Phone (or Name+AddressLine1 when Phone
+	// is empty) within a customer profile; hits update, misses create.
+	UpsertAddressFromImport(ctx context.Context, customerProfileID uint, draft RecipientAddressDraft) (*dto.CustomerAddressDTO, error)
 }
 
 // ProfileManagementUseCase handles IntegrationProfile CRUD and seeding.

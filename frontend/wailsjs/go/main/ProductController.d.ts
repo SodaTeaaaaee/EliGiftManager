@@ -4,6 +4,8 @@ import {dto} from '../models';
 
 export function CreateProductMaster(arg1:dto.CreateProductMasterInput):Promise<dto.ProductMasterDTO>;
 
+export function ImportProductCatalog(arg1:dto.ImportProductCatalogInput):Promise<dto.ImportProductCatalogResult>;
+
 export function ListProductMasters():Promise<Array<dto.ProductMasterDTO>>;
 
 export function ListProductsByWave(arg1:number):Promise<Array<dto.ProductDTO>>;

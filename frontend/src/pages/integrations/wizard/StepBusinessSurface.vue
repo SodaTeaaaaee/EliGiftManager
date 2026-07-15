@@ -1,42 +1,40 @@
 <script setup lang="ts">
 /**
- * StepBusinessSurface — wizard step 2 (create mode only). A simple two-card
- * choice confirming/overriding `demandKind`, independent of whatever the
- * platform preset pre-filled — an operator onboarding e.g. a merch-only
- * Bilibili shop, not a membership programme, can still pick "Retail Order"
- * here even though the `bilibili` preset defaults to membership.
+ * StepBusinessSurface — wizard step 2 (create mode only). Three-card choice
+ * for the integration's business surface: membership, retail, or factory.
+ * Selecting a surface updates `sourceSurface` (+ demandKind for demand faces)
+ * so factory onboarding is a first-class path, not a free-text sourceSurface.
  */
 import { useI18n } from 'vue-i18n'
+import { SelectableCard } from '@/shared/ui/cards'
 import type { UseIntakeWizardStateApi } from './useIntakeWizardState'
-import type { DemandKind } from './deriveProfileDefaults'
+import type { BusinessSurfaceChoice } from './useIntakeWizardState'
 
 const props = defineProps<{ state: UseIntakeWizardStateApi }>()
 
 const { t } = useI18n({ useScope: 'global' })
 
-const OPTIONS: { value: DemandKind; key: string }[] = [
-  { value: 'membership_entitlement', key: 'membership' },
-  { value: 'retail_order', key: 'retail' },
+const OPTIONS: { value: BusinessSurfaceChoice; key: string }[] = [
+  { value: 'membership', key: 'membership' },
+  { value: 'retail', key: 'retail' },
+  { value: 'factory', key: 'factory' },
 ]
 
-function select(value: DemandKind): void {
-  props.state.demandKind.value = value
+function select(value: BusinessSurfaceChoice): void {
+  props.state.setBusinessSurface(value)
 }
 </script>
 
 <template>
   <div class="step-business-surface">
-    <button
+    <SelectableCard
       v-for="option in OPTIONS"
       :key="option.value"
-      type="button"
-      class="step-business-surface__card"
-      :class="{ 'step-business-surface__card--active': state.demandKind.value === option.value }"
-      @click="select(option.value)"
-    >
-      <span class="step-business-surface__label">{{ t(`intakeWizard.businessSurface.${option.key}.label`) }}</span>
-      <span class="step-business-surface__desc">{{ t(`intakeWizard.businessSurface.${option.key}.description`) }}</span>
-    </button>
+      :label="t(`intakeWizard.businessSurface.${option.key}.label`)"
+      :description="t(`intakeWizard.businessSurface.${option.key}.description`)"
+      :selected="state.businessSurface.value === option.value"
+      @select="select(option.value)"
+    />
   </div>
 </template>
 
@@ -45,44 +43,6 @@ function select(value: DemandKind): void {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: var(--space-3);
-  max-width: 640px;
-}
-
-.step-business-surface__card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  text-align: left;
-  padding: var(--space-4);
-  border: 1px solid var(--card-border-color);
-  border-radius: var(--card-radius);
-  background: var(--color-surface);
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast) var(--ease-out),
-    background var(--duration-fast) var(--ease-out);
-}
-
-.step-business-surface__card:hover {
-  border-color: var(--color-accent);
-}
-
-.step-business-surface__card--active {
-  border-color: var(--color-accent);
-  background: var(--color-accent-subtle);
-}
-
-.step-business-surface__label {
-  font-family: var(--font-display);
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-}
-
-.step-business-surface__desc {
-  font-family: var(--font-body);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-relaxed);
-  color: var(--color-text-muted);
+  max-width: 720px;
 }
 </style>

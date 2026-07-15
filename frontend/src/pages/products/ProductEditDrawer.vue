@@ -16,7 +16,7 @@ import type { SelectOption } from 'naive-ui'
 import { useFeedback } from '@/shared/ui/feedback'
 import { useGlossary, type ProductKindValue } from '@/shared/i18n/glossary'
 import { createProductMaster, updateProductMaster } from '@/shared/api/bridge'
-import type { ProductMaster } from '@/entities/product'
+import { localImageUrl, parseDetailImagePaths, type ProductMaster } from '@/entities/product'
 
 const props = defineProps<{
   show: boolean
@@ -67,6 +67,14 @@ const productKindOptions = computed<SelectOption[]>(() =>
   PRODUCT_KINDS.map((kind) => ({ label: glossaryLabel('productKind', kind), value: kind })),
 )
 
+/** Read-only cover URL for edit-mode preview (empty when none / create mode). */
+const coverPreviewSrc = computed(() => localImageUrl(props.master?.coverImagePath))
+
+/** Read-only detail thumbnail URLs for edit-mode preview. */
+const detailPreviewSrcs = computed(() =>
+  parseDetailImagePaths(props.master?.detailImagePaths).map((rel) => localImageUrl(rel)).filter(Boolean),
+)
+
 const canSubmit = computed(
   () =>
     !submitting.value &&
@@ -89,6 +97,10 @@ async function handleSubmit(): Promise<void> {
       supplierProductRef: supplierProductRef.value.trim(),
       name: name.value.trim(),
       productKind: productKind.value,
+      // Images are catalog/ZIP-managed; preserve existing paths on manual edit.
+      coverImagePath: props.master?.coverImagePath ?? '',
+      detailImagePaths: props.master?.detailImagePaths ?? '',
+      extraData: props.master?.extraData ?? '',
     }
     const saved =
       isEdit.value && props.master
@@ -133,6 +145,38 @@ async function handleSubmit(): Promise<void> {
       <NFormItem v-if="isEdit" :label="t('products.editDialog.archivedLabel')">
         <NSwitch v-model:value="archived" :disabled="submitting" />
       </NFormItem>
+      <NFormItem v-if="isEdit" :label="t('products.editDialog.imagesLabel')">
+        <div class="product-edit-drawer__images">
+          <div class="product-edit-drawer__cover-block">
+            <span class="product-edit-drawer__images-caption">{{ t('products.editDialog.coverLabel') }}</span>
+            <img
+              v-if="coverPreviewSrc"
+              class="product-edit-drawer__thumb product-edit-drawer__thumb--cover"
+              :src="coverPreviewSrc"
+              :alt="t('products.editDialog.coverLabel')"
+            />
+            <div
+              v-else
+              class="product-edit-drawer__thumb product-edit-drawer__thumb--cover product-edit-drawer__thumb--placeholder"
+            >
+              {{ t('products.coverPlaceholder') }}
+            </div>
+          </div>
+          <div v-if="detailPreviewSrcs.length > 0" class="product-edit-drawer__detail-block">
+            <span class="product-edit-drawer__images-caption">{{ t('products.editDialog.detailLabel') }}</span>
+            <div class="product-edit-drawer__detail-row">
+              <img
+                v-for="(src, index) in detailPreviewSrcs"
+                :key="`${src}-${index}`"
+                class="product-edit-drawer__thumb"
+                :src="src"
+                :alt="t('products.editDialog.detailLabel')"
+              />
+            </div>
+          </div>
+          <p class="product-edit-drawer__images-hint">{{ t('products.editDialog.imagesReadOnlyHint') }}</p>
+        </div>
+      </NFormItem>
     </NForm>
     <template #footer>
       <div class="product-edit-drawer__footer">
@@ -150,5 +194,63 @@ async function handleSubmit(): Promise<void> {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-2);
+}
+
+.product-edit-drawer__images {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.product-edit-drawer__cover-block,
+.product-edit-drawer__detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.product-edit-drawer__images-caption {
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.product-edit-drawer__detail-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.product-edit-drawer__thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm, 4px);
+  object-fit: cover;
+  background: var(--color-surface-muted, #f0f0f0);
+}
+
+.product-edit-drawer__thumb--cover {
+  width: 72px;
+  height: 72px;
+}
+
+.product-edit-drawer__thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-border, #d0d0d0);
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs, 11px);
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-1);
+}
+
+.product-edit-drawer__images-hint {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs, 11px);
+  color: var(--color-text-muted);
 }
 </style>

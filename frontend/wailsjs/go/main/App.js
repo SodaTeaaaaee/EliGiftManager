@@ -6,6 +6,14 @@ export function PickCSVFile() {
   return window['go']['main']['App']['PickCSVFile']();
 }
 
+export function PickCatalogImportFile() {
+  return window['go']['main']['App']['PickCatalogImportFile']();
+}
+
+export function PickTabularFile() {
+  return window['go']['main']['App']['PickTabularFile']();
+}
+
 export function PickZIPFile() {
   return window['go']['main']['App']['PickZIPFile']();
 }

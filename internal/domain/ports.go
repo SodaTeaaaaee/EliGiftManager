@@ -237,13 +237,22 @@ type DocumentTemplateRepository interface {
 	FindByKey(ctx context.Context, key string) (*DocumentTemplate, error)
 	List(ctx context.Context) ([]DocumentTemplate, error)
 	ListByDocumentType(ctx context.Context, docType string) ([]DocumentTemplate, error)
+	Update(ctx context.Context, t *DocumentTemplate) error
+	Delete(ctx context.Context, id uint) error
 }
 
 // ProfileTemplateBindingRepository defines persistence operations for IntegrationProfileTemplateBinding.
 type ProfileTemplateBindingRepository interface {
 	Create(ctx context.Context, b *IntegrationProfileTemplateBinding) error
+	FindByID(ctx context.Context, id uint) (*IntegrationProfileTemplateBinding, error)
 	ListByProfile(ctx context.Context, profileID uint) ([]IntegrationProfileTemplateBinding, error)
+	ListByTemplateID(ctx context.Context, templateID uint) ([]IntegrationProfileTemplateBinding, error)
 	FindDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) (*IntegrationProfileTemplateBinding, error)
+	// ClearDefaultByProfileAndType sets is_default=false for all bindings of the
+	// given (profileID, documentType) pair. Used by SetDefaultBinding to enforce
+	// uniqueness before promoting a new default.
+	ClearDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) error
+	Update(ctx context.Context, b *IntegrationProfileTemplateBinding) error
 	Delete(ctx context.Context, id uint) error
 	CountByProfileID(ctx context.Context, profileID uint) (int64, error)
 }
@@ -304,8 +313,10 @@ type ProductRepository interface {
 // CarrierMappingRepository defines persistence operations for CarrierMapping.
 type CarrierMappingRepository interface {
 	Create(ctx context.Context, mapping *CarrierMapping) error
+	Update(ctx context.Context, mapping *CarrierMapping) error
 	ListByProfile(ctx context.Context, profileID uint) ([]CarrierMapping, error)
 	FindByProfileAndInternal(ctx context.Context, profileID uint, internalCode string) (*CarrierMapping, error)
+	FindByProfileAndExternal(ctx context.Context, profileID uint, externalCode string) (*CarrierMapping, error)
 	Delete(ctx context.Context, id uint) error
 }
 

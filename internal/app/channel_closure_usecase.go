@@ -133,16 +133,21 @@ func (uc *channelClosureUseCase) resolveEffectiveProfileForWave(ctx context.Cont
 		return nil, err
 	}
 	return &dto.BoundProfileSnapshot{
-		ProfileID:               profile.ID,
-		ProfileKey:              profile.ProfileKey,
-		TrackingSyncMode:        profile.TrackingSyncMode,
-		ClosurePolicy:           profile.ClosurePolicy,
-		AllowsManualClosure:     profile.AllowsManualClosure,
-		RequiresCarrierMapping:  profile.RequiresCarrierMapping,
-		RequiresExternalOrderNo: profile.RequiresExternalOrderNo,
-		SupportsPartialShipment: profile.SupportsPartialShipment,
-		ConnectorKey:            profile.ConnectorKey,
-		SupportsAPIExport:       profile.SupportsAPIExport,
+		ProfileID:                      profile.ID,
+		ProfileKey:                     profile.ProfileKey,
+		SourceSurface:                  profile.SourceSurface,
+		TrackingSyncMode:               profile.TrackingSyncMode,
+		ClosurePolicy:                  profile.ClosurePolicy,
+		AllowsManualClosure:            profile.AllowsManualClosure,
+		RequiresCarrierMapping:         profile.RequiresCarrierMapping,
+		RequiresExternalOrderNo:        profile.RequiresExternalOrderNo,
+		SupportsPartialShipment:        profile.SupportsPartialShipment,
+		ConnectorKey:                   profile.ConnectorKey,
+		FactorySupplierPlatform:        profile.FactorySupplierPlatform,
+		SupportsAPIExport:              profile.SupportsAPIExport,
+		SupportsExportSupplierOrder:    profile.SupportsExportSupplierOrder,
+		SupportsImportProductCatalog:   profile.SupportsImportProductCatalog,
+		SupportsImportSupplierShipment: profile.SupportsImportSupplierShipment,
 	}, nil
 }
 

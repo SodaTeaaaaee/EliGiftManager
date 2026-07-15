@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -15,13 +16,16 @@ var validDocumentTypes = map[string]bool{
 	"export_supplier_order":         true,
 	"import_supplier_shipment":      true,
 	"export_source_tracking_update": true,
+	"import_carrier_mapping":        true,
 }
 
 var validDocumentFormats = map[string]bool{
 	"csv":         true,
 	"xlsx":        true,
+	"xls":         true,
 	"json":        true,
 	"api_payload": true,
+	"zip":         true, // product catalog archives (tabular sheet + images)
 }
 
 type templateManagementUseCase struct {
@@ -52,6 +56,15 @@ func (uc *templateManagementUseCase) CreateDocumentTemplate(ctx context.Context,
 	if !validDocumentFormats[input.Format] {
 		return nil, fmt.Errorf("invalid format: %q", input.Format)
 	}
+	if strings.TrimSpace(input.MappingRules) != "" {
+		rules, err := ParseMappingRules(input.MappingRules)
+		if err != nil {
+			return nil, fmt.Errorf("mappingRules: %w", err)
+		}
+		if err := ValidateMappingRulesConfig(input.DocumentType, rules); err != nil {
+			return nil, fmt.Errorf("mappingRules: %w", err)
+		}
+	}
 
 	t := &domain.DocumentTemplate{
 		TemplateKey:  input.TemplateKey,
@@ -76,6 +89,72 @@ func (uc *templateManagementUseCase) ListDocumentTemplates(ctx context.Context) 
 		out[i] = *templateToDTO(&templates[i])
 	}
 	return out, nil
+}
+
+func (uc *templateManagementUseCase) UpdateDocumentTemplate(ctx context.Context, input dto.UpdateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error) {
+	if input.ID == 0 {
+		return nil, fmt.Errorf("id must not be empty")
+	}
+	if !validDocumentFormats[input.Format] {
+		return nil, fmt.Errorf("invalid format: %q", input.Format)
+	}
+
+	existing, err := uc.templateRepo.FindByID(ctx, input.ID)
+	if err != nil {
+		return nil, fmt.Errorf("look up template %d: %w", input.ID, err)
+	}
+	if existing == nil {
+		return nil, fmt.Errorf("template %d not found", input.ID)
+	}
+
+	// TemplateKey and DocumentType are immutable — only Format/MappingRules/ExtraData may change.
+	if strings.TrimSpace(input.MappingRules) != "" {
+		rules, err := ParseMappingRules(input.MappingRules)
+		if err != nil {
+			return nil, fmt.Errorf("mappingRules: %w", err)
+		}
+		if err := ValidateMappingRulesConfig(existing.DocumentType, rules); err != nil {
+			return nil, fmt.Errorf("mappingRules: %w", err)
+		}
+	}
+
+	existing.Format = input.Format
+	existing.MappingRules = input.MappingRules
+	existing.ExtraData = input.ExtraData
+
+	if err := uc.templateRepo.Update(ctx, existing); err != nil {
+		return nil, err
+	}
+	return templateToDTO(existing), nil
+}
+
+func (uc *templateManagementUseCase) DeleteDocumentTemplate(ctx context.Context, id uint) error {
+	if id == 0 {
+		return fmt.Errorf("id must not be empty")
+	}
+	existing, err := uc.templateRepo.FindByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("look up template %d: %w", id, err)
+	}
+	if existing == nil {
+		return fmt.Errorf("template %d not found", id)
+	}
+
+	// Refuse deletion while any profile binding still references this template.
+	refs, err := uc.bindingRepo.ListByTemplateID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("check bindings for template %d: %w", id, err)
+	}
+	if len(refs) > 0 {
+		parts := make([]string, 0, len(refs))
+		for _, b := range refs {
+			parts = append(parts, fmt.Sprintf("bindingID=%d profileID=%d docType=%q", b.ID, b.IntegrationProfileID, b.DocumentType))
+		}
+		return fmt.Errorf("cannot delete template %d (%s): still referenced by %d binding(s): %s",
+			id, existing.TemplateKey, len(refs), strings.Join(parts, "; "))
+	}
+
+	return uc.templateRepo.Delete(ctx, id)
 }
 
 func (uc *templateManagementUseCase) BindTemplateToProfile(ctx context.Context, input dto.BindTemplateToProfileInput) (*dto.ProfileTemplateBindingDTO, error) {
@@ -140,6 +219,46 @@ func (uc *templateManagementUseCase) ListBindingsByProfile(ctx context.Context, 
 		out[i] = *bindingToDTO(&bindings[i])
 	}
 	return out, nil
+}
+
+func (uc *templateManagementUseCase) UnbindTemplate(ctx context.Context, bindingID uint) error {
+	if bindingID == 0 {
+		return fmt.Errorf("bindingID must not be empty")
+	}
+	existing, err := uc.bindingRepo.FindByID(ctx, bindingID)
+	if err != nil {
+		return fmt.Errorf("look up binding %d: %w", bindingID, err)
+	}
+	if existing == nil {
+		return fmt.Errorf("binding %d not found", bindingID)
+	}
+	return uc.bindingRepo.Delete(ctx, bindingID)
+}
+
+func (uc *templateManagementUseCase) SetDefaultBinding(ctx context.Context, bindingID uint) error {
+	if bindingID == 0 {
+		return fmt.Errorf("bindingID must not be empty")
+	}
+	binding, err := uc.bindingRepo.FindByID(ctx, bindingID)
+	if err != nil {
+		return fmt.Errorf("look up binding %d: %w", bindingID, err)
+	}
+	if binding == nil {
+		return fmt.Errorf("binding %d not found", bindingID)
+	}
+	if binding.IsDefault {
+		return nil
+	}
+
+	// Clear any existing default for the same (profile, documentType), then promote this row.
+	if err := uc.bindingRepo.ClearDefaultByProfileAndType(ctx, binding.IntegrationProfileID, binding.DocumentType); err != nil {
+		return fmt.Errorf("clear existing default for profile %d / type %q: %w", binding.IntegrationProfileID, binding.DocumentType, err)
+	}
+	binding.IsDefault = true
+	if err := uc.bindingRepo.Update(ctx, binding); err != nil {
+		return fmt.Errorf("set binding %d as default: %w", bindingID, err)
+	}
+	return nil
 }
 
 func (uc *templateManagementUseCase) GetDefaultTemplateForProfile(ctx context.Context, profileID uint, docType string) (*dto.DocumentTemplateDTO, error) {

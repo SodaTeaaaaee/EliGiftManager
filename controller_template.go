@@ -49,6 +49,30 @@ func (c *TemplateController) ListBindingsByProfile(profileID uint) ([]dto.Profil
 	return c.templateUC.ListBindingsByProfile(ctx, profileID)
 }
 
+func (c *TemplateController) UpdateDocumentTemplate(input dto.UpdateDocumentTemplateInput) (dto.DocumentTemplateDTO, error) {
+	ctx := appContext
+	result, err := c.templateUC.UpdateDocumentTemplate(ctx, input)
+	if err != nil {
+		return dto.DocumentTemplateDTO{}, err
+	}
+	return *result, nil
+}
+
+func (c *TemplateController) DeleteDocumentTemplate(id uint) error {
+	ctx := appContext
+	return c.templateUC.DeleteDocumentTemplate(ctx, id)
+}
+
+func (c *TemplateController) UnbindTemplate(bindingID uint) error {
+	ctx := appContext
+	return c.templateUC.UnbindTemplate(ctx, bindingID)
+}
+
+func (c *TemplateController) SetDefaultBinding(bindingID uint) error {
+	ctx := appContext
+	return c.templateUC.SetDefaultBinding(ctx, bindingID)
+}
+
 // GetDefaultTemplateForProfile returns the default template bound to the given
 // profile/docType, or nil if no default binding exists. Returning a typed nil
 // pointer (instead of a zero-value DTO) lets the JSON response serialize to a

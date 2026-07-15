@@ -261,3 +261,24 @@ const (
 	ProductKindBundle   ProductKind = "bundle"
 	ProductKindOther    ProductKind = "other"
 )
+
+// BusinessSurface is the operator-facing business face of an integration
+// profile (membership entitlement, retail store order, or factory-side catalog).
+type BusinessSurface string
+
+const (
+	BusinessSurfaceMembership BusinessSurface = "membership"
+	BusinessSurfaceRetail     BusinessSurface = "retail"
+	BusinessSurfaceFactory    BusinessSurface = "factory"
+)
+
+// SourceSurface is the persisted IntegrationProfile.SourceSurface value set.
+// Same wire values as BusinessSurface; kept as an independent type so callers
+// can express "this is a stored source surface" without aliasing ambiguity.
+type SourceSurface string
+
+const (
+	SourceSurfaceMembership SourceSurface = "membership"
+	SourceSurfaceRetail     SourceSurface = "retail"
+	SourceSurfaceFactory    SourceSurface = "factory"
+)

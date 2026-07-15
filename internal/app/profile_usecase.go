@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -37,8 +38,40 @@ func NewProfileManagementUseCase(
 	}
 }
 
-// validateProfileEnums checks that all non-empty strategy enum fields contain valid values.
+// validSourceSurfaces is the shared value set for BusinessSurface / SourceSurface.
+var validSourceSurfaces = map[string]bool{
+	string(domain.SourceSurfaceMembership): true,
+	string(domain.SourceSurfaceRetail):     true,
+	string(domain.SourceSurfaceFactory):    true,
+}
+
+// validateProfileEnums checks SourceSurface and surface-specific constraints.
+//
+// membership/retail: existing 8 demand-strategy enum checks (non-empty → must be valid).
+// factory: exempts the 8 demand-strategy checks; requires FactorySupplierPlatform and
+// at least one factory capability flag.
 func validateProfileEnums(input dto.CreateProfileInput) error {
+	if input.SourceSurface == "" {
+		return fmt.Errorf("source_surface is required")
+	}
+	if !validSourceSurfaces[input.SourceSurface] {
+		return fmt.Errorf("invalid source_surface: %q", input.SourceSurface)
+	}
+
+	if input.SourceSurface == string(domain.SourceSurfaceFactory) {
+		if strings.TrimSpace(input.FactorySupplierPlatform) == "" {
+			return fmt.Errorf("factory surface requires a non-empty factory_supplier_platform")
+		}
+		if !input.SupportsExportSupplierOrder &&
+			!input.SupportsImportProductCatalog &&
+			!input.SupportsImportSupplierShipment {
+			return fmt.Errorf("factory surface requires at least one factory capability (export_supplier_order, import_product_catalog, import_supplier_shipment)")
+		}
+		// Factory profiles do not use demand-side strategy enums.
+		return nil
+	}
+
+	// membership / retail — existing 8 demand-strategy enum validations.
 	validDemandKind := map[string]bool{
 		"membership_entitlement": true,
 		"retail_order":           true,
@@ -142,6 +175,12 @@ func (uc *profileManagementUseCase) CreateProfile(ctx context.Context, input dto
 		return nil, fmt.Errorf("profile_key is required")
 	}
 
+	// Friendly uniqueness pre-check before enum/readiness validation so the
+	// operator gets a clear "already exists" rather than a raw DB unique error.
+	if existing, err := uc.repo.FindByProfileKey(ctx, input.ProfileKey); err == nil && existing != nil {
+		return nil, fmt.Errorf("profile_key %q already exists", input.ProfileKey)
+	}
+
 	if err := validateProfileEnums(input); err != nil {
 		return nil, err
 	}
@@ -150,29 +189,7 @@ func (uc *profileManagementUseCase) CreateProfile(ctx context.Context, input dto
 		return nil, err
 	}
 
-	profile := &domain.IntegrationProfile{
-		ProfileKey:                input.ProfileKey,
-		SourceChannel:             input.SourceChannel,
-		SourceSurface:             input.SourceSurface,
-		DemandKind:                input.DemandKind,
-		InitialAllocationStrategy: input.InitialAllocationStrategy,
-		IdentityStrategy:          input.IdentityStrategy,
-		EntitlementAuthorityMode:  input.EntitlementAuthorityMode,
-		RecipientInputMode:        input.RecipientInputMode,
-		ReferenceStrategy:         input.ReferenceStrategy,
-		TrackingSyncMode:          input.TrackingSyncMode,
-		ClosurePolicy:             input.ClosurePolicy,
-		SupportsPartialShipment:   input.SupportsPartialShipment,
-		SupportsAPIImport:         input.SupportsAPIImport,
-		SupportsAPIExport:         input.SupportsAPIExport,
-		RequiresCarrierMapping:    input.RequiresCarrierMapping,
-		RequiresExternalOrderNo:   input.RequiresExternalOrderNo,
-		AllowsManualClosure:       input.AllowsManualClosure,
-		ConnectorKey:              input.ConnectorKey,
-		SupportedLocales:          input.SupportedLocales,
-		DefaultLocale:             input.DefaultLocale,
-		ExtraData:                 input.ExtraData,
-	}
+	profile := profileFromCreateInput(input)
 
 	if err := uc.repo.Create(ctx, profile); err != nil {
 		return nil, err
@@ -187,18 +204,42 @@ func (uc *profileManagementUseCase) UpdateProfile(ctx context.Context, input dto
 		return nil, err
 	}
 
-	// Validate enums using a CreateProfileInput (same field set)
+	// When renaming, uniqueness must exclude the profile itself.
+	if input.ProfileKey != "" && input.ProfileKey != profile.ProfileKey {
+		if existing, findErr := uc.repo.FindByProfileKey(ctx, input.ProfileKey); findErr == nil && existing != nil && existing.ID != profile.ID {
+			return nil, fmt.Errorf("profile_key %q already exists", input.ProfileKey)
+		}
+	}
+
+	// Validate enums + readiness using a CreateProfileInput that carries the
+	// full readiness-relevant field set (including ProfileKey / SourceChannel /
+	// SourceSurface and factory capability flags).
 	enumInput := dto.CreateProfileInput{
-		DemandKind:                input.DemandKind,
-		InitialAllocationStrategy: input.InitialAllocationStrategy,
-		IdentityStrategy:          input.IdentityStrategy,
-		EntitlementAuthorityMode:  input.EntitlementAuthorityMode,
-		RecipientInputMode:        input.RecipientInputMode,
-		ReferenceStrategy:         input.ReferenceStrategy,
-		TrackingSyncMode:          input.TrackingSyncMode,
-		ClosurePolicy:             input.ClosurePolicy,
-		AllowsManualClosure:       input.AllowsManualClosure,
-		ConnectorKey:              input.ConnectorKey,
+		ProfileKey:                     input.ProfileKey,
+		SourceChannel:                  input.SourceChannel,
+		SourceSurface:                  input.SourceSurface,
+		DemandKind:                     input.DemandKind,
+		InitialAllocationStrategy:      input.InitialAllocationStrategy,
+		IdentityStrategy:               input.IdentityStrategy,
+		EntitlementAuthorityMode:       input.EntitlementAuthorityMode,
+		RecipientInputMode:             input.RecipientInputMode,
+		ReferenceStrategy:              input.ReferenceStrategy,
+		TrackingSyncMode:               input.TrackingSyncMode,
+		ClosurePolicy:                  input.ClosurePolicy,
+		SupportsPartialShipment:        input.SupportsPartialShipment,
+		SupportsAPIImport:              input.SupportsAPIImport,
+		SupportsAPIExport:              input.SupportsAPIExport,
+		RequiresCarrierMapping:         input.RequiresCarrierMapping,
+		RequiresExternalOrderNo:        input.RequiresExternalOrderNo,
+		AllowsManualClosure:            input.AllowsManualClosure,
+		SupportsExportSupplierOrder:    input.SupportsExportSupplierOrder,
+		SupportsImportProductCatalog:   input.SupportsImportProductCatalog,
+		SupportsImportSupplierShipment: input.SupportsImportSupplierShipment,
+		ConnectorKey:                   input.ConnectorKey,
+		FactorySupplierPlatform:        input.FactorySupplierPlatform,
+		SupportedLocales:               input.SupportedLocales,
+		DefaultLocale:                  input.DefaultLocale,
+		ExtraData:                      input.ExtraData,
 	}
 	if err := validateProfileEnums(enumInput); err != nil {
 		return nil, err
@@ -224,7 +265,11 @@ func (uc *profileManagementUseCase) UpdateProfile(ctx context.Context, input dto
 	profile.RequiresCarrierMapping = input.RequiresCarrierMapping
 	profile.RequiresExternalOrderNo = input.RequiresExternalOrderNo
 	profile.AllowsManualClosure = input.AllowsManualClosure
+	profile.SupportsExportSupplierOrder = input.SupportsExportSupplierOrder
+	profile.SupportsImportProductCatalog = input.SupportsImportProductCatalog
+	profile.SupportsImportSupplierShipment = input.SupportsImportSupplierShipment
 	profile.ConnectorKey = input.ConnectorKey
+	profile.FactorySupplierPlatform = input.FactorySupplierPlatform
 	profile.SupportedLocales = input.SupportedLocales
 	profile.DefaultLocale = input.DefaultLocale
 	profile.ExtraData = input.ExtraData
@@ -343,31 +388,67 @@ func (uc *profileManagementUseCase) SeedDefaultProfiles(ctx context.Context) ([]
 
 // ---- helpers ----
 
+// profileFromCreateInput maps a validated CreateProfileInput onto a domain entity.
+// Shared by CreateProfile and seed paths that must not bypass field coverage.
+func profileFromCreateInput(input dto.CreateProfileInput) *domain.IntegrationProfile {
+	return &domain.IntegrationProfile{
+		ProfileKey:                     input.ProfileKey,
+		SourceChannel:                  input.SourceChannel,
+		SourceSurface:                  input.SourceSurface,
+		DemandKind:                     input.DemandKind,
+		InitialAllocationStrategy:      input.InitialAllocationStrategy,
+		IdentityStrategy:               input.IdentityStrategy,
+		EntitlementAuthorityMode:       input.EntitlementAuthorityMode,
+		RecipientInputMode:             input.RecipientInputMode,
+		ReferenceStrategy:              input.ReferenceStrategy,
+		TrackingSyncMode:               input.TrackingSyncMode,
+		ClosurePolicy:                  input.ClosurePolicy,
+		SupportsPartialShipment:        input.SupportsPartialShipment,
+		SupportsAPIImport:              input.SupportsAPIImport,
+		SupportsAPIExport:              input.SupportsAPIExport,
+		RequiresCarrierMapping:         input.RequiresCarrierMapping,
+		RequiresExternalOrderNo:        input.RequiresExternalOrderNo,
+		AllowsManualClosure:            input.AllowsManualClosure,
+		SupportsExportSupplierOrder:    input.SupportsExportSupplierOrder,
+		SupportsImportProductCatalog:   input.SupportsImportProductCatalog,
+		SupportsImportSupplierShipment: input.SupportsImportSupplierShipment,
+		ConnectorKey:                   input.ConnectorKey,
+		FactorySupplierPlatform:        input.FactorySupplierPlatform,
+		SupportedLocales:               input.SupportedLocales,
+		DefaultLocale:                  input.DefaultLocale,
+		ExtraData:                      input.ExtraData,
+	}
+}
+
 func profileToDTO(p *domain.IntegrationProfile) dto.IntegrationProfileDTO {
 	return dto.IntegrationProfileDTO{
-		ID:                        p.ID,
-		ProfileKey:                p.ProfileKey,
-		SourceChannel:             p.SourceChannel,
-		SourceSurface:             p.SourceSurface,
-		DemandKind:                p.DemandKind,
-		InitialAllocationStrategy: p.InitialAllocationStrategy,
-		IdentityStrategy:          p.IdentityStrategy,
-		EntitlementAuthorityMode:  p.EntitlementAuthorityMode,
-		RecipientInputMode:        p.RecipientInputMode,
-		ReferenceStrategy:         p.ReferenceStrategy,
-		TrackingSyncMode:          p.TrackingSyncMode,
-		ClosurePolicy:             p.ClosurePolicy,
-		SupportsPartialShipment:   p.SupportsPartialShipment,
-		SupportsAPIImport:         p.SupportsAPIImport,
-		SupportsAPIExport:         p.SupportsAPIExport,
-		RequiresCarrierMapping:    p.RequiresCarrierMapping,
-		RequiresExternalOrderNo:   p.RequiresExternalOrderNo,
-		AllowsManualClosure:       p.AllowsManualClosure,
-		ConnectorKey:              p.ConnectorKey,
-		SupportedLocales:          p.SupportedLocales,
-		DefaultLocale:             p.DefaultLocale,
-		ExtraData:                 p.ExtraData,
-		CreatedAt:                 p.CreatedAt,
-		UpdatedAt:                 p.UpdatedAt,
+		ID:                             p.ID,
+		ProfileKey:                     p.ProfileKey,
+		SourceChannel:                  p.SourceChannel,
+		SourceSurface:                  p.SourceSurface,
+		DemandKind:                     p.DemandKind,
+		InitialAllocationStrategy:      p.InitialAllocationStrategy,
+		IdentityStrategy:               p.IdentityStrategy,
+		EntitlementAuthorityMode:       p.EntitlementAuthorityMode,
+		RecipientInputMode:             p.RecipientInputMode,
+		ReferenceStrategy:              p.ReferenceStrategy,
+		TrackingSyncMode:               p.TrackingSyncMode,
+		ClosurePolicy:                  p.ClosurePolicy,
+		SupportsPartialShipment:        p.SupportsPartialShipment,
+		SupportsAPIImport:              p.SupportsAPIImport,
+		SupportsAPIExport:              p.SupportsAPIExport,
+		RequiresCarrierMapping:         p.RequiresCarrierMapping,
+		RequiresExternalOrderNo:        p.RequiresExternalOrderNo,
+		AllowsManualClosure:            p.AllowsManualClosure,
+		SupportsExportSupplierOrder:    p.SupportsExportSupplierOrder,
+		SupportsImportProductCatalog:   p.SupportsImportProductCatalog,
+		SupportsImportSupplierShipment: p.SupportsImportSupplierShipment,
+		ConnectorKey:                   p.ConnectorKey,
+		FactorySupplierPlatform:        p.FactorySupplierPlatform,
+		SupportedLocales:               p.SupportedLocales,
+		DefaultLocale:                  p.DefaultLocale,
+		ExtraData:                      p.ExtraData,
+		CreatedAt:                      p.CreatedAt,
+		UpdatedAt:                      p.UpdatedAt,
 	}
 }

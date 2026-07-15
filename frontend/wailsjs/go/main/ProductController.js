@@ -6,6 +6,10 @@ export function CreateProductMaster(arg1) {
   return window['go']['main']['ProductController']['CreateProductMaster'](arg1);
 }
 
+export function ImportProductCatalog(arg1) {
+  return window['go']['main']['ProductController']['ImportProductCatalog'](arg1);
+}
+
 export function ListProductMasters() {
   return window['go']['main']['ProductController']['ListProductMasters']();
 }

@@ -518,7 +518,15 @@ func (m *mockFulfillRepoForShipment) Create(ctx context.Context, line *domain.Fu
 }
 
 func (m *mockFulfillRepoForShipment) ListByWave(ctx context.Context, waveID uint) ([]domain.FulfillmentLine, error) {
-	panic("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.FulfillmentLine
+	for _, l := range m.lines {
+		if l.WaveID == waveID {
+			out = append(out, *l)
+		}
+	}
+	return out, nil
 }
 
 func (m *mockFulfillRepoForShipment) DeleteByWaveAndGeneratedBy(ctx context.Context, waveID uint, generatedBy string) error {

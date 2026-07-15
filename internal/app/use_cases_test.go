@@ -941,7 +941,7 @@ func TestExportSupplierOrder(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil, nil)
 	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder failed: %v", err)
@@ -1043,7 +1043,7 @@ func TestFullVerticalSlice(t *testing.T) {
 	}
 
 	// Step 4: Export Supplier Order
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil, nil)
 	exportedOrders, err := exportUC.ExportSupplierOrder(context.Background(), wave.ID)
 	if err != nil {
 		t.Fatalf("Step 4 ExportSupplierOrder failed: %v", err)
@@ -1189,7 +1189,7 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil, nil)
 
 	// First export
 	orders1, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
@@ -1495,11 +1495,23 @@ type mockBindingRepo struct{}
 func (m *mockBindingRepo) Create(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error {
 	return nil
 }
+func (m *mockBindingRepo) FindByID(ctx context.Context, id uint) (*domain.IntegrationProfileTemplateBinding, error) {
+	return nil, nil
+}
 func (m *mockBindingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+	return nil, nil
+}
+func (m *mockBindingRepo) ListByTemplateID(ctx context.Context, templateID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
 	return nil, nil
 }
 func (m *mockBindingRepo) FindDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) (*domain.IntegrationProfileTemplateBinding, error) {
 	return nil, nil
+}
+func (m *mockBindingRepo) ClearDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) error {
+	return nil
+}
+func (m *mockBindingRepo) Update(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error {
+	return nil
 }
 func (m *mockBindingRepo) Delete(ctx context.Context, id uint) error { return nil }
 func (m *mockBindingRepo) CountByProfileID(ctx context.Context, profileID uint) (int64, error) {
@@ -1561,7 +1573,7 @@ func TestExportSupplierOrderGroupsByProfile(t *testing.T) {
 	)
 	bindingRepo := &mockBindingRepo{}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, bindingRepo)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, bindingRepo, nil)
 	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder failed: %v", err)

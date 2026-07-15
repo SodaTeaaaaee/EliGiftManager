@@ -151,10 +151,22 @@ func (s *stubProfileTemplateBindingRepo) Create(ctx context.Context, _ *domain.I
 func (s *stubProfileTemplateBindingRepo) ListByProfile(ctx context.Context, _ uint) ([]domain.IntegrationProfileTemplateBinding, error) {
 	return nil, nil
 }
+func (s *stubProfileTemplateBindingRepo) ListByTemplateID(ctx context.Context, _ uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+	return nil, nil
+}
 func (s *stubProfileTemplateBindingRepo) FindDefaultByProfileAndType(ctx context.Context, _ uint, _ string) (*domain.IntegrationProfileTemplateBinding, error) {
 	return nil, fmt.Errorf("not found")
 }
 func (s *stubProfileTemplateBindingRepo) Delete(ctx context.Context, _ uint) error { return nil }
+func (s *stubProfileTemplateBindingRepo) FindByID(ctx context.Context, _ uint) (*domain.IntegrationProfileTemplateBinding, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (s *stubProfileTemplateBindingRepo) Update(ctx context.Context, _ *domain.IntegrationProfileTemplateBinding) error {
+	return nil
+}
+func (s *stubProfileTemplateBindingRepo) ClearDefaultByProfileAndType(ctx context.Context, _ uint, _ string) error {
+	return nil
+}
 func (s *stubProfileTemplateBindingRepo) CountByProfileID(ctx context.Context, profileID uint) (int64, error) {
 	if s.CountByProfileIDFn != nil {
 		return s.CountByProfileIDFn(profileID)
@@ -315,6 +327,7 @@ func TestCreateProfileValidatesExecutionReadiness(t *testing.T) {
 			name: "api_push with empty connectorKey rejected at CreateProfile level",
 			input: dto.CreateProfileInput{
 				ProfileKey:       "test-profile",
+				SourceSurface:    "membership",
 				TrackingSyncMode: "api_push",
 				ConnectorKey:     "",
 			},
@@ -324,6 +337,7 @@ func TestCreateProfileValidatesExecutionReadiness(t *testing.T) {
 			name: "document_export with empty connectorKey rejected at CreateProfile level",
 			input: dto.CreateProfileInput{
 				ProfileKey:       "test-profile",
+				SourceSurface:    "membership",
 				TrackingSyncMode: "document_export",
 				ConnectorKey:     "",
 			},
@@ -333,6 +347,7 @@ func TestCreateProfileValidatesExecutionReadiness(t *testing.T) {
 			name: "manual_confirmation with allowsManualClosure=false rejected at CreateProfile level",
 			input: dto.CreateProfileInput{
 				ProfileKey:          "test-profile",
+				SourceSurface:       "membership",
 				TrackingSyncMode:    "manual_confirmation",
 				AllowsManualClosure: false,
 			},
@@ -342,6 +357,7 @@ func TestCreateProfileValidatesExecutionReadiness(t *testing.T) {
 			name: "api_push with valid connectorKey passes CreateProfile validation",
 			input: dto.CreateProfileInput{
 				ProfileKey:       "test-profile",
+				SourceSurface:    "membership",
 				TrackingSyncMode: "api_push",
 				ConnectorKey:     "valid.connector",
 			},
@@ -351,6 +367,7 @@ func TestCreateProfileValidatesExecutionReadiness(t *testing.T) {
 			name: "document_export with unknown connectorKey rejected at CreateProfile level",
 			input: dto.CreateProfileInput{
 				ProfileKey:       "test-profile",
+				SourceSurface:    "membership",
 				TrackingSyncMode: "document_export",
 				ConnectorKey:     "unknown.connector",
 			},
@@ -404,6 +421,7 @@ func TestUpdateProfileValidatesExecutionReadiness(t *testing.T) {
 			input: dto.UpdateProfileInput{
 				ID:               1,
 				ProfileKey:       "test-profile",
+				SourceSurface:    "membership",
 				TrackingSyncMode: "api_push",
 				ConnectorKey:     "",
 			},
@@ -414,6 +432,7 @@ func TestUpdateProfileValidatesExecutionReadiness(t *testing.T) {
 			input: dto.UpdateProfileInput{
 				ID:                  1,
 				ProfileKey:          "test-profile",
+				SourceSurface:       "membership",
 				TrackingSyncMode:    "manual_confirmation",
 				AllowsManualClosure: false,
 			},
@@ -424,6 +443,7 @@ func TestUpdateProfileValidatesExecutionReadiness(t *testing.T) {
 			input: dto.UpdateProfileInput{
 				ID:               1,
 				ProfileKey:       "test-profile",
+				SourceSurface:    "membership",
 				TrackingSyncMode: "document_export",
 				ConnectorKey:     "unknown.connector",
 			},
@@ -578,5 +598,107 @@ func TestSeedDefaultProfilesUsesExecutableDefaults(t *testing.T) {
 	}
 	if _, err := provider.Resolve(retail); err != nil {
 		t.Fatalf("retail_default should resolve in runtime executor provider, got error: %v", err)
+	}
+}
+
+func TestValidateProfileEnums_FactorySurface(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		input   dto.CreateProfileInput
+		wantErr bool
+	}{
+		{
+			name: "factory with platform + capability passes without demand strategies",
+			input: dto.CreateProfileInput{
+				ProfileKey:                   "factory-demo",
+				SourceSurface:                "factory",
+				FactorySupplierPlatform:      "rouzao",
+				SupportsImportProductCatalog: true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "factory without platform rejected",
+			input: dto.CreateProfileInput{
+				ProfileKey:                   "factory-demo",
+				SourceSurface:                "factory",
+				SupportsImportProductCatalog: true,
+			},
+			wantErr: true,
+		},
+		{
+			name: "factory without any capability rejected",
+			input: dto.CreateProfileInput{
+				ProfileKey:              "factory-demo",
+				SourceSurface:           "factory",
+				FactorySupplierPlatform: "rouzao",
+			},
+			wantErr: true,
+		},
+		{
+			name: "missing source surface rejected",
+			input: dto.CreateProfileInput{
+				ProfileKey: "x",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid source surface rejected",
+			input: dto.CreateProfileInput{
+				ProfileKey:    "x",
+				SourceSurface: "members",
+			},
+			wantErr: true,
+		},
+		{
+			name: "membership accepts demand strategy enums",
+			input: dto.CreateProfileInput{
+				ProfileKey:    "m",
+				SourceSurface: "membership",
+				DemandKind:    "membership_entitlement",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateProfileEnums(tc.input)
+			if tc.wantErr && err == nil {
+				t.Errorf("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestCreateProfileRejectsDuplicateProfileKey(t *testing.T) {
+	t.Parallel()
+
+	uc := NewProfileManagementUseCase(
+		&stubIntegrationProfileRepo{
+			FindByKeyFn: func(key string) (*domain.IntegrationProfile, error) {
+				return &domain.IntegrationProfile{ID: 9, ProfileKey: key}, nil
+			},
+		},
+		&stubDemandDocumentRepo{},
+		&stubChannelSyncRepo{},
+		&stubProfileTemplateBindingRepo{},
+		&stubClosureDecisionRepo{},
+		nil,
+	)
+
+	_, err := uc.CreateProfile(context.Background(), dto.CreateProfileInput{
+		ProfileKey:    "dup-key",
+		SourceSurface: "membership",
+	})
+	if err == nil {
+		t.Fatal("expected duplicate profile_key error")
 	}
 }

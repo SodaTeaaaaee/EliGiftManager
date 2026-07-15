@@ -33,4 +33,7 @@ type SupplierOrderFileResultDTO struct {
 	FilePath    string    `json:"filePath"`
 	LineCount   int       `json:"lineCount"`
 	GeneratedAt time.Time `json:"generatedAt" ts_type:"string"`
+	// Warnings carries non-fatal notices (e.g. legacy JSON fallback when no
+	// export_supplier_order template is bound). Empty when the preferred path ran.
+	Warnings []string `json:"warnings,omitempty"`
 }

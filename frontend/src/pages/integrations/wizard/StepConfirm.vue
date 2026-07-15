@@ -5,24 +5,34 @@
  * (`deriveProfileDefaults.ts`) rendered via `StatusBadge` — never a raw enum
  * string. `Finish` triggers `state.finish()` from the parent `IntakeWizard`
  * (WizardFrame's `finish` emit), not from inside this component.
+ *
+ * `persistError` / `bindWarning` render inline so a failed or degraded finish
+ * is visible without relying solely on a floating toast.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { StatusBadge } from '@/shared/ui/status'
+import { CalloutBar } from '@/shared/ui/guidance'
 import type { UseIntakeWizardStateApi } from './useIntakeWizardState'
-import { INTAKE_DEST_FIELD_ORDER, destFieldLabelKey } from './destFields'
+import { INTAKE_V2_DEST_FIELD_ORDER, destFieldLabelKey } from './destFields'
 
 const props = defineProps<{ state: UseIntakeWizardStateApi }>()
 
-const { t } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n({ useScope: 'global' })
 
-const CAPABILITY_KEYS = [
+const DEMAND_CAPABILITY_KEYS = [
   'supportsPartialShipment',
   'supportsApiImport',
   'supportsApiExport',
   'requiresCarrierMapping',
   'requiresExternalOrderNo',
   'allowsManualClosure',
+] as const
+
+const FACTORY_CAPABILITY_KEYS = [
+  'supportsExportSupplierOrder',
+  'supportsImportProductCatalog',
+  'supportsImportSupplierShipment',
 ] as const
 
 const STRATEGY_ROWS = [
@@ -38,27 +48,67 @@ const STRATEGY_ROWS = [
 interface MappingSummaryRow {
   field: string
   labelKey: string
-  resolvedKind: 'column' | 'fixed' | 'unmapped'
+  resolvedKind: 'column' | 'position' | 'fixed' | 'unmapped'
   resolvedValue: string
 }
 
-const mappingSummary = computed<MappingSummaryRow[]>(() =>
-  INTAKE_DEST_FIELD_ORDER.map((field) => {
-    const fixedValue = props.state.mapping.value.defaults[field]
-    if (fixedValue !== undefined && fixedValue !== '') {
-      return { field, labelKey: destFieldLabelKey(field), resolvedKind: 'fixed', resolvedValue: fixedValue }
-    }
-    const column = props.state.mapping.value.columns[field]
-    if (column) {
-      return { field, labelKey: destFieldLabelKey(field), resolvedKind: 'column', resolvedValue: column }
-    }
-    return { field, labelKey: destFieldLabelKey(field), resolvedKind: 'unmapped', resolvedValue: '' }
-  }),
+const mappingSummary = computed<MappingSummaryRow[]>(() => {
+  const mapping = props.state.mapping.value
+  const mode = mapping.mode === 'positional' ? 'positional' : 'header'
+  const extraKeys = new Set([
+    ...Object.keys(mapping.columns ?? {}),
+    ...Object.keys(mapping.positions ?? {}),
+    ...Object.keys(mapping.defaults ?? {}),
+  ])
+  const ordered = [...INTAKE_V2_DEST_FIELD_ORDER]
+  for (const key of extraKeys) {
+    if (!ordered.includes(key)) ordered.push(key)
+  }
+  return ordered
+    .map((field) => {
+      const fixedValue = mapping.defaults[field]
+      if (fixedValue !== undefined && fixedValue !== '') {
+        return { field, labelKey: destFieldLabelKey(field), resolvedKind: 'fixed' as const, resolvedValue: fixedValue }
+      }
+      if (mode === 'positional') {
+        const positions = mapping.positions ?? {}
+        if (field in positions) {
+          return {
+            field,
+            labelKey: destFieldLabelKey(field),
+            resolvedKind: 'position' as const,
+            resolvedValue: String(positions[field]),
+          }
+        }
+      } else {
+        const column = mapping.columns[field]
+        if (column) {
+          return { field, labelKey: destFieldLabelKey(field), resolvedKind: 'column' as const, resolvedValue: column }
+        }
+      }
+      return { field, labelKey: destFieldLabelKey(field), resolvedKind: 'unmapped' as const, resolvedValue: '' }
+    })
+    .filter((row) => row.resolvedKind !== 'unmapped')
+})
+
+const showStrategy = computed(
+  () => !props.state.isRemapMode.value && !props.state.isFactorySurface.value,
 )
 </script>
 
 <template>
   <div class="step-confirm">
+    <CalloutBar
+      v-if="state.persistError.value"
+      tone="error"
+      :message="state.persistError.value"
+    />
+    <CalloutBar
+      v-if="state.bindWarning.value"
+      tone="warning"
+      :message="state.bindWarning.value"
+    />
+
     <section class="step-confirm__section">
       <h4 class="step-confirm__section-title">{{ t('intakeWizard.confirm.profileTitle') }}</h4>
       <p v-if="state.isRemapMode.value" class="step-confirm__remap-notice">{{ t('intakeWizard.confirm.remapNotice') }}</p>
@@ -70,8 +120,18 @@ const mappingSummary = computed<MappingSummaryRow[]>(() =>
           <dd>{{ state.sourceChannel.value }}</dd>
           <dt>{{ t('intakeWizard.profileFields.sourceSurfaceLabel') }}</dt>
           <dd>{{ state.sourceSurface.value }}</dd>
-          <dt>{{ t('statusKit.dimensionNames.demandKind') }}</dt>
-          <dd><StatusBadge dimension="demandKind" :value="state.demandKind.value" size="sm" /></dd>
+          <template v-if="!state.isFactorySurface.value">
+            <dt>{{ t('statusKit.dimensionNames.demandKind') }}</dt>
+            <dd><StatusBadge dimension="demandKind" :value="state.demandKind.value" size="sm" /></dd>
+          </template>
+          <template v-else>
+            <dt>{{ t('intakeWizard.businessSurface.factory.label') }}</dt>
+            <dd>{{ t('intakeWizard.businessSurface.factory.label') }}</dd>
+          </template>
+          <dt>{{ t('intakeWizard.profileFields.factorySupplierPlatformLabel') }}</dt>
+          <dd>{{ state.factorySupplierPlatform.value || '—' }}</dd>
+          <dt>{{ t('intakeWizard.confirm.documentType') }}</dt>
+          <dd><StatusBadge dimension="documentType" :value="state.documentType.value" size="sm" /></dd>
         </template>
         <template v-else>
           <dt>{{ t('intakeWizard.profileFields.profileKeyLabel') }}</dt>
@@ -80,7 +140,7 @@ const mappingSummary = computed<MappingSummaryRow[]>(() =>
       </dl>
     </section>
 
-    <section v-if="!state.isRemapMode.value" class="step-confirm__section">
+    <section v-if="showStrategy" class="step-confirm__section">
       <h4 class="step-confirm__section-title">{{ t('intakeWizard.confirm.strategyTitle') }}</h4>
       <div class="step-confirm__badge-row">
         <StatusBadge
@@ -97,23 +157,48 @@ const mappingSummary = computed<MappingSummaryRow[]>(() =>
     <section v-if="!state.isRemapMode.value" class="step-confirm__section">
       <h4 class="step-confirm__section-title">{{ t('intakeWizard.confirm.capabilitiesTitle') }}</h4>
       <dl class="step-confirm__kv">
-        <template v-for="key in CAPABILITY_KEYS" :key="key">
-          <dt>{{ t(`intakeWizard.capabilities.${key}.label`) }}</dt>
-          <dd>{{ state.capabilities[key] ? t('common.yes') : t('common.no') }}</dd>
+        <template v-if="state.isFactorySurface.value">
+          <template v-for="key in FACTORY_CAPABILITY_KEYS" :key="key">
+            <dt>{{ t(`intakeWizard.capabilities.${key}.label`) }}</dt>
+            <dd>{{ state.factoryCapabilities[key] ? t('common.yes') : t('common.no') }}</dd>
+          </template>
+        </template>
+        <template v-else>
+          <template v-for="key in DEMAND_CAPABILITY_KEYS" :key="key">
+            <dt>{{ t(`intakeWizard.capabilities.${key}.label`) }}</dt>
+            <dd>{{ state.capabilities[key] ? t('common.yes') : t('common.no') }}</dd>
+          </template>
         </template>
       </dl>
     </section>
 
     <section class="step-confirm__section">
       <h4 class="step-confirm__section-title">{{ t('intakeWizard.confirm.mappingTitle') }}</h4>
-      <dl class="step-confirm__kv">
+      <p class="step-confirm__remap-notice">
+        {{ t('intakeWizard.mapping.modeLabel') }}:
+        {{
+          state.mapping.value.mode === 'positional'
+            ? t('intakeWizard.mapping.modePositional')
+            : t('intakeWizard.mapping.modeHeader')
+        }}
+        ·
+        {{ t('intakeWizard.mapping.hasHeaderLabel') }}:
+        {{ state.mapping.value.hasHeader === false ? t('common.no') : t('common.yes') }}
+      </p>
+      <dl v-if="mappingSummary.length" class="step-confirm__kv">
         <template v-for="row in mappingSummary" :key="row.field">
-          <dt>{{ t(row.labelKey) }}</dt>
-          <dd :class="{ 'step-confirm__unmapped': row.resolvedKind === 'unmapped' }">
-            {{ row.resolvedKind === 'unmapped' ? t('intakeWizard.mapping.unmapped') : row.resolvedValue }}
+          <dt>{{ te(row.labelKey) ? t(row.labelKey) : row.field }}</dt>
+          <dd>
+            <template v-if="row.resolvedKind === 'position'">
+              #{{ row.resolvedValue }}
+            </template>
+            <template v-else>
+              {{ row.resolvedValue }}
+            </template>
           </dd>
         </template>
       </dl>
+      <p v-else class="step-confirm__remap-notice">{{ t('intakeWizard.confirm.mappingEmpty') }}</p>
     </section>
   </div>
 </template>
@@ -158,11 +243,6 @@ const mappingSummary = computed<MappingSummaryRow[]>(() =>
   font-family: var(--font-body);
   font-size: var(--font-size-sm);
   color: var(--color-text-primary);
-}
-
-.step-confirm__unmapped {
-  color: var(--color-text-muted);
-  font-style: italic;
 }
 
 .step-confirm__badge-row {

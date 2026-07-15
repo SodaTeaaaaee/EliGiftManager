@@ -70,13 +70,14 @@ func (uc *productSnapshotDetailUseCase) SnapshotProductsForWaveDetailed(ctx cont
 		}
 
 		mid := masterID
+		// Copy ExtraData from master; image fields stay Master-only (not snapshotted).
 		product := &domain.Product{
 			WaveID:           input.WaveID,
 			ProductMasterID:  &mid,
 			SupplierPlatform: master.SupplierPlatform,
 			FactorySKU:       master.FactorySKU,
 			Name:             master.Name,
-			ExtraData:        "",
+			ExtraData:        master.ExtraData,
 		}
 		if err := uc.productRepo.Create(ctx, product); err != nil {
 			return nil, err

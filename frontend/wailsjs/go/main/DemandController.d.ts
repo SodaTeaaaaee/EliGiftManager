@@ -24,4 +24,6 @@ export function ListUnassignedDemandDocuments():Promise<Array<dto.DemandDocument
 
 export function ParseCSVFile(arg1:string):Promise<dto.CSVFilePreviewDTO>;
 
+export function ParseTabularFile(arg1:string,arg2:boolean):Promise<dto.CSVFilePreviewDTO>;
+
 export function UpdateDemandLineRouting(arg1:dto.UpdateDemandLineRoutingInput):Promise<void>;

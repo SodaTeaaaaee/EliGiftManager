@@ -614,6 +614,7 @@ export namespace dto {
 	    internalCarrierCode: string;
 	    externalCarrierCode: string;
 	    externalCarrierName: string;
+	    aliases: string;
 	    isDefault: boolean;
 	    createdAt: string;
 	    updatedAt: string;
@@ -629,6 +630,7 @@ export namespace dto {
 	        this.internalCarrierCode = source["internalCarrierCode"];
 	        this.externalCarrierCode = source["externalCarrierCode"];
 	        this.externalCarrierName = source["externalCarrierName"];
+	        this.aliases = source["aliases"];
 	        this.isDefault = source["isDefault"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
@@ -911,6 +913,7 @@ export namespace dto {
 	    internalCarrierCode: string;
 	    externalCarrierCode: string;
 	    externalCarrierName: string;
+	    aliases: string;
 	    isDefault: boolean;
 	
 	    static createFrom(source: any = {}) {
@@ -923,6 +926,7 @@ export namespace dto {
 	        this.internalCarrierCode = source["internalCarrierCode"];
 	        this.externalCarrierCode = source["externalCarrierCode"];
 	        this.externalCarrierName = source["externalCarrierName"];
+	        this.aliases = source["aliases"];
 	        this.isDefault = source["isDefault"];
 	    }
 	}
@@ -1131,6 +1135,9 @@ export namespace dto {
 	    supplierProductRef: string;
 	    name: string;
 	    productKind: string;
+	    coverImagePath: string;
+	    detailImagePaths: string;
+	    extraData: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new CreateProductMasterInput(source);
@@ -1143,6 +1150,9 @@ export namespace dto {
 	        this.supplierProductRef = source["supplierProductRef"];
 	        this.name = source["name"];
 	        this.productKind = source["productKind"];
+	        this.coverImagePath = source["coverImagePath"];
+	        this.detailImagePaths = source["detailImagePaths"];
+	        this.extraData = source["extraData"];
 	    }
 	}
 	export class CreateProfileInput {
@@ -1163,7 +1173,11 @@ export namespace dto {
 	    requiresCarrierMapping: boolean;
 	    requiresExternalOrderNo: boolean;
 	    allowsManualClosure: boolean;
+	    supportsExportSupplierOrder: boolean;
+	    supportsImportProductCatalog: boolean;
+	    supportsImportSupplierShipment: boolean;
 	    connectorKey: string;
+	    factorySupplierPlatform: string;
 	    supportedLocales: string;
 	    defaultLocale: string;
 	    extraData: string;
@@ -1191,7 +1205,11 @@ export namespace dto {
 	        this.requiresCarrierMapping = source["requiresCarrierMapping"];
 	        this.requiresExternalOrderNo = source["requiresExternalOrderNo"];
 	        this.allowsManualClosure = source["allowsManualClosure"];
+	        this.supportsExportSupplierOrder = source["supportsExportSupplierOrder"];
+	        this.supportsImportProductCatalog = source["supportsImportProductCatalog"];
+	        this.supportsImportSupplierShipment = source["supportsImportSupplierShipment"];
 	        this.connectorKey = source["connectorKey"];
+	        this.factorySupplierPlatform = source["factorySupplierPlatform"];
 	        this.supportedLocales = source["supportedLocales"];
 	        this.defaultLocale = source["defaultLocale"];
 	        this.extraData = source["extraData"];
@@ -2033,6 +2051,82 @@ export namespace dto {
 	        this.createdBy = source["createdBy"];
 	    }
 	}
+	export class ImportCarrierMappingError {
+	    rowIndex: number;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportCarrierMappingError(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rowIndex = source["rowIndex"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class ImportCarrierMappingsInput {
+	    integrationProfileId: number;
+	    importMode: string;
+	    filePath: string;
+	    rows: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportCarrierMappingsInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.importMode = source["importMode"];
+	        this.filePath = source["filePath"];
+	        this.rows = source["rows"];
+	    }
+	}
+	export class ImportCarrierMappingsResult {
+	    createdCount: number;
+	    updatedCount: number;
+	    totalProcessed: number;
+	    successCount: number;
+	    errorCount: number;
+	    errors: ImportCarrierMappingError[];
+	    mappings: CarrierMappingDTO[];
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportCarrierMappingsResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.createdCount = source["createdCount"];
+	        this.updatedCount = source["updatedCount"];
+	        this.totalProcessed = source["totalProcessed"];
+	        this.successCount = source["successCount"];
+	        this.errorCount = source["errorCount"];
+	        this.errors = this.convertValues(source["errors"], ImportCarrierMappingError);
+	        this.mappings = this.convertValues(source["mappings"], CarrierMappingDTO);
+	        this.warnings = source["warnings"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ImportDemandCSVInput {
 	    integrationProfileId: number;
 	    documentType: string;
@@ -2040,6 +2134,7 @@ export namespace dto {
 	    sourceCustomerRef: string;
 	    importMode: string;
 	    rows: any[];
+	    filePath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new ImportDemandCSVInput(source);
@@ -2053,6 +2148,7 @@ export namespace dto {
 	        this.sourceCustomerRef = source["sourceCustomerRef"];
 	        this.importMode = source["importMode"];
 	        this.rows = source["rows"];
+	        this.filePath = source["filePath"];
 	    }
 	}
 	export class ImportDemandCSVResult {
@@ -2061,6 +2157,7 @@ export namespace dto {
 	    totalProcessed: number;
 	    successCount: number;
 	    errorCount: number;
+	    warnings: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ImportDemandCSVResult(source);
@@ -2073,6 +2170,7 @@ export namespace dto {
 	        this.totalProcessed = source["totalProcessed"];
 	        this.successCount = source["successCount"];
 	        this.errorCount = source["errorCount"];
+	        this.warnings = source["warnings"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2112,6 +2210,116 @@ export namespace dto {
 	        this.sourceCustomerRef = source["sourceCustomerRef"];
 	        this.rows = source["rows"];
 	    }
+	}
+	export class ImportProductCatalogError {
+	    rowIndex: number;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportProductCatalogError(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rowIndex = source["rowIndex"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class ImportProductCatalogInput {
+	    integrationProfileId: number;
+	    importMode: string;
+	    filePath: string;
+	    rows: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportProductCatalogInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.importMode = source["importMode"];
+	        this.filePath = source["filePath"];
+	        this.rows = source["rows"];
+	    }
+	}
+	export class ProductMasterDTO {
+	    id: number;
+	    supplierPlatform: string;
+	    factorySku: string;
+	    supplierProductRef: string;
+	    name: string;
+	    productKind: string;
+	    archived: boolean;
+	    coverImagePath: string;
+	    detailImagePaths: string;
+	    extraData: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMasterDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.supplierPlatform = source["supplierPlatform"];
+	        this.factorySku = source["factorySku"];
+	        this.supplierProductRef = source["supplierProductRef"];
+	        this.name = source["name"];
+	        this.productKind = source["productKind"];
+	        this.archived = source["archived"];
+	        this.coverImagePath = source["coverImagePath"];
+	        this.detailImagePaths = source["detailImagePaths"];
+	        this.extraData = source["extraData"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class ImportProductCatalogResult {
+	    createdCount: number;
+	    updatedCount: number;
+	    totalProcessed: number;
+	    successCount: number;
+	    errorCount: number;
+	    errors: ImportProductCatalogError[];
+	    masters: ProductMasterDTO[];
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportProductCatalogResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.createdCount = source["createdCount"];
+	        this.updatedCount = source["updatedCount"];
+	        this.totalProcessed = source["totalProcessed"];
+	        this.successCount = source["successCount"];
+	        this.errorCount = source["errorCount"];
+	        this.errors = this.convertValues(source["errors"], ImportProductCatalogError);
+	        this.masters = this.convertValues(source["masters"], ProductMasterDTO);
+	        this.warnings = source["warnings"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ImportShipmentEntry {
 	    supplierOrderLineId: number;
@@ -2279,6 +2487,7 @@ export namespace dto {
 	    totalProcessed: number;
 	    successCount: number;
 	    errorCount: number;
+	    warnings: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new ImportShipmentResult(source);
@@ -2291,6 +2500,7 @@ export namespace dto {
 	        this.totalProcessed = source["totalProcessed"];
 	        this.successCount = source["successCount"];
 	        this.errorCount = source["errorCount"];
+	        this.warnings = source["warnings"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -2330,7 +2540,11 @@ export namespace dto {
 	    requiresCarrierMapping: boolean;
 	    requiresExternalOrderNo: boolean;
 	    allowsManualClosure: boolean;
+	    supportsExportSupplierOrder: boolean;
+	    supportsImportProductCatalog: boolean;
+	    supportsImportSupplierShipment: boolean;
 	    connectorKey: string;
+	    factorySupplierPlatform: string;
 	    supportedLocales: string;
 	    defaultLocale: string;
 	    extraData: string;
@@ -2361,7 +2575,11 @@ export namespace dto {
 	        this.requiresCarrierMapping = source["requiresCarrierMapping"];
 	        this.requiresExternalOrderNo = source["requiresExternalOrderNo"];
 	        this.allowsManualClosure = source["allowsManualClosure"];
+	        this.supportsExportSupplierOrder = source["supportsExportSupplierOrder"];
+	        this.supportsImportProductCatalog = source["supportsImportProductCatalog"];
+	        this.supportsImportSupplierShipment = source["supportsImportSupplierShipment"];
 	        this.connectorKey = source["connectorKey"];
+	        this.factorySupplierPlatform = source["factorySupplierPlatform"];
 	        this.supportedLocales = source["supportedLocales"];
 	        this.defaultLocale = source["defaultLocale"];
 	        this.extraData = source["extraData"];
@@ -2373,9 +2591,13 @@ export namespace dto {
 	    id: number;
 	    profileKey: string;
 	    sourceChannel: string;
+	    sourceSurface: string;
 	    trackingSyncMode: string;
 	    closurePolicy: string;
 	    allowsManualClosure: boolean;
+	    supportsExportSupplierOrder: boolean;
+	    supportsImportProductCatalog: boolean;
+	    supportsImportSupplierShipment: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new IntegrationProfileSummaryDTO(source);
@@ -2386,9 +2608,33 @@ export namespace dto {
 	        this.id = source["id"];
 	        this.profileKey = source["profileKey"];
 	        this.sourceChannel = source["sourceChannel"];
+	        this.sourceSurface = source["sourceSurface"];
 	        this.trackingSyncMode = source["trackingSyncMode"];
 	        this.closurePolicy = source["closurePolicy"];
 	        this.allowsManualClosure = source["allowsManualClosure"];
+	        this.supportsExportSupplierOrder = source["supportsExportSupplierOrder"];
+	        this.supportsImportProductCatalog = source["supportsImportProductCatalog"];
+	        this.supportsImportSupplierShipment = source["supportsImportSupplierShipment"];
+	    }
+	}
+	export class MapAndReconcileShipmentsInput {
+	    waveId: number;
+	    integrationProfileId: number;
+	    importMode: string;
+	    filePath: string;
+	    rows: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new MapAndReconcileShipmentsInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.importMode = source["importMode"];
+	        this.filePath = source["filePath"];
+	        this.rows = source["rows"];
 	    }
 	}
 	export class MarkSupplierOrderSubmittedInput {
@@ -2736,36 +2982,7 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
-	export class ProductMasterDTO {
-	    id: number;
-	    supplierPlatform: string;
-	    factorySku: string;
-	    supplierProductRef: string;
-	    name: string;
-	    productKind: string;
-	    archived: boolean;
-	    extraData: string;
-	    createdAt: string;
-	    updatedAt: string;
 	
-	    static createFrom(source: any = {}) {
-	        return new ProductMasterDTO(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.supplierPlatform = source["supplierPlatform"];
-	        this.factorySku = source["factorySku"];
-	        this.supplierProductRef = source["supplierProductRef"];
-	        this.name = source["name"];
-	        this.productKind = source["productKind"];
-	        this.archived = source["archived"];
-	        this.extraData = source["extraData"];
-	        this.createdAt = source["createdAt"];
-	        this.updatedAt = source["updatedAt"];
-	    }
-	}
 	export class ProductMasterPageFilterInput {
 	    keyword: string;
 	    productKinds: string[];
@@ -3183,6 +3400,7 @@ export namespace dto {
 	    filePath: string;
 	    lineCount: number;
 	    generatedAt: string;
+	    warnings?: string[];
 	
 	    static createFrom(source: any = {}) {
 	        return new SupplierOrderFileResultDTO(source);
@@ -3194,6 +3412,7 @@ export namespace dto {
 	        this.filePath = source["filePath"];
 	        this.lineCount = source["lineCount"];
 	        this.generatedAt = source["generatedAt"];
+	        this.warnings = source["warnings"];
 	    }
 	}
 	
@@ -3410,6 +3629,24 @@ export namespace dto {
 	    }
 	}
 	
+	export class UpdateDocumentTemplateInput {
+	    id: number;
+	    format: string;
+	    mappingRules: string;
+	    extraData: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateDocumentTemplateInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.format = source["format"];
+	        this.mappingRules = source["mappingRules"];
+	        this.extraData = source["extraData"];
+	    }
+	}
 	export class UpdateProductMasterInput {
 	    id: number;
 	    supplierPlatform: string;
@@ -3418,6 +3655,9 @@ export namespace dto {
 	    name: string;
 	    productKind: string;
 	    archived: boolean;
+	    coverImagePath: string;
+	    detailImagePaths: string;
+	    extraData: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateProductMasterInput(source);
@@ -3432,6 +3672,9 @@ export namespace dto {
 	        this.name = source["name"];
 	        this.productKind = source["productKind"];
 	        this.archived = source["archived"];
+	        this.coverImagePath = source["coverImagePath"];
+	        this.detailImagePaths = source["detailImagePaths"];
+	        this.extraData = source["extraData"];
 	    }
 	}
 	export class UpdateProfileInput {
@@ -3453,7 +3696,11 @@ export namespace dto {
 	    requiresCarrierMapping: boolean;
 	    requiresExternalOrderNo: boolean;
 	    allowsManualClosure: boolean;
+	    supportsExportSupplierOrder: boolean;
+	    supportsImportProductCatalog: boolean;
+	    supportsImportSupplierShipment: boolean;
 	    connectorKey: string;
+	    factorySupplierPlatform: string;
 	    supportedLocales: string;
 	    defaultLocale: string;
 	    extraData: string;
@@ -3482,7 +3729,11 @@ export namespace dto {
 	        this.requiresCarrierMapping = source["requiresCarrierMapping"];
 	        this.requiresExternalOrderNo = source["requiresExternalOrderNo"];
 	        this.allowsManualClosure = source["allowsManualClosure"];
+	        this.supportsExportSupplierOrder = source["supportsExportSupplierOrder"];
+	        this.supportsImportProductCatalog = source["supportsImportProductCatalog"];
+	        this.supportsImportSupplierShipment = source["supportsImportSupplierShipment"];
 	        this.connectorKey = source["connectorKey"];
+	        this.factorySupplierPlatform = source["factorySupplierPlatform"];
 	        this.supportedLocales = source["supportedLocales"];
 	        this.defaultLocale = source["defaultLocale"];
 	        this.extraData = source["extraData"];

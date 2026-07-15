@@ -42,9 +42,20 @@ func NewShipmentController() *ShipmentController {
 	basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
 	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	addressRepo := infra.NewAddressRepository(gdb)
+	carrierMappingRepo := infra.NewCarrierMappingRepository(gdb)
+	mapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
+	carrierUC := app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo)
+	masterRepo := infra.NewProductMasterRepository(gdb)
+	importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+	importUC = app.WithShipmentReconcileDeps(importUC, mapping, productRepo, masterRepo, addressRepo, carrierUC)
+
 	return &ShipmentController{
 		shipmentUC:          app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
-		shipmentImportUC:    app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
+		shipmentImportUC:    importUC,
 		shipmentRepo:        shipmentRepo,
 		gdb:                 gdb,
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc)),
@@ -221,6 +232,83 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 			WaveID:                  input.WaveID,
 			CommandKind:             domain.CmdCreateShipment,
 			CommandSummary:          fmt.Sprintf("import %d shipments for wave %d (%d succeeded, %d failed)", res.TotalProcessed, input.WaveID, res.SuccessCount, res.ErrorCount),
+			PatchPayload:            "",
+			InversePatchPayload:     "",
+			BaselineSnapshotPayload: preSnapshot,
+			ProjectionHash:          projHash,
+		})
+		return recordErr
+	})
+	if err != nil {
+		return dto.ImportShipmentResult{}, err
+	}
+
+	return *importResult, nil
+}
+
+// MapAndReconcileShipments maps an external factory-return sheet onto internal IDs
+// then imports the reconciled entries. History recording mirrors ImportShipments.
+func (c *ShipmentController) MapAndReconcileShipments(input dto.MapAndReconcileShipmentsInput) (dto.ImportShipmentResult, error) {
+	ctx := appContext
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
+	if err != nil {
+		return dto.ImportShipmentResult{}, err
+	}
+
+	var importResult *dto.ImportShipmentResult
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		repos := infra.NewTxRepos(tx)
+		shipmentRepo := repos.ShipmentRepo
+		supplierRepo := repos.SupplierRepo
+		fulfillRepo := repos.FulfillRepo
+		ruleRepo := repos.RuleRepo
+		adjustmentRepo := repos.AdjustmentRepo
+		assignmentRepo := repos.AssignmentRepo
+		waveRepo := repos.WaveRepo
+		productRepo := repos.ProductRepo
+		closureDecisionRepo := repos.ClosureDecision
+		historyScopeRepo := repos.HistoryScope
+		historyNodeRepo := repos.HistoryNode
+		historyPinRepo := repos.HistoryPin
+		historyCheckpointRepo := repos.HistoryCheckpoint
+
+		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
+		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
+		importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+
+		templateRepo := infra.NewDocumentTemplateRepository(tx)
+		bindingRepo := infra.NewProfileTemplateBindingRepository(tx)
+		profileRepo := infra.NewIntegrationProfileRepository(tx)
+		addressRepo := infra.NewAddressRepository(tx)
+		carrierMappingRepo := infra.NewCarrierMappingRepository(tx)
+		mapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
+		carrierUC := app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo)
+		masterRepo := infra.NewProductMasterRepository(tx)
+		importUC = app.WithShipmentReconcileDeps(importUC, mapping, productRepo, masterRepo, addressRepo, carrierUC)
+
+		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
+		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
+		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
+
+		res, importErr := importUC.MapAndReconcileShipments(ctx, input)
+		if importErr != nil {
+			return importErr
+		}
+		importResult = res
+
+		// Skip history when nothing was reconciled/imported successfully.
+		if res.SuccessCount == 0 {
+			return nil
+		}
+
+		projHash, hashErr := projHashSvc.ComputeHash(ctx, input.WaveID)
+		if hashErr != nil {
+			return hashErr
+		}
+		_, recordErr := historySvc.RecordNode(ctx, app.RecordNodeInput{
+			WaveID:                  input.WaveID,
+			CommandKind:             domain.CmdCreateShipment,
+			CommandSummary:          fmt.Sprintf("map+import %d shipment rows for wave %d (%d succeeded, %d failed)", res.TotalProcessed, input.WaveID, res.SuccessCount, res.ErrorCount),
 			PatchPayload:            "",
 			InversePatchPayload:     "",
 			BaselineSnapshotPayload: preSnapshot,

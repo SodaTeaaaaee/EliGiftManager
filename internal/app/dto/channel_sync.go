@@ -119,10 +119,14 @@ type ChannelSyncItemDTO struct {
 }
 
 type IntegrationProfileSummaryDTO struct {
-	ID                  uint   `json:"id"`
-	ProfileKey          string `json:"profileKey"`
-	SourceChannel       string `json:"sourceChannel"`
-	TrackingSyncMode    string `json:"trackingSyncMode"`
-	ClosurePolicy       string `json:"closurePolicy"`
-	AllowsManualClosure bool   `json:"allowsManualClosure"`
+	ID                             uint   `json:"id"`
+	ProfileKey                     string `json:"profileKey"`
+	SourceChannel                  string `json:"sourceChannel"`
+	SourceSurface                  string `json:"sourceSurface"`
+	TrackingSyncMode               string `json:"trackingSyncMode"`
+	ClosurePolicy                  string `json:"closurePolicy"`
+	AllowsManualClosure            bool   `json:"allowsManualClosure"`
+	SupportsExportSupplierOrder    bool   `json:"supportsExportSupplierOrder"`
+	SupportsImportProductCatalog   bool   `json:"supportsImportProductCatalog"`
+	SupportsImportSupplierShipment bool   `json:"supportsImportSupplierShipment"`
 }

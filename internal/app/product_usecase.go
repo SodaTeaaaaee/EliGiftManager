@@ -14,6 +14,7 @@ type productUseCase struct {
 	masterRepo  domain.ProductMasterRepository
 	productRepo domain.ProductRepository
 	waveRepo    domain.WaveRepository
+	catalog     *catalogImportDeps
 }
 
 func NewProductUseCase(
@@ -65,7 +66,9 @@ func (uc *productUseCase) CreateProductMaster(ctx context.Context, input dto.Cre
 		Name:               input.Name,
 		ProductKind:        domain.ProductKind(productKind),
 		Archived:           false,
-		ExtraData:          "",
+		CoverImagePath:     input.CoverImagePath,
+		DetailImagePaths:   input.DetailImagePaths,
+		ExtraData:          input.ExtraData,
 	}
 	if err := uc.masterRepo.Create(ctx, master); err != nil {
 		return nil, err
@@ -107,6 +110,9 @@ func (uc *productUseCase) UpdateProductMaster(ctx context.Context, input dto.Upd
 	master.Name = input.Name
 	master.ProductKind = domain.ProductKind(productKind)
 	master.Archived = input.Archived
+	master.CoverImagePath = input.CoverImagePath
+	master.DetailImagePaths = input.DetailImagePaths
+	master.ExtraData = input.ExtraData
 
 	if err := uc.masterRepo.Update(ctx, master); err != nil {
 		return nil, err
@@ -140,13 +146,14 @@ func (uc *productUseCase) SnapshotProductsForWave(ctx context.Context, input dto
 		}
 
 		mid := masterID
+		// Copy ExtraData from master; image fields stay Master-only (not snapshotted).
 		product := &domain.Product{
 			WaveID:           input.WaveID,
 			ProductMasterID:  &mid,
 			SupplierPlatform: master.SupplierPlatform,
 			FactorySKU:       master.FactorySKU,
 			Name:             master.Name,
-			ExtraData:        "",
+			ExtraData:        master.ExtraData,
 		}
 		if err := uc.productRepo.Create(ctx, product); err != nil {
 			return nil, err
@@ -180,6 +187,8 @@ func productMasterToDTO(m *domain.ProductMaster) dto.ProductMasterDTO {
 		Name:               m.Name,
 		ProductKind:        string(m.ProductKind),
 		Archived:           m.Archived,
+		CoverImagePath:     m.CoverImagePath,
+		DetailImagePaths:   m.DetailImagePaths,
 		ExtraData:          m.ExtraData,
 		CreatedAt:          m.CreatedAt,
 		UpdatedAt:          m.UpdatedAt,

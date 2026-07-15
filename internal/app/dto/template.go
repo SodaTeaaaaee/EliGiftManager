@@ -10,6 +10,15 @@ type CreateDocumentTemplateInput struct {
 	ExtraData    string `json:"extraData"`
 }
 
+// UpdateDocumentTemplateInput updates mutable template fields only.
+// TemplateKey and DocumentType are intentionally omitted — they are immutable.
+type UpdateDocumentTemplateInput struct {
+	ID           uint   `json:"id"`
+	Format       string `json:"format"`
+	MappingRules string `json:"mappingRules"`
+	ExtraData    string `json:"extraData"`
+}
+
 type DocumentTemplateDTO struct {
 	ID           uint      `json:"id"`
 	TemplateKey  string    `json:"templateKey"`

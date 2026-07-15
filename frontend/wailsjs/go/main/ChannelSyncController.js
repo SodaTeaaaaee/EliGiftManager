@@ -18,6 +18,10 @@ export function ExecuteChannelSyncJob(arg1) {
   return window['go']['main']['ChannelSyncController']['ExecuteChannelSyncJob'](arg1);
 }
 
+export function ImportCarrierMappings(arg1) {
+  return window['go']['main']['ChannelSyncController']['ImportCarrierMappings'](arg1);
+}
+
 export function ListCarrierMappings(arg1) {
   return window['go']['main']['ChannelSyncController']['ListCarrierMappings'](arg1);
 }

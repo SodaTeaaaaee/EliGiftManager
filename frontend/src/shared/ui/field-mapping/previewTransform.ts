@@ -1,19 +1,15 @@
 /**
  * Pure, client-side preview transform for FieldMappingEditor. No backend
- * round-trip — the wizard's mapping-step preview and the demand-intake
- * default validator both run entirely in the browser.
+ * round-trip — the wizard's mapping-step preview and import UIs' default
+ * validators both run entirely in the browser.
  *
- * `applyMapping` mirrors `MapCSVRowToDemandLine` /
- * `internal/app/template_mapping_service.go`'s field-resolution order
- * exactly: column mappings are resolved first, then `defaults` are applied
- * on top and WIN over a column-mapped value for the same destField (the
- * backend's "Apply defaults" loop runs after "Apply column mappings" and
- * unconditionally overwrites). A destField absent from both `columns` and
- * `defaults` resolves to `''` here — callers that need to distinguish
- * "unmapped" from "mapped to an empty value" should check `columns`/
- * `defaults` directly (as `FieldMappingEditor` does for its "unmapped" cell
- * state), not infer it from this output.
+ * Mirrors `ApplyRow` / `internal/app/template_mapping_service.go`:
+ * source mapping first (columns or positions), then defaults overwrite.
+ * A destField absent from both resolves to `''` here — callers that need
+ * to distinguish "unmapped" from "mapped to empty" check the maps directly.
  */
+
+import type { FieldMappingValue } from './types'
 
 /** One row's resolved values, keyed by destField. */
 export interface MappedPreviewRow {
@@ -21,23 +17,61 @@ export interface MappedPreviewRow {
 }
 
 /**
- * Resolves every destField referenced by `columns` or `defaults` for each
- * input row. `rows` are raw CSV rows (header -> cell value, as parsed by
- * `parseCSVFile` / `CSVFilePreviewDTO.rows`).
+ * Resolves every destField referenced by columns/positions/defaults for each
+ * input row. `rows` are header-keyed maps from `parseTabularFile`. When mode is
+ * positional, cells are taken by index over `sourceHeaders` order (fallback:
+ * Object.values order).
+ *
+ * Call forms:
+ * - `applyMapping(rows, mappingValue)` — v2 full mapping (mode/positions/hasHeader)
+ * - `applyMapping(rows, mappingValue, undefined, sourceHeaders)` — v2 + header order
+ * - `applyMapping(rows, columns, defaults)` — legacy header-only back-compat
  */
 export function applyMapping(
   rows: Record<string, string>[],
-  columns: Record<string, string>,
-  defaults: Record<string, string>,
+  columnsOrMapping: Record<string, string> | FieldMappingValue,
+  defaults?: Record<string, string>,
+  sourceHeaders?: string[],
 ): MappedPreviewRow[] {
-  const destFields = new Set<string>([...Object.keys(columns), ...Object.keys(defaults)])
+  // Back-compat: applyMapping(rows, columns, defaults)
+  const mapping: FieldMappingValue =
+    defaults !== undefined || !isFieldMappingValue(columnsOrMapping)
+      ? {
+          columns: (columnsOrMapping as Record<string, string>) ?? {},
+          defaults: defaults ?? {},
+          mode: 'header',
+        }
+      : columnsOrMapping
+
+  const mode = mapping.mode === 'positional' ? 'positional' : 'header'
+  const columns = mapping.columns ?? {}
+  const positions = mapping.positions ?? {}
+  const mappingDefaults = mapping.defaults ?? {}
+
+  const destFields = new Set<string>([
+    ...Object.keys(mode === 'positional' ? positions : columns),
+    ...Object.keys(mappingDefaults),
+  ])
 
   return rows.map((row) => {
     const values: Record<string, string> = {}
+    const orderedCells =
+      sourceHeaders && sourceHeaders.length > 0
+        ? sourceHeaders.map((header) => row[header] ?? '')
+        : Object.values(row)
+
     for (const destField of destFields) {
-      const defaultValue = defaults[destField]
+      const defaultValue = mappingDefaults[destField]
       if (defaultValue !== undefined && defaultValue !== '') {
         values[destField] = defaultValue
+        continue
+      }
+      if (mode === 'positional') {
+        const idx = positions[destField]
+        values[destField] =
+          typeof idx === 'number' && idx >= 0 && idx < orderedCells.length
+            ? (orderedCells[idx] ?? '')
+            : ''
         continue
       }
       const sourceColumn = columns[destField]
@@ -48,19 +82,60 @@ export function applyMapping(
   })
 }
 
+function isFieldMappingValue(value: unknown): value is FieldMappingValue {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'columns' in value &&
+    'defaults' in value
+  )
+}
+
 /**
- * The demand-intake domain's validation rule, mirroring
- * `setDemandLineField`'s only hard rule (`internal/app/template_mapping_service.go`):
- * every destField is free text EXCEPT `requested_quantity`, which must parse
- * as an integer (`strconv.Atoi`). Returns a stable, untranslated reason code
- * (`undefined` when valid) — callers resolve it to display copy themselves
- * (e.g. `intakeWizard.mapping.invalidValue`).
+ * Bare-leaf validator registry for client-side mapping preview.
+ * Keys are the leaf after the last namespace dot (or the whole key when
+ * unprefixed). Returns a stable untranslated reason code, or undefined when
+ * valid / no rule applies.
  *
- * FieldMappingEditor accepts this as its default `validate` prop; pass a
- * different function to reuse the editor for a domain with different rules
- * (e.g. a future P5 shipment-CSV mapping UI).
+ * Covers demand-intake (`requested_quantity`) and shipment import
+ * (`quantity`, reconciliation integers) so ImportWizard / IntakeWizard /
+ * ImportFileModal share one mechanism.
+ */
+type DestFieldValidator = (value: string) => string | undefined
+
+const DEST_FIELD_VALIDATORS: Record<string, DestFieldValidator> = {
+  // Demand line quantity — integer (backend setDemandLineField).
+  requested_quantity: (value) => (/^-?\d+$/.test(value.trim()) ? undefined : 'invalid_integer'),
+  // Shipment quantity — positive integer.
+  quantity: (value) => {
+    const trimmed = value.trim()
+    return /^\d+$/.test(trimmed) && Number(trimmed) > 0 ? undefined : 'invalid_quantity'
+  },
+  // Reconciliation / id fields — empty or non-negative integer.
+  supplierLineNo: optionalInteger,
+  supplier_line_no: optionalInteger,
+  fulfillment_line_id: optionalInteger,
+  lineId: optionalInteger,
+  line_id: optionalInteger,
+}
+
+function optionalInteger(value: string): string | undefined {
+  const trimmed = value.trim()
+  return trimmed === '' || /^\d+$/.test(trimmed) ? undefined : 'invalid_integer'
+}
+
+/** Strip `ns.` prefix; unprefixed keys pass through. */
+export function bareDestFieldLeaf(destField: string): string {
+  if (!destField.includes('.')) return destField
+  return destField.slice(destField.lastIndexOf('.') + 1)
+}
+
+/**
+ * Unified dest-field validator used as FieldMappingEditor's default
+ * `validate` prop. Looks up the bare leaf in the dest registry.
  */
 export function validateDestFieldValue(destField: string, value: string): string | undefined {
-  if (destField !== 'requested_quantity') return undefined
-  return /^-?\d+$/.test(value.trim()) ? undefined : 'invalid_integer'
+  const bare = bareDestFieldLeaf(destField)
+  const validator = DEST_FIELD_VALIDATORS[bare] ?? DEST_FIELD_VALIDATORS[destField]
+  return validator ? validator(value) : undefined
 }

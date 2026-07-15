@@ -457,6 +457,7 @@ type exportUseCase struct {
 	demandRepo   domain.DemandDocumentRepository
 	profileRepo  domain.IntegrationProfileRepository
 	bindingRepo  domain.ProfileTemplateBindingRepository
+	productRepo  domain.ProductRepository
 }
 
 func NewExportUseCase(
@@ -466,6 +467,7 @@ func NewExportUseCase(
 	demandRepo domain.DemandDocumentRepository,
 	profileRepo domain.IntegrationProfileRepository,
 	bindingRepo domain.ProfileTemplateBindingRepository,
+	productRepo domain.ProductRepository,
 ) ExportUseCase {
 	return &exportUseCase{
 		supplierRepo: supplierRepo,
@@ -474,7 +476,21 @@ func NewExportUseCase(
 		demandRepo:   demandRepo,
 		profileRepo:  profileRepo,
 		bindingRepo:  bindingRepo,
+		productRepo:  productRepo,
 	}
+}
+
+// resolveSupplierPlatform prefers FactorySupplierPlatform; falls back to ConnectorKey
+// when the factory platform label is unset. ConnectorKey is the executor identity,
+// not the factory-facing platform label — never use it as the primary path.
+func resolveSupplierPlatform(profile *domain.IntegrationProfile) string {
+	if profile == nil {
+		return ""
+	}
+	if profile.FactorySupplierPlatform != "" {
+		return profile.FactorySupplierPlatform
+	}
+	return profile.ConnectorKey
 }
 
 // supplierOrderGroupKey identifies a unique execution boundary for grouping
@@ -546,7 +562,7 @@ func (uc *exportUseCase) ExportSupplierOrder(ctx context.Context, waveID uint) (
 		templateID := ""
 		if key.IntegrationProfileID != 0 {
 			if profile, ok := profileCache[key.IntegrationProfileID]; ok {
-				supplierPlatform = profile.ConnectorKey
+				supplierPlatform = resolveSupplierPlatform(profile)
 				if profile.SupportsAPIExport {
 					submissionMode = "api"
 				}
@@ -569,14 +585,17 @@ func (uc *exportUseCase) ExportSupplierOrder(ctx context.Context, waveID uint) (
 			UpdatedAt:           now,
 		}
 
+		// Cache product lookups within this batch to avoid N+1.
+		productCache := make(map[uint]*domain.Product)
+
 		lines := make([]*domain.SupplierOrderLine, len(indices))
 		for li, flIdx := range indices {
 			fl := &fulfillLines[flIdx]
+			supplierSKU := resolveSupplierSKU(ctx, fl, uc.productRepo, productCache)
 			lines[li] = &domain.SupplierOrderLine{
 				FulfillmentLineID: fl.ID,
 				SupplierLineNo:    li + 1,
-				// FulfillmentLine has no ProductSKU field; SupplierSKU left empty
-				SupplierSKU:       "",
+				SupplierSKU:       supplierSKU,
 				SubmittedQuantity: fl.Quantity,
 				Status:            "draft",
 				CreatedAt:         now,
@@ -655,6 +674,33 @@ func (uc *exportUseCase) resolveGroupKey(
 	}
 
 	return supplierOrderGroupKey{IntegrationProfileID: profileID, TemplateID: templateID}
+}
+
+// resolveSupplierSKU fills SupplierOrderLine.SupplierSKU from the wave Product
+// snapshot's FactorySKU when available.
+func resolveSupplierSKU(
+	ctx context.Context,
+	fl *domain.FulfillmentLine,
+	productRepo domain.ProductRepository,
+	cache map[uint]*domain.Product,
+) string {
+	if fl == nil || fl.ProductID == nil || productRepo == nil {
+		return ""
+	}
+	pid := *fl.ProductID
+	if p, ok := cache[pid]; ok {
+		if p == nil {
+			return ""
+		}
+		return p.FactorySKU
+	}
+	p, err := productRepo.FindByID(ctx, pid)
+	if err != nil || p == nil {
+		cache[pid] = nil
+		return ""
+	}
+	cache[pid] = p
+	return p.FactorySKU
 }
 
 // projectSupplierStateFromOrder maps a SupplierOrder.Status to the corresponding

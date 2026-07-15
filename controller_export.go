@@ -44,7 +44,7 @@ func NewExportController() *ExportController {
 	snapshotSvc := app.NewWaveSnapshotService(gdb, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 
 	return &ExportController{
-		exportUC:            app.NewExportUseCase(supplierRepo, fulfillRepo, basisStamp, demandRepo, profileRepo, bindingRepo),
+		exportUC:            app.NewExportUseCase(supplierRepo, fulfillRepo, basisStamp, demandRepo, profileRepo, bindingRepo, productRepo),
 		supplierRepo:        supplierRepo,
 		gdb:                 gdb,
 		historyRecordingSvc: app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc)),
@@ -83,7 +83,7 @@ func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrder
 
 		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
-		exportUC := app.NewExportUseCase(supplierRepo, fulfillRepo, basisStamp, demandRepo, profileRepo, bindingRepo)
+		exportUC := app.NewExportUseCase(supplierRepo, fulfillRepo, basisStamp, demandRepo, profileRepo, bindingRepo, productRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)

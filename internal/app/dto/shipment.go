@@ -78,10 +78,25 @@ type ImportShipmentResult struct {
 	TotalProcessed   int                   `json:"totalProcessed"`
 	SuccessCount     int                   `json:"successCount"`
 	ErrorCount       int                   `json:"errorCount"`
+	// Warnings are non-blocking, row-level mapping warnings (e.g. mapping
+	// dests outside the global legal vocabulary) surfaced by the
+	// MapAndReconcileShipments template-mapping pass — values are still kept
+	// and imported, but flagged so the operator can review them.
+	Warnings []string `json:"warnings"`
 }
 
 // ImportShipmentError records a single entry that failed during import.
 type ImportShipmentError struct {
 	EntryIndex int    `json:"entryIndex"`
 	Reason     string `json:"reason"`
+}
+
+// MapAndReconcileShipmentsInput maps an external factory-return sheet onto internal IDs
+// then runs ImportShipments. FilePath is preferred; Rows is for pre-parsed callers/tests.
+type MapAndReconcileShipmentsInput struct {
+	WaveID               uint                `json:"waveId"`
+	IntegrationProfileID uint                `json:"integrationProfileId"`
+	ImportMode           string              `json:"importMode"` // "reject_all" | "skip_invalid"
+	FilePath             string              `json:"filePath"`
+	Rows                 []map[string]string `json:"rows"`
 }

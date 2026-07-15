@@ -5,41 +5,48 @@
  * profile + its bindings + the system's document templates on every open.
  * Sections: connector config, capability toggles (editable), document
  * templates (read-only, derived from bindings), template bindings
- * (setDefault; `unbind` is disabled — see the code comment near
- * `UNBIND_DISABLED_REASON_KEY` for the real backend gap), and an
- * expert-mode fold-out (raw `extraData` JSON + `connectorKey`).
- *
- * KNOWN BACKEND GAP (flagged in the unit's deviations report): there is no
- * Wails-bound way to delete/replace an existing default template binding.
- * `internal/app/template_usecase.go`'s `BindTemplateToProfile` always
- * INSERTS a new binding row and REJECTS the call if a default already
- * exists for the (profile, documentType) pair (uniqueness enforced by
- * rejection, not by replacing the old row) — the repository layer has a
- * `Delete(ctx, id)` method, but no controller exposes it. `setDefault`
- * below therefore only succeeds for a documentType that has NO current
- * default yet; `unbind` has no backend primitive to call at all and is
- * rendered disabled with an explanatory tooltip rather than faking success.
+ * (setDefault / unbind via TemplateController), and an expert-mode fold-out
+ * (raw `extraData` JSON + `connectorKey`).
  */
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NModal, NSwitch, NSelect, NInput, NTooltip, NSpin } from 'naive-ui'
+import { NButton, NModal, NSwitch, NSelect, NInput, NSpin } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { DetailDrawer } from '@/shared/ui/drawer'
 import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
-import { useFeedback } from '@/shared/ui/feedback'
+import { ErrorBanner, useFeedback } from '@/shared/ui/feedback'
 import {
   getProfile,
   listBindingsByProfile,
   listDocumentTemplates,
   listConnectorCapabilities,
   updateProfile,
-  bindTemplateToProfile,
+  setDefaultBinding,
+  unbindTemplate,
+  listCarrierMappings,
+  deleteCarrierMapping,
+  importCarrierMappings,
+  pickTabularFile,
 } from '@/shared/api/bridge'
 import type { IntegrationProfile } from '@/entities/profile'
 import type { dto } from '../../../wailsjs/go/models'
 import IntakeWizard from './wizard/IntakeWizard.vue'
+
+function formatAliases(raw: string | undefined): string {
+  if (!raw) return '—'
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (Array.isArray(parsed)) {
+      const labels = parsed.map((item) => String(item).trim()).filter(Boolean)
+      return labels.length ? labels.join(', ') : '—'
+    }
+  } catch {
+    // fall through — treat as plain comma-separated text
+  }
+  return raw.trim() || '—'
+}
 
 const props = defineProps<{
   profileId: number | null
@@ -55,9 +62,13 @@ const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
 
 const loading = ref(false)
+const loadError = ref('')
 const profile = ref<IntegrationProfile | null>(null)
 const bindings = ref<dto.ProfileTemplateBindingDTO[]>([])
 const allTemplates = ref<dto.DocumentTemplateDTO[]>([])
+const carrierMappings = ref<dto.CarrierMappingDTO[]>([])
+const importingCarriers = ref(false)
+const deletingCarrierId = ref<number | null>(null)
 
 const boundTemplates = computed(() => {
   const templateIds = new Set(bindings.value.map((b) => b.templateId))
@@ -67,19 +78,25 @@ const boundTemplates = computed(() => {
 async function loadDetail(): Promise<void> {
   if (!props.profileId) return
   loading.value = true
+  loadError.value = ''
   try {
-    const [p, b, templates] = await Promise.all([
+    const [p, b, templates, carriers] = await Promise.all([
       getProfile(props.profileId),
       listBindingsByProfile(props.profileId),
       listDocumentTemplates(),
+      listCarrierMappings(props.profileId),
     ])
     profile.value = p
     bindings.value = b
     allTemplates.value = templates
-  } catch {
+    carrierMappings.value = carriers
+    factoryPlatformDraft.value = p.factorySupplierPlatform ?? ''
+  } catch (err) {
     profile.value = null
     bindings.value = []
     allTemplates.value = []
+    carrierMappings.value = []
+    loadError.value = err instanceof Error ? err.message : String(err)
   } finally {
     loading.value = false
   }
@@ -129,33 +146,49 @@ function cancelEditCapabilities(): void {
   editingCapabilities.value = false
 }
 
+function profileUpdateBase(p: IntegrationProfile) {
+  return {
+    id: p.id,
+    profileKey: p.profileKey,
+    sourceChannel: p.sourceChannel,
+    sourceSurface: p.sourceSurface,
+    demandKind: p.demandKind,
+    initialAllocationStrategy: p.initialAllocationStrategy,
+    identityStrategy: p.identityStrategy,
+    entitlementAuthorityMode: p.entitlementAuthorityMode,
+    recipientInputMode: p.recipientInputMode,
+    referenceStrategy: p.referenceStrategy,
+    trackingSyncMode: p.trackingSyncMode,
+    closurePolicy: p.closurePolicy,
+    supportsPartialShipment: p.supportsPartialShipment,
+    supportsApiImport: p.supportsApiImport,
+    supportsApiExport: p.supportsApiExport,
+    requiresCarrierMapping: p.requiresCarrierMapping,
+    requiresExternalOrderNo: p.requiresExternalOrderNo,
+    allowsManualClosure: p.allowsManualClosure,
+    supportsExportSupplierOrder: p.supportsExportSupplierOrder ?? false,
+    supportsImportProductCatalog: p.supportsImportProductCatalog ?? false,
+    supportsImportSupplierShipment: p.supportsImportSupplierShipment ?? false,
+    connectorKey: p.connectorKey,
+    factorySupplierPlatform: p.factorySupplierPlatform ?? '',
+    supportedLocales: p.supportedLocales,
+    defaultLocale: p.defaultLocale,
+    extraData: p.extraData,
+  }
+}
+
 async function saveCapabilities(): Promise<void> {
   if (!profile.value) return
   savingCapabilities.value = true
   try {
     await updateProfile({
-      id: profile.value.id,
-      profileKey: profile.value.profileKey,
-      sourceChannel: profile.value.sourceChannel,
-      sourceSurface: profile.value.sourceSurface,
-      demandKind: profile.value.demandKind,
-      initialAllocationStrategy: profile.value.initialAllocationStrategy,
-      identityStrategy: profile.value.identityStrategy,
-      entitlementAuthorityMode: profile.value.entitlementAuthorityMode,
-      recipientInputMode: profile.value.recipientInputMode,
-      referenceStrategy: profile.value.referenceStrategy,
-      trackingSyncMode: profile.value.trackingSyncMode,
-      closurePolicy: profile.value.closurePolicy,
+      ...profileUpdateBase(profile.value),
       supportsPartialShipment: capabilityDraft.supportsPartialShipment,
       supportsApiImport: capabilityDraft.supportsApiImport,
       supportsApiExport: capabilityDraft.supportsApiExport,
       requiresCarrierMapping: capabilityDraft.requiresCarrierMapping,
       requiresExternalOrderNo: capabilityDraft.requiresExternalOrderNo,
       allowsManualClosure: capabilityDraft.allowsManualClosure,
-      connectorKey: profile.value.connectorKey,
-      supportedLocales: profile.value.supportedLocales,
-      defaultLocale: profile.value.defaultLocale,
-      extraData: profile.value.extraData,
     })
     feedback.success(t('feedback.success'))
     editingCapabilities.value = false
@@ -168,10 +201,89 @@ async function saveCapabilities(): Promise<void> {
   }
 }
 
+// ── Factory supplier platform ──
+
+const factoryPlatformDraft = ref('')
+const savingFactoryPlatform = ref(false)
+
+async function saveFactoryPlatform(): Promise<void> {
+  if (!profile.value) return
+  savingFactoryPlatform.value = true
+  try {
+    await updateProfile({
+      ...profileUpdateBase(profile.value),
+      factorySupplierPlatform: factoryPlatformDraft.value.trim(),
+    })
+    feedback.success(t('feedback.success'))
+    await loadDetail()
+    emit('changed')
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    savingFactoryPlatform.value = false
+  }
+}
+
+// ── Carrier mappings ──
+
+async function handleImportCarrierMappings(): Promise<void> {
+  if (!profile.value) return
+  importingCarriers.value = true
+  try {
+    const path = await pickTabularFile()
+    if (!path) return
+    const result = await importCarrierMappings({
+      integrationProfileId: profile.value.id,
+      importMode: 'skip_invalid',
+      filePath: path,
+    })
+    if (result.errorCount > 0) {
+      feedback.error(
+        t('feedback.error'),
+        t('integrations.carrierMappings.importPartial', {
+          success: result.successCount,
+          errors: result.errorCount,
+        }),
+      )
+    } else {
+      feedback.success(t('feedback.success'))
+    }
+    if (result.warnings && result.warnings.length > 0) {
+      feedback.info(
+        t('integrations.carrierMappings.importWarnings', {
+          count: result.warnings.length,
+          items: result.warnings.join('; '),
+        }),
+      )
+    }
+    await loadDetail()
+    emit('changed')
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    importingCarriers.value = false
+  }
+}
+
+async function handleDeleteCarrierMapping(id: number): Promise<void> {
+  deletingCarrierId.value = id
+  try {
+    await deleteCarrierMapping(id)
+    feedback.success(t('feedback.success'))
+    await loadDetail()
+    emit('changed')
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    deletingCarrierId.value = null
+  }
+}
+
 // ── Bindings management ──
 
 const bindingsExpanded = ref(false)
 const settingDefaultId = ref<number | null>(null)
+const unbindingId = ref<number | null>(null)
 
 function templateKeyFor(templateId: number): string {
   return allTemplates.value.find((tmpl) => tmpl.id === templateId)?.templateKey ?? String(templateId)
@@ -180,12 +292,7 @@ function templateKeyFor(templateId: number): string {
 async function handleSetDefault(binding: dto.ProfileTemplateBindingDTO): Promise<void> {
   settingDefaultId.value = binding.id
   try {
-    await bindTemplateToProfile({
-      integrationProfileId: binding.integrationProfileId,
-      documentType: binding.documentType,
-      templateId: binding.templateId,
-      isDefault: true,
-    })
+    await setDefaultBinding(binding.id)
     feedback.success(t('feedback.success'))
     await loadDetail()
     emit('changed')
@@ -193,6 +300,20 @@ async function handleSetDefault(binding: dto.ProfileTemplateBindingDTO): Promise
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
     settingDefaultId.value = null
+  }
+}
+
+async function handleUnbind(binding: dto.ProfileTemplateBindingDTO): Promise<void> {
+  unbindingId.value = binding.id
+  try {
+    await unbindTemplate(binding.id)
+    feedback.success(t('feedback.success'))
+    await loadDetail()
+    emit('changed')
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    unbindingId.value = null
   }
 }
 
@@ -255,27 +376,8 @@ async function saveExpertMode(): Promise<void> {
   savingExpert.value = true
   try {
     await updateProfile({
-      id: profile.value.id,
-      profileKey: profile.value.profileKey,
-      sourceChannel: profile.value.sourceChannel,
-      sourceSurface: profile.value.sourceSurface,
-      demandKind: profile.value.demandKind,
-      initialAllocationStrategy: profile.value.initialAllocationStrategy,
-      identityStrategy: profile.value.identityStrategy,
-      entitlementAuthorityMode: profile.value.entitlementAuthorityMode,
-      recipientInputMode: profile.value.recipientInputMode,
-      referenceStrategy: profile.value.referenceStrategy,
-      trackingSyncMode: profile.value.trackingSyncMode,
-      closurePolicy: profile.value.closurePolicy,
-      supportsPartialShipment: profile.value.supportsPartialShipment,
-      supportsApiImport: profile.value.supportsApiImport,
-      supportsApiExport: profile.value.supportsApiExport,
-      requiresCarrierMapping: profile.value.requiresCarrierMapping,
-      requiresExternalOrderNo: profile.value.requiresExternalOrderNo,
-      allowsManualClosure: profile.value.allowsManualClosure,
+      ...profileUpdateBase(profile.value),
       connectorKey: expertConnectorKey.value,
-      supportedLocales: profile.value.supportedLocales,
-      defaultLocale: profile.value.defaultLocale,
       extraData: expertExtraDataRaw.value,
     })
     feedback.success(t('feedback.success'))
@@ -294,7 +396,13 @@ async function saveExpertMode(): Promise<void> {
     <template #title>{{ profile?.profileKey ?? t('integrations.detail.title') }}</template>
 
     <NSpin :show="loading">
-      <template v-if="profile">
+      <ErrorBanner
+        v-if="loadError"
+        :message="t('integrations.detail.loadError')"
+        :detail="loadError"
+        @retry="loadDetail"
+      />
+      <template v-else-if="profile">
         <SectionCard :title="t('integrations.detail.sections.connector')" flat>
           <template #actions>
             <NButton size="small" @click="openRerunWizard">{{ t('integrations.actions.rerunWizard') }}</NButton>
@@ -314,6 +422,18 @@ async function saveExpertMode(): Promise<void> {
             <dd><StatusBadge dimension="closurePolicy" :value="profile.closurePolicy" size="sm" /></dd>
             <dt>{{ t('integrations.detail.fields.connectorKey') }}</dt>
             <dd>{{ profile.connectorKey || '—' }}</dd>
+            <dt>{{ t('integrations.detail.fields.factorySupplierPlatform') }}</dt>
+            <dd class="integration-detail__factory-platform">
+              <NInput
+                v-model:value="factoryPlatformDraft"
+                size="small"
+                :placeholder="t('integrations.detail.fields.factorySupplierPlatformPlaceholder')"
+                style="max-width: 220px"
+              />
+              <NButton size="tiny" type="primary" :loading="savingFactoryPlatform" @click="saveFactoryPlatform">
+                {{ t('common.save') }}
+              </NButton>
+            </dd>
           </dl>
         </SectionCard>
 
@@ -352,6 +472,43 @@ async function saveExpertMode(): Promise<void> {
           </dl>
         </SectionCard>
 
+        <SectionCard :title="t('integrations.detail.sections.carrierMappings')" flat>
+          <template #actions>
+            <NButton size="small" :loading="importingCarriers" @click="handleImportCarrierMappings">
+              {{ t('integrations.carrierMappings.import') }}
+            </NButton>
+          </template>
+          <EmptyState v-if="!carrierMappings.length" size="sm" :title="t('integrations.carrierMappings.empty')" />
+          <div v-else class="integration-detail__carriers">
+            <div v-for="mapping in carrierMappings" :key="mapping.id" class="integration-detail__carrier-row">
+              <div class="integration-detail__carrier-info">
+                <span class="integration-detail__carrier-code">{{ mapping.internalCarrierCode }}</span>
+                <span class="integration-detail__carrier-arrow">→</span>
+                <span>{{ mapping.externalCarrierCode }}</span>
+                <span v-if="mapping.externalCarrierName" class="integration-detail__carrier-name">
+                  ({{ mapping.externalCarrierName }})
+                </span>
+                <span v-if="mapping.isDefault" class="integration-detail__default-tag">
+                  {{ t('integrations.detail.fields.isDefault') }}
+                </span>
+              </div>
+              <div class="integration-detail__carrier-aliases">
+                <span class="integration-detail__carrier-aliases-label">
+                  {{ t('integrations.carrierMappings.aliases') }}:
+                </span>
+                {{ formatAliases(mapping.aliases) }}
+              </div>
+              <NButton
+                size="tiny"
+                :loading="deletingCarrierId === mapping.id"
+                @click="handleDeleteCarrierMapping(mapping.id)"
+              >
+                {{ t('common.delete') }}
+              </NButton>
+            </div>
+          </div>
+        </SectionCard>
+
         <SectionCard :title="t('integrations.detail.sections.bindings')" flat>
           <template #actions>
             <NButton size="small" @click="bindingsExpanded = !bindingsExpanded">{{ t('integrations.actions.manageBindings') }}</NButton>
@@ -369,20 +526,19 @@ async function saveExpertMode(): Promise<void> {
                   v-if="!binding.isDefault"
                   size="tiny"
                   :loading="settingDefaultId === binding.id"
+                  :disabled="unbindingId === binding.id"
                   @click="handleSetDefault(binding)"
                 >
                   {{ t('integrations.actions.setDefault') }}
                 </NButton>
-                <NTooltip trigger="hover">
-                  <template #trigger>
-                    <!-- Native `disabled` buttons don't reliably fire hover events for the
-                         tooltip trigger — the wrapping span is the pointer-event target instead. -->
-                    <span class="integration-detail__disabled-action-wrap">
-                      <NButton size="tiny" disabled>{{ t('integrations.actions.unbind') }}</NButton>
-                    </span>
-                  </template>
-                  {{ t('integrations.detail.unbindDisabledHint') }}
-                </NTooltip>
+                <NButton
+                  size="tiny"
+                  :loading="unbindingId === binding.id"
+                  :disabled="settingDefaultId === binding.id"
+                  @click="handleUnbind(binding)"
+                >
+                  {{ t('integrations.actions.unbind') }}
+                </NButton>
               </div>
             </div>
           </div>
@@ -493,10 +649,6 @@ async function saveExpertMode(): Promise<void> {
   gap: var(--space-2);
 }
 
-.integration-detail__disabled-action-wrap {
-  display: inline-flex;
-}
-
 .integration-detail__expert-toggle {
   border: none;
   background: none;
@@ -533,5 +685,58 @@ async function saveExpertMode(): Promise<void> {
 .integration-detail__expert-actions {
   display: flex;
   gap: var(--space-2);
+}
+
+.integration-detail__factory-platform {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.integration-detail__carriers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.integration-detail__carrier-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--card-border-color);
+}
+
+.integration-detail__carrier-info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.integration-detail__carrier-code {
+  font-weight: var(--font-weight-semibold);
+}
+
+.integration-detail__carrier-arrow {
+  color: var(--color-text-muted);
+}
+
+.integration-detail__carrier-name {
+  color: var(--color-text-secondary);
+}
+
+.integration-detail__carrier-aliases {
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.integration-detail__carrier-aliases-label {
+  color: var(--color-text-muted);
 }
 </style>

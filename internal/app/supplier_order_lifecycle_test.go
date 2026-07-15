@@ -175,7 +175,7 @@ func TestGenerateSupplierOrderFile_EmbedsLineIDsForReconciliation(t *testing.T) 
 	line2 := mustCreateSupplierOrderLine(t, ctx, supplierRepo, order.ID, 2, 5)
 
 	outputDir := t.TempDir()
-	fileWriter := NewSupplierOrderFileWriter(supplierRepo, outputDir)
+	fileWriter := NewSupplierOrderFileWriter(supplierRepo, outputDir, nil)
 
 	result, err := fileWriter.GenerateSupplierOrderFile(ctx, order.ID)
 	if err != nil {
@@ -186,6 +186,9 @@ func TestGenerateSupplierOrderFile_EmbedsLineIDsForReconciliation(t *testing.T) 
 	}
 	if filepath.Dir(result.FilePath) != outputDir {
 		t.Errorf("expected file under %q, got %q", outputDir, result.FilePath)
+	}
+	if len(result.Warnings) == 0 {
+		t.Error("expected legacy JSON fallback warning when no template is bound")
 	}
 
 	data, err := os.ReadFile(result.FilePath)

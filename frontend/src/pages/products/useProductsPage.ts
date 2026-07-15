@@ -121,6 +121,10 @@ export function useProductsPage(): UseProductsPageApi {
       name: master.name,
       productKind: master.productKind,
       archived: !master.archived,
+      // Preserve image paths — update is a full-object PUT.
+      coverImagePath: master.coverImagePath ?? '',
+      detailImagePaths: master.detailImagePaths ?? '',
+      extraData: master.extraData ?? '',
     })
     await load()
     return updated

@@ -284,6 +284,7 @@ const (
 	DocumentTypeExportSupplierOrder  = "export_supplier_order"
 	DocumentTypeImportShipment       = "import_supplier_shipment"
 	DocumentTypeExportTracking       = "export_source_tracking_update"
+	DocumentTypeImportCarrierMapping = "import_carrier_mapping"
 )
 
 // ---- DocumentFormat ----
@@ -291,6 +292,7 @@ const (
 const (
 	DocumentFormatCSV        = "csv"
 	DocumentFormatXLSX       = "xlsx"
+	DocumentFormatXLS        = "xls"
 	DocumentFormatJSON       = "json"
 	DocumentFormatAPIPayload = "api_payload"
 )

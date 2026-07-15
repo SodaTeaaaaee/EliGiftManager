@@ -146,11 +146,28 @@ func (m *mockCarrierMappingRepo) FindByProfileAndInternal(ctx context.Context, p
 	return nil, fmt.Errorf("carrier mapping not found for profile %d, internal code %q", profileID, internalCode)
 }
 
+func (m *mockCarrierMappingRepo) FindByProfileAndExternal(ctx context.Context, profileID uint, externalCode string) (*domain.CarrierMapping, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, cm := range m.mappings[profileID] {
+		if cm.ExternalCarrierCode == externalCode {
+			cp := cm
+			return &cp, nil
+		}
+	}
+	return nil, fmt.Errorf("carrier mapping not found for profile %d, external code %q", profileID, externalCode)
+}
+
 func (m *mockCarrierMappingRepo) Create(ctx context.Context, mapping *domain.CarrierMapping) error {
 	panic("not implemented")
 }
-func (m *mockCarrierMappingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.CarrierMapping, error) {
+func (m *mockCarrierMappingRepo) Update(ctx context.Context, mapping *domain.CarrierMapping) error {
 	panic("not implemented")
+}
+func (m *mockCarrierMappingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.CarrierMapping, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]domain.CarrierMapping(nil), m.mappings[profileID]...), nil
 }
 func (m *mockCarrierMappingRepo) Delete(ctx context.Context, id uint) error { panic("not implemented") }
 

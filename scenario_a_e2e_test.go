@@ -495,7 +495,7 @@ func TestScenarioA_MonthlyMemberWave(t *testing.T) {
 		if len(covered) != 6 {
 			t.Fatalf("distinct fulfillment-line coverage = %d, want 6", len(covered))
 		}
-		writer := app.NewSupplierOrderFileWriter(infra.NewSupplierOrderRepository(s.gdb), t.TempDir())
+		writer := app.NewSupplierOrderFileWriter(infra.NewSupplierOrderRepository(s.gdb), t.TempDir(), nil)
 		fileResult, err := writer.GenerateSupplierOrderFile(context.Background(), orders[0].ID)
 		if err != nil {
 			t.Fatalf("GenerateSupplierOrderFile: %v", err)
@@ -577,7 +577,7 @@ func TestScenarioA_MonthlyMemberWave(t *testing.T) {
 			t.Fatalf("pending sync projected stage = %q, want syncing_back", got.ProjectedLifecycleStage)
 		}
 		syncDir := filepath.Join(t.TempDir(), "sync")
-		executor := app.NewDocumentExportExecutor(syncDir)
+		executor := app.NewDocumentExportExecutor(syncDir, nil)
 		provider := app.NewRuntimeExecutorProviderWith(map[string]map[string]app.ChannelSyncExecutor{"document_export": {"eli.local_export": executor}})
 		execute := app.NewExecuteSyncUseCase(infra.NewChannelSyncRepository(s.gdb), infra.NewIntegrationProfileRepository(s.gdb), provider, infra.NewFulfillmentRepository(s.gdb))
 		result, err := execute.ExecuteChannelSyncJob(context.Background(), job.ID)

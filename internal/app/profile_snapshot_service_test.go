@@ -14,16 +14,21 @@ import (
 func TestProfileSnapshotCaptureAndParse(t *testing.T) {
 	t.Parallel()
 	profile := &domain.IntegrationProfile{
-		ID:                      42,
-		ProfileKey:              "test.key",
-		TrackingSyncMode:        "api_push",
-		ClosurePolicy:           "close_after_sync",
-		AllowsManualClosure:     true,
-		RequiresCarrierMapping:  false,
-		RequiresExternalOrderNo: true,
-		SupportsPartialShipment: false,
-		ConnectorKey:            "connector_a",
-		SupportsAPIExport:       true,
+		ID:                             42,
+		ProfileKey:                     "test.key",
+		SourceSurface:                  "factory",
+		TrackingSyncMode:               "api_push",
+		ClosurePolicy:                  "close_after_sync",
+		AllowsManualClosure:            true,
+		RequiresCarrierMapping:         false,
+		RequiresExternalOrderNo:        true,
+		SupportsPartialShipment:        false,
+		ConnectorKey:                   "connector_a",
+		FactorySupplierPlatform:        "rouzao",
+		SupportsAPIExport:              true,
+		SupportsExportSupplierOrder:    true,
+		SupportsImportProductCatalog:   true,
+		SupportsImportSupplierShipment: false,
 	}
 
 	raw := CaptureProfileSnapshot(profile)
@@ -69,8 +74,40 @@ func TestProfileSnapshotCaptureAndParse(t *testing.T) {
 	if snap.ConnectorKey != "connector_a" {
 		t.Errorf("ConnectorKey = %q, want %q", snap.ConnectorKey, "connector_a")
 	}
+	if snap.FactorySupplierPlatform != "rouzao" {
+		t.Errorf("FactorySupplierPlatform = %q, want %q", snap.FactorySupplierPlatform, "rouzao")
+	}
 	if !snap.SupportsAPIExport {
 		t.Error("SupportsAPIExport = false, want true")
+	}
+	if snap.SourceSurface != "factory" {
+		t.Errorf("SourceSurface = %q, want factory", snap.SourceSurface)
+	}
+	if !snap.SupportsExportSupplierOrder {
+		t.Error("SupportsExportSupplierOrder = false, want true")
+	}
+	if !snap.SupportsImportProductCatalog {
+		t.Error("SupportsImportProductCatalog = false, want true")
+	}
+	if snap.SupportsImportSupplierShipment {
+		t.Error("SupportsImportSupplierShipment = true, want false")
+	}
+}
+
+func TestParseProfileSnapshotMissingFactoryFieldsZeroFallback(t *testing.T) {
+	t.Parallel()
+	// Old JSON without sourceSurface / factory capability flags must unmarshal to zero values.
+	raw := `{"profileId":1,"profileKey":"legacy","trackingSyncMode":"api_push"}`
+	snap, err := ParseProfileSnapshot(raw)
+	if err != nil {
+		t.Fatalf("ParseProfileSnapshot: %v", err)
+	}
+	if snap.SourceSurface != "" {
+		t.Errorf("SourceSurface = %q, want empty zero fallback", snap.SourceSurface)
+	}
+	if snap.SupportsExportSupplierOrder || snap.SupportsImportProductCatalog || snap.SupportsImportSupplierShipment {
+		t.Errorf("factory capability flags should zero-fallback, got export=%v catalog=%v shipment=%v",
+			snap.SupportsExportSupplierOrder, snap.SupportsImportProductCatalog, snap.SupportsImportSupplierShipment)
 	}
 }
 
@@ -176,10 +213,11 @@ func TestResolveEffectiveProfileFallsBackToLive(t *testing.T) {
 	t.Parallel()
 
 	liveProfile := &domain.IntegrationProfile{
-		ID:               1,
-		ProfileKey:       "live.profile",
-		TrackingSyncMode: "manual_confirmation",
-		ClosurePolicy:    "close_after_sync",
+		ID:                      1,
+		ProfileKey:              "live.profile",
+		TrackingSyncMode:        "manual_confirmation",
+		ClosurePolicy:           "close_after_sync",
+		FactorySupplierPlatform: "rouzao-live",
 	}
 	profileRepo := &mockProfileRepoForSnapshot{
 		profiles: map[uint]*domain.IntegrationProfile{1: liveProfile},
@@ -205,6 +243,9 @@ func TestResolveEffectiveProfileFallsBackToLive(t *testing.T) {
 	}
 	if result.ProfileKey != "live.profile" {
 		t.Errorf("ProfileKey = %q, want %q (live fallback)", result.ProfileKey, "live.profile")
+	}
+	if result.FactorySupplierPlatform != "rouzao-live" {
+		t.Errorf("FactorySupplierPlatform = %q, want %q (live fallback)", result.FactorySupplierPlatform, "rouzao-live")
 	}
 }
 

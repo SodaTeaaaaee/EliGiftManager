@@ -11,6 +11,7 @@ import {
   ListDemandLines,
   ListUnassignedDemandDocuments,
   ParseCSVFile,
+  ParseTabularFile,
   UpdateDemandLineRouting,
   BatchUpdateDemandLineRouting,
   GetWaveRoutingStats,
@@ -63,6 +64,7 @@ import {
   GetSupplierOrderLineShippedSummary,
   ImportShipments,
   ListShipmentsByWave,
+  MapAndReconcileShipments,
   UpdateShipment,
   VoidShipment,
 } from "../../../wailsjs/go/main/ShipmentController";
@@ -71,6 +73,7 @@ import {
   CreateCarrierMapping,
   DeleteCarrierMapping,
   ExecuteChannelSyncJob,
+  ImportCarrierMappings,
   ListCarrierMappings,
   ListChannelSyncJobsByWave,
   ListConnectorCapabilities,
@@ -89,6 +92,7 @@ import {
 } from "../../../wailsjs/go/main/ProfileController";
 import {
   CreateProductMaster,
+  ImportProductCatalog,
   ListProductMasters,
   ListProductsByWave,
   SnapshotProductsForWave,
@@ -108,6 +112,8 @@ import {
 } from "../../../wailsjs/go/main/AddressController";
 import {
   PickCSVFile,
+  PickCatalogImportFile,
+  PickTabularFile,
   PickZIPFile,
   SaveZoom,
 } from "../../../wailsjs/go/main/App";
@@ -214,15 +220,36 @@ export async function getDemandDocument(
   return GetDemandDocument(id);
 }
 
-/** Parse a CSV file on disk into headers + header-keyed row maps, for the intake wizard's preview step. */
-export async function parseCSVFile(path: string): Promise<dto.CSVFilePreviewDTO> {
+/**
+ * Parse a spreadsheet on disk (CSV / XLSX / XLS via extension detection) into
+ * headers + header-keyed row maps. Preferred entry for all import previews.
+ *
+ * @param hasHeader when false, the first physical row stays in Rows (headerless
+ *   positional sheets such as bilibili membership). Defaults to true.
+ */
+export async function parseTabularFile(
+  path: string,
+  hasHeader = true,
+): Promise<dto.CSVFilePreviewDTO> {
   assertWailsRuntime();
+  try {
+    if (typeof ParseTabularFile === 'function') {
+      return await ParseTabularFile(path, hasHeader);
+    }
+  } catch {
+    // Runtime may not expose ParseTabularFile yet — fall through to CSV path.
+  }
   return ParseCSVFile(path);
+}
+
+/** @deprecated Prefer `parseTabularFile` — kept for compatibility; forwards to multi-format parse. */
+export async function parseCSVFile(path: string): Promise<dto.CSVFilePreviewDTO> {
+  return parseTabularFile(path, true);
 }
 
 /**
  * Dual-mode (reject_all / skip_invalid) template-driven demand CSV import. `rows` are
- * header-keyed maps, typically produced by `parseCSVFile`. Partial-success in
+ * header-keyed maps, typically produced by `parseTabularFile`. Partial-success in
  * `skip_invalid` mode — check `result.errors` / `result.errorCount`.
  */
 export async function importDemandCSV(input: {
@@ -231,10 +258,18 @@ export async function importDemandCSV(input: {
   sourceDocumentNo: string;
   sourceCustomerRef: string;
   importMode: string;
-  rows: Record<string, string>[];
+  rows?: Record<string, string>[];
+  /** Preferred for positional / multi-format sheets — backend re-reads with hasHeader from mapping rules. */
+  filePath?: string;
 }): Promise<dto.ImportDemandCSVResult> {
   assertWailsRuntime();
-  return ImportDemandCSV(dto.ImportDemandCSVInput.createFrom(input));
+  return ImportDemandCSV(
+    dto.ImportDemandCSVInput.createFrom({
+      ...input,
+      rows: input.rows ?? [],
+      filePath: input.filePath ?? "",
+    }),
+  );
 }
 
 /** Import a demand document. Accepts a plain object matching CreateDemandInput shape. */
@@ -561,6 +596,30 @@ export async function importShipments(input: ImportShipmentsInput): Promise<Impo
 }
 
 /**
+ * Template-driven factory-return sheet import: maps external rows via the
+ * profile's default shipment-import template, reconciles to internal line
+ * IDs, then runs ImportShipments. Prefer `filePath` for multi-format sheets.
+ */
+export async function mapAndReconcileShipments(input: {
+  waveId: number
+  integrationProfileId: number
+  importMode: string
+  filePath?: string
+  rows?: Record<string, string>[]
+}): Promise<ImportShipmentsResult> {
+  assertWailsRuntime()
+  return MapAndReconcileShipments(
+    dto.MapAndReconcileShipmentsInput.createFrom({
+      waveId: input.waveId,
+      integrationProfileId: input.integrationProfileId,
+      importMode: input.importMode,
+      filePath: input.filePath ?? '',
+      rows: input.rows ?? [],
+    }),
+  )
+}
+
+/**
  * Per-line shipped/remaining quantity summary for a supplier order — feeds
  * the shipment line selector's over-ship-aware display. Server-side
  * over-ship blocking already applies unconditionally in `createShipment`/
@@ -675,10 +734,17 @@ export async function createCarrierMapping(input: {
   internalCarrierCode: string
   externalCarrierCode: string
   externalCarrierName: string
+  /** JSON string array, e.g. `["SF","顺丰"]`. */
+  aliases?: string
   isDefault: boolean
 }): Promise<dto.CarrierMappingDTO> {
   assertWailsRuntime()
-  return CreateCarrierMapping(dto.CreateCarrierMappingInput.createFrom(input))
+  return CreateCarrierMapping(
+    dto.CreateCarrierMappingInput.createFrom({
+      ...input,
+      aliases: input.aliases ?? '',
+    }),
+  )
 }
 
 export async function listCarrierMappings(profileId: number): Promise<dto.CarrierMappingDTO[]> {
@@ -689,6 +755,27 @@ export async function listCarrierMappings(profileId: number): Promise<dto.Carrie
 export async function deleteCarrierMapping(id: number): Promise<void> {
   assertWailsRuntime()
   return DeleteCarrierMapping(id)
+}
+
+/**
+ * Template-mapped carrier mapping upsert (`carrier.*` dest keys). Prefer
+ * `filePath` so the backend honours hasHeader/positional rules.
+ */
+export async function importCarrierMappings(input: {
+  integrationProfileId: number
+  importMode: string
+  filePath?: string
+  rows?: Record<string, string>[]
+}): Promise<dto.ImportCarrierMappingsResult> {
+  assertWailsRuntime()
+  return ImportCarrierMappings(
+    dto.ImportCarrierMappingsInput.createFrom({
+      integrationProfileId: input.integrationProfileId,
+      importMode: input.importMode,
+      filePath: input.filePath ?? '',
+      rows: input.rows ?? [],
+    }),
+  )
 }
 
 export async function listConnectorCapabilities(): Promise<Record<string, any>> {
@@ -726,13 +813,27 @@ export async function createProfile(input: {
   requiresCarrierMapping: boolean
   requiresExternalOrderNo: boolean
   allowsManualClosure: boolean
+  /** Factory-surface capability: export supplier orders. */
+  supportsExportSupplierOrder?: boolean
+  /** Factory-surface capability: import product catalog. */
+  supportsImportProductCatalog?: boolean
+  /** Factory-surface capability: import supplier shipment returns. */
+  supportsImportSupplierShipment?: boolean
   connectorKey: string
+  /** Factory-facing platform label (supplier orders / product catalog fallback). */
+  factorySupplierPlatform?: string
   supportedLocales: string
   defaultLocale: string
   extraData: string
 }): Promise<dto.IntegrationProfileDTO> {
   assertWailsRuntime()
-  const req = dto.CreateProfileInput.createFrom(input)
+  const req = dto.CreateProfileInput.createFrom({
+    ...input,
+    supportsExportSupplierOrder: input.supportsExportSupplierOrder ?? false,
+    supportsImportProductCatalog: input.supportsImportProductCatalog ?? false,
+    supportsImportSupplierShipment: input.supportsImportSupplierShipment ?? false,
+    factorySupplierPlatform: input.factorySupplierPlatform ?? '',
+  })
   return CreateProfile(req)
 }
 
@@ -755,13 +856,23 @@ export async function updateProfile(input: {
   requiresCarrierMapping: boolean
   requiresExternalOrderNo: boolean
   allowsManualClosure: boolean
+  supportsExportSupplierOrder?: boolean
+  supportsImportProductCatalog?: boolean
+  supportsImportSupplierShipment?: boolean
   connectorKey: string
+  factorySupplierPlatform?: string
   supportedLocales: string
   defaultLocale: string
   extraData: string
 }): Promise<dto.IntegrationProfileDTO> {
   assertWailsRuntime()
-  const req = dto.UpdateProfileInput.createFrom(input)
+  const req = dto.UpdateProfileInput.createFrom({
+    ...input,
+    supportsExportSupplierOrder: input.supportsExportSupplierOrder ?? false,
+    supportsImportProductCatalog: input.supportsImportProductCatalog ?? false,
+    supportsImportSupplierShipment: input.supportsImportSupplierShipment ?? false,
+    factorySupplierPlatform: input.factorySupplierPlatform ?? '',
+  })
   return UpdateProfile(req)
 }
 
@@ -783,9 +894,17 @@ export async function createProductMaster(input: {
   supplierProductRef: string
   name: string
   productKind: string
+  coverImagePath?: string
+  detailImagePaths?: string
+  extraData?: string
 }): Promise<dto.ProductMasterDTO> {
   assertWailsRuntime()
-  const req = dto.CreateProductMasterInput.createFrom(input)
+  const req = dto.CreateProductMasterInput.createFrom({
+    ...input,
+    coverImagePath: input.coverImagePath ?? '',
+    detailImagePaths: input.detailImagePaths ?? '',
+    extraData: input.extraData ?? '',
+  })
   return CreateProductMaster(req)
 }
 
@@ -817,9 +936,17 @@ export async function updateProductMaster(input: {
   name: string
   productKind: string
   archived: boolean
+  coverImagePath?: string
+  detailImagePaths?: string
+  extraData?: string
 }): Promise<dto.ProductMasterDTO> {
   assertWailsRuntime()
-  const req = dto.UpdateProductMasterInput.createFrom(input)
+  const req = dto.UpdateProductMasterInput.createFrom({
+    ...input,
+    coverImagePath: input.coverImagePath ?? '',
+    detailImagePaths: input.detailImagePaths ?? '',
+    extraData: input.extraData ?? '',
+  })
   return UpdateProductMaster(req)
 }
 
@@ -835,6 +962,27 @@ export async function snapshotProductsForWave(input: {
 export async function listProductsByWave(waveId: number): Promise<dto.ProductDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
   return ListProductsByWave(waveId)
+}
+
+/**
+ * Template-mapped ProductMaster upsert (`product.*` dest keys, document type
+ * `import_product_catalog`). Prefer `filePath` for multi-format sheets.
+ */
+export async function importProductCatalog(input: {
+  integrationProfileId: number
+  importMode: string
+  filePath?: string
+  rows?: Record<string, string>[]
+}): Promise<dto.ImportProductCatalogResult> {
+  assertWailsRuntime()
+  return ImportProductCatalog(
+    dto.ImportProductCatalogInput.createFrom({
+      integrationProfileId: input.integrationProfileId,
+      importMode: input.importMode,
+      filePath: input.filePath ?? '',
+      rows: input.rows ?? [],
+    }),
+  )
 }
 
 /**
@@ -990,8 +1138,12 @@ export async function batchRecordAdjustments(input: {
 
 import {
   CreateDocumentTemplate,
+  UpdateDocumentTemplate,
+  DeleteDocumentTemplate,
   ListDocumentTemplates,
   BindTemplateToProfile,
+  UnbindTemplate,
+  SetDefaultBinding,
   ListBindingsByProfile,
   GetDefaultTemplateForProfile,
 } from "../../../wailsjs/go/main/TemplateController";
@@ -1008,6 +1160,22 @@ export async function createDocumentTemplate(input: {
   return CreateDocumentTemplate(req)
 }
 
+export async function updateDocumentTemplate(input: {
+  id: number
+  format: string
+  mappingRules: string
+  extraData: string
+}): Promise<dto.DocumentTemplateDTO> {
+  assertWailsRuntime()
+  const req = dto.UpdateDocumentTemplateInput.createFrom(input)
+  return UpdateDocumentTemplate(req)
+}
+
+export async function deleteDocumentTemplate(id: number): Promise<void> {
+  assertWailsRuntime()
+  return DeleteDocumentTemplate(id)
+}
+
 export async function listDocumentTemplates(): Promise<dto.DocumentTemplateDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
   return ListDocumentTemplates()
@@ -1022,6 +1190,16 @@ export async function bindTemplateToProfile(input: {
   assertWailsRuntime()
   const req = dto.BindTemplateToProfileInput.createFrom(input)
   return BindTemplateToProfile(req)
+}
+
+export async function unbindTemplate(bindingId: number): Promise<void> {
+  assertWailsRuntime()
+  return UnbindTemplate(bindingId)
+}
+
+export async function setDefaultBinding(bindingId: number): Promise<void> {
+  assertWailsRuntime()
+  return SetDefaultBinding(bindingId)
 }
 
 export async function listBindingsByProfile(profileId: number): Promise<dto.ProfileTemplateBindingDTO[]> {
@@ -1085,9 +1263,42 @@ export async function pickCsvFile(): Promise<string> {
   return PickCSVFile();
 }
 
+/**
+ * Native dialog for CSV / XLSX / XLS. Falls back to `PickCSVFile` when the
+ * generated binding is missing (older runtime without `PickTabularFile`).
+ */
+export async function pickTabularFile(): Promise<string> {
+  assertWailsRuntime();
+  try {
+    if (typeof PickTabularFile === 'function') {
+      return await PickTabularFile();
+    }
+  } catch {
+    // Runtime may not expose PickTabularFile yet — fall through.
+  }
+  // Fallback: CSV-only picker.
+  return PickCSVFile();
+}
+
 export async function pickZipFile(): Promise<string> {
   assertWailsRuntime();
   return PickZIPFile();
+}
+
+/**
+ * Native dialog for product-catalog imports: ZIP (with images) or CSV / XLSX / XLS.
+ * Falls back to `pickTabularFile` when the generated binding is missing.
+ */
+export async function pickCatalogImportFile(): Promise<string> {
+  assertWailsRuntime();
+  try {
+    if (typeof PickCatalogImportFile === 'function') {
+      return await PickCatalogImportFile();
+    }
+  } catch {
+    // Runtime may not expose PickCatalogImportFile yet — fall through.
+  }
+  return pickTabularFile();
 }
 
 export async function saveZoom(zoomPercent: number): Promise<void> {

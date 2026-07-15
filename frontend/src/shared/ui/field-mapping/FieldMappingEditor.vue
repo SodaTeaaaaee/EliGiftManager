@@ -1,26 +1,18 @@
 <script setup lang="ts">
 import { computed, h } from 'vue'
-import { NSelect, NInput, NTooltip } from 'naive-ui'
+import { useI18n } from 'vue-i18n'
+import { NSelect, NInput, NInputNumber, NRadioGroup, NRadioButton, NSwitch } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { DataGrid, createColumns } from '@/shared/ui/data-grid'
-import type { FieldMappingDestField, FieldMappingValue } from './types'
+import type { FieldMappingDestField, FieldMappingMode, FieldMappingValue } from './types'
 import { applyMapping, validateDestFieldValue } from './previewTransform'
 
 /**
- * FieldMappingEditor — the visual CSV column-mapping widget (P4
- * demand-intake wizard's mapping step; reusable later for e.g. a P5
- * shipment-CSV mapping UI). Left column lists the destination fields
- * (label + tooltip); right column is a dropdown binding each destField to
- * a parsed CSV source header, plus a fixed-value input for destFields with
- * no natural per-row column (e.g. a constant `line_type`). A live preview
- * of the first 5 sample rows re-renders on every mapping change, with a
- * red highlight on cells that fail `validate` — 100% client-side, no
- * backend round-trip.
- *
- * `validate` defaults to `validateDestFieldValue` (the demand-intake rule:
- * only `requested_quantity` must parse as an integer); pass a different
- * function to reuse this editor for a domain with different validation
- * rules.
+ * FieldMappingEditor — visual column/position mapping widget.
+ * Supports MappingRules v2: mode header|positional, hasHeader, columnOrder.
+ * Left column lists dest fields; right column binds each to a source header
+ * (header mode) or 0-based cell index (positional mode), plus a fixed-value
+ * input. Live preview of the first 5 sample rows re-renders on change.
  */
 const props = withDefaults(
   defineProps<{
@@ -40,25 +32,83 @@ const props = withDefaults(
     unmappedLabel: string
     /** Already-resolved placeholder for the fixed-value input. */
     fixedValuePlaceholder?: string
+    /** Labels for mode / hasHeader / columnOrder controls (already translated). */
+    modeLabel?: string
+    modeHeaderLabel?: string
+    modePositionalLabel?: string
+    hasHeaderLabel?: string
+    positionPlaceholder?: string
+    columnOrderLabel?: string
+    columnOrderPlaceholder?: string
     /** Per-cell validator deciding the red-highlight. Defaults to the demand-intake rule. */
     validate?: (destField: string, value: string) => string | undefined
   }>(),
   {
     fixedValuePlaceholder: undefined,
-    validate: () => validateDestFieldValue,
+    modeLabel: undefined,
+    modeHeaderLabel: undefined,
+    modePositionalLabel: undefined,
+    hasHeaderLabel: undefined,
+    positionPlaceholder: undefined,
+    columnOrderLabel: undefined,
+    columnOrderPlaceholder: undefined,
+    // Function prop defaults are used as-is (not as factories) — must be the validator itself.
+    validate: (destField: string, value: string) => validateDestFieldValue(destField, value),
   },
+)
+
+const { t } = useI18n({ useScope: 'global' })
+const resolvedModeHeaderLabel = computed(
+  () => props.modeHeaderLabel ?? t('intakeWizard.mapping.modeHeader'),
+)
+const resolvedModePositionalLabel = computed(
+  () => props.modePositionalLabel ?? t('intakeWizard.mapping.modePositional'),
 )
 
 const emit = defineEmits<{
   'update:modelValue': [FieldMappingValue]
 }>()
 
+const mode = computed<FieldMappingMode>(() =>
+  props.modelValue.mode === 'positional' ? 'positional' : 'header',
+)
+
+const hasHeader = computed(() => props.modelValue.hasHeader !== false)
+
 const sourceHeaderOptions = computed<SelectOption[]>(() =>
   props.sourceHeaders.map((header) => ({ label: header, value: header })),
 )
 
+function patch(partial: Partial<FieldMappingValue>): void {
+  emit('update:modelValue', {
+    version: props.modelValue.version ?? 2,
+    mode: props.modelValue.mode ?? 'header',
+    hasHeader: props.modelValue.hasHeader ?? true,
+    columns: props.modelValue.columns ?? {},
+    positions: props.modelValue.positions ?? {},
+    defaults: props.modelValue.defaults ?? {},
+    transforms: props.modelValue.transforms,
+    columnOrder: props.modelValue.columnOrder,
+    required: props.modelValue.required,
+    ...partial,
+  })
+}
+
+function handleModeChange(next: FieldMappingMode): void {
+  patch({ mode: next, version: 2 })
+}
+
+function handleHasHeaderChange(next: boolean): void {
+  patch({ hasHeader: next, version: 2 })
+}
+
 function columnValue(destField: string): string | null {
   return props.modelValue.columns[destField] ?? null
+}
+
+function positionValue(destField: string): number | null {
+  const positions = props.modelValue.positions ?? {}
+  return destField in positions ? positions[destField]! : null
 }
 
 function defaultValue(destField: string): string {
@@ -66,21 +116,44 @@ function defaultValue(destField: string): string {
 }
 
 function isUnmapped(destField: string): boolean {
+  if (mode.value === 'positional') {
+    return !(destField in (props.modelValue.positions ?? {})) && !(destField in props.modelValue.defaults)
+  }
   return !(destField in props.modelValue.columns) && !(destField in props.modelValue.defaults)
 }
 
-function handleColumnChange(destField: string, value: string | null) {
+function handleColumnChange(destField: string, value: string | null): void {
   const columns = { ...props.modelValue.columns }
   if (value) columns[destField] = value
   else delete columns[destField]
-  emit('update:modelValue', { columns, defaults: props.modelValue.defaults })
+  patch({ columns })
 }
 
-function handleDefaultChange(destField: string, value: string) {
+function handlePositionChange(destField: string, value: number | null): void {
+  const positions = { ...(props.modelValue.positions ?? {}) }
+  if (value !== null && value !== undefined && Number.isFinite(value) && value >= 0) {
+    positions[destField] = Math.floor(value)
+  } else {
+    delete positions[destField]
+  }
+  patch({ positions, version: 2 })
+}
+
+function handleDefaultChange(destField: string, value: string): void {
   const defaults = { ...props.modelValue.defaults }
   if (value !== '') defaults[destField] = value
   else delete defaults[destField]
-  emit('update:modelValue', { columns: props.modelValue.columns, defaults })
+  patch({ defaults })
+}
+
+const columnOrderText = computed(() => (props.modelValue.columnOrder ?? []).join(', '))
+
+function handleColumnOrderChange(value: string): void {
+  const parts = value
+    .split(/[,，\n]/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+  patch({ columnOrder: parts, version: 2 })
 }
 
 interface PreviewRow {
@@ -89,7 +162,7 @@ interface PreviewRow {
 }
 
 const previewRows = computed<PreviewRow[]>(() => {
-  const mapped = applyMapping(props.sampleRows.slice(0, 5), props.modelValue.columns, props.modelValue.defaults)
+  const mapped = applyMapping(props.sampleRows.slice(0, 5), props.modelValue, undefined, props.sourceHeaders)
   return mapped.map((row, index) => ({ __previewRowIndex: index, ...row.values }))
 })
 
@@ -121,6 +194,28 @@ const previewColumns = computed(() =>
 
 <template>
   <div class="field-mapping-editor">
+    <div class="field-mapping-editor__meta">
+      <div v-if="modeLabel" class="field-mapping-editor__meta-row">
+        <span class="field-mapping-editor__meta-label">{{ modeLabel }}</span>
+        <NRadioGroup :value="mode" @update:value="(v) => handleModeChange(v as FieldMappingMode)">
+          <NRadioButton value="header">{{ resolvedModeHeaderLabel }}</NRadioButton>
+          <NRadioButton value="positional">{{ resolvedModePositionalLabel }}</NRadioButton>
+        </NRadioGroup>
+      </div>
+      <div v-if="hasHeaderLabel" class="field-mapping-editor__meta-row">
+        <span class="field-mapping-editor__meta-label">{{ hasHeaderLabel }}</span>
+        <NSwitch :value="hasHeader" @update:value="handleHasHeaderChange" />
+      </div>
+      <div v-if="columnOrderLabel" class="field-mapping-editor__meta-row field-mapping-editor__meta-row--wide">
+        <span class="field-mapping-editor__meta-label">{{ columnOrderLabel }}</span>
+        <NInput
+          :value="columnOrderText"
+          :placeholder="columnOrderPlaceholder"
+          @update:value="handleColumnOrderChange"
+        />
+      </div>
+    </div>
+
     <div class="field-mapping-editor__mapping">
       <div class="field-mapping-editor__mapping-header">
         <span class="field-mapping-editor__mapping-header-cell">{{ destColumnHeader }}</span>
@@ -129,15 +224,11 @@ const previewColumns = computed(() =>
       <div v-for="field in destFields" :key="field.key" class="field-mapping-editor__row">
         <div class="field-mapping-editor__field-label">
           <span>{{ field.label }}</span>
-          <NTooltip v-if="field.tooltip" trigger="hover">
-            <template #trigger>
-              <span class="field-mapping-editor__hint-icon" aria-hidden="true">?</span>
-            </template>
-            {{ field.tooltip }}
-          </NTooltip>
+          <span v-if="field.tooltip" class="field-mapping-editor__hint" :title="field.tooltip">?</span>
         </div>
         <div class="field-mapping-editor__field-controls">
           <NSelect
+            v-if="mode === 'header'"
             class="field-mapping-editor__column-select"
             :value="columnValue(field.key)"
             :options="sourceHeaderOptions"
@@ -145,6 +236,16 @@ const previewColumns = computed(() =>
             filterable
             :placeholder="unmappedLabel"
             @update:value="(value) => handleColumnChange(field.key, value)"
+          />
+          <NInputNumber
+            v-else
+            class="field-mapping-editor__position-input"
+            :value="positionValue(field.key)"
+            :min="0"
+            :precision="0"
+            :placeholder="positionPlaceholder ?? '0'"
+            clearable
+            @update:value="(value) => handlePositionChange(field.key, value)"
           />
           <NInput
             class="field-mapping-editor__default-input"
@@ -168,6 +269,31 @@ const previewColumns = computed(() =>
   display: flex;
   flex-direction: column;
   gap: var(--space-6);
+}
+
+.field-mapping-editor__meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.field-mapping-editor__meta-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.field-mapping-editor__meta-row--wide {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.field-mapping-editor__meta-label {
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-secondary);
+  min-width: 120px;
 }
 
 .field-mapping-editor__mapping {
@@ -214,7 +340,7 @@ const previewColumns = computed(() =>
   color: var(--color-text-primary);
 }
 
-.field-mapping-editor__hint-icon {
+.field-mapping-editor__hint {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -235,7 +361,8 @@ const previewColumns = computed(() =>
   gap: var(--space-2);
 }
 
-.field-mapping-editor__column-select {
+.field-mapping-editor__column-select,
+.field-mapping-editor__position-input {
   flex: 1;
   min-width: 0;
 }

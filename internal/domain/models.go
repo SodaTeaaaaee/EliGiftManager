@@ -377,12 +377,19 @@ type IntegrationProfile struct {
 	RequiresCarrierMapping    bool
 	RequiresExternalOrderNo   bool
 	AllowsManualClosure       bool
-	ConnectorKey              string
-	SupportedLocales          string
-	DefaultLocale             string
-	ExtraData                 string
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
+	// Factory-surface capability flags (zero for legacy / non-factory profiles).
+	SupportsExportSupplierOrder    bool
+	SupportsImportProductCatalog   bool
+	SupportsImportSupplierShipment bool
+	ConnectorKey                   string
+	// FactorySupplierPlatform is the factory-facing platform label written onto
+	// SupplierOrder.SupplierPlatform. When empty, export falls back to ConnectorKey.
+	FactorySupplierPlatform string
+	SupportedLocales        string
+	DefaultLocale           string
+	ExtraData               string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
 }
 
 // ---- ChannelClosureDecisionRecord ----
@@ -513,9 +520,15 @@ type ProductMaster struct {
 	Name               string
 	ProductKind        ProductKind
 	Archived           bool
-	ExtraData          string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	// CoverImagePath is a relative path under the product asset store (Master only;
+	// wave Product snapshots intentionally do not copy image fields).
+	CoverImagePath string
+	// DetailImagePaths is a JSON-encoded []string of relative detail image paths
+	// (Master only; wave Product snapshots intentionally do not copy image fields).
+	DetailImagePaths string
+	ExtraData        string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // ---- Product ----
@@ -535,12 +548,15 @@ type Product struct {
 // ---- CarrierMapping ----
 
 // CarrierMapping maps an internal carrier code to a platform-specific external code.
+// Aliases holds a JSON-encoded []string of alternate external codes that should
+// resolve to the same mapping (e.g. factory abbreviations).
 type CarrierMapping struct {
 	ID                   uint
 	IntegrationProfileID uint
 	InternalCarrierCode  string
 	ExternalCarrierCode  string
 	ExternalCarrierName  string
+	Aliases              string // JSON []string
 	IsDefault            bool
 	CreatedAt            time.Time
 	UpdatedAt            time.Time

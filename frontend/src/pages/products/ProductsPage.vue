@@ -7,15 +7,17 @@
  */
 import { computed, h, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NSwitch, NTag } from 'naive-ui'
+import { NButton, NModal, NSelect, NSwitch, NTag } from 'naive-ui'
+import type { SelectOption } from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
 import { FilterBar } from '@/shared/ui/filter-bar'
 import { DataGrid, createColumns, type DataGridColumnSpec } from '@/shared/ui/data-grid'
 import { useFeedback } from '@/shared/ui/feedback'
+import { importProductCatalog, listProfiles, pickCatalogImportFile } from '@/shared/api/bridge'
 import { useProductsPage } from './useProductsPage'
 import ProductEditDrawer from './ProductEditDrawer.vue'
 import BatchStockToWaveDialog from './BatchStockToWaveDialog.vue'
-import type { ProductMaster } from '@/entities/product'
+import { localImageUrl, type ProductMaster } from '@/entities/product'
 
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
@@ -81,6 +83,65 @@ function onSaved(): void {
   void page.load()
 }
 
+// ── Catalog import (ImportProductCatalog) ──
+const showCatalogImport = ref(false)
+const catalogProfileId = ref<number | null>(null)
+const catalogProfiles = ref<SelectOption[]>([])
+const catalogImporting = ref(false)
+
+async function openCatalogImport(): Promise<void> {
+  showCatalogImport.value = true
+  catalogProfileId.value = null
+  try {
+    const profiles = await listProfiles()
+    catalogProfiles.value = profiles.map((p) => ({
+      label: `${p.profileKey} (${p.factorySupplierPlatform || p.sourceChannel})`,
+      value: p.id,
+    }))
+  } catch {
+    catalogProfiles.value = []
+  }
+}
+
+async function runCatalogImport(): Promise<void> {
+  if (catalogProfileId.value == null) return
+  catalogImporting.value = true
+  try {
+    const path = await pickCatalogImportFile()
+    if (!path) return
+    const result = await importProductCatalog({
+      integrationProfileId: catalogProfileId.value,
+      importMode: 'skip_invalid',
+      filePath: path,
+    })
+    if (result.errorCount > 0) {
+      feedback.error(
+        t('feedback.error'),
+        t('products.catalogImport.partial', {
+          success: result.successCount,
+          errors: result.errorCount,
+        }),
+      )
+    } else {
+      feedback.success(t('products.catalogImport.success', { count: result.successCount }))
+    }
+    if (result.warnings && result.warnings.length > 0) {
+      feedback.info(
+        t('products.catalogImport.warnings', {
+          count: result.warnings.length,
+          items: result.warnings.join('; '),
+        }),
+      )
+    }
+    showCatalogImport.value = false
+    void page.load()
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    catalogImporting.value = false
+  }
+}
+
 async function handleToggleArchived(master: ProductMaster): Promise<void> {
   try {
     await page.toggleArchived(master)
@@ -93,6 +154,28 @@ async function handleToggleArchived(master: ProductMaster): Promise<void> {
 // ── Grid columns ──
 const columns = computed(() => {
   const specs: DataGridColumnSpec<ProductMaster>[] = [
+    {
+      type: 'text',
+      key: 'coverImagePath',
+      title: t('products.columns.cover'),
+      width: 72,
+      sortable: false,
+      render: (row) => {
+        const src = localImageUrl(row.coverImagePath)
+        if (src) {
+          return h('img', {
+            class: 'products-page__cover',
+            src,
+            alt: row.name || '',
+            loading: 'lazy',
+          })
+        }
+        return h('div', {
+          class: 'products-page__cover products-page__cover--placeholder',
+          title: t('products.coverPlaceholder'),
+        })
+      },
+    },
     { type: 'text', key: 'name', title: t('products.columns.name'), minWidth: 180 },
     { type: 'text', key: 'supplierPlatform', title: t('products.columns.supplierPlatform'), width: 130 },
     { type: 'text', key: 'factorySku', title: t('products.columns.factorySku'), width: 140 },
@@ -160,6 +243,7 @@ const columns = computed(() => {
   <div class="products-page">
     <PageHeader :title="t('products.title')" :description="t('products.subtitle')">
       <template #actions>
+        <NButton @click="openCatalogImport">{{ t('products.catalogImport.action') }}</NButton>
         <NButton type="primary" @click="openCreate">{{ t('products.createAction') }}</NButton>
       </template>
     </PageHeader>
@@ -209,10 +293,50 @@ const columns = computed(() => {
       :selected-masters="selectedMasters"
       @success="onBatchStockSuccess"
     />
+
+    <NModal
+      v-model:show="showCatalogImport"
+      preset="card"
+      :title="t('products.catalogImport.title')"
+      style="width: 480px"
+    >
+      <p class="products-page__catalog-hint">{{ t('products.catalogImport.hint') }}</p>
+      <NSelect
+        v-model:value="catalogProfileId"
+        :options="catalogProfiles"
+        filterable
+        :placeholder="t('products.catalogImport.profilePlaceholder')"
+      />
+      <div class="products-page__catalog-actions">
+        <NButton @click="showCatalogImport = false">{{ t('common.cancel') }}</NButton>
+        <NButton
+          type="primary"
+          :disabled="catalogProfileId == null"
+          :loading="catalogImporting"
+          @click="runCatalogImport"
+        >
+          {{ t('products.catalogImport.pickAndImport') }}
+        </NButton>
+      </div>
+    </NModal>
   </div>
 </template>
 
 <style scoped>
+.products-page__catalog-hint {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.products-page__catalog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
 .products-page {
   display: flex;
   flex-direction: column;
@@ -273,5 +397,19 @@ const columns = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+.products-page__cover {
+  display: block;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm, 4px);
+  object-fit: cover;
+  background: var(--color-surface-muted, #f0f0f0);
+}
+
+.products-page__cover--placeholder {
+  border: 1px dashed var(--color-border, #d0d0d0);
+  background: var(--color-surface-muted, #f5f5f5);
 }
 </style>

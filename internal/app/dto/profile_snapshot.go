@@ -6,6 +6,7 @@ package dto
 type BoundProfileSnapshot struct {
 	ProfileID               uint   `json:"profileId"`
 	ProfileKey              string `json:"profileKey"`
+	SourceSurface           string `json:"sourceSurface"`
 	TrackingSyncMode        string `json:"trackingSyncMode"`
 	ClosurePolicy           string `json:"closurePolicy"`
 	AllowsManualClosure     bool   `json:"allowsManualClosure"`
@@ -13,5 +14,11 @@ type BoundProfileSnapshot struct {
 	RequiresExternalOrderNo bool   `json:"requiresExternalOrderNo"`
 	SupportsPartialShipment bool   `json:"supportsPartialShipment"`
 	ConnectorKey            string `json:"connectorKey"`
-	SupportsAPIExport       bool   `json:"supportsAPIExport"`
+	// FactorySupplierPlatform is the factory-facing platform label written onto
+	// SupplierOrder.SupplierPlatform. When empty, export falls back to ConnectorKey.
+	FactorySupplierPlatform            string `json:"factorySupplierPlatform"`
+	SupportsAPIExport                  bool   `json:"supportsAPIExport"`
+	SupportsExportSupplierOrder        bool   `json:"supportsExportSupplierOrder"`
+	SupportsImportProductCatalog       bool   `json:"supportsImportProductCatalog"`
+	SupportsImportSupplierShipment     bool   `json:"supportsImportSupplierShipment"`
 }

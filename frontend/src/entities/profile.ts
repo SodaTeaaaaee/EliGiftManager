@@ -15,3 +15,6 @@ export type CreateProfileInput = dto.CreateProfileInput
 
 /** Input for updating an existing IntegrationProfile. */
 export type UpdateProfileInput = dto.UpdateProfileInput
+
+/** Domain business-surface / source-surface enums (membership / retail / factory). */
+export type { BusinessSurface, SourceSurface } from '@/shared/api/generated/enums'

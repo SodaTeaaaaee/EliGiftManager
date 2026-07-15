@@ -5,6 +5,7 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 )
 
 // ProductController exposes product Wails bindings.
@@ -17,9 +18,15 @@ func NewProductController() *ProductController {
 	masterRepo := infra.NewProductMasterRepository(gdb)
 	productRepo := infra.NewProductRepository(gdb)
 	waveRepo := infra.NewWaveRepository(gdb)
-	return &ProductController{
-		uc: app.NewProductUseCase(masterRepo, productRepo, waveRepo),
-	}
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	mapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
+	// AssetStore is optional for non-image catalog imports; zip imageLayout needs it.
+	assetStore, _ := service.NewAssetStore()
+	uc := app.NewProductUseCase(masterRepo, productRepo, waveRepo)
+	uc = app.WithCatalogImportDeps(uc, mapping, profileRepo, assetStore)
+	return &ProductController{uc: uc}
 }
 
 // CreateProductMaster creates a new product master record.
@@ -50,4 +57,14 @@ func (c *ProductController) SnapshotProductsForWave(input dto.SnapshotProductsIn
 func (c *ProductController) ListProductsByWave(waveID uint) ([]dto.ProductDTO, error) {
 	ctx := appContext
 	return c.uc.ListProductsByWave(ctx, waveID)
+}
+
+// ImportProductCatalog upserts ProductMaster rows from a template-mapped catalog sheet.
+func (c *ProductController) ImportProductCatalog(input dto.ImportProductCatalogInput) (dto.ImportProductCatalogResult, error) {
+	ctx := appContext
+	result, err := c.uc.ImportProductCatalog(ctx, input)
+	if err != nil {
+		return dto.ImportProductCatalogResult{}, err
+	}
+	return *result, nil
 }

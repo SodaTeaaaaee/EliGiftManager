@@ -72,6 +72,12 @@ func (c *ExportController) GenerateSupplierOrderFile(orderID uint) (dto.Supplier
 		return dto.SupplierOrderFileResultDTO{}, fmt.Errorf("resolve exports dir: %w", err)
 	}
 
-	fileWriter := app.NewSupplierOrderFileWriter(c.supplierRepo, exportsDir)
+	opts := &app.SupplierOrderFileWriterOptions{
+		FulfillRepo:  infra.NewFulfillmentRepository(c.gdb),
+		ProductRepo:  infra.NewProductRepository(c.gdb),
+		AddressRepo:  infra.NewAddressRepository(c.gdb),
+		TemplateRepo: infra.NewDocumentTemplateRepository(c.gdb),
+	}
+	fileWriter := app.NewSupplierOrderFileWriter(c.supplierRepo, exportsDir, opts)
 	return fileWriter.GenerateSupplierOrderFile(ctx, orderID)
 }

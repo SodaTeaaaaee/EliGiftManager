@@ -337,16 +337,20 @@ type IntegrationProfile struct {
 	ReferenceStrategy         ReferenceStrategy         `gorm:"type:text;not null;default:'member_level'"`
 	TrackingSyncMode          TrackingSyncMode          `gorm:"type:text;not null;default:'manual_confirmation'"`
 	ClosurePolicy             ClosurePolicy             `gorm:"type:text;not null;default:'close_after_sync'"`
-	SupportsPartialShipment   bool                      `gorm:"not null;default:false"`
-	SupportsAPIImport         bool                      `gorm:"not null;default:false"`
-	SupportsAPIExport         bool                      `gorm:"not null;default:false"`
-	RequiresCarrierMapping    bool                      `gorm:"not null;default:false"`
-	RequiresExternalOrderNo   bool                      `gorm:"not null;default:false"`
-	AllowsManualClosure       bool                      `gorm:"not null;default:false"`
-	ConnectorKey              string
-	SupportedLocales          string `gorm:"type:text"`
-	DefaultLocale             string
-	ExtraData                 string `gorm:"type:text"`
+	SupportsPartialShipment            bool                      `gorm:"not null;default:false"`
+	SupportsAPIImport                  bool                      `gorm:"not null;default:false"`
+	SupportsAPIExport                  bool                      `gorm:"not null;default:false"`
+	RequiresCarrierMapping             bool                      `gorm:"not null;default:false"`
+	RequiresExternalOrderNo            bool                      `gorm:"not null;default:false"`
+	AllowsManualClosure                bool                      `gorm:"not null;default:false"`
+	SupportsExportSupplierOrder        bool                      `gorm:"not null;default:false"`
+	SupportsImportProductCatalog       bool                      `gorm:"not null;default:false"`
+	SupportsImportSupplierShipment     bool                      `gorm:"not null;default:false"`
+	ConnectorKey                       string
+	FactorySupplierPlatform            string
+	SupportedLocales                   string `gorm:"type:text"`
+	DefaultLocale                      string
+	ExtraData                          string `gorm:"type:text"`
 }
 
 func (IntegrationProfile) TableName() string { return "integration_profiles" }
@@ -477,6 +481,8 @@ type ProductMaster struct {
 	Name               string `gorm:"not null"`
 	ProductKind        string `gorm:"not null;default:other"`
 	Archived           bool   `gorm:"not null;default:false"`
+	CoverImagePath     string `gorm:"type:text"`
+	DetailImagePaths   string `gorm:"type:text"` // JSON []string
 	ExtraData          string `gorm:"type:text"`
 }
 
@@ -504,7 +510,8 @@ type CarrierMapping struct {
 	InternalCarrierCode  string `gorm:"not null"`
 	ExternalCarrierCode  string `gorm:"not null"`
 	ExternalCarrierName  string
-	IsDefault            bool `gorm:"not null;default:false"`
+	Aliases              string `gorm:"type:text"` // JSON []string
+	IsDefault            bool   `gorm:"not null;default:false"`
 }
 
 func (CarrierMapping) TableName() string { return "carrier_mappings" }

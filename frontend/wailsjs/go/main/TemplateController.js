@@ -10,6 +10,10 @@ export function CreateDocumentTemplate(arg1) {
   return window['go']['main']['TemplateController']['CreateDocumentTemplate'](arg1);
 }
 
+export function DeleteDocumentTemplate(arg1) {
+  return window['go']['main']['TemplateController']['DeleteDocumentTemplate'](arg1);
+}
+
 export function GetDefaultTemplateForProfile(arg1, arg2) {
   return window['go']['main']['TemplateController']['GetDefaultTemplateForProfile'](arg1, arg2);
 }
@@ -20,4 +24,16 @@ export function ListBindingsByProfile(arg1) {
 
 export function ListDocumentTemplates() {
   return window['go']['main']['TemplateController']['ListDocumentTemplates']();
+}
+
+export function SetDefaultBinding(arg1) {
+  return window['go']['main']['TemplateController']['SetDefaultBinding'](arg1);
+}
+
+export function UnbindTemplate(arg1) {
+  return window['go']['main']['TemplateController']['UnbindTemplate'](arg1);
+}
+
+export function UpdateDocumentTemplate(arg1) {
+  return window['go']['main']['TemplateController']['UpdateDocumentTemplate'](arg1);
 }

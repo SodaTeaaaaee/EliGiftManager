@@ -1,31 +1,53 @@
 /**
  * Pure derivation helpers for fields `CreateProfileInput` requires that the
- * intake wizard's 5 named steps (platformPreset / businessSurface /
- * sampleUpload / capabilities / confirm — see the P4 foundations i18n key
- * tree) have no dedicated UI for: the 7 profile "strategy" enums
- * (`initialAllocationStrategy`, `identityStrategy`,
- * `entitlementAuthorityMode`, `recipientInputMode`, `referenceStrategy`,
- * `trackingSyncMode`, `closurePolicy`) and `documentType` (which the backend
- * derives 1:1 from `demandKind`, see `internal/app/template_usecase.go`'s
- * `validDocumentTypes` + `controller_demand_csv_import.go`'s default).
+ * intake wizard's named steps have no dedicated UI for: the 7 profile
+ * "strategy" enums and `documentType` (which the backend derives 1:1 from
+ * `demandKind` for demand faces; factory uses catalog/shipment/export types).
  *
  * Rather than adding a 6th wizard step, these are deterministically derived
  * from answers the operator already gave (business surface + capability
  * toggles) — every value produced here is still shown to the operator on
- * the confirm step via `StatusBadge`, never silently applied. This is a
- * deliberate scope decision, flagged in the unit's deviations report; a
- * later iteration could promote any of these to an explicit wizard field if
- * the derived default proves wrong often enough in practice.
+ * the confirm step via `StatusBadge`, never silently applied.
  */
 import type { IntakeProfileCapabilities } from '@/shared/lib/demand-intake/platform-presets'
 
-export type DemandKind = 'membership_entitlement' | 'retail_order'
+export type DemandKind = 'membership_entitlement' | 'retail_order' | ''
 
-/** `documentType` used for both `createDocumentTemplate`/`bindTemplateToProfile` and later
- * `importDemandCSV`/`getDefaultTemplateForProfile` calls — must match `validDocumentTypes`
- * in `internal/app/template_usecase.go` exactly. */
+/** Business-surface choice shown on the wizard's second step. */
+export type BusinessSurfaceChoice = 'membership' | 'retail' | 'factory'
+
+/** Factory capability flags on IntegrationProfile (Create/Update DTO). */
+export interface FactoryProfileCapabilities {
+  supportsExportSupplierOrder: boolean
+  supportsImportProductCatalog: boolean
+  supportsImportSupplierShipment: boolean
+}
+
+/** `documentType` for demand faces — must match `validDocumentTypes` backend. */
 export function documentTypeForDemandKind(demandKind: DemandKind): string {
-  return demandKind === 'retail_order' ? 'import_sales_order' : 'import_entitlement'
+  if (demandKind === 'retail_order') return 'import_sales_order'
+  if (demandKind === 'membership_entitlement') return 'import_entitlement'
+  return 'import_entitlement'
+}
+
+/**
+ * Primary document type for a factory surface profile, by capability priority:
+ * product catalog → supplier shipment → export supplier order.
+ */
+export function documentTypeForFactoryCaps(caps: FactoryProfileCapabilities): string {
+  if (caps.supportsImportProductCatalog) return 'import_product_catalog'
+  if (caps.supportsImportSupplierShipment) return 'import_supplier_shipment'
+  if (caps.supportsExportSupplierOrder) return 'export_supplier_order'
+  return 'import_product_catalog'
+}
+
+/** All document types implied by enabled factory caps (for multi-template seed). */
+export function documentTypesForFactoryCaps(caps: FactoryProfileCapabilities): string[] {
+  const types: string[] = []
+  if (caps.supportsImportProductCatalog) types.push('import_product_catalog')
+  if (caps.supportsImportSupplierShipment) types.push('import_supplier_shipment')
+  if (caps.supportsExportSupplierOrder) types.push('export_supplier_order')
+  return types
 }
 
 export interface DerivedProfileStrategy {
@@ -43,45 +65,38 @@ export interface DeriveProfileStrategyOptions {
   hasConnectorKey: boolean
   /**
    * Explicit `trackingSyncMode` choice, ONLY meaningful when `hasConnectorKey` is true.
-   * `api_push`/`document_export` are gated server-side by
-   * `internal/app/profile_usecase.go`'s `validateExecutionReadiness`: both REQUIRE a
-   * non-empty `connectorKey` AND that the (`trackingSyncMode`, `connectorKey`) pair
-   * resolves against the backend's executor registry — a pairing the frontend has no
-   * way to verify ahead of time (`listConnectorCapabilities()` lists registered
-   * connector keys and their capability flags, but not which `trackingSyncMode` each
-   * is registered under). This function therefore never silently guesses `api_push`
-   * or `document_export` — the wizard only sets `hasConnectorKey: true` once the
-   * operator has explicitly picked a connector AND a sync mode, and any backend
-   * rejection (wrong pairing) is surfaced to the operator as-is via the real error
-   * message, not swallowed.
+   * See prior doc: never silently guess `api_push` / `document_export`.
    */
   trackingSyncModeOverride?: string
+  /** When true, strategy fields collapse to factory-safe defaults. */
+  isFactorySurface?: boolean
 }
 
 /**
- * Derives the 7 profile-strategy enum fields from `demandKind` + the operator's capability
- * toggles. Every branch below is a plain, auditable heuristic — no hidden magic:
- * - `trackingSyncMode`: when no `connectorKey` is configured, defaults to the SAFE, always-
- *   valid pair of options that never require a connector (`manual_confirmation` if manual
- *   closure is allowed, else `unsupported`) — `api_push`/`document_export` are only used when
- *   the operator explicitly opted into a connector + sync mode (see
- *   `DeriveProfileStrategyOptions.trackingSyncModeOverride` above).
- * - `closurePolicy`: `close_after_sync` for the two automated sync modes; otherwise
- *   `close_after_manual_confirmation` if manual closure is allowed, else
- *   `close_after_shipment` (the line closes the moment it ships, since neither automatic
- *   nor manual sync-back is available).
- * - `recipientInputMode` / `referenceStrategy`: membership demand collects recipient info
- *   via a platform claim flow and is tracked at the member level; retail demand already
- *   carries recipient info on the order itself (`'none'`) and is tracked per order.
- * - `initialAllocationStrategy` / `identityStrategy` / `entitlementAuthorityMode`: fixed,
- *   generically-sound defaults (policy-driven allocation, platform-UID identity, local-policy
- *   entitlement authority) — the common case for a freshly-onboarded integration.
+ * Derives the 7 profile-strategy enum fields from `demandKind` + capability
+ * toggles. Factory surfaces skip demand-side strategy enums (backend exempts
+ * them) and only keep a safe trackingSyncMode / closurePolicy pair.
  */
 export function deriveProfileStrategyDefaults(
   demandKind: DemandKind,
   capabilities: IntakeProfileCapabilities,
   options: DeriveProfileStrategyOptions = { hasConnectorKey: false },
 ): DerivedProfileStrategy {
+  if (options.isFactorySurface) {
+    const trackingSyncMode = options.hasConnectorKey
+      ? (options.trackingSyncModeOverride ?? 'document_export')
+      : 'unsupported'
+    return {
+      initialAllocationStrategy: '',
+      identityStrategy: '',
+      entitlementAuthorityMode: '',
+      recipientInputMode: '',
+      referenceStrategy: '',
+      trackingSyncMode,
+      closurePolicy: trackingSyncMode === 'unsupported' ? '' : 'close_after_sync',
+    }
+  }
+
   const isMembership = demandKind === 'membership_entitlement'
 
   const trackingSyncMode = options.hasConnectorKey

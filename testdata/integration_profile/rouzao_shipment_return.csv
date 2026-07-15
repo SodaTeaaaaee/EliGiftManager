@@ -1,0 +1,5 @@
+"订单编号","下单时间","商品编码","商品名称","规格&数量","应付金额","收件人","电话","收件信息","物流公司","物流单号","打印快递时间","订单状态"
+"RZ-ORD-
+001","2026-05-01 10:00:00","PARENT-BUNDLE","Synthetic Bundle","206068021_standee-label * 1|63098307_magnet-label * 2","0.00","RecipientA","13800000001","Synthetic Address Line","申通快递","'YT1234567890","2026-05-10 09:17:20","已发货"
+"RZ-ORD-002","2026-05-02 11:00:00","PARENT-B","Synthetic B","99999999_ambiguous-label * 1","0.00","RecipientA","13800000001","Synthetic Address Line","申通快递","'YT999000111","2026-05-11 10:00:00","已发货"
+"RZ-ORD-003","2026-05-03 12:00:00","PARENT-C","Synthetic C","205721969_fallback-label * 1","0.00","RecipientA","13800000001","Synthetic Address Line","申通快递","'YT777000222","2026-05-12 11:00:00","已发货"

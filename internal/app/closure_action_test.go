@@ -748,7 +748,7 @@ func TestExecuteChannelSyncJobWithRegisteredDocumentExportExecutorSucceeds(t *te
 	exportsDir := filepath.Join(tmpDir, "exports")
 	registry := map[string]map[string]ChannelSyncExecutor{
 		"document_export": {
-			"eli.local_export": NewDocumentExportExecutor(exportsDir),
+			"eli.local_export": NewDocumentExportExecutor(exportsDir, nil),
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
@@ -816,7 +816,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testi
 
 	registry := map[string]map[string]ChannelSyncExecutor{
 		"document_export": {
-			"eli.local_export": NewDocumentExportExecutor(badDir),
+			"eli.local_export": NewDocumentExportExecutor(badDir, nil),
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
@@ -851,7 +851,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testi
 	fixedDir := filepath.Join(tmpDir, "fixed_exports")
 	fixedRegistry := map[string]map[string]ChannelSyncExecutor{
 		"document_export": {
-			"eli.local_export": NewDocumentExportExecutor(fixedDir),
+			"eli.local_export": NewDocumentExportExecutor(fixedDir, nil),
 		},
 	}
 	retryUC := NewRetrySyncUseCase(cs, pr, NewRuntimeExecutorProviderWith(fixedRegistry))
@@ -878,7 +878,7 @@ func TestRuntimeExecutorProviderRejectsModeMismatch(t *testing.T) {
 	tmpDir := t.TempDir()
 	registry := map[string]map[string]ChannelSyncExecutor{
 		"document_export": {
-			"eli.local_export": NewDocumentExportExecutor(filepath.Join(tmpDir, "exports")),
+			"eli.local_export": NewDocumentExportExecutor(filepath.Join(tmpDir, "exports"), nil),
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
@@ -905,7 +905,7 @@ func TestExecuteChannelSyncJobRejectsModeMismatchAtRuntime(t *testing.T) {
 	tmpDir := t.TempDir()
 	registry := map[string]map[string]ChannelSyncExecutor{
 		"document_export": {
-			"eli.local_export": NewDocumentExportExecutor(filepath.Join(tmpDir, "exports")),
+			"eli.local_export": NewDocumentExportExecutor(filepath.Join(tmpDir, "exports"), nil),
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)
@@ -945,7 +945,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorPersistsRealRequestPaylo
 	exportsDir := filepath.Join(tmpDir, "exports")
 	registry := map[string]map[string]ChannelSyncExecutor{
 		"document_export": {
-			"eli.local_export": NewDocumentExportExecutor(exportsDir),
+			"eli.local_export": NewDocumentExportExecutor(exportsDir, nil),
 		},
 	}
 	provider := NewRuntimeExecutorProviderWith(registry)

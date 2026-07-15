@@ -18,6 +18,10 @@ export function ListShipmentsByWave(arg1) {
   return window['go']['main']['ShipmentController']['ListShipmentsByWave'](arg1);
 }
 
+export function MapAndReconcileShipments(arg1) {
+  return window['go']['main']['ShipmentController']['MapAndReconcileShipments'](arg1);
+}
+
 export function UpdateShipment(arg1) {
   return window['go']['main']['ShipmentController']['UpdateShipment'](arg1);
 }

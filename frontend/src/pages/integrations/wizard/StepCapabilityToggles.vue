@@ -5,16 +5,15 @@
  * so the operator can review the existing profile's capabilities, but they
  * are read-only there — see `:disabled="state.isRemapMode.value"`).
  *
- * The 6 boolean capability switches, plus an OPTIONAL `connectorKey` picked
- * from `listConnectorCapabilities()`'s registered keys. `trackingSyncMode`
- * only becomes an explicit choice once a connector is picked — see
- * `deriveProfileDefaults.ts`'s doc comment for why this can't be silently
- * guessed once a real connector enters the picture.
+ * Demand surfaces: the 6 boolean capability switches + optional connectorKey.
+ * Factory surface: the 3 factory capability switches (export supplier order /
+ * import product catalog / import supplier shipment) instead of demand caps.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NSwitch, NSelect, NFormItem } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
+import { SelectableCard } from '@/shared/ui/cards'
 import { StatusBadge } from '@/shared/ui/status'
 import { listConnectorCapabilities } from '@/shared/api/bridge'
 import type { UseIntakeWizardStateApi } from './useIntakeWizardState'
@@ -24,7 +23,7 @@ const props = defineProps<{ state: UseIntakeWizardStateApi }>()
 
 const { t } = useI18n({ useScope: 'global' })
 
-const CAPABILITY_KEYS: (keyof IntakeProfileCapabilities)[] = [
+const DEMAND_CAPABILITY_KEYS: (keyof IntakeProfileCapabilities)[] = [
   'supportsPartialShipment',
   'supportsApiImport',
   'supportsApiExport',
@@ -32,6 +31,12 @@ const CAPABILITY_KEYS: (keyof IntakeProfileCapabilities)[] = [
   'requiresExternalOrderNo',
   'allowsManualClosure',
 ]
+
+const FACTORY_CAPABILITY_KEYS = [
+  'supportsExportSupplierOrder',
+  'supportsImportProductCatalog',
+  'supportsImportSupplierShipment',
+] as const
 
 const connectorKeys = ref<string[]>([])
 
@@ -47,19 +52,37 @@ onMounted(async () => {
 const connectorOptions = computed<SelectOption[]>(() => connectorKeys.value.map((key) => ({ label: key, value: key })))
 
 const hasConnector = computed(() => props.state.connectorKey.value.trim().length > 0)
+const isFactory = computed(() => props.state.isFactorySurface.value)
 
 const TRACKING_SYNC_MODE_OPTIONS = ['api_push', 'document_export', 'manual_confirmation', 'unsupported']
 </script>
 
 <template>
   <div class="step-capability-toggles">
-    <div v-for="key in CAPABILITY_KEYS" :key="key" class="step-capability-toggles__row">
-      <div class="step-capability-toggles__label-group">
-        <span class="step-capability-toggles__label">{{ t(`intakeWizard.capabilities.${key}.label`) }}</span>
-        <span class="step-capability-toggles__hint">{{ t(`intakeWizard.capabilities.${key}.hint`) }}</span>
+    <template v-if="isFactory">
+      <p class="step-capability-toggles__intro">{{ t('intakeWizard.capabilities.factoryIntro') }}</p>
+      <div
+        v-for="key in FACTORY_CAPABILITY_KEYS"
+        :key="key"
+        class="step-capability-toggles__row"
+      >
+        <div class="step-capability-toggles__label-group">
+          <span class="step-capability-toggles__label">{{ t(`intakeWizard.capabilities.${key}.label`) }}</span>
+          <span class="step-capability-toggles__hint">{{ t(`intakeWizard.capabilities.${key}.hint`) }}</span>
+        </div>
+        <NSwitch v-model:value="state.factoryCapabilities[key]" :disabled="state.isRemapMode.value" />
       </div>
-      <NSwitch v-model:value="state.capabilities[key]" :disabled="state.isRemapMode.value" />
-    </div>
+    </template>
+
+    <template v-else>
+      <div v-for="key in DEMAND_CAPABILITY_KEYS" :key="key" class="step-capability-toggles__row">
+        <div class="step-capability-toggles__label-group">
+          <span class="step-capability-toggles__label">{{ t(`intakeWizard.capabilities.${key}.label`) }}</span>
+          <span class="step-capability-toggles__hint">{{ t(`intakeWizard.capabilities.${key}.hint`) }}</span>
+        </div>
+        <NSwitch v-model:value="state.capabilities[key]" :disabled="state.isRemapMode.value" />
+      </div>
+    </template>
 
     <NFormItem :label="t('intakeWizard.capabilities.connectorKeyLabel')" :show-feedback="false">
       <NSelect
@@ -75,17 +98,17 @@ const TRACKING_SYNC_MODE_OPTIONS = ['api_push', 'document_export', 'manual_confi
 
     <NFormItem v-if="hasConnector" :label="t('statusKit.dimensionNames.trackingSyncMode')" :show-feedback="false">
       <div class="step-capability-toggles__sync-mode-options">
-        <button
+        <SelectableCard
           v-for="mode in TRACKING_SYNC_MODE_OPTIONS"
           :key="mode"
-          type="button"
-          class="step-capability-toggles__sync-mode-option"
-          :class="{ 'step-capability-toggles__sync-mode-option--active': state.trackingSyncModeOverride.value === mode }"
+          class="step-capability-toggles__sync-card"
+          :label="mode"
+          :selected="state.trackingSyncModeOverride.value === mode"
           :disabled="state.isRemapMode.value"
-          @click="state.trackingSyncModeOverride.value = mode"
+          @select="state.trackingSyncModeOverride.value = mode"
         >
           <StatusBadge dimension="trackingSyncMode" :value="mode" size="sm" />
-        </button>
+        </SelectableCard>
       </div>
     </NFormItem>
   </div>
@@ -97,6 +120,13 @@ const TRACKING_SYNC_MODE_OPTIONS = ['api_push', 'document_export', 'manual_confi
   flex-direction: column;
   gap: var(--space-4);
   max-width: 560px;
+}
+
+.step-capability-toggles__intro {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 .step-capability-toggles__row {
@@ -132,17 +162,15 @@ const TRACKING_SYNC_MODE_OPTIONS = ['api_push', 'document_export', 'manual_confi
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  width: 100%;
 }
 
-.step-capability-toggles__sync-mode-option {
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
-  padding: 2px;
-  cursor: pointer;
+.step-capability-toggles__sync-card {
+  min-width: 140px;
+  flex: 1 1 140px;
 }
 
-.step-capability-toggles__sync-mode-option--active {
-  border-color: var(--color-accent);
+.step-capability-toggles__sync-card :deep(.selectable-card__label) {
+  display: none;
 }
 </style>

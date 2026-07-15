@@ -1,248 +1,247 @@
-import { assert, assertEquals } from "jsr:@std/assert";
+import { assert, expect, test } from 'vitest'
 import {
   classifySortBucket,
   compareStrings,
   compareValues,
-} from "./compareSortValues.ts";
+} from './compareSortValues.ts'
 import {
   buildKanaRomajiKey,
   hasHan,
   hasHangul,
   isPureKana,
   toHiragana,
-} from "./kanaRomaji.ts";
+} from './kanaRomaji.ts'
+import { stableSortRows } from './stableSortRows.ts'
 
 // --- kanaRomaji ---
-Deno.test("toHiragana converts katakana to hiragana", () => {
-  assertEquals(toHiragana("アイウエオ"), "あいうえお");
-  assertEquals(toHiragana("カキクケコ"), "かきくけこ");
-  assertEquals(toHiragana("コンニチハ"), "こんにちは");
-});
+test('toHiragana converts katakana to hiragana', () => {
+  expect(toHiragana('アイウエオ')).toBe('あいうえお')
+  expect(toHiragana('カキクケコ')).toBe('かきくけこ')
+  expect(toHiragana('コンニチハ')).toBe('こんにちは')
+})
 
-Deno.test("toHiragana handles small kana and mixed", () => {
-  assertEquals(toHiragana("キャ"), "きゃ");
-  assertEquals(toHiragana("ッ"), "っ");
-});
+test('toHiragana handles small kana and mixed', () => {
+  expect(toHiragana('キャ')).toBe('きゃ')
+  expect(toHiragana('ッ')).toBe('っ')
+})
 
-Deno.test("buildKanaRomajiKey outputs romaji", () => {
-  assertEquals(buildKanaRomajiKey("あか"), "aka");
-  assertEquals(buildKanaRomajiKey("ねこ"), "neko");
-});
+test('buildKanaRomajiKey outputs romaji', () => {
+  expect(buildKanaRomajiKey('あか')).toBe('aka')
+  expect(buildKanaRomajiKey('ねこ')).toBe('neko')
+})
 
-Deno.test("isPureKana detects pure kana", () => {
-  assertEquals(isPureKana("あいう"), true);
-  assertEquals(isPureKana("アイウ"), true);
-  assertEquals(isPureKana("漢字"), false);
-  assertEquals(isPureKana("あ漢"), false);
-});
+test('isPureKana detects pure kana', () => {
+  expect(isPureKana('あいう')).toBe(true)
+  expect(isPureKana('アイウ')).toBe(true)
+  expect(isPureKana('漢字')).toBe(false)
+  expect(isPureKana('あ漢')).toBe(false)
+})
 
-Deno.test("hasHan detects CJK characters", () => {
-  assertEquals(hasHan("中文"), true);
-  assertEquals(hasHan("日本語"), true);
-  assertEquals(hasHan("abc"), false);
-});
+test('hasHan detects CJK characters', () => {
+  expect(hasHan('中文')).toBe(true)
+  expect(hasHan('日本語')).toBe(true)
+  expect(hasHan('abc')).toBe(false)
+})
 
-Deno.test("hasHangul detects Korean", () => {
-  assertEquals(hasHangul("한글"), true);
-  assertEquals(hasHangul("abc"), false);
-});
+test('hasHangul detects Korean', () => {
+  expect(hasHangul('한글')).toBe(true)
+  expect(hasHangul('abc')).toBe(false)
+})
 
 // --- compareValues ---
-Deno.test("compareValues: numbers are sorted naturally", () => {
+test('compareValues: numbers are sorted naturally', () => {
   // "2" < "19" in natural order
-  assertEquals(compareValues(2, 19) < 0, true);
-  assertEquals(compareValues(100, 2) > 0, true);
-});
+  expect(compareValues(2, 19) < 0).toBe(true)
+  expect(compareValues(100, 2) > 0).toBe(true)
+})
 
-Deno.test("compareValues: numeric strings are sorted naturally", () => {
-  assertEquals(compareValues("2", "19") < 0, true);
-  assertEquals(compareValues("A2", "A19") < 0, true);
-});
+test('compareValues: numeric strings are sorted naturally', () => {
+  expect(compareValues('2', '19') < 0).toBe(true)
+  expect(compareValues('A2', 'A19') < 0).toBe(true)
+})
 
-Deno.test("compareValues: null/undefined sink to bottom", () => {
-  assertEquals(compareValues(null, "abc") > 0, true);
-  assertEquals(compareValues("abc", null) < 0, true);
-  assertEquals(compareValues(undefined, "abc") > 0, true);
-});
+test('compareValues: null/undefined sink to bottom', () => {
+  expect(compareValues(null, 'abc') > 0).toBe(true)
+  expect(compareValues('abc', null) < 0).toBe(true)
+  expect(compareValues(undefined, 'abc') > 0).toBe(true)
+})
 
-Deno.test("compareValues: empty string sinks to bottom", () => {
-  assertEquals(compareValues("", "abc") > 0, true);
-  assertEquals(compareValues("abc", "") < 0, true);
-});
+test('compareValues: empty string sinks to bottom', () => {
+  expect(compareValues('', 'abc') > 0).toBe(true)
+  expect(compareValues('abc', '') < 0).toBe(true)
+})
 
-Deno.test("compareValues: Chinese sorted by pinyin", () => {
+test('compareValues: Chinese sorted by pinyin', () => {
   // 张 should come after 李 in pinyin (zhang > li)
-  assertEquals(compareValues("李", "张") < 0, true);
-});
+  expect(compareValues('李', '张') < 0).toBe(true)
+})
 
-Deno.test("compareValues: pure kana sorted by romaji", () => {
-  assertEquals(compareValues("あか", "いき") < 0, true); // aka < iki
-});
+test('compareValues: pure kana sorted by romaji', () => {
+  expect(compareValues('あか', 'いき') < 0).toBe(true) // aka < iki
+})
 
-Deno.test("compareValues: hiragana before katakana as tiebreak", () => {
-  assertEquals(compareValues("あか", "アカ") < 0, true);
-});
+test('compareValues: hiragana before katakana as tiebreak', () => {
+  expect(compareValues('あか', 'アカ') < 0).toBe(true)
+})
 
-Deno.test("compareValues: Korean sorted correctly", () => {
-  assertEquals(compareValues("가", "나") < 0, true);
-});
+test('compareValues: Korean sorted correctly', () => {
+  expect(compareValues('가', '나') < 0).toBe(true)
+})
 
-Deno.test("compareValues: booleans", () => {
-  assertEquals(compareValues(false, true) < 0, true);
-});
+test('compareValues: booleans', () => {
+  expect(compareValues(false, true) < 0).toBe(true)
+})
 
 // --- stableSortRows integration ---
-import { stableSortRows } from "./stableSortRows.ts";
-
-Deno.test("stableSortRows: ascending puts values in order, nulls at end", () => {
-  const rows = [{ name: "b" }, { name: null }, { name: "a" }, { name: "" }];
+test('stableSortRows: ascending puts values in order, nulls at end', () => {
+  const rows = [{ name: 'b' }, { name: null }, { name: 'a' }, { name: '' }]
   const result = stableSortRows(rows, {
-    key: "name",
-    getValue: (r: any) => r.name,
-  }, "ascend");
-  assertEquals(result[0].name, "a");
-  assertEquals(result[1].name, "b");
-  assertEquals(result[2].name, null);
-  assertEquals(result[3].name, "");
-});
+    key: 'name',
+    getValue: (r: { name: string | null }) => r.name,
+  }, 'ascend')
+  expect(result[0].name).toBe('a')
+  expect(result[1].name).toBe('b')
+  expect(result[2].name).toBe(null)
+  expect(result[3].name).toBe('')
+})
 
-Deno.test("stableSortRows: descending puts values in reverse, nulls still at end", () => {
-  const rows = [{ name: "b" }, { name: null }, { name: "a" }, { name: "" }];
+test('stableSortRows: descending puts values in reverse, nulls still at end', () => {
+  const rows = [{ name: 'b' }, { name: null }, { name: 'a' }, { name: '' }]
   const result = stableSortRows(rows, {
-    key: "name",
-    getValue: (r: any) => r.name,
-  }, "descend");
-  assertEquals(result[0].name, "b");
-  assertEquals(result[1].name, "a");
-  assertEquals(result[2].name, null);
-  assertEquals(result[3].name, "");
-});
+    key: 'name',
+    getValue: (r: { name: string | null }) => r.name,
+  }, 'descend')
+  expect(result[0].name).toBe('b')
+  expect(result[1].name).toBe('a')
+  expect(result[2].name).toBe(null)
+  expect(result[3].name).toBe('')
+})
 
-Deno.test("stableSortRows: preserves original order on equal values", () => {
-  const rows = [{ id: 1, v: "same" }, { id: 2, v: "same" }, {
+test('stableSortRows: preserves original order on equal values', () => {
+  const rows = [{ id: 1, v: 'same' }, { id: 2, v: 'same' }, {
     id: 3,
-    v: "same",
-  }];
+    v: 'same',
+  }]
   const result = stableSortRows(
     rows,
-    { key: "v", getValue: (r: any) => r.v },
-    "ascend",
-  );
-  assertEquals(result[0].id, 1);
-  assertEquals(result[1].id, 2);
-  assertEquals(result[2].id, 3);
-});
+    { key: 'v', getValue: (r: { id: number; v: string }) => r.v },
+    'ascend',
+  )
+  expect(result[0].id).toBe(1)
+  expect(result[1].id).toBe(2)
+  expect(result[2].id).toBe(3)
+})
 
-Deno.test("stableSortRows: descending preserves original order on equal values", () => {
-  const rows = [{ id: 1, v: "same" }, { id: 2, v: "same" }, {
+test('stableSortRows: descending preserves original order on equal values', () => {
+  const rows = [{ id: 1, v: 'same' }, { id: 2, v: 'same' }, {
     id: 3,
-    v: "same",
-  }];
+    v: 'same',
+  }]
   const result = stableSortRows(
     rows,
-    { key: "v", getValue: (r: any) => r.v },
-    "descend",
-  );
-  assertEquals(result[0].id, 1);
-  assertEquals(result[1].id, 2);
-  assertEquals(result[2].id, 3);
-});
+    { key: 'v', getValue: (r: { id: number; v: string }) => r.v },
+    'descend',
+  )
+  expect(result[0].id).toBe(1)
+  expect(result[1].id).toBe(2)
+  expect(result[2].id).toBe(3)
+})
 
 // --- bucket classification ---
-Deno.test("classifySortBucket: digit", () => {
-  assertEquals(classifySortBucket("123"), "digit");
-  assertEquals(classifySortBucket("０１２"), "digit");
-});
+test('classifySortBucket: digit', () => {
+  expect(classifySortBucket('123')).toBe('digit')
+  expect(classifySortBucket('０１２')).toBe('digit')
+})
 
-Deno.test("classifySortBucket: latin", () => {
-  assertEquals(classifySortBucket("ABC"), "latin");
-  assertEquals(classifySortBucket("hello"), "latin");
-});
+test('classifySortBucket: latin', () => {
+  expect(classifySortBucket('ABC')).toBe('latin')
+  expect(classifySortBucket('hello')).toBe('latin')
+})
 
-Deno.test("classifySortBucket: han", () => {
-  assertEquals(classifySortBucket("张三"), "han");
-  assertEquals(classifySortBucket("日本語"), "han"); // kanji → han
-});
+test('classifySortBucket: han', () => {
+  expect(classifySortBucket('张三')).toBe('han')
+  expect(classifySortBucket('日本語')).toBe('han') // kanji → han
+})
 
-Deno.test("classifySortBucket: hiragana", () => {
-  assertEquals(classifySortBucket("あいう"), "hiragana");
-});
+test('classifySortBucket: hiragana', () => {
+  expect(classifySortBucket('あいう')).toBe('hiragana')
+})
 
-Deno.test("classifySortBucket: katakana", () => {
-  assertEquals(classifySortBucket("アイウ"), "katakana");
-});
+test('classifySortBucket: katakana', () => {
+  expect(classifySortBucket('アイウ')).toBe('katakana')
+})
 
-Deno.test("classifySortBucket: hangul", () => {
-  assertEquals(classifySortBucket("한글"), "hangul");
-});
+test('classifySortBucket: hangul', () => {
+  expect(classifySortBucket('한글')).toBe('hangul')
+})
 
-Deno.test("classifySortBucket: leading bracket skipped", () => {
-  assertEquals(classifySortBucket("【张三】"), "han");
-});
+test('classifySortBucket: leading bracket skipped', () => {
+  expect(classifySortBucket('【张三】')).toBe('han')
+})
 
-Deno.test("classifySortBucket: A12中文 → latin (first strong char is A)", () => {
-  assertEquals(classifySortBucket("A12中文"), "latin");
-});
+test('classifySortBucket: A12中文 → latin (first strong char is A)', () => {
+  expect(classifySortBucket('A12中文')).toBe('latin')
+})
 
-Deno.test("classifySortBucket: 123abc → digit", () => {
-  assertEquals(classifySortBucket("123abc"), "digit");
-});
+test('classifySortBucket: 123abc → digit', () => {
+  expect(classifySortBucket('123abc')).toBe('digit')
+})
 
 // --- bucket ordering ---
-Deno.test("compareStrings: bucket order ascending (digit < latin < han < hiragana < katakana < hangul < other)", () => {
-  assert(compareStrings("1", "A") < 0);
-  assert(compareStrings("A", "张") < 0);
-  assert(compareStrings("张", "あ") < 0);
-  assert(compareStrings("あ", "ア") < 0);
-  assert(compareStrings("ア", "가") < 0);
-  assert(compareStrings("가", "#") < 0);
-});
+test('compareStrings: bucket order ascending (digit < latin < han < hiragana < katakana < hangul < other)', () => {
+  assert(compareStrings('1', 'A') < 0)
+  assert(compareStrings('A', '张') < 0)
+  assert(compareStrings('张', 'あ') < 0)
+  assert(compareStrings('あ', 'ア') < 0)
+  assert(compareStrings('ア', '가') < 0)
+  assert(compareStrings('가', '#') < 0)
+})
 
-Deno.test("compareStrings: bucket order is preserved regardless of numeric value", () => {
+test('compareStrings: bucket order is preserved regardless of numeric value', () => {
   // 1000 (digit) should come before A (latin)
-  assert(compareStrings("1000", "A") < 0);
-});
+  assert(compareStrings('1000', 'A') < 0)
+})
 
 // --- mixed natural sort ---
-Deno.test("compareStrings: numeric strings sort naturally", () => {
-  assert(compareStrings("2", "19") < 0);
-  assert(compareStrings("A2", "A19") < 0);
-  assert(compareStrings("SKU-2", "SKU-19") < 0);
-});
+test('compareStrings: numeric strings sort naturally', () => {
+  assert(compareStrings('2', '19') < 0)
+  assert(compareStrings('A2', 'A19') < 0)
+  assert(compareStrings('SKU-2', 'SKU-19') < 0)
+})
 
-Deno.test("compareStrings: mixed CJK with numbers sort naturally", () => {
-  assert(compareStrings("张2", "张19") < 0);
-  assert(compareStrings("第2名", "第19名") < 0);
-});
+test('compareStrings: mixed CJK with numbers sort naturally', () => {
+  assert(compareStrings('张2', '张19') < 0)
+  assert(compareStrings('第2名', '第19名') < 0)
+})
 
-Deno.test("compareStrings: mixed kana with numbers sort naturally", () => {
-  assert(compareStrings("あ2", "あ19") < 0);
-});
+test('compareStrings: mixed kana with numbers sort naturally', () => {
+  assert(compareStrings('あ2', 'あ19') < 0)
+})
 
-Deno.test("compareStrings: mixed hangul with numbers sort naturally", () => {
-  assert(compareStrings("가2", "가19") < 0);
-});
+test('compareStrings: mixed hangul with numbers sort naturally', () => {
+  assert(compareStrings('가2', '가19') < 0)
+})
 
-Deno.test("stableSortRows: mixed natural sort descending", () => {
-  const rows = [{ v: "A19" }, { v: "A2" }, { v: "A1" }];
+test('stableSortRows: mixed natural sort descending', () => {
+  const rows = [{ v: 'A19' }, { v: 'A2' }, { v: 'A1' }]
   const result = stableSortRows(
     rows,
-    { key: "v", getValue: (r: any) => r.v },
-    "descend",
-  );
-  assertEquals(result[0].v, "A19");
-  assertEquals(result[1].v, "A2");
-  assertEquals(result[2].v, "A1");
-});
+    { key: 'v', getValue: (r: { v: string }) => r.v },
+    'descend',
+  )
+  expect(result[0].v).toBe('A19')
+  expect(result[1].v).toBe('A2')
+  expect(result[2].v).toBe('A1')
+})
 
-Deno.test("stableSortRows: mixed natural sort keeps nulls at end in descend", () => {
-  const rows = [{ v: "A2" }, { v: null }, { v: "A19" }];
+test('stableSortRows: mixed natural sort keeps nulls at end in descend', () => {
+  const rows = [{ v: 'A2' }, { v: null }, { v: 'A19' }]
   const result = stableSortRows(
     rows,
-    { key: "v", getValue: (r: any) => r.v },
-    "descend",
-  );
-  assertEquals(result[0].v, "A19");
-  assertEquals(result[1].v, "A2");
-  assertEquals(result[2].v, null);
-});
+    { key: 'v', getValue: (r: { v: string | null }) => r.v },
+    'descend',
+  )
+  expect(result[0].v).toBe('A19')
+  expect(result[1].v).toBe('A2')
+  expect(result[2].v).toBe(null)
+})

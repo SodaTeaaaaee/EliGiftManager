@@ -23,6 +23,7 @@ type DemandController struct {
 	templateMapping      *app.TemplateMappingService
 	inboxAssignmentRepo  domain.DemandInboxAssignmentRepository
 	inboxLineRepo        domain.DemandInboxLineRepository
+	addressUC            app.AddressManagementUseCase
 }
 
 func NewDemandController() *DemandController {
@@ -34,6 +35,8 @@ func NewDemandController() *DemandController {
 	waveRepo := infra.NewWaveRepository(gdb)
 	templateRepo := infra.NewDocumentTemplateRepository(gdb)
 	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	addressRepo := infra.NewAddressRepository(gdb)
+	fulfillRepo := infra.NewFulfillmentRepository(gdb)
 	return &DemandController{
 		intakeUC:             app.NewDemandIntakeUseCase(demandRepo),
 		entitlementRoutingUC: app.NewEntitlementRoutingUseCase(demandRepo, assignmentRepo),
@@ -46,6 +49,7 @@ func NewDemandController() *DemandController {
 		templateMapping:      app.NewTemplateMappingService(templateRepo, bindingRepo, integrationProfileRepo),
 		inboxAssignmentRepo:  infra.NewDemandInboxAssignmentRepository(gdb),
 		inboxLineRepo:        infra.NewDemandInboxLineRepository(gdb),
+		addressUC:            app.NewAddressManagementUseCase(addressRepo, fulfillRepo),
 	}
 }
 

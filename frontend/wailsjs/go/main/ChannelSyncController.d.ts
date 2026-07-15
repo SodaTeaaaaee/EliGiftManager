@@ -10,6 +10,8 @@ export function DeleteCarrierMapping(arg1:number):Promise<void>;
 
 export function ExecuteChannelSyncJob(arg1:number):Promise<dto.ExecuteSyncResult>;
 
+export function ImportCarrierMappings(arg1:dto.ImportCarrierMappingsInput):Promise<dto.ImportCarrierMappingsResult>;
+
 export function ListCarrierMappings(arg1:number):Promise<Array<dto.CarrierMappingDTO>>;
 
 export function ListChannelSyncJobsByWave(arg1:number):Promise<Array<dto.ChannelSyncJobDTO>>;

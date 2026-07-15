@@ -14,6 +14,7 @@ type shipmentImportUseCase struct {
 	supplierRepo domain.SupplierOrderRepository
 	fulfillRepo  domain.FulfillmentLineRepository
 	basisStamp   *BasisStampService
+	reconcile    *shipmentReconcileDeps
 }
 
 // NewShipmentImportUseCase constructs a ShipmentImportUseCase.

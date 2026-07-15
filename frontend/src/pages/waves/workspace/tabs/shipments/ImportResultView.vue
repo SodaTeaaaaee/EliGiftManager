@@ -37,6 +37,9 @@ export interface ImportResultViewData {
   successCount: number
   errorCount: number
   rows: ImportResultViewRow[]
+  /** Non-blocking, row-level mapping warnings (e.g. unknown mapping-dest
+   * vocabulary) — values were still kept and imported. */
+  warnings: string[]
 }
 
 const props = defineProps<{ result: ImportResultViewData }>()
@@ -46,6 +49,7 @@ const emit = defineEmits<{ 'new-import': [] }>()
 const { t } = useI18n({ useScope: 'global' })
 
 const hasErrors = computed(() => props.result.rows.length > 0)
+const hasWarnings = computed(() => props.result.warnings.length > 0)
 const summaryTone = computed(() => (props.result.errorCount > 0 ? 'warning' : 'success'))
 </script>
 
@@ -73,6 +77,18 @@ const summaryTone = computed(() => (props.result.errorCount > 0 ? 'warning' : 's
         <ul v-else class="import-result-view__error-list">
           <li v-for="row in result.rows" :key="row.rowNo" class="import-result-view__error-row">
             {{ t('waveWorkspace.shipments.import.result.errorRow', { index: row.rowNo, reason: row.reason }) }}
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="hasWarnings" class="import-result-view__warnings">
+        <CalloutBar
+          tone="warning"
+          :message="t('waveWorkspace.shipments.import.result.warningCount', { count: result.warnings.length })"
+        />
+        <ul class="import-result-view__warning-list">
+          <li v-for="(warning, idx) in result.warnings" :key="idx" class="import-result-view__warning-row">
+            {{ warning }}
           </li>
         </ul>
       </div>
@@ -124,6 +140,32 @@ const summaryTone = computed(() => (props.result.errorCount > 0 ? 'warning' : 's
   border-radius: var(--radius-sm);
   background: var(--status-error-bg);
   color: var(--status-error-fg);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+}
+
+.import-result-view__warnings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.import-result-view__warning-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  max-height: 320px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.import-result-view__warning-row {
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
   font-family: var(--font-body);
   font-size: var(--font-size-sm);
 }

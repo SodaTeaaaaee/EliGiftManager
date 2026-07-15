@@ -5,14 +5,25 @@
  * the operator confirms/edits before the profile + template are actually created
  * via `createProfile` / `createDocumentTemplate` (bridge.ts).
  *
- * `defaultColumns` keys are the 12 canonical destFields consumed by the backend's
- * `TemplateMappingRules.Columns` (see `internal/app/template_mapping_service.go`
- * `setDemandLineField` — snake_case, NOT the camelCase entity/DTO field names).
- * Values are best-guess CSV header names for that platform's typical export —
- * starter guesses only, always user-editable in the wizard's mapping step.
+ * Mapping seeds may be either:
+ * - `defaultColumns` (v1 header-mode dest → CSV header), or
+ * - `defaultMapping` (full v2 FieldMappingValue shape: mode/positions/hasHeader).
+ *
+ * Dest keys use v2 namespaced form (`line.*` / `document.*` / `recipient.*`).
+ * Bare line keys are still accepted and normalised by `mappingFromPreset` /
+ * `serializeMappingRules`.
+ *
+ * Bilibili membership ships a **config-level** positional three-column example
+ * (no header row) — not a hard-coded parser. Sample shape (SampleData 会员列表):
+ * col0=gift level, col1=UID, col2=display name.
  */
 
-/** One of the 12 destFields `TemplateMappingRules.Columns`/`Defaults` accepts. */
+import {
+  ensureNamespacedDestKey,
+  type FieldMappingValue,
+} from '@/shared/ui/field-mapping'
+
+/** One of the 12 destFields `TemplateMappingRules.Columns`/`Defaults` accepts (unprefixed). */
 export type IntakeDestField =
   | 'line_type'
   | 'obligation_trigger_kind'
@@ -50,10 +61,63 @@ export interface PlatformPreset {
   sourceSurface: string
   /** Seeds `CreateProfileInput.demandKind` — MUST be one of the backend's two whitelisted values. */
   demandKind: 'membership_entitlement' | 'retail_order'
-  /** destField -> likely CSV header name, seeding the wizard's column-mapping step. */
-  defaultColumns: Partial<Record<IntakeDestField, string>>
+  /**
+   * Seeds `CreateProfileInput.factorySupplierPlatform` — factory-facing platform
+   * label written onto supplier orders / product catalog fallback.
+   */
+  factorySupplierPlatform?: string
+  /**
+   * destField -> likely CSV header name, seeding the wizard's column-mapping
+   * step (header mode). Optional when `defaultMapping` is present.
+   */
+  defaultColumns?: Partial<Record<IntakeDestField | string, string>>
+  /**
+   * Optional full v2 mapping seed. When present, takes precedence over
+   * `defaultColumns` for the wizard's initial FieldMappingValue.
+   */
+  defaultMapping?: Partial<FieldMappingValue>
   /** Seeds the 6 boolean capability flags on the new integration profile. */
   defaultCapabilities: Partial<IntakeProfileCapabilities>
+}
+
+function mapRecordKeys<T>(record: Record<string, T> | undefined): Record<string, T> {
+  const out: Record<string, T> = {}
+  for (const [k, v] of Object.entries(record ?? {})) {
+    out[ensureNamespacedDestKey(k)] = v
+  }
+  return out
+}
+
+/** Build a v2 FieldMappingValue from a preset (columns or full defaultMapping). */
+export function mappingFromPreset(preset: PlatformPreset): FieldMappingValue {
+  if (preset.defaultMapping) {
+    return {
+      version: 2,
+      mode: preset.defaultMapping.mode ?? 'header',
+      hasHeader: preset.defaultMapping.hasHeader ?? true,
+      columns: mapRecordKeys(preset.defaultMapping.columns ?? {}),
+      positions: mapRecordKeys(preset.defaultMapping.positions ?? {}),
+      defaults: mapRecordKeys(preset.defaultMapping.defaults ?? {}),
+      transforms: preset.defaultMapping.transforms
+        ? mapRecordKeys(preset.defaultMapping.transforms)
+        : undefined,
+      columnOrder: preset.defaultMapping.columnOrder
+        ? preset.defaultMapping.columnOrder.map(ensureNamespacedDestKey)
+        : [],
+      required: preset.defaultMapping.required
+        ? preset.defaultMapping.required.map(ensureNamespacedDestKey)
+        : undefined,
+    }
+  }
+  return {
+    version: 2,
+    mode: 'header',
+    hasHeader: true,
+    columns: mapRecordKeys((preset.defaultColumns ?? {}) as Record<string, string>),
+    positions: {},
+    defaults: {},
+    columnOrder: [],
+  }
 }
 
 export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
@@ -64,11 +128,12 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
     sourceChannel: 'patreon',
     sourceSurface: 'membership',
     demandKind: 'membership_entitlement',
+    factorySupplierPlatform: 'patreon',
     defaultColumns: {
-      external_title: 'Reward',
-      requested_quantity: 'Quantity',
-      entitlement_code: 'Tier',
-      recipient_input_payload: 'Address',
+      'line.external_title': 'Reward',
+      'line.requested_quantity': 'Quantity',
+      'line.entitlement_code': 'Tier',
+      'line.recipient_input_payload': 'Address',
     },
     defaultCapabilities: {
       supportsPartialShipment: true,
@@ -86,11 +151,31 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
     sourceChannel: 'bilibili',
     sourceSurface: 'membership',
     demandKind: 'membership_entitlement',
-    defaultColumns: {
-      external_title: '礼物名称',
-      requested_quantity: '数量',
-      entitlement_code: '大航海等级',
-      recipient_input_payload: '收货地址',
+    factorySupplierPlatform: 'bilibili',
+    // Config-level positional three-column example (SampleData 会员列表, no header):
+    // col0 = gift level, col1 = platform UID, col2 = display name.
+    defaultMapping: {
+      version: 2,
+      mode: 'positional',
+      hasHeader: false,
+      columns: {},
+      positions: {
+        'line.gift_level_snapshot': 0,
+        'document.source_customer_ref': 1,
+        'document.display_name': 2,
+      },
+      defaults: {
+        'line.line_type': 'entitlement_rule',
+        'line.requested_quantity': '1',
+        'line.obligation_trigger_kind': 'periodic_membership',
+        'line.entitlement_authority': 'upstream_platform',
+        'line.routing_disposition': 'accepted',
+      },
+      columnOrder: [
+        'line.gift_level_snapshot',
+        'document.source_customer_ref',
+        'document.display_name',
+      ],
     },
     defaultCapabilities: {
       supportsPartialShipment: true,
@@ -102,16 +187,66 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
     },
   },
   {
+    key: 'bilibili_retail',
+    labelKey: 'intakeWizard.presets.bilibili_retail.label',
+    descKey: 'intakeWizard.presets.bilibili_retail.description',
+    sourceChannel: 'bilibili',
+    sourceSurface: 'retail',
+    demandKind: 'retail_order',
+    factorySupplierPlatform: 'bilibili',
+    // SampleData 单个订单数据 — Chinese header columns locked to export headers.
+    // Remaining sample columns (规格/订单价格（含运费）/订单状态/付款时间/最晚发货时间/买家留言)
+    // are intentionally unmapped until a dest field is needed.
+    defaultMapping: {
+      version: 2,
+      mode: 'header',
+      hasHeader: true,
+      columns: {
+        'line.external_title': '商品名称',
+        'line.requested_quantity': '数量',
+        'recipient.name': '收货人姓名',
+        'recipient.phone': '联系电话',
+        'recipient.address_line1': '收货地址',
+        'document.source_document_no': '订单号',
+        'document.display_name': '买家昵称',
+      },
+      positions: {},
+      defaults: {
+        'line.line_type': 'sku_order',
+        'line.entitlement_authority': 'upstream_platform',
+        'line.routing_disposition': 'accepted',
+      },
+      columnOrder: [
+        'line.external_title',
+        'line.requested_quantity',
+        'recipient.name',
+        'recipient.phone',
+        'recipient.address_line1',
+        'document.source_document_no',
+        'document.display_name',
+      ],
+    },
+    defaultCapabilities: {
+      supportsPartialShipment: false,
+      supportsApiImport: false,
+      supportsApiExport: false,
+      requiresCarrierMapping: true,
+      requiresExternalOrderNo: true,
+      allowsManualClosure: false,
+    },
+  },
+  {
     key: 'gumroad',
     labelKey: 'intakeWizard.presets.gumroad.label',
     descKey: 'intakeWizard.presets.gumroad.description',
     sourceChannel: 'gumroad',
     sourceSurface: 'retail',
     demandKind: 'retail_order',
+    factorySupplierPlatform: 'gumroad',
     defaultColumns: {
-      external_title: 'Product Name',
-      requested_quantity: 'Quantity',
-      recipient_input_payload: 'Shipping Address',
+      'line.external_title': 'Product Name',
+      'line.requested_quantity': 'Quantity',
+      'line.recipient_input_payload': 'Shipping Address',
     },
     defaultCapabilities: {
       supportsPartialShipment: false,
@@ -129,11 +264,12 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
     sourceChannel: 'youtube',
     sourceSurface: 'membership',
     demandKind: 'membership_entitlement',
+    factorySupplierPlatform: 'youtube',
     defaultColumns: {
-      external_title: 'Reward Name',
-      requested_quantity: 'Quantity',
-      entitlement_code: 'Membership Level',
-      recipient_input_payload: 'Shipping Address',
+      'line.external_title': 'Reward Name',
+      'line.requested_quantity': 'Quantity',
+      'line.entitlement_code': 'Membership Level',
+      'line.recipient_input_payload': 'Shipping Address',
     },
     defaultCapabilities: {
       supportsPartialShipment: true,
@@ -151,6 +287,7 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
     sourceChannel: '',
     sourceSurface: '',
     demandKind: 'membership_entitlement',
+    factorySupplierPlatform: '',
     defaultColumns: {},
     defaultCapabilities: {},
   },

@@ -52,11 +52,36 @@ func (a *App) PickCSVFile() (string, error) {
 	})
 }
 
+// PickTabularFile opens a native dialog for CSV / XLSX / XLS spreadsheet files.
+func (a *App) PickTabularFile() (string, error) {
+	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "选择表格文件",
+		Filters: []wailsruntime.FileFilter{
+			{DisplayName: "Tabular Files", Pattern: "*.csv;*.xlsx;*.xls"},
+			{DisplayName: "CSV Files", Pattern: "*.csv"},
+			{DisplayName: "Excel Files", Pattern: "*.xlsx;*.xls"},
+		},
+	})
+}
+
 func (a *App) PickZIPFile() (string, error) {
 	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
 		Title: "选择 ZIP 文件",
 		Filters: []wailsruntime.FileFilter{
 			{DisplayName: "ZIP Files", Pattern: "*.zip"},
+		},
+	})
+}
+
+// PickCatalogImportFile opens a native dialog for product-catalog imports:
+// ZIP (with images) or tabular CSV / XLSX / XLS.
+func (a *App) PickCatalogImportFile() (string, error) {
+	return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+		Title: "选择商品目录文件",
+		Filters: []wailsruntime.FileFilter{
+			{DisplayName: "Catalog Files", Pattern: "*.zip;*.csv;*.xlsx;*.xls"},
+			{DisplayName: "ZIP Files", Pattern: "*.zip"},
+			{DisplayName: "Tabular Files", Pattern: "*.csv;*.xlsx;*.xls"},
 		},
 	})
 }

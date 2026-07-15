@@ -73,3 +73,17 @@ func (r *documentTemplateRepository) ListByDocumentType(ctx context.Context, doc
 	}
 	return out, nil
 }
+
+func (r *documentTemplateRepository) Update(ctx context.Context, t *domain.DocumentTemplate) error {
+	p := persistence.DocumentTemplateFromDomain(t)
+	p.ID = t.ID
+	if err := r.db.WithContext(ctx).Save(p).Error; err != nil {
+		return err
+	}
+	*t = *persistence.DocumentTemplateToDomain(p)
+	return nil
+}
+
+func (r *documentTemplateRepository) Delete(ctx context.Context, id uint) error {
+	return r.db.WithContext(ctx).Delete(&persistence.DocumentTemplate{}, id).Error
+}

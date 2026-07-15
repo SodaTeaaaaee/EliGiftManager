@@ -6,8 +6,16 @@ export function BindTemplateToProfile(arg1:dto.BindTemplateToProfileInput):Promi
 
 export function CreateDocumentTemplate(arg1:dto.CreateDocumentTemplateInput):Promise<dto.DocumentTemplateDTO>;
 
+export function DeleteDocumentTemplate(arg1:number):Promise<void>;
+
 export function GetDefaultTemplateForProfile(arg1:number,arg2:string):Promise<dto.DocumentTemplateDTO>;
 
 export function ListBindingsByProfile(arg1:number):Promise<Array<dto.ProfileTemplateBindingDTO>>;
 
 export function ListDocumentTemplates():Promise<Array<dto.DocumentTemplateDTO>>;
+
+export function SetDefaultBinding(arg1:number):Promise<void>;
+
+export function UnbindTemplate(arg1:number):Promise<void>;
+
+export function UpdateDocumentTemplate(arg1:dto.UpdateDocumentTemplateInput):Promise<dto.DocumentTemplateDTO>;
