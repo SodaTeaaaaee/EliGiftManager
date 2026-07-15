@@ -594,6 +594,20 @@ export namespace dto {
 	        this.isDefault = source["isDefault"];
 	    }
 	}
+	export class CSVFilePreviewDTO {
+	    headers: string[];
+	    rows: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CSVFilePreviewDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.headers = source["headers"];
+	        this.rows = source["rows"];
+	    }
+	}
 	export class CarrierMappingDTO {
 	    id: number;
 	    integrationProfileId: number;
@@ -1434,6 +1448,76 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class CustomerProfilePageFilterInput {
+	    keyword: string;
+	    platform: string;
+	    missingAddressOnly: boolean;
+	    sortBy: string;
+	    sortDir: string;
+	    limit: number;
+	    offset: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerProfilePageFilterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.keyword = source["keyword"];
+	        this.platform = source["platform"];
+	        this.missingAddressOnly = source["missingAddressOnly"];
+	        this.sortBy = source["sortBy"];
+	        this.sortDir = source["sortDir"];
+	        this.limit = source["limit"];
+	        this.offset = source["offset"];
+	    }
+	}
+	export class CustomerProfilePageResult {
+	    items: CustomerProfileDTO[];
+	    totalCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerProfilePageResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], CustomerProfileDTO);
+	        this.totalCount = source["totalCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class DemandCSVImportError {
+	    rowIndex: number;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandCSVImportError(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.rowIndex = source["rowIndex"];
+	        this.reason = source["reason"];
+	    }
+	}
 	export class DemandDocumentDTO {
 	    id: number;
 	    kind: string;
@@ -1482,6 +1566,11 @@ export namespace dto {
 	    assignment: string;
 	    demandKind: string;
 	    integrationProfileId?: number;
+	    waveId?: number;
+	    sortBy: string;
+	    sortDir: string;
+	    limit: number;
+	    offset: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new DemandInboxFilterInput(source);
@@ -1492,6 +1581,11 @@ export namespace dto {
 	        this.assignment = source["assignment"];
 	        this.demandKind = source["demandKind"];
 	        this.integrationProfileId = source["integrationProfileId"];
+	        this.waveId = source["waveId"];
+	        this.sortBy = source["sortBy"];
+	        this.sortDir = source["sortDir"];
+	        this.limit = source["limit"];
+	        this.offset = source["offset"];
 	    }
 	}
 	export class DemandInboxRowDTO {
@@ -1542,6 +1636,39 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	    }
 	}
+	export class DemandInboxPageResult {
+	    items: DemandInboxRowDTO[];
+	    totalCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DemandInboxPageResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], DemandInboxRowDTO);
+	        this.totalCount = source["totalCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class PaginationResult {
 	    page: number;
 	    pageSize: number;
@@ -1905,6 +2032,66 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.createdBy = source["createdBy"];
 	    }
+	}
+	export class ImportDemandCSVInput {
+	    integrationProfileId: number;
+	    documentType: string;
+	    sourceDocumentNo: string;
+	    sourceCustomerRef: string;
+	    importMode: string;
+	    rows: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportDemandCSVInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.documentType = source["documentType"];
+	        this.sourceDocumentNo = source["sourceDocumentNo"];
+	        this.sourceCustomerRef = source["sourceCustomerRef"];
+	        this.importMode = source["importMode"];
+	        this.rows = source["rows"];
+	    }
+	}
+	export class ImportDemandCSVResult {
+	    document?: DemandDocumentDTO;
+	    errors: DemandCSVImportError[];
+	    totalProcessed: number;
+	    successCount: number;
+	    errorCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportDemandCSVResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.document = this.convertValues(source["document"], DemandDocumentDTO);
+	        this.errors = this.convertValues(source["errors"], DemandCSVImportError);
+	        this.totalProcessed = source["totalProcessed"];
+	        this.successCount = source["successCount"];
+	        this.errorCount = source["errorCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ImportDemandTemplateInput {
 	    integrationProfileId: number;
@@ -2388,6 +2575,8 @@ export namespace dto {
 	    updatedDemandDocs: number;
 	    updatedParticipants: number;
 	    updatedFulfillmentLines: number;
+	    mergeId: number;
+	    undoAvailable: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new MergeProfilesResult(source);
@@ -2400,6 +2589,8 @@ export namespace dto {
 	        this.updatedDemandDocs = source["updatedDemandDocs"];
 	        this.updatedParticipants = source["updatedParticipants"];
 	        this.updatedFulfillmentLines = source["updatedFulfillmentLines"];
+	        this.mergeId = source["mergeId"];
+	        this.undoAvailable = source["undoAvailable"];
 	    }
 	}
 	export class MergeSuggestionDTO {
@@ -2574,6 +2765,62 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
+	}
+	export class ProductMasterPageFilterInput {
+	    keyword: string;
+	    productKinds: string[];
+	    archivedOnly: boolean;
+	    sortBy: string;
+	    sortDir: string;
+	    limit: number;
+	    offset: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMasterPageFilterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.keyword = source["keyword"];
+	        this.productKinds = source["productKinds"];
+	        this.archivedOnly = source["archivedOnly"];
+	        this.sortBy = source["sortBy"];
+	        this.sortDir = source["sortDir"];
+	        this.limit = source["limit"];
+	        this.offset = source["offset"];
+	    }
+	}
+	export class ProductMasterPageResult {
+	    items: ProductMasterDTO[];
+	    totalCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductMasterPageResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], ProductMasterDTO);
+	        this.totalCount = source["totalCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ProfileTemplateBindingDTO {
 	    id: number;
@@ -2751,8 +2998,60 @@ export namespace dto {
 		}
 	}
 	
+	export class ShipmentByWavePageFilterInput {
+	    waveId: number;
+	    sortBy: string;
+	    sortDir: string;
+	    limit: number;
+	    offset: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShipmentByWavePageFilterInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.sortBy = source["sortBy"];
+	        this.sortDir = source["sortDir"];
+	        this.limit = source["limit"];
+	        this.offset = source["offset"];
+	    }
+	}
 	
 	
+	export class ShipmentPageResult {
+	    items: ShipmentDTO[];
+	    totalCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new ShipmentPageResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], ShipmentDTO);
+	        this.totalCount = source["totalCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class SnapshotProductDetailItem {
 	    masterId: number;
 	    product: ProductDTO;
@@ -2930,6 +3229,34 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class SupplierOrderLineShippedDTO {
+	    lineId: number;
+	    fulfillmentLineId: number;
+	    batchNo: string;
+	    supplierLineNo: number;
+	    supplierSku: string;
+	    submittedQuantity: number;
+	    acceptedQuantity: number;
+	    shippedQuantity: number;
+	    remainingQuantity: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SupplierOrderLineShippedDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.lineId = source["lineId"];
+	        this.fulfillmentLineId = source["fulfillmentLineId"];
+	        this.batchNo = source["batchNo"];
+	        this.supplierLineNo = source["supplierLineNo"];
+	        this.supplierSku = source["supplierSku"];
+	        this.submittedQuantity = source["submittedQuantity"];
+	        this.acceptedQuantity = source["acceptedQuantity"];
+	        this.shippedQuantity = source["shippedQuantity"];
+	        this.remainingQuantity = source["remainingQuantity"];
+	    }
+	}
 	export class SystemSettingsDTO {
 	    autoMergeCrossPlatform: boolean;
 	    autoMergeByEmail: boolean;
@@ -2958,6 +3285,40 @@ export namespace dto {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.waveId = source["waveId"];
 	        this.demandDocumentId = source["demandDocumentId"];
+	    }
+	}
+	export class UndoCustomerMergeInput {
+	    mergeId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UndoCustomerMergeInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	    }
+	}
+	export class UndoCustomerMergeResult {
+	    mergeId: number;
+	    restoredSourceProfileId: number;
+	    targetProfileId: number;
+	    restoredIdentityCount: number;
+	    restoredAddressCount: number;
+	    restoredDemandDocumentCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new UndoCustomerMergeResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	        this.restoredSourceProfileId = source["restoredSourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.restoredIdentityCount = source["restoredIdentityCount"];
+	        this.restoredAddressCount = source["restoredAddressCount"];
+	        this.restoredDemandDocumentCount = source["restoredDemandDocumentCount"];
 	    }
 	}
 	export class UpdateAddressInput {

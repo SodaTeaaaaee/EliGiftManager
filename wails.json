@@ -3,7 +3,7 @@
   "name": "EliGiftManager",
   "outputfilename": "EliGiftManager",
   "frontend:dir": "frontend",
-  "frontend:install": "deno install",
+  "frontend:install": "deno task prepare",
   "frontend:build": "deno task build",
   "frontend:dev:watcher": "deno task dev",
   "frontend:dev:serverUrl": "http://127.0.0.1:5173",

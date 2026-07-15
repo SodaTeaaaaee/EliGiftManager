@@ -7,3 +7,4 @@ export type * from "./product";
 export type * from "./profile";
 export type * from "./address";
 export type * from "./merge";
+export type * from "./customer";

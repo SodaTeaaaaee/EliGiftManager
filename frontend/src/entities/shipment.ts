@@ -3,15 +3,10 @@
  * from generated Wails models (wailsjs/go/models.ts).
  */
 import type { dto } from '@/../wailsjs/go/models'
+import type { ShipmentStatus as DomainShipmentStatus } from '@/shared/api/generated/enums'
 
 /** Shipment lifecycle status. */
-export type ShipmentStatus =
-  | 'pending'
-  | 'shipped'
-  | 'in_transit'
-  | 'delivered'
-  | 'exception'
-  | 'returned'
+export type ShipmentStatus = DomainShipmentStatus
 
 /** Import mode for bulk shipment import. */
 export type ImportMode = 'reject_all' | 'skip_invalid'

@@ -7,7 +7,9 @@
     "preview": "vite preview --host 127.0.0.1 --strictPort --port 4173",
     "typecheck": "vue-tsc -b",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:enums": "deno run --allow-read --allow-write scripts/gen-enums.ts",
+    "lint:guardrails": "deno run --allow-read scripts/guardrails.ts && deno run --allow-read scripts/gen-enums.ts --check"
   },
   "exclude": [
     "dist",

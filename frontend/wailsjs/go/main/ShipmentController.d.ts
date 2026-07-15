@@ -4,6 +4,8 @@ import {dto} from '../models';
 
 export function CreateShipment(arg1:dto.CreateShipmentInput):Promise<dto.ShipmentDTO>;
 
+export function GetSupplierOrderLineShippedSummary(arg1:number):Promise<Array<dto.SupplierOrderLineShippedDTO>>;
+
 export function ImportShipments(arg1:dto.ImportShipmentInput):Promise<dto.ImportShipmentResult>;
 
 export function ListShipmentsByWave(arg1:number):Promise<Array<dto.ShipmentDTO>>;

@@ -3,6 +3,7 @@ node_modules/.tmp/
 dist/
 dist-ssr/
 .vite/
+.cache/
 coverage/
 *.local
 *.tsbuildinfo

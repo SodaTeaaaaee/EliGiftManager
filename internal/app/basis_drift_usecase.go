@@ -69,6 +69,13 @@ func (uc *basisDriftDetectionUseCase) DetectWaveBasisDrift(ctx context.Context, 
 	structuralSignals := uc.detectStructuralUnsafety(ctx, waveID)
 	signals = append(signals, structuralSignals...)
 
+	// Normalize nil → empty slice so JSON encodes as [] not null. Wails
+	// convertValues preserves null, and frontend optional chains that only
+	// guard the parent object (e.g. overview?.basisDriftSignals.length)
+	// throw TypeError on a null list.
+	if signals == nil {
+		signals = []dto.BasisDriftSignalDTO{}
+	}
 	return signals, nil
 }
 

@@ -16,7 +16,7 @@ export default defineConfig({
     strictPort: true,
   },
   build: {
-    emptyOutDir: false,
+    emptyOutDir: true,
   },
   preview: {
     host: "127.0.0.1",

@@ -1,216 +1,158 @@
 import { createRouter, createWebHashHistory } from "vue-router";
+import { useRouteProgressStore } from "@/shared/model/route-progress";
 
-// NOTE: createWebHashHistory is correct for Wails desktop (file:// protocol).
+// Module augmentation: `meta.navTitleKey` is an i18n message key (not a
+// resolved string) read by `PlaceholderPage.vue` to render its title.
+declare module "vue-router" {
+  interface RouteMeta {
+    navTitleKey?: string;
+  }
+}
+
+// NOTE: createWebHashHistory is required for Wails desktop (file:// protocol).
 // If the app ever targets web/SSR, switch to createWebHistory.
+//
+// `meta.navTitleKey` on the placeholder routes below is an i18n message KEY
+// (not a resolved string) consumed by `PlaceholderPage.vue` — every one of
+// the plan 2.1 top-level nav destinations gets a real, distinctly-routable
+// page so `SideNav`'s active-item highlighting is correct even before the
+// real page for that section is built. Swapping a placeholder for its real
+// page later is a one-line `component:` change here, nothing else moves.
 const router = createRouter({
   history: createWebHashHistory(),
   routes: [
     {
       path: "/",
-      component: () => import("@/app/AppLayout.vue"),
+      name: "home",
+      component: () => import("@/pages/home/HomePage.vue"),
+    },
+    {
+      path: "/waves",
+      name: "waves",
+      component: () => import("@/pages/waves/WavesPage.vue"),
+      meta: { navTitleKey: "nav.waves" },
+    },
+    {
+      // Parent shell route (plan 3.3): `WaveWorkspaceShell` owns the header +
+      // `WorkspaceNav` rail and provides the single `useWaveWorkspace()`
+      // context; each child renders inside its `<RouterView/>`. The
+      // empty-path child KEEPS the name `wave-workspace` so P1's
+      // `buildWaveFilterLink({name:'wave-workspace',params:{id},query})`
+      // deep link keeps resolving unchanged.
+      path: "/waves/:id",
+      component: () => import("@/pages/waves/workspace/WaveWorkspaceShell.vue"),
+      meta: { navTitleKey: "nav.waves" },
       children: [
-        { path: "", redirect: "/dashboard" },
-
-        // ── Action Center ──
         {
-          path: "dashboard",
-          name: "dashboard",
-          component: () => import("@/pages/dashboard/DashboardPage.vue"),
-        },
-
-        // ── Waves (波次列表) ──
-        {
-          path: "waves",
-          name: "waves",
-          component: () => import("@/pages/waves/WavesPage.vue"),
-        },
-
-        // ── Wave Workspace (波次工作区) ──
-        {
-          path: "waves/:waveId",
-          component: () =>
-            import("@/pages/wave-workspace/WaveWorkspaceLayout.vue"),
-          children: [
-            {
-              path: "",
-              name: "wave-overview-step",
-              component: () =>
-                import("@/pages/wave-workspace/WaveOverviewStep.vue"),
-            },
-            {
-              path: "intake",
-              name: "wave-intake",
-              component: () =>
-                import("@/pages/wave-workspace/WaveIntakeStep.vue"),
-            },
-            // Initial Allocation 折叠分组：两个独立子项
-            {
-              path: "allocation/membership",
-              name: "wave-membership-allocation",
-              component: () =>
-                import(
-                  "@/pages/membership-allocation/MembershipAllocationPage.vue"
-                ),
-            },
-            {
-              path: "allocation/demand",
-              name: "wave-demand-mapping",
-              component: () =>
-                import("@/pages/demand-mapping/DemandMappingPage.vue"),
-            },
-            // Legacy compatibility — 旧 demandKind 参数路径
-            {
-              path: "allocation/:demandKind?",
-              name: "wave-allocation-legacy",
-              component: () =>
-                import(
-                  "@/pages/membership-allocation/MembershipAllocationPage.vue"
-                ),
-            },
-            {
-              path: "demand-mapping/:demandKind?",
-              name: "wave-demand-mapping-legacy",
-              component: () =>
-                import("@/pages/demand-mapping/DemandMappingPage.vue"),
-            },
-            {
-              path: "adjustment-review",
-              name: "wave-adjustment-review",
-              component: () =>
-                import(
-                  "@/pages/adjustment-review/AdjustmentReviewPage.vue"
-                ),
-            },
-            {
-              path: "readiness",
-              name: "wave-readiness",
-              component: () =>
-                import("@/pages/wave-workspace/WaveReadinessStep.vue"),
-            },
-            {
-              path: "export",
-              name: "wave-export",
-              component: () =>
-                import("@/pages/wave-workspace/WaveExportStep.vue"),
-            },
-            {
-              path: "shipment",
-              name: "wave-shipment",
-              component: () =>
-                import("@/pages/wave-workspace/WaveShipmentStep.vue"),
-            },
-            {
-              path: "channel-sync",
-              name: "wave-channel-sync",
-              component: () =>
-                import("@/pages/wave-workspace/WaveChannelSyncStep.vue"),
-            },
-            {
-              path: "history",
-              name: "wave-history",
-              component: () =>
-                import("@/pages/wave-workspace/WaveHistoryPage.vue"),
-            },
-          ],
-        },
-
-        // ── Demand Inbox (全局需求收件箱) ──
-        {
-          path: "demand-inbox",
-          name: "demand-inbox",
-          component: () =>
-            import("@/pages/demand-inbox/DemandInboxPage.vue"),
-        },
-
-        // ── Profiles (集成配置 master-detail) ──
-        {
-          path: "profiles",
-          name: "profiles",
-          component: () =>
-            import("@/pages/profile/ProfileManagementPage.vue"),
+          path: "",
+          name: "wave-workspace",
+          component: () => import("@/pages/waves/workspace/tabs/WaveOverviewTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
         {
-          path: "profiles/:id",
-          name: "profile-detail",
-          component: () =>
-            import("@/pages/profile/ProfileDetailPage.vue"),
-        },
-
-        // ── Customers (客户档案 CRM) ──
-        {
-          path: "customers",
-          name: "customers",
-          component: () =>
-            import("@/pages/customer/CustomerManagementPage.vue"),
+          path: "intake",
+          name: "wave-workspace-intake",
+          component: () => import("@/pages/waves/workspace/tabs/WaveIntakeTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
         {
-          path: "customers/:id",
-          name: "customer-detail",
-          component: () =>
-            import("@/pages/customer/CustomerDetailPage.vue"),
-        },
-
-        // ── Products (商品库) ──
-        {
-          path: "products",
-          name: "products",
-          component: () =>
-            import("@/pages/product/ProductManagementPage.vue"),
-        },
-
-        // ── Settings (设置) ──
-        {
-          path: "settings",
-          name: "settings",
-          component: () =>
-            import("@/pages/settings/SettingsPage.vue"),
-        },
-
-        // Legacy redirects — keep old routes functional
-        {
-          path: "demand-intake",
-          redirect: "/demand-inbox",
+          path: "allocation",
+          name: "wave-workspace-allocation",
+          component: () => import("@/pages/waves/workspace/tabs/WaveAllocationTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
         {
-          path: "wave-overview",
-          redirect: "/dashboard",
+          path: "lines",
+          name: "wave-workspace-lines",
+          component: () => import("@/pages/waves/workspace/tabs/WaveLinesTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
         {
-          path: "templates",
-          redirect: "/profiles",
+          path: "readiness",
+          name: "wave-workspace-readiness",
+          component: () => import("@/pages/waves/workspace/tabs/WaveLinesTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
         {
-          path: "templates/bindings",
-          redirect: "/profiles",
+          path: "factory",
+          name: "wave-workspace-factory",
+          component: () => import("@/pages/waves/workspace/tabs/WaveFactoryTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
         {
-          path: "templates/csv-import",
-          redirect: "/profiles",
+          path: "shipments",
+          name: "wave-workspace-shipments",
+          component: () => import("@/pages/waves/workspace/tabs/WaveShipmentsTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
         {
-          path: "addresses",
-          redirect: "/customers",
-        },
-        {
-          path: "merge",
-          redirect: "/customers",
+          path: "closure",
+          name: "wave-workspace-closure",
+          component: () => import("@/pages/waves/workspace/tabs/WaveClosureTab.vue"),
+          meta: { navTitleKey: "nav.waves" },
         },
       ],
+    },
+    {
+      path: "/inbox",
+      name: "inbox",
+      component: () => import("@/pages/inbox/InboxPage.vue"),
+      meta: { navTitleKey: "nav.inbox" },
+    },
+    {
+      path: "/customers",
+      name: "customers",
+      component: () => import("@/pages/customers/CustomersPage.vue"),
+      meta: { navTitleKey: "nav.customers" },
+    },
+    {
+      // Unified customer detail: single edit surface (profile fields,
+      // identities, addresses, fulfillment history, merge preview). `id` is
+      // passed as a prop (see `props: true` below) rather than read from
+      // `route.params` inside the component, matching Vue Router's typed
+      // prop-passing convention.
+      path: "/customers/:id",
+      name: "customer-detail",
+      component: () => import("@/pages/customers/CustomerDetailPage.vue"),
+      props: true,
+      meta: { navTitleKey: "nav.customers" },
+    },
+    {
+      path: "/products",
+      name: "products",
+      component: () => import("@/pages/products/ProductsPage.vue"),
+      meta: { navTitleKey: "nav.products" },
+    },
+    {
+      path: "/integrations",
+      name: "integrations",
+      component: () => import("@/pages/integrations/IntegrationsPage.vue"),
+      meta: { navTitleKey: "nav.integrations" },
+    },
+    {
+      path: "/settings",
+      name: "settings",
+      component: () => import("@/pages/settings/SettingsPage.vue"),
+      meta: { navTitleKey: "nav.settings" },
+    },
+    {
+      path: "/design-lab",
+      name: "design-lab",
+      component: () => import("@/pages/design-lab/DesignLabPage.vue"),
     },
   ],
 });
 
-router.onError((error) => {
-  // Chunk load failures from dynamic imports (network issues, stale deployment, etc.)
-  const msg = error?.message ?? '';
-  const isChunkError =
-    msg.includes('Failed to fetch dynamically imported module') ||
-    msg.includes('Importing a module script failed') ||
-    msg.includes('Unable to preload CSS') ||
-    msg.includes('error loading dynamically imported module');
-  if (isChunkError) {
-    window.dispatchEvent(new CustomEvent('router-chunk-error', { detail: error }));
-  }
+router.beforeEach(() => {
+  useRouteProgressStore().start();
+});
+
+router.afterEach(() => {
+  useRouteProgressStore().finish();
+});
+
+router.onError(() => {
+  useRouteProgressStore().finish();
 });
 
 export { router };

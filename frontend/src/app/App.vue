@@ -1,195 +1,106 @@
 <script setup lang="ts">
-import { computed, onErrorCaptured, onMounted, onUnmounted, ref, watchEffect } from "vue";
+/**
+ * App root — NConfigProvider (theme/tokens bridge) wraps FeedbackProvider
+ * (the app's only toast/receipt path) wraps AppShell (nav + content zone,
+ * itself the only place a content-crash error boundary lives). `abstract`
+ * on NConfigProvider skips its default wrapper `<div>` so AppShell's own
+ * `height: 100%` flex chain reaches all the way up to `#app` uninterrupted
+ * (see `shared/styles/reset.css`'s `#app { height: 100% }`).
+ */
+import { computed, onMounted } from "vue";
 import { RouterView } from "vue-router";
+import { NConfigProvider } from "naive-ui";
 import {
-  NButton,
-  NConfigProvider,
-  NGlobalStyle,
-  NDialogProvider,
-  NMessageProvider,
-  NResult,
-  darkTheme,
-  useOsTheme,
-  type GlobalThemeOverrides,
-} from "naive-ui";
-import { useThemeStore } from "@/shared/model/theme";
-import { useLocaleStore } from "@/shared/model/locale";
-import { useContextMenu } from "@/shared/composables/useContextMenu";
-import ContextMenu from "@/shared/ui/ContextMenu.vue";
-import { useI18n } from "@/shared/i18n";
+  GridOutline,
+  TicketOutline,
+  DownloadOutline,
+  PeopleOutline,
+  CubeOutline,
+  GitNetworkOutline,
+  SettingsOutline,
+  FlaskOutline,
+} from "@vicons/ionicons5";
+import { AppShell, useActionCenterBadgesStore, type NavGroupSpec, type NavItemSpec } from "@/shared/ui/shell";
+import { FeedbackProvider, DisconnectedBanner, TopProgressBar } from "@/shared/ui/feedback";
+import { useNaiveTheme } from "@/shared/theme/naive-bridge";
+import { useGlobalViewHotkeys } from "@/shared/lib/view-hotkeys";
 
-const lightThemeOverrides: GlobalThemeOverrides = {
-  common: {
-    primaryColor: '#3b82f6',
-    primaryColorHover: '#60a5fa',
-    primaryColorPressed: '#2563eb',
-    primaryColorSuppl: '#3b82f6',
-    infoColor: '#0ea5e9',
-    successColor: '#10b981',
-    warningColor: '#f59e0b',
-    errorColor: '#ef4444',
-    fontFamily: "'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
-    borderRadius: '8px',
-    borderRadiusSmall: '6px',
-    boxShadow1: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-    boxShadow2: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    boxShadow3: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-  },
-}
+const { theme, themeOverrides } = useNaiveTheme();
+useGlobalViewHotkeys();
 
-const darkThemeOverrides: GlobalThemeOverrides = {
-  common: {
-    primaryColor: '#60a5fa',
-    primaryColorHover: '#93c5fd',
-    primaryColorPressed: '#3b82f6',
-    primaryColorSuppl: '#60a5fa',
-    infoColor: '#38bdf8',
-    successColor: '#34d399',
-    warningColor: '#fbbf24',
-    errorColor: '#f87171',
-    fontFamily: "'Inter', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
-    borderRadius: '8px',
-    borderRadiusSmall: '6px',
-    boxShadow1: '0 1px 2px 0 rgba(0, 0, 0, 0.5)',
-    boxShadow2: '0 4px 6px -1px rgba(0, 0, 0, 0.6), 0 2px 4px -1px rgba(0, 0, 0, 0.4)',
-    boxShadow3: '0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.4)',
-  },
-}
-
-const themeStore = useThemeStore()
-themeStore.hydrate()
-const localeStore = useLocaleStore()
-localeStore.hydrate()
-const { locale } = useI18n()
-
-const osTheme = useOsTheme()
-
-const resolvedTheme = computed<'light' | 'dark'>(() => {
-  if (themeStore.preference === 'system') {
-    return osTheme.value === 'dark' ? 'dark' : 'light'
-  }
-
-  return themeStore.preference
-})
-
-const naiveTheme = computed(() => (resolvedTheme.value === 'dark' ? darkTheme : null))
-const themeOverrides = computed(() =>
-  resolvedTheme.value === 'dark' ? darkThemeOverrides : lightThemeOverrides,
-)
-
-watchEffect(() => {
-  if (typeof document === 'undefined') {
-    return
-  }
-
-  document.documentElement.dataset.theme = resolvedTheme.value
-  document.documentElement.lang = locale.value
-  document.documentElement.style.colorScheme = resolvedTheme.value
-})
-
-const { handleEvent } = useContextMenu()
-
-function onGlobalContextMenu(event: MouseEvent) {
-  event.preventDefault()
-  handleEvent(event)
-}
-
-// ── zoom persistence via devicePixelRatio ──
-// WebView2 native zoom changes devicePixelRatio proportionally.
-// Shutdown: Go OnBeforeClose → WindowExecJS → persistZoom().
-// Backend saveZoom binding will be restored when Wails bridge is rebuilt.
-let baseDPR = 1
-
-function persistZoom() {
-  const current = window.devicePixelRatio
-  const zoom = Math.round((current / baseDPR) * 100)
-  if (zoom < 25 || zoom > 500) return
-  // TODO(V2): restore saveZoom backend call when Wails bridge rebuilt
-  try {
-    localStorage.setItem('eligift_zoom', String(zoom))
-  } catch {
-    /* ok */
-  }
-}
-
-// Exposed for Go OnBeforeClose → WindowExecJS call.
-;(window as any).__persistZoom = persistZoom
-
-// ── Error boundary ──
-const renderError = ref<Error | null>(null)
-const renderErrorInfo = ref('')
-const chunkError = ref(false)
-
-onErrorCaptured((err: Error, _instance, info: string) => {
-  // Wails bridge not ready during dev — non-fatal, let it propagate normally
-  const msg = err?.message ?? ''
-  if (msg.includes('wails') || msg.includes('runtime.')) {
-    console.warn('[App] Wails bridge error (non-fatal):', err)
-    return false
-  }
-  console.error('[App] Render error captured:', err, '\nComponent info:', info)
-  renderError.value = err
-  renderErrorInfo.value = info
-  return false
-})
-
-function reloadPage() {
-  window.location.reload()
-}
-
-const onChunkError = () => {
-  chunkError.value = true
-}
-
+// Plan 3.1's nav badges (ActionCenterSummaryDTO.navBadges) are fetched once
+// on mount and kept in a small cross-cutting store (see
+// shared/ui/shell/action-center-badges.ts) so any later page can trigger a
+// fresh count (e.g. after closing a wave) without prop-drilling through
+// AppShell. An empty/failed summary yields an empty countsByNavKey map, so
+// every item below simply renders with no badge — defensive by construction.
+const actionCenterBadges = useActionCenterBadgesStore();
 onMounted(() => {
-  document.addEventListener('contextmenu', onGlobalContextMenu)
-  baseDPR = window.devicePixelRatio
-  window.addEventListener('router-chunk-error', onChunkError)
-})
+  void actionCenterBadges.refresh();
+});
 
-onUnmounted(() => {
-  document.removeEventListener('contextmenu', onGlobalContextMenu)
-  window.removeEventListener('router-chunk-error', onChunkError)
-  persistZoom()
-})
+function badgeFor(navKey: string): NavItemSpec["badge"] {
+  const count = actionCenterBadges.countsByNavKey[navKey] ?? 0;
+  return count > 0 ? { count, tone: "warning" } : undefined;
+}
+
+// Plan 2.1's 6 top-level sections + a dev-only Design Lab entry. Real
+// destinations that don't have a rebuilt page yet route to a distinct
+// placeholder route (see app/router/index.ts) rather than all piling onto
+// "/", so SideNav's active-item highlighting stays correct.
+const navGroups = computed<NavGroupSpec[]>(() => [
+  {
+    key: "primary",
+    items: [
+      { key: "home", labelKey: "nav.home", icon: GridOutline, to: { name: "home" }, badge: badgeFor("home") },
+      { key: "waves", labelKey: "nav.waves", icon: TicketOutline, to: { name: "waves" }, badge: badgeFor("waves") },
+      { key: "inbox", labelKey: "nav.inbox", icon: DownloadOutline, to: { name: "inbox" }, badge: badgeFor("inbox") },
+      {
+        key: "customers",
+        labelKey: "nav.customers",
+        icon: PeopleOutline,
+        to: { name: "customers" },
+        badge: badgeFor("customers"),
+      },
+      {
+        key: "products",
+        labelKey: "nav.products",
+        icon: CubeOutline,
+        to: { name: "products" },
+        badge: badgeFor("products"),
+      },
+      {
+        key: "integrations",
+        labelKey: "nav.integrations",
+        icon: GitNetworkOutline,
+        to: { name: "integrations" },
+        badge: badgeFor("integrations"),
+      },
+    ],
+  },
+  {
+    key: "dev",
+    labelKey: "nav.devSectionLabel",
+    items: [{ key: "design-lab", labelKey: "designLab.title", icon: FlaskOutline, to: { name: "design-lab" } }],
+  },
+]);
+
+const settingsItem: NavItemSpec = {
+  key: "settings",
+  labelKey: "nav.settings",
+  icon: SettingsOutline,
+  to: { name: "settings" },
+};
 </script>
 
 <template>
-  <NConfigProvider :theme="naiveTheme" :theme-overrides="themeOverrides">
-    <NGlobalStyle />
-    <NMessageProvider>
-      <NDialogProvider>
-        <!-- Chunk load failure banner — shown above router content, nav stays visible -->
-        <div v-if="chunkError" style="padding: 16px">
-          <NResult
-            status="error"
-            title="页面加载失败"
-            description="路由模块加载出错，可能是网络问题或版本更新导致。"
-          >
-            <template #footer>
-              <NButton type="primary" @click="reloadPage">重新加载</NButton>
-            </template>
-          </NResult>
-        </div>
-        <!-- Render error boundary — replaces router-view area only, nav stays visible -->
-        <div v-else-if="renderError" style="padding: 16px">
-          <NResult
-            status="error"
-            title="页面渲染出错"
-            :description="renderError.message"
-          >
-            <template #footer>
-              <NButton type="primary" @click="reloadPage">重新加载</NButton>
-            </template>
-          </NResult>
-          <pre
-            v-if="renderErrorInfo"
-            style="margin-top: 12px; font-size: 12px; opacity: 0.6; white-space: pre-wrap; word-break: break-all"
-          >{{ renderErrorInfo }}</pre>
-        </div>
-        <RouterView v-else />
-      </NDialogProvider>
-    </NMessageProvider>
-    <ContextMenu />
+  <NConfigProvider abstract :theme="theme" :theme-overrides="themeOverrides">
+    <TopProgressBar />
+    <FeedbackProvider>
+      <AppShell :groups="navGroups" :settings-item="settingsItem">
+        <DisconnectedBanner />
+        <RouterView />
+      </AppShell>
+    </FeedbackProvider>
   </NConfigProvider>
 </template>

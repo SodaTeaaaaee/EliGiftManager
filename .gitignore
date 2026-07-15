@@ -59,5 +59,15 @@ $null
 env/
 /go/
 
-# agent/tooling output residue
-frontend-next/*_out.txt
+# agent/tooling output residue (typecheck/build console dumps, agent scratch)
+frontend/*_out.txt
+frontend/*_fresh.txt
+frontend-legacy/*_out.txt
+frontend-legacy/*_fresh.txt
+
+# Legacy frontend generated/local artifacts (mirrors frontend rules)
+frontend-legacy/.vite/
+frontend-legacy/node_modules/
+frontend-legacy/dist/*
+frontend-legacy/coverage/
+frontend-legacy/*.tsbuildinfo

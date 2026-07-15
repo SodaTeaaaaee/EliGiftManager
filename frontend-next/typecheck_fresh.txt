@@ -1,1 +1,0 @@
-[0m[32mTask[0m [0m[36mtypecheck[0m vue-tsc -b

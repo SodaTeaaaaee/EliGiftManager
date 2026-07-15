@@ -387,6 +387,8 @@ skins/<name>/
 
 ### 6.1 目录与切换
 
+> 已于 2026-07-13 执行。
+
 ```
 frontend/          # 旧前端，重写期间保持可用、原则上功能冻结
 frontend-next/     # 新前端（独立 deno.json / vite / 自己的 wailsjs 生成副本）

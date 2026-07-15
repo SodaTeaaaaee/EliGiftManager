@@ -6,6 +6,10 @@ export function CreateShipment(arg1) {
   return window['go']['main']['ShipmentController']['CreateShipment'](arg1);
 }
 
+export function GetSupplierOrderLineShippedSummary(arg1) {
+  return window['go']['main']['ShipmentController']['GetSupplierOrderLineShippedSummary'](arg1);
+}
+
 export function ImportShipments(arg1) {
   return window['go']['main']['ShipmentController']['ImportShipments'](arg1);
 }

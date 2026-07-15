@@ -9,3 +9,5 @@
 import type { dto } from '@/../wailsjs/go/models'
 
 export type MergeProfilesResult = dto.MergeProfilesResult
+export type UndoCustomerMergeInput = dto.UndoCustomerMergeInput
+export type UndoCustomerMergeResult = dto.UndoCustomerMergeResult

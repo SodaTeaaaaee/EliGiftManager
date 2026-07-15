@@ -317,8 +317,10 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(ctx context.Context, wave
 	}
 
 	now := time.Now()
-	var createdLines []domain.FulfillmentLine
-	var blockedLines []dto.DemandMappingBlockedLine
+	// Pre-allocate empty (non-nil) slices so DemandMappingResult JSON encodes
+	// createdLines/blockedLines as [] rather than null when nothing matched.
+	createdLines := make([]domain.FulfillmentLine, 0)
+	blockedLines := make([]dto.DemandMappingBlockedLine, 0)
 
 	for docIdx := range docs {
 		doc := &docs[docIdx]

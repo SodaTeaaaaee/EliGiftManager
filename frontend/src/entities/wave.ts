@@ -6,22 +6,20 @@
  * a snapshot concept used only in the frontend domain layer.
  */
 import type { dto } from '@/../wailsjs/go/models'
+import type {
+  LifecycleStage as DomainLifecycleStage,
+  SnapshotType as DomainSnapshotType,
+  WaveType as DomainWaveType,
+} from '@/shared/api/generated/enums'
 
 /** Classification of wave composition. */
-export type WaveType = 'membership' | 'retail' | 'mixed'
+export type WaveType = DomainWaveType
 
 /** Lifecycle phase of a wave. */
-export type LifecycleStage =
-  | 'intake'
-  | 'allocation'
-  | 'review'
-  | 'execution'
-  | 'syncing_back'
-  | 'awaiting_manual_closure'
-  | 'closed'
+export type LifecycleStage = DomainLifecycleStage
 
 /** Role of a participant within this wave snapshot. */
-export type SnapshotType = 'member' | 'buyer' | 'mixed'
+export type SnapshotType = DomainSnapshotType
 
 /** All wave allocations — policy rules, contribution sums, final results. */
 export type InitialAllocationStrategy =
