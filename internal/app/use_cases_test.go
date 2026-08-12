@@ -455,6 +455,19 @@ func (m *mockAssignmentRepo) Create(ctx context.Context, assignment *domain.Wave
 	return nil
 }
 
+func (m *mockAssignmentRepo) ExistsByDocument(ctx context.Context, demandDocumentID uint) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, aa := range m.assignments {
+		for _, a := range aa {
+			if a.DemandDocumentID == demandDocumentID {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}
+
 func (m *mockAssignmentRepo) ListByWave(ctx context.Context, waveID uint) ([]domain.WaveDemandAssignment, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

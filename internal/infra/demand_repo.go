@@ -119,7 +119,7 @@ func (r *demandRepository) FindLineByID(ctx context.Context, id uint) (*domain.D
 
 func (r *demandRepository) ListLinesByDocument(ctx context.Context, docID uint) ([]domain.DemandLine, error) {
 	var ps []persistence.DemandLine
-	if err := r.db.WithContext(ctx).Where("demand_document_id = ?", docID).Find(&ps).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("demand_document_id = ?", docID).Order("id").Find(&ps).Error; err != nil {
 		return nil, err
 	}
 	result := make([]domain.DemandLine, len(ps))

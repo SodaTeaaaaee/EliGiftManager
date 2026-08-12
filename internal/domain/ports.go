@@ -157,6 +157,8 @@ type AllocationPolicyRuleRepository interface {
 // WaveDemandAssignmentRepository defines persistence operations for wave-demand linkage.
 type WaveDemandAssignmentRepository interface {
 	Create(ctx context.Context, assignment *WaveDemandAssignment) error
+	// ExistsByDocument reports whether the demand document is linked to any wave.
+	ExistsByDocument(ctx context.Context, demandDocumentID uint) (bool, error)
 	DeleteByWaveAndDocument(ctx context.Context, waveID uint, demandDocumentID uint) error
 	DeleteByWave(ctx context.Context, waveID uint) error
 	ListByWave(ctx context.Context, waveID uint) ([]WaveDemandAssignment, error)

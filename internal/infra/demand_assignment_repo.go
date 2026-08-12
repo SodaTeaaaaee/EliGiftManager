@@ -41,6 +41,15 @@ func (r *waveDemandAssignmentRepository) Create(ctx context.Context, assignment 
 	return nil
 }
 
+func (r *waveDemandAssignmentRepository) ExistsByDocument(ctx context.Context, demandDocumentID uint) (bool, error) {
+	var count int64
+	if err := r.db.WithContext(ctx).Model(&persistence.WaveDemandAssignment{}).
+		Where("demand_document_id = ?", demandDocumentID).Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *waveDemandAssignmentRepository) DeleteByWaveAndDocument(ctx context.Context, waveID uint, demandDocumentID uint) error {
 	return r.db.WithContext(ctx).Where("wave_id = ? AND demand_document_id = ?", waveID, demandDocumentID).
 		Delete(&persistence.WaveDemandAssignment{}).Error

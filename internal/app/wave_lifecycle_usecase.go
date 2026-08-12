@@ -224,6 +224,29 @@ func (uc *waveLifecycleUseCase) assignOne(ctx context.Context, waveID, demandDoc
 		return fmt.Errorf("demand document %d not found: %w", demandDocumentID, err)
 	}
 
+	exists, err := uc.assignmentRepo.ExistsByDocument(ctx, demandDocumentID)
+	if err != nil {
+		return fmt.Errorf("check existing assignment for demand document %d: %w", demandDocumentID, err)
+	}
+	if exists {
+		return fmt.Errorf("demand document %d already assigned to a wave; cross-wave split is not supported", demandDocumentID)
+	}
+
+	// membership_entitlement docs may only enter a wave once every line has been
+	// triaged. retail_order is temporarily exempt: 节 3 lands retail
+	// auto-acceptance and tightens this gate to all kinds.
+	if doc.Kind == string(domain.DemandKindMembershipEntitlement) {
+		docLines, lineErr := uc.demandRepo.ListLinesByDocument(ctx, demandDocumentID)
+		if lineErr != nil {
+			return fmt.Errorf("list demand lines for demand document %d: %w", demandDocumentID, lineErr)
+		}
+		for _, l := range docLines {
+			if l.RoutingDisposition == string(domain.RoutingDispositionPendingIntake) {
+				return fmt.Errorf("demand document %d has pending_intake line(s); complete triage before assigning to a wave", demandDocumentID)
+			}
+		}
+	}
+
 	now := time.Now()
 	assignment := &domain.WaveDemandAssignment{
 		WaveID:           waveID,

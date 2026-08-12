@@ -372,3 +372,123 @@ func TestBatchUnassignDemandFromWaveReturnsPerItemResults(t *testing.T) {
 		t.Fatalf("doc 12 should fail with allocation-started reason, got %+v", result.Results[2])
 	}
 }
+
+func TestAssignOneRejectsAlreadyAssignedDocument(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, demandRepo, _ := newWaveLifecycleTestUC()
+
+	wave1 := &domain.Wave{Name: "assign-gate-wave-1"}
+	if err := waveRepo.Create(ctx, wave1); err != nil {
+		t.Fatalf("seed wave 1: %v", err)
+	}
+	wave2 := &domain.Wave{Name: "assign-gate-wave-2"}
+	if err := waveRepo.Create(ctx, wave2); err != nil {
+		t.Fatalf("seed wave 2: %v", err)
+	}
+
+	// Pre-advance the mock's auto-increment counter so the seeded document lands
+	// on the fixed ID 10 the call below references.
+	demandRepo.mu.Lock()
+	demandRepo.lastID = 9
+	demandRepo.mu.Unlock()
+	doc := &domain.DemandDocument{Kind: "retail_order", SourceChannel: "test", SourceDocumentNo: "DOC-10"}
+	if err := demandRepo.Create(ctx, doc); err != nil {
+		t.Fatalf("seed demand document: %v", err)
+	}
+	if doc.ID != 10 {
+		t.Fatalf("seeded demand document ID = %d, want 10", doc.ID)
+	}
+
+	// First assign doc 10 to wave 1 — this must succeed.
+	first, err := uc.BatchAssignDemandToWave(ctx, wave1.ID, []uint{10})
+	if err != nil {
+		t.Fatalf("first BatchAssignDemandToWave: %v", err)
+	}
+	if first.SuccessCount != 1 || first.FailureCount != 0 {
+		t.Fatalf("first assignment result = %+v, want 1 success / 0 failures", first)
+	}
+
+	// Assigning the same doc to wave 2 must be rejected item-wise (#34: no
+	// cross-wave split).
+	result, err := uc.BatchAssignDemandToWave(ctx, wave2.ID, []uint{10})
+	if err != nil {
+		t.Fatalf("second BatchAssignDemandToWave: %v", err)
+	}
+	if result.SuccessCount != 0 || result.FailureCount != 1 {
+		t.Fatalf("second assignment result = %+v, want 0 successes / 1 failure", result)
+	}
+	if len(result.Results) != 1 {
+		t.Fatalf("Results len = %d, want 1", len(result.Results))
+	}
+	item := result.Results[0]
+	if item.DemandDocumentID != 10 {
+		t.Fatalf("failed item DemandDocumentID = %d, want 10", item.DemandDocumentID)
+	}
+	if item.Success {
+		t.Fatal("expected doc 10 to fail on the second assignment, got success")
+	}
+	if !strings.Contains(item.Error, "already assigned") {
+		t.Fatalf("expected error to contain %q, got %q", "already assigned", item.Error)
+	}
+}
+
+func TestAssignOneRejectsMembershipDocWithPendingIntakeLines(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, demandRepo, _ := newWaveLifecycleTestUC()
+
+	wave := &domain.Wave{Name: "membership-gate-wave"}
+	if err := waveRepo.Create(ctx, wave); err != nil {
+		t.Fatalf("seed wave: %v", err)
+	}
+	if wave.ID != 1 {
+		t.Fatalf("seed wave ID = %d, want 1", wave.ID)
+	}
+
+	// Pre-advance the mock's auto-increment counter so the seeded document lands
+	// on the fixed ID 20 the call below references.
+	demandRepo.mu.Lock()
+	demandRepo.lastID = 19
+	demandRepo.mu.Unlock()
+	doc := &domain.DemandDocument{
+		Kind:             string(domain.DemandKindMembershipEntitlement),
+		SourceChannel:    "test",
+		SourceDocumentNo: "DOC-20",
+	}
+	if err := demandRepo.Create(ctx, doc); err != nil {
+		t.Fatalf("seed demand document: %v", err)
+	}
+	if doc.ID != 20 {
+		t.Fatalf("seeded demand document ID = %d, want 20", doc.ID)
+	}
+	if err := demandRepo.CreateLine(ctx, &domain.DemandLine{
+		DemandDocumentID:   doc.ID,
+		RoutingDisposition: string(domain.RoutingDispositionPendingIntake),
+	}); err != nil {
+		t.Fatalf("seed pending_intake demand line: %v", err)
+	}
+
+	// A membership_entitlement doc with a pending_intake line must not enter a
+	// wave until triage completes.
+	result, err := uc.BatchAssignDemandToWave(ctx, 1, []uint{20})
+	if err != nil {
+		t.Fatalf("BatchAssignDemandToWave: %v", err)
+	}
+	if result.SuccessCount != 0 || result.FailureCount != 1 {
+		t.Fatalf("assignment result = %+v, want 0 successes / 1 failure", result)
+	}
+	if len(result.Results) != 1 {
+		t.Fatalf("Results len = %d, want 1", len(result.Results))
+	}
+	item := result.Results[0]
+	if item.DemandDocumentID != 20 {
+		t.Fatalf("failed item DemandDocumentID = %d, want 20", item.DemandDocumentID)
+	}
+	if item.Success {
+		t.Fatal("expected doc 20 to fail with a pending_intake reason, got success")
+	}
+	if !strings.Contains(item.Error, "pending_intake") {
+		t.Fatalf("expected error to contain %q, got %q", "pending_intake", item.Error)
+	}
+}
