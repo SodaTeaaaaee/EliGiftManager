@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -10,6 +12,20 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 	"gorm.io/gorm"
 )
+
+// jsonIDs renders a []uint as a JSON array literal for history patch payloads.
+func jsonIDs(ids []uint) string {
+	var b strings.Builder
+	b.WriteString("[")
+	for i, id := range ids {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		b.WriteString(strconv.FormatUint(uint64(id), 10))
+	}
+	b.WriteString("]")
+	return b.String()
+}
 
 // buildWaveLifecycleUC constructs a WaveLifecycleUseCase whose repositories are all
 // bound to the given transaction, mirroring the pattern already used by
@@ -127,6 +143,42 @@ func (c *WaveController) UnassignDemandFromWave(input dto.UnassignDemandInput) e
 			InversePatchPayload: fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, input.WaveID, input.DemandDocumentID),
 		})
 	})
+}
+
+// BatchUnassignDemandFromWave returns multiple demand documents to the unassigned
+// pool. Unlike the single-item variant, the whole batch is applied in ONE transaction
+// and records ONE undo/redo history node — so a batch unassign can be undone with a
+// single Ctrl+Z instead of N.
+func (c *WaveController) BatchUnassignDemandFromWave(input dto.BatchUnassignDemandInput) (dto.BatchUnassignDemandResult, error) {
+	ctx := appContext
+	defer c.persistLifecycle(input.WaveID)
+
+	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
+	if err != nil {
+		return dto.BatchUnassignDemandResult{}, err
+	}
+
+	var result dto.BatchUnassignDemandResult
+	txErr := c.gdb.Transaction(func(tx *gorm.DB) error {
+		waveLifecycleUC := c.buildWaveLifecycleUC(tx)
+		result, err = waveLifecycleUC.BatchUnassignDemandFromWave(ctx, input.WaveID, input.DocIDs)
+		if err != nil {
+			return err
+		}
+		if result.SuccessCount == 0 {
+			return fmt.Errorf("batch unassign: no document could be unassigned")
+		}
+		return c.recordWaveLifecycleHistory(ctx, tx, input.WaveID, preSnapshot, app.RecordNodeInput{
+			CommandKind:         "batch_unassign_demand",
+			CommandSummary:      fmt.Sprintf("batch unassign %d demand(s) from wave %d", result.SuccessCount, input.WaveID),
+			PatchPayload:        fmt.Sprintf(`{"op":"batch_unassign_demand","wave_id":%d,"demand_document_ids":%s}`, input.WaveID, jsonIDs(input.DocIDs)),
+			InversePatchPayload: fmt.Sprintf(`{"op":"batch_assign_demand","wave_id":%d,"demand_document_ids":%s}`, input.WaveID, jsonIDs(input.DocIDs)),
+		})
+	})
+	if txErr != nil {
+		return dto.BatchUnassignDemandResult{}, txErr
+	}
+	return result, nil
 }
 
 // BatchAssignDemandToWave assigns multiple demand documents to a wave in one call,

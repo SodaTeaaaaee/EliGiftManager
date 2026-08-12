@@ -17,6 +17,7 @@ type WaveLifecycleUseCase interface {
 	CloseWave(ctx context.Context, input dto.CloseWaveInput) (dto.CloseWaveResult, error)
 	UnassignDemandFromWave(ctx context.Context, waveID uint, demandDocumentID uint) error
 	BatchAssignDemandToWave(ctx context.Context, waveID uint, docIDs []uint) (dto.BatchAssignDemandResult, error)
+	BatchUnassignDemandFromWave(ctx context.Context, waveID uint, docIDs []uint) (dto.BatchUnassignDemandResult, error)
 }
 
 type waveLifecycleUseCase struct {
@@ -170,6 +171,47 @@ func (uc *waveLifecycleUseCase) UnassignDemandFromWave(ctx context.Context, wave
 	}
 
 	return uc.assignmentRepo.DeleteByWaveAndDocument(ctx, waveID, demandDocumentID)
+}
+
+// BatchUnassignDemandFromWave returns multiple demand documents to the unassigned
+// pool with per-item partial-success semantics. A document is only removable while
+// allocation has not started for it (same rule as the single-item variant).
+func (uc *waveLifecycleUseCase) BatchUnassignDemandFromWave(ctx context.Context, waveID uint, docIDs []uint) (dto.BatchUnassignDemandResult, error) {
+	if _, err := uc.waveRepo.FindByID(ctx, waveID); err != nil {
+		return dto.BatchUnassignDemandResult{}, fmt.Errorf("wave %d not found: %w", waveID, err)
+	}
+
+	lines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
+	if err != nil {
+		return dto.BatchUnassignDemandResult{}, err
+	}
+	blockedByLines := make(map[uint]bool, len(lines))
+	for _, l := range lines {
+		if l.DemandDocumentID != nil {
+			blockedByLines[*l.DemandDocumentID] = true
+		}
+	}
+
+	result := dto.BatchUnassignDemandResult{Results: make([]dto.BatchUnassignDemandItemResult, 0, len(docIDs))}
+	for _, docID := range docIDs {
+		item := dto.BatchUnassignDemandItemResult{DemandDocumentID: docID}
+		if blockedByLines[docID] {
+			item.Error = fmt.Sprintf("demand document %d already has fulfillment lines in wave %d; allocation has started, unassign is no longer available", docID, waveID)
+			result.Results = append(result.Results, item)
+			result.FailureCount++
+			continue
+		}
+		if err := uc.assignmentRepo.DeleteByWaveAndDocument(ctx, waveID, docID); err != nil {
+			item.Error = err.Error()
+			result.Results = append(result.Results, item)
+			result.FailureCount++
+			continue
+		}
+		item.Success = true
+		result.Results = append(result.Results, item)
+		result.SuccessCount++
+	}
+	return result, nil
 }
 
 // assignOne performs the core single-document assignment: create the wave-demand

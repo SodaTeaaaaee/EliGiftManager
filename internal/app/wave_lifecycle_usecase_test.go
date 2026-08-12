@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -321,5 +322,53 @@ func TestListWaveFulfillmentRowsFilteredReturnsExpectedSubset(t *testing.T) {
 	}
 	if allPage.Pagination.TotalCount != 2 {
 		t.Fatalf("unfiltered TotalCount = %d, want 2", allPage.Pagination.TotalCount)
+	}
+}
+
+func TestBatchUnassignDemandFromWaveReturnsPerItemResults(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, demandRepo, fulfillRepo := newWaveLifecycleTestUC()
+
+	wave := &domain.Wave{Name: "batch-unassign-wave"}
+	if err := waveRepo.Create(ctx, wave); err != nil {
+		t.Fatalf("seed wave: %v", err)
+	}
+	if wave.ID != 1 {
+		t.Fatalf("seed wave ID = %d, want 1", wave.ID)
+	}
+
+	// Pre-advance the mock's auto-increment counter so the seeded documents land
+	// on the fixed IDs 10/11/12 the call below references.
+	demandRepo.mu.Lock()
+	demandRepo.lastID = 9
+	demandRepo.mu.Unlock()
+	for _, seedID := range []uint{10, 11, 12} {
+		doc := &domain.DemandDocument{Kind: "retail_order", SourceChannel: "test", SourceDocumentNo: fmt.Sprintf("DOC-%d", seedID)}
+		if err := demandRepo.Create(ctx, doc); err != nil {
+			t.Fatalf("seed demand document %d: %v", seedID, err)
+		}
+		if doc.ID != seedID {
+			t.Fatalf("seeded demand document ID = %d, want %d", doc.ID, seedID)
+		}
+	}
+
+	// doc 12 already has a fulfillment line — allocation has started for it, so
+	// it must fail while docs 10 and 11 unassign cleanly.
+	doc12 := uint(12)
+	if err := fulfillRepo.Create(ctx, &domain.FulfillmentLine{WaveID: wave.ID, DemandDocumentID: &doc12, Quantity: 1}); err != nil {
+		t.Fatalf("seed fulfillment line: %v", err)
+	}
+
+	result, err := uc.BatchUnassignDemandFromWave(ctx, 1, []uint{10, 11, 12})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SuccessCount != 2 || result.FailureCount != 1 {
+		t.Fatalf("want 2/1, got %+v", result)
+	}
+	// doc 12's failure reason must contain "allocation has started".
+	if result.Results[2].Success || !strings.Contains(result.Results[2].Error, "allocation has started") {
+		t.Fatalf("doc 12 should fail with allocation-started reason, got %+v", result.Results[2])
 	}
 }

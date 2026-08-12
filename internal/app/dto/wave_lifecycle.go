@@ -51,3 +51,24 @@ type BatchAssignDemandResult struct {
 	SuccessCount int                           `json:"successCount"`
 	FailureCount int                           `json:"failureCount"`
 }
+
+// BatchUnassignDemandInput carries a batch of demand documents to unassign from one wave.
+type BatchUnassignDemandInput struct {
+	WaveID uint   `json:"waveId"`
+	DocIDs []uint `json:"docIds"`
+}
+
+// BatchUnassignDemandItemResult reports the per-item outcome of a batch unassignment.
+type BatchUnassignDemandItemResult struct {
+	DemandDocumentID uint   `json:"demandDocumentId"`
+	Success          bool   `json:"success"`
+	Error            string `json:"error,omitempty"`
+}
+
+// BatchUnassignDemandResult aggregates per-item results for BatchUnassignDemandFromWave,
+// mirroring BatchAssignDemandResult's partial-success contract.
+type BatchUnassignDemandResult struct {
+	Results      []BatchUnassignDemandItemResult `json:"results"`
+	SuccessCount int                             `json:"successCount"`
+	FailureCount int                             `json:"failureCount"`
+}
