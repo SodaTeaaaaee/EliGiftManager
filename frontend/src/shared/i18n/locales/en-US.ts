@@ -777,6 +777,17 @@ export const enUS: AppMessageSchema = {
    * (this file is foundations-owned; the two page units cannot edit it).
    */
   waveWorkspace: {
+    /**
+     * `waveWorkspace.intake` — the wave-intake page (Task 7): pull-demands dialog,
+     * in-wave file import (import-then-assign), and batch unassign.
+     */
+    intake: {
+      pullDemands: 'Pull Demands',
+      pullSomeFailed: '{count} demand(s) failed to be pulled',
+      importIntoWave: 'Import File Into Wave',
+      unassignSelected: 'Unassign Selected',
+      unassignSomeFailed: '{count} demand(s) failed to be unassigned',
+    },
     shell: {
       loading: 'Loading wave workspace…',
       notFound: 'Wave not found, or failed to load.',
@@ -1643,6 +1654,11 @@ export const enUS: AppMessageSchema = {
       // added in lockstep to both locales per the hard rule, flagged in the handoff deviations.
       sourceSurface: 'Source Surface',
       selectedLines: '{n} lines selected',
+    },
+    // New leaves (Task 7): the wave-intake import flow — result-step "send to wave" CTA and the auto-assign failure notice.
+    import: {
+      sendToWave: 'Send to Wave',
+      assignToWaveFailed: 'Assign to wave failed',
     },
     importModal: {
       title: 'Import Demand Sheet',

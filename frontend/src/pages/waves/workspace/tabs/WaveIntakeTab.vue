@@ -1,28 +1,37 @@
 <script setup lang="ts">
 /**
- * WaveIntakeTab — the wave-scoped demand-intake tab (plan P4, replaces the
- * `WaveTabPlaceholder` at `wave-workspace-intake`). A THIN reuse of
- * `useInboxGrid`/`RowDetailPanel` (see `pages/inbox/inbox-grid/useInboxGrid.ts`)
- * scoped to the current wave via `useWaveWorkspaceContext()`: shows this
- * wave's already-assigned demand documents, offers an "assign more from
- * inbox" deep link to the global `/inbox` page (pre-filtered to
- * unassigned), and a per-row "unassign" action
- * (`unassignDemandFromWave`).
+ * WaveIntakeTab — the wave-scoped demand-intake tab (plan P4, Task 7 turns
+ * it into the self-sufficient 波内导入页面). Reuses `useInboxGrid` scoped to
+ * the current wave via `useWaveWorkspaceContext()`: shows this wave's
+ * already-assigned demand documents with the full inbox capability set
+ * (FilterBar + SavedViews + server pagination + selection), and offers
+ * three toolbar actions:
  *
- * `options.waveId` forces `assignment: 'assigned'` and sends the wave ID to
- * the server-paginated inbox endpoint.
+ * - 拉取需求 (primary) — `PullDemandsDialog`: browse the unassigned pool
+ *   (business-surface segmented + FilterBar + server paging), batch-pull
+ *   into the wave via `batchAssignDemandToWave`.
+ * - 导入文件入波 — `ImportFileModal` with `:target-wave-id` so a freshly
+ *   imported document is assigned into the wave automatically.
+ * - 从收件箱分派更多 (secondary) — deep link to `/inbox?assignment=unassigned`.
+ *
+ * Selection is wired to a batch-unassign action in `DataGrid`'s
+ * `#selection-toolbar` (`batchUnassignDemandFromWave`); single-row unassign
+ * and the row-detail panel are kept as before.
  */
 import { computed, h, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { NButton } from 'naive-ui'
 import { DataGrid, createColumns, type DataGridColumnSpec } from '@/shared/ui/data-grid'
+import { FilterBar, SavedViews } from '@/shared/ui/filter-bar'
 import { useFeedback } from '@/shared/ui/feedback'
-import { unassignDemandFromWave } from '@/shared/api/bridge'
+import { batchUnassignDemandFromWave, unassignDemandFromWave } from '@/shared/api/bridge'
 import { useWaveWorkspaceContext } from '@/shared/lib/wave-workspace/useWaveWorkspace'
 import { useInboxGrid } from '@/pages/inbox/inbox-grid/useInboxGrid'
 import { buildInboxColumns } from '@/pages/inbox/inbox-grid/columns'
 import RowDetailPanel from '@/pages/inbox/inbox-grid/RowDetailPanel.vue'
+import PullDemandsDialog from './intake/PullDemandsDialog.vue'
+import ImportFileModal from '@/pages/inbox/ImportFileModal.vue'
 import type { DemandInboxRow } from '@/entities/demand'
 
 const { t } = useI18n({ useScope: 'global' })
@@ -45,6 +54,35 @@ async function handleUnassign(row: DemandInboxRow): Promise<void> {
   } finally {
     unassigningId.value = null
   }
+}
+
+// ── 批量退单（selection toolbar）──
+
+const unassigningBatch = ref(false)
+
+async function handleBatchUnassign(): Promise<void> {
+  const docIds = grid.selectedKeys.value
+  if (docIds.length === 0) return
+  unassigningBatch.value = true
+  try {
+    const result = await batchUnassignDemandFromWave({ waveId: ctx.waveId.value, docIds })
+    if (result.failureCount > 0) {
+      feedback.error(t('waveWorkspace.intake.unassignSomeFailed', { count: result.failureCount }))
+    } else {
+      feedback.success(t('feedback.success'))
+    }
+    feedback.receipt({ kind: 'action', summary: t('waveWorkspace.intake.unassignSelected') })
+    grid.selectedKeys.value = []
+    await Promise.all([grid.mutationDone(), ctx.refresh()])
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    unassigningBatch.value = false
+  }
+}
+
+function handleSelectedKeysChange(keys: Array<string | number>): void {
+  grid.selectedKeys.value = keys as number[]
 }
 
 const columns = computed<DataGridColumnSpec<DemandInboxRow>[]>(() => [
@@ -77,6 +115,19 @@ function handleAssignMore(): void {
   void router.push({ name: 'inbox', query: { assignment: 'unassigned' } })
 }
 
+// ── 拉取需求 / 波内文件导入 ──
+
+const showPullDialog = ref(false)
+const showImportModal = ref(false)
+
+async function handlePulled(_count: number): Promise<void> {
+  await Promise.all([grid.mutationDone(), ctx.refresh()])
+}
+
+async function handleAssignedToWave(_docIds: number[]): Promise<void> {
+  await Promise.all([grid.mutationDone(), ctx.refresh()])
+}
+
 // ── Row detail panel ──
 
 const detailRow = ref<DemandInboxRow | null>(null)
@@ -99,13 +150,20 @@ async function handleDetailChanged(): Promise<void> {
 <template>
   <div class="wave-intake-tab">
     <div class="wave-intake-tab__toolbar">
-      <NButton type="primary" @click="handleAssignMore">{{ t('inbox.assignMoreFromInbox') }}</NButton>
+      <NButton secondary @click="handleAssignMore">{{ t('inbox.assignMoreFromInbox') }}</NButton>
+      <NButton @click="showImportModal = true">{{ t('waveWorkspace.intake.importIntoWave') }}</NButton>
+      <NButton type="primary" @click="showPullDialog = true">{{ t('waveWorkspace.intake.pullDemands') }}</NButton>
     </div>
+
+    <SavedViews :filters="grid.filters" scope-id="wave-intake" />
+    <FilterBar :filters="grid.filters" />
 
     <DataGrid
       :columns="gridColumns"
       :rows="grid.rows.value"
       row-key="demandDocumentId"
+      selectable
+      :selected-keys="grid.selectedKeys"
       :loading="grid.loading.value"
       :pagination="{
         server: {
@@ -117,10 +175,33 @@ async function handleDetailChanged(): Promise<void> {
         },
       }"
       :empty="{ title: t('inbox.empty.noneAssignedToWave') }"
+      @update:selected-keys="handleSelectedKeysChange"
       @row-click="handleRowClick"
-    />
+    >
+      <template #selection-toolbar>
+        <span class="wave-intake-tab__selection-count">
+          {{ t('inbox.batch.selected', { n: grid.selectedKeys.value.length }) }}
+        </span>
+        <NButton
+          size="small"
+          type="error"
+          :loading="unassigningBatch"
+          class="wave-intake-tab__selection-action"
+          @click="handleBatchUnassign"
+        >
+          {{ t('waveWorkspace.intake.unassignSelected') }}
+        </NButton>
+      </template>
+    </DataGrid>
 
     <RowDetailPanel :row="detailRow" :show="showDetail" @update:show="handleDetailVisibility" @changed="handleDetailChanged" />
+
+    <PullDemandsDialog v-model:show="showPullDialog" :wave-id="ctx.waveId.value" @pulled="handlePulled" />
+    <ImportFileModal
+      v-model:show="showImportModal"
+      :target-wave-id="ctx.waveId.value"
+      @assigned-to-wave="handleAssignedToWave"
+    />
   </div>
 </template>
 
@@ -134,5 +215,14 @@ async function handleDetailChanged(): Promise<void> {
 .wave-intake-tab__toolbar {
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.wave-intake-tab__selection-count {
+  font-weight: var(--font-weight-medium);
+}
+
+.wave-intake-tab__selection-action {
+  margin-left: auto;
 }
 </style>

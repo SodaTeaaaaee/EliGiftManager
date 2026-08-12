@@ -783,6 +783,16 @@ export const zhCN = {
    * (this file is foundations-owned; the two page units cannot edit it).
    */
   waveWorkspace: {
+    /**
+     * `waveWorkspace.intake` — 波内导入页（Task 7）：拉取需求弹窗、波内文件导入（导入即入波）、批量退单。
+     */
+    intake: {
+      pullDemands: '拉取需求',
+      pullSomeFailed: '部分需求拉取失败：{count} 份',
+      importIntoWave: '导入文件入波',
+      unassignSelected: '批量取消分派',
+      unassignSomeFailed: '部分需求取消分派失败：{count} 份',
+    },
     shell: {
       loading: '正在加载波次工作区…',
       notFound: '未找到该波次，或加载失败。',
@@ -1667,6 +1677,11 @@ export const zhCN = {
       // 契约未预先声明这两个叶子，按规则在中英文件中同步补充，并在交接 deviations 中标注。
       sourceSurface: '来源界面',
       selectedLines: '已选择 {n} 行',
+    },
+    // 新增叶子（Task 7）：波内导入流——结果步「发送到波次」CTA 与自动入波失败提示。
+    import: {
+      sendToWave: '发送到波次',
+      assignToWaveFailed: '分派到波次失败',
     },
     importModal: {
       title: '导入需求表格',

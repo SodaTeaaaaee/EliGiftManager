@@ -28,6 +28,8 @@ import {
   parseTabularFile,
   importDemandCSV,
   getDefaultTemplateForProfile,
+  batchAssignDemandToWave,
+  listWavesFiltered,
 } from '@/shared/api/bridge'
 import type { ImportDemandCSVResult } from '@/entities/demand'
 import type { dto } from '@/../wailsjs/go/models'
@@ -40,14 +42,18 @@ import { documentTypeForDemandKind, type DemandKind } from '@/pages/integrations
 import { canImportDemand } from '@/pages/integrations/profileAvailability'
 import ImportEvidenceReference from '@/shared/ui/customer-resolution/ImportEvidenceReference.vue'
 
-defineProps<{
+const props = defineProps<{
   show: boolean
+  /** 波内导入：设置后导入成功即把新单据自动分派进该波次（不再显示「发送到波次」选择器）。 */
+  targetWaveId?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'update:show', value: boolean): void
   /** Fires once a document was actually persisted (import succeeded, at least partially). */
   (e: 'imported'): void
+  /** Fires when the imported document was assigned into a wave (targetWaveId flow or the result-step picker). */
+  (e: 'assignedToWave', docIds: number[]): void
 }>()
 
 const { t, te } = useI18n({ useScope: 'global' })
@@ -138,6 +144,15 @@ watch(profileId, (id) => {
   if (id != null) void loadTemplatePreview(id)
 })
 
+// 打开即重置并加载 profiles——NModal 只在关闭路径回发 update:show(false)，
+// 打开路径只能由父级改 show prop 驱动，因此在这里监听。
+watch(
+  () => props.show,
+  (show) => {
+    if (show) void handleOpen()
+  },
+)
+
 async function handleOpen(): Promise<void> {
   currentStep.value = 'select'
   profileId.value = null
@@ -152,6 +167,9 @@ async function handleOpen(): Promise<void> {
   pickError.value = ''
   profilesError.value = ''
   templateNotice.value = ''
+  showSendPicker.value = false
+  targetPickerWaveId.value = null
+  sentToWave.value = false
 
   profilesLoading.value = true
   try {
@@ -223,6 +241,23 @@ async function handleImport(): Promise<void> {
     currentStep.value = 'result'
     if (result.document) {
       emit('imported')
+      // 波内导入：导入成功即自动把新单据分派进目标波次。
+      if (props.targetWaveId != null) {
+        try {
+          const assignResult = await batchAssignDemandToWave({
+            waveId: props.targetWaveId,
+            docIds: [result.document.id],
+          })
+          if (assignResult.failureCount > 0) {
+            feedback.error(t('inbox.import.assignToWaveFailed'))
+          } else {
+            sentToWave.value = true
+            emit('assignedToWave', [result.document.id])
+          }
+        } catch (err) {
+          feedback.error(t('inbox.import.assignToWaveFailed'), err instanceof Error ? err.message : String(err))
+        }
+      }
     }
   } catch (err) {
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
@@ -231,9 +266,59 @@ async function handleImport(): Promise<void> {
   }
 }
 
+// ── 结果步「发送到波次」picker（无 targetWaveId 的收件箱用法）──
+
+const showSendPicker = ref(false)
+const waveOptions = ref<SelectOption[]>([])
+const wavesLoading = ref(false)
+const targetPickerWaveId = ref<number | null>(null)
+const sendingToWave = ref(false)
+const sentToWave = ref(false)
+
+async function openSendToWavePicker(): Promise<void> {
+  showSendPicker.value = true
+  targetPickerWaveId.value = null
+  wavesLoading.value = true
+  try {
+    const page = await listWavesFiltered({ page: 1, pageSize: 200, sortBy: 'updatedAt', sortDesc: true })
+    waveOptions.value = page.items.map((wave) => ({ label: `${wave.name} (${wave.waveNo})`, value: wave.id }))
+  } catch (err) {
+    waveOptions.value = []
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    wavesLoading.value = false
+  }
+}
+
+const canConfirmSend = computed(() => targetPickerWaveId.value != null && !sendingToWave.value)
+
+async function handleConfirmSendToWave(): Promise<void> {
+  const doc = importResult.value?.document
+  if (targetPickerWaveId.value == null || doc == null) return
+  sendingToWave.value = true
+  try {
+    const assignResult = await batchAssignDemandToWave({
+      waveId: targetPickerWaveId.value,
+      docIds: [doc.id],
+    })
+    if (assignResult.failureCount > 0) {
+      feedback.error(t('inbox.import.assignToWaveFailed'))
+    } else {
+      sentToWave.value = true
+      feedback.success(t('feedback.success'))
+      emit('assignedToWave', [doc.id])
+      showSendPicker.value = false
+    }
+  } catch (err) {
+    feedback.error(t('inbox.import.assignToWaveFailed'), err instanceof Error ? err.message : String(err))
+  } finally {
+    sendingToWave.value = false
+  }
+}
+
 function handleUpdateShow(value: boolean): void {
+  // 打开路径由 `watch(() => props.show)` 驱动（NModal 只回发关闭）。
   emit('update:show', value)
-  if (value) void handleOpen()
 }
 
 const canNext = computed(() => {
@@ -351,12 +436,37 @@ const canNext = computed(() => {
               <li v-for="(warning, idx) in importResult.warnings" :key="idx">{{ warning }}</li>
             </ul>
             <div class="import-file-modal__actions">
+              <NButton
+                v-if="targetWaveId == null && importResult.document && !sentToWave"
+                secondary
+                @click="openSendToWavePicker"
+              >
+                {{ t('inbox.import.sendToWave') }}
+              </NButton>
               <NButton type="primary" @click="handleUpdateShow(false)">{{ t('common.close') }}</NButton>
             </div>
           </div>
         </template>
       </WizardFrame>
     </div>
+  </NModal>
+
+  <NModal v-model:show="showSendPicker" preset="card" :title="t('inbox.batch.chooseWave')" style="width: 420px">
+    <NSelect
+      v-model:value="targetPickerWaveId"
+      :options="waveOptions"
+      :loading="wavesLoading"
+      filterable
+      :placeholder="t('inbox.batch.chooseWave')"
+    />
+    <template #footer>
+      <div class="import-file-modal__actions">
+        <NButton @click="showSendPicker = false">{{ t('common.cancel') }}</NButton>
+        <NButton type="primary" :loading="sendingToWave" :disabled="!canConfirmSend" @click="handleConfirmSendToWave">
+          {{ t('inbox.batch.confirm') }}
+        </NButton>
+      </div>
+    </template>
   </NModal>
 </template>
 
