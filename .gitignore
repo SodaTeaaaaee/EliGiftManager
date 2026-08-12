@@ -75,3 +75,6 @@ frontend-legacy/*.tsbuildinfo
 
 # Handoff documents
 docs/handoff/
+
+# Claude Code SDD scratch (task briefs, reports, review packages, progress ledger)
+.superpowers/
