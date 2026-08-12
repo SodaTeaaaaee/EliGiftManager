@@ -167,7 +167,9 @@ function handleCardClick(card: StreamCard): void {
     router.push(buildWaveFilterLink(card.waveId, card.filter));
     return;
   }
-  router.push({ name: "inbox" });
+  // 待分诊卡深链预筛：routingDisposition=pending_intake 由收件箱 useUrlFilters
+  // 在 init 时读取（与 INBOX_GRID_FILTER_SCHEMA 的单数键一致）。
+  router.push({ name: "inbox", query: { routingDisposition: "pending_intake" } });
 }
 
 function handleWaveClick(waveId: number): void {
