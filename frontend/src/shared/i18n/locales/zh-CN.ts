@@ -1668,6 +1668,10 @@ export const zhCN = {
       assignToWave: '分派到波次',
       chooseWave: '选择目标波次',
       confirm: '确认分派',
+      // 新增叶子（Task 8）：分派回执带数量文案、picker 波次搜索框与 200 截断提示。
+      assignToWaveDone: '已分派 {n} 份需求',
+      waveKeywordPlaceholder: '按波次名称 / 编号搜索',
+      waveListTruncated: '匹配的波次超过 200 个，仅显示前 200 个——请用搜索缩小范围。',
     },
     detail: {
       title: '需求文档详情',

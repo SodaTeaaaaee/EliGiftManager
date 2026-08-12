@@ -2,9 +2,14 @@
  * `buildWaveFilterLink` — the SINGLE source for the task-center-bucket ->
  * wave-workspace deep-link query mapping. Both the task center (P1) and the
  * fulfillment grid (P3) import this instead of hand-inlining the mapping, so
- * the singular ActionCenterBucketFilterDTO fields and the plural
- * WaveFulfillmentFilterInput query keys the grid's `useUrlFilters` schema
- * will use can never drift apart.
+ * the singular ActionCenterBucketFilterDTO fields and the singular
+ * URL query keys the grid's `useUrlFilters` schema reads can never drift
+ * apart.
+ *
+ * Targets `wave-workspace-lines` (the fulfillment grid tab reads those
+ * singular keys via its `FULFILLMENT_GRID_FILTER_SCHEMA`); a filter whose
+ * `stepKey` is `'intake'` targets `wave-workspace-intake` instead and drops
+ * the grid pre-filters entirely.
  *
  * Encoding matches `shared/ui/filter-bar/useUrlFilters.ts`'s
  * `serializeEnumMultiQuery`: a single filter value becomes a one-element
@@ -15,43 +20,33 @@ import type { RouteLocationRaw } from 'vue-router'
 import type { dto } from '../../../wailsjs/go/models'
 import { serializeEnumMultiQuery } from '@/shared/ui/filter-bar/useUrlFilters'
 
-/** Singular DTO field -> plural query-param name (matches the future WaveFulfillmentFilterInput field names). */
+/** Singular DTO field -> singular URL query key (matches the grid's useUrlFilters schema keys). */
 const FIELD_TO_QUERY_KEY = {
-  allocationState: 'allocationStates',
-  addressState: 'addressStates',
-  supplierState: 'supplierStates',
-  channelSyncState: 'channelSyncStates',
-  reviewRequirement: 'reviewRequirements',
-  drift: 'driftStatuses',
+  allocationState: 'allocationState',
+  addressState: 'addressState',
+  supplierState: 'supplierState',
+  channelSyncState: 'channelSyncState',
+  reviewRequirement: 'reviewRequirement',
+  drift: 'driftStatus',
 } as const
 
-/**
- * Builds a `RouteLocationRaw` targeting the wave workspace, carrying the
- * bucket's pre-filter as URL query params. Only non-empty filter fields are
- * included; `stepKey` (not an enum-multi dimension) is passed through as a
- * plain string query value.
- */
-export function buildWaveFilterLink(
-  waveId: number,
-  filter: dto.ActionCenterBucketFilterDTO,
-): RouteLocationRaw {
+export function buildWaveFilterLink(waveId: number, filter: dto.ActionCenterBucketFilterDTO): RouteLocationRaw {
   const query: Record<string, string> = {}
+  const isIntake = filter.stepKey === 'intake'
 
-  for (const [field, queryKey] of Object.entries(FIELD_TO_QUERY_KEY) as Array<
-    [keyof typeof FIELD_TO_QUERY_KEY, string]
-  >) {
-    const value = filter[field]
-    if (!value) continue
-    const serialized = serializeEnumMultiQuery([value])
-    if (serialized !== undefined) query[queryKey] = serialized
-  }
-
-  if (filter.stepKey) {
-    query.stepKey = filter.stepKey
+  if (!isIntake) {
+    for (const [field, queryKey] of Object.entries(FIELD_TO_QUERY_KEY) as Array<
+      [keyof typeof FIELD_TO_QUERY_KEY, string]
+    >) {
+      const value = filter[field]
+      if (!value) continue
+      const serialized = serializeEnumMultiQuery([value])
+      if (serialized !== undefined) query[queryKey] = serialized
+    }
   }
 
   return {
-    name: 'wave-workspace',
+    name: isIntake ? 'wave-workspace-intake' : 'wave-workspace-lines',
     params: { id: waveId },
     query,
   }

@@ -5,6 +5,7 @@
  * only talks to the backend through the bridge wrapper.
  */
 import { computed, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { NModal, NForm, NFormItem, NInput, NSelect, NButton } from "naive-ui";
 import type { SelectOption } from "naive-ui";
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ useScope: "global" });
 const feedback = useFeedback();
+const router = useRouter();
 
 const name = ref("");
 const waveType = ref("mixed");
@@ -67,6 +69,8 @@ async function handleSubmit(): Promise<void> {
     });
     emit("created", wave);
     close();
+    // Land directly on the new wave's intake (plan: 建波直落 intake).
+    void router.push({ name: "wave-workspace-intake", params: { id: wave.id } });
   } catch (err) {
     feedback.error(t("feedback.error"), err instanceof Error ? err.message : String(err));
   } finally {

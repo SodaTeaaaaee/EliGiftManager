@@ -16,7 +16,6 @@ import { GuidanceCard, CalloutBar } from '@/shared/ui/guidance'
 import { SectionCard, StatCard } from '@/shared/ui/cards'
 import { StatusBadge } from '@/shared/ui/status'
 import { EmptyState } from '@/shared/ui/empty-state'
-import { serializeEnumMultiQuery } from '@/shared/ui/filter-bar/useUrlFilters'
 import { buildWaveFilterLink } from '@/shared/lib/wave-filter-link'
 import { useWaveWorkspaceContext } from '@/shared/lib/wave-workspace/useWaveWorkspace'
 import {
@@ -66,31 +65,28 @@ const funnelStages = computed<FunnelStage[]>(() => {
 })
 
 // Only `addressReady` and `submittedToFactory` map onto a fulfillment-line-
-// level enum the future grid can filter by (`AddressState`/`SupplierState`,
+// level enum the grid can filter by (`AddressState`/`SupplierState`,
 // matching wave_overview_query_usecase.go's per-line switch exactly).
 // `tracked` (shipment-tracking derived), `backfilled` and
 // `manualClosureOrFailed` (channel-sync JOB status + manual-closure
 // candidate counts — a different level than the per-line filter dimensions)
 // have no clean 1:1 filter mapping, so their segments stay non-navigating
 // rather than pushing a wrong/misleading query.
-const FUNNEL_STAGE_FILTERS: Partial<Record<string, { queryKey: string; values: string[] }>> = {
-  addressReady: { queryKey: 'addressStates', values: ['ready'] },
+const FUNNEL_STAGE_FILTERS: Partial<Record<string, dto.ActionCenterBucketFilterDTO>> = {
+  addressReady: { addressState: 'ready' },
   submittedToFactory: {
-    queryKey: 'supplierStates',
-    values: ['submitted', 'accepted', 'producing', 'partially_shipped'],
+    // The funnel segment counts four supplier states together. The DTO field is a
+    // single string, so the four values travel comma-joined — `buildWaveFilterLink`
+    // emits them verbatim via `serializeEnumMultiQuery` and the lines grid's
+    // enum-multi URL parser splits them back apart.
+    supplierState: 'submitted,accepted,producing,partially_shipped',
   },
 }
 
 function handleStageClick(key: string): void {
-  const mapping = FUNNEL_STAGE_FILTERS[key]
-  if (!mapping) return
-  const serialized = serializeEnumMultiQuery(mapping.values)
-  if (serialized === undefined) return
-  void router.push({
-    name: 'wave-workspace',
-    params: { id: ctx.waveId.value },
-    query: { [mapping.queryKey]: serialized },
-  })
+  const filter = FUNNEL_STAGE_FILTERS[key]
+  if (!filter) return
+  void router.push(buildWaveFilterLink(ctx.waveId.value, filter))
 }
 
 // ── Guidance card ──

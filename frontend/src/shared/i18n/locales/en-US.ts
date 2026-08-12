@@ -1644,6 +1644,10 @@ export const enUS: AppMessageSchema = {
       assignToWave: 'Assign to Wave',
       chooseWave: 'Choose target wave',
       confirm: 'Confirm Assignment',
+      // New leaves (Task 8): count-carrying assignment receipt, picker keyword search, and the 200-item truncation notice.
+      assignToWaveDone: 'Assigned {n} document(s)',
+      waveKeywordPlaceholder: 'Search by wave name / number',
+      waveListTruncated: 'More than 200 waves match — showing the first 200. Refine the search to narrow the list.',
     },
     detail: {
       title: 'Demand Document Detail',
