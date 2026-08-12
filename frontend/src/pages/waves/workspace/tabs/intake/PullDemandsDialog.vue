@@ -3,7 +3,7 @@
  * PullDemandsDialog — 波内导入页面的「拉取需求」弹窗：浏览未分派池（业务面三态 +
  * FilterBar + server 分页），批量勾选后调 batchAssignDemandToWave 拉入当前波次。
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NModal, NRadioButton, NRadioGroup } from 'naive-ui'
 import { DataGrid, createColumns } from '@/shared/ui/data-grid'
@@ -25,6 +25,15 @@ const feedback = useFeedback()
 // 筛选/assignment 写进 wave 路由 query（反之亦然），互相串扰。
 const grid = useInboxGrid({ syncFiltersToUrl: false })
 grid.assignment.value = 'unassigned'
+
+// 弹窗常驻挂载（NModal 只隐藏不销毁），拉走后池内容会变旧——每次打开时
+// 重取一页，保证刚被拉走的需求立即消失。
+watch(
+  () => props.show,
+  (show) => {
+    if (show) void grid.fetchPage()
+  },
+)
 
 const columns = computed(() => createColumns(buildInboxColumns(t)))
 
@@ -52,6 +61,8 @@ async function handlePull(): Promise<void> {
     if (result.failureCount > 0) feedback.error(t('waveWorkspace.intake.pullSomeFailed', { count: result.failureCount }))
     else feedback.success(t('feedback.success'))
     grid.selectedKeys.value = []
+    // 拉取成功（含部分成功）后立刻刷新未分派池，避免刚拉走的需求残留显示。
+    void grid.fetchPage()
     emit('pulled', result.successCount)
     emit('update:show', false)
   } catch (err) {
