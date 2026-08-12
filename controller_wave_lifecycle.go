@@ -262,7 +262,7 @@ func (c *WaveController) ListWaveFulfillmentRowsFiltered(input dto.WaveFulfillme
 // returns an untyped map[string]any and ignores SortBy) to avoid redeclaring that
 // bound method from a different file; the Integrate phase should decide whether to
 // retire the old method in favor of this one or keep both during a transition.
-func (c *WaveController) ListWavesFiltered(input dto.PaginationInput) (dto.WavesPage, error) {
+func (c *WaveController) ListWavesFiltered(input dto.WaveListFilterInput) (dto.WavesPage, error) {
 	ctx := appContext
 	filterUC := app.NewWaveFulfillmentFilterUseCase(infra.NewWaveRepository(c.gdb), c.overviewQueryUC)
 	return filterUC.ListWavesPaginatedTyped(ctx, input)

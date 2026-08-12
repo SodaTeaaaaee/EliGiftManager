@@ -325,6 +325,100 @@ func TestListWaveFulfillmentRowsFilteredReturnsExpectedSubset(t *testing.T) {
 	}
 }
 
+func TestListWavesPaginatedTypedFiltersByStageTypeAndKeyword(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	waveRepo := newMockWaveRepo()
+	demandRepo := newMockDemandRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	fulfillRepo := newMockFulfillRepo()
+	supplierRepo := newMockSupplierRepo()
+	shipmentRepo := newMockShipmentRepo()
+	profileRepo := newMockProfileRepo()
+	scopeRepo := newMockHistoryScopeRepo()
+	nodeRepo := newMockHistoryNodeRepo()
+	syncRepo := newMockChannelSyncRepo()
+	closureRepo := newMockClosureDecisionRepo()
+
+	overviewProjUC := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{})
+	overviewQueryUC := NewWaveOverviewQueryUseCase(
+		waveRepo, fulfillRepo, supplierRepo, assignmentRepo, demandRepo, shipmentRepo,
+		staticProductRepo{}, profileRepo, scopeRepo, nodeRepo, overviewProjUC,
+	)
+
+	// Seed three waves: A (active/membership, "舰长回馈"), B (closed/retail,
+	// "6月零售"), C (active/retail, "无关"). CreateWave keeps a pre-set
+	// LifecycleStage and generates a dated WaveNo, matching production.
+	waveUC := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
+	seeds := []*domain.Wave{
+		{Name: "舰长回馈", LifecycleStage: "active", WaveType: "membership"},
+		{Name: "6月零售", LifecycleStage: "closed", WaveType: "retail"},
+		{Name: "无关", LifecycleStage: "active", WaveType: "retail"},
+	}
+	for _, w := range seeds {
+		if err := waveUC.CreateWave(ctx, w); err != nil {
+			t.Fatalf("seed wave %q: %v", w.Name, err)
+		}
+	}
+
+	filterUC := NewWaveFulfillmentFilterUseCase(waveRepo, overviewQueryUC)
+
+	// Sanity: an unfiltered call should see all three waves.
+	allPage, err := filterUC.ListWavesPaginatedTyped(ctx, dto.WaveListFilterInput{
+		PaginationInput: dto.PaginationInput{Page: 1, PageSize: 20},
+	})
+	if err != nil {
+		t.Fatalf("ListWavesPaginatedTyped (unfiltered): %v", err)
+	}
+	if allPage.Pagination.TotalCount != 3 {
+		t.Fatalf("unfiltered TotalCount = %d, want 3", allPage.Pagination.TotalCount)
+	}
+
+	// (1) {LifecycleStage:"active", WaveType:"retail"} -> only C (B is closed).
+	page, err := filterUC.ListWavesPaginatedTyped(ctx, dto.WaveListFilterInput{
+		PaginationInput: dto.PaginationInput{Page: 1, PageSize: 20},
+		LifecycleStage:  "active",
+		WaveType:        "retail",
+	})
+	if err != nil {
+		t.Fatalf("ListWavesPaginatedTyped (stage+type): %v", err)
+	}
+	if page.Pagination.TotalCount != 1 || len(page.Items) != 1 {
+		t.Fatalf("stage+type filter: TotalCount=%d items=%d, want 1/1", page.Pagination.TotalCount, len(page.Items))
+	}
+	if page.Items[0].Name != "无关" || page.Items[0].LifecycleStage != "active" || page.Items[0].WaveType != "retail" {
+		t.Fatalf("stage+type filter returned unexpected item: %+v", page.Items[0])
+	}
+
+	// (2) {NameKeyword:"舰长"} -> only A.
+	kwPage, err := filterUC.ListWavesPaginatedTyped(ctx, dto.WaveListFilterInput{
+		PaginationInput: dto.PaginationInput{Page: 1, PageSize: 20},
+		NameKeyword:     "舰长",
+	})
+	if err != nil {
+		t.Fatalf("ListWavesPaginatedTyped (keyword): %v", err)
+	}
+	if kwPage.Pagination.TotalCount != 1 || len(kwPage.Items) != 1 || kwPage.Items[0].Name != "舰长回馈" {
+		t.Fatalf("keyword filter: TotalCount=%d items=%d, want only 舰长回馈; got %+v", kwPage.Pagination.TotalCount, len(kwPage.Items), kwPage.Items)
+	}
+
+	// (3) All three filters combined: stage=active already excludes B, and B is the
+	// only wave whose name contains "6月" — so the result set is empty.
+	emptyPage, err := filterUC.ListWavesPaginatedTyped(ctx, dto.WaveListFilterInput{
+		PaginationInput: dto.PaginationInput{Page: 1, PageSize: 20},
+		LifecycleStage:  "active",
+		WaveType:        "retail",
+		NameKeyword:     "6月",
+	})
+	if err != nil {
+		t.Fatalf("ListWavesPaginatedTyped (combined): %v", err)
+	}
+	if emptyPage.Pagination.TotalCount != 0 || len(emptyPage.Items) != 0 {
+		t.Fatalf("combined filter: TotalCount=%d items=%d, want empty", emptyPage.Pagination.TotalCount, len(emptyPage.Items))
+	}
+}
+
 func TestBatchUnassignDemandFromWaveReturnsPerItemResults(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

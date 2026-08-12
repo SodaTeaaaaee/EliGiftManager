@@ -17,7 +17,7 @@ import (
 // controller_wave.go or ports.go. See controller_wave_lifecycle.go.
 type WaveFulfillmentFilterUseCase interface {
 	ListWaveFulfillmentRowsFiltered(ctx context.Context, input dto.WaveFulfillmentFilterInput) (dto.WaveFulfillmentRowsPage, error)
-	ListWavesPaginatedTyped(ctx context.Context, input dto.PaginationInput) (dto.WavesPage, error)
+	ListWavesPaginatedTyped(ctx context.Context, input dto.WaveListFilterInput) (dto.WavesPage, error)
 }
 
 type waveFulfillmentFilterUseCase struct {
@@ -141,16 +141,42 @@ func waveListSortLess(a, b domain.Wave, sortBy string) bool {
 	}
 }
 
+// filterWaves applies the picker/list filters in memory. The wave list is small by
+// design (single operator, tens of waves); server-side SQL filtering is not worth
+// the extra repository surface (spec §2 follow-ups).
+func filterWaves(waves []domain.Wave, input dto.WaveListFilterInput) []domain.Wave {
+	out := waves[:0]
+	keyword := strings.ToLower(strings.TrimSpace(input.NameKeyword))
+	for _, w := range waves {
+		if input.LifecycleStage != "" && w.LifecycleStage != input.LifecycleStage {
+			continue
+		}
+		if input.WaveType != "" && w.WaveType != input.WaveType {
+			continue
+		}
+		if keyword != "" &&
+			!strings.Contains(strings.ToLower(w.Name), keyword) &&
+			!strings.Contains(strings.ToLower(w.WaveNo), keyword) {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
+}
+
 // ListWavesPaginatedTyped returns a typed, sorted, paginated page of waves. Waves
 // are loaded via WaveRepository.List and sorted/paginated in memory rather than
 // pushed down to SQL — the plan explicitly notes wave counts are small enough that
 // this is acceptable (plan 5.4: "ListWavesPaginated 补类型化 DTO 并真正实现
-// SortBy | 或废弃，波次量小可暂缓").
-func (uc *waveFulfillmentFilterUseCase) ListWavesPaginatedTyped(ctx context.Context, input dto.PaginationInput) (dto.WavesPage, error) {
+// SortBy | 或废弃，波次量小可暂缓"). The picker/list filters (lifecycle stage,
+// wave type, name/WaveNo keyword) are applied in memory via filterWaves.
+func (uc *waveFulfillmentFilterUseCase) ListWavesPaginatedTyped(ctx context.Context, input dto.WaveListFilterInput) (dto.WavesPage, error) {
 	waves, err := uc.waveRepo.List(ctx)
 	if err != nil {
 		return dto.WavesPage{}, err
 	}
+
+	waves = filterWaves(waves, input)
 
 	sortBy := input.SortBy
 	if !waveListSortableFields[sortBy] {
@@ -163,7 +189,7 @@ func (uc *waveFulfillmentFilterUseCase) ListWavesPaginatedTyped(ctx context.Cont
 		return waveListSortLess(waves[i], waves[j], sortBy)
 	})
 
-	pagination := dto.NormalizePagination(input)
+	pagination := dto.NormalizePagination(input.PaginationInput)
 	total := len(waves)
 	offset := (pagination.Page - 1) * pagination.PageSize
 	page := []domain.Wave{}

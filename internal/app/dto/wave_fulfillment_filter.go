@@ -30,3 +30,12 @@ type WavesPage struct {
 	Items      []WaveDTO        `json:"items"`
 	Pagination PaginationResult `json:"pagination"`
 }
+
+// WaveListFilterInput extends pagination with wave-list filters for the assign-to-wave
+// picker and the waves list page (plan §4.5 of the round-2 spec).
+type WaveListFilterInput struct {
+	PaginationInput
+	LifecycleStage string `json:"lifecycleStage"`
+	NameKeyword    string `json:"nameKeyword"`
+	WaveType       string `json:"waveType"`
+}
