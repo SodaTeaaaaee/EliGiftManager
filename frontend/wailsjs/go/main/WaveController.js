@@ -10,6 +10,10 @@ export function BatchAssignDemandToWave(arg1) {
   return window['go']['main']['WaveController']['BatchAssignDemandToWave'](arg1);
 }
 
+export function BatchUnassignDemandFromWave(arg1) {
+  return window['go']['main']['WaveController']['BatchUnassignDemandFromWave'](arg1);
+}
+
 export function CloseWave(arg1) {
   return window['go']['main']['WaveController']['CloseWave'](arg1);
 }

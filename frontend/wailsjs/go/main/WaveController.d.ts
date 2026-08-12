@@ -6,6 +6,8 @@ export function AssignDemandToWave(arg1:number,arg2:number):Promise<void>;
 
 export function BatchAssignDemandToWave(arg1:dto.BatchAssignDemandInput):Promise<dto.BatchAssignDemandResult>;
 
+export function BatchUnassignDemandFromWave(arg1:dto.BatchUnassignDemandInput):Promise<dto.BatchUnassignDemandResult>;
+
 export function CloseWave(arg1:dto.CloseWaveInput):Promise<dto.CloseWaveResult>;
 
 export function CreateWave(arg1:dto.CreateWaveInput):Promise<dto.WaveDTO>;
@@ -34,7 +36,7 @@ export function ListWaveParticipantRows(arg1:number):Promise<Array<dto.WaveParti
 
 export function ListWaves():Promise<Array<dto.WaveDTO>>;
 
-export function ListWavesFiltered(arg1:dto.PaginationInput):Promise<dto.WavesPage>;
+export function ListWavesFiltered(arg1:dto.WaveListFilterInput):Promise<dto.WavesPage>;
 
 export function ListWavesPaginated(arg1:dto.PaginationInput):Promise<Record<string, any>>;
 

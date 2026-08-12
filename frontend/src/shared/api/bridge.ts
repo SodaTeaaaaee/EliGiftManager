@@ -30,6 +30,7 @@ import {
   MapDemandLines,
   AssignDemandToWave,
   BatchAssignDemandToWave,
+  BatchUnassignDemandFromWave,
   UnassignDemandFromWave,
   GenerateParticipants,
   ListAssignedDemandsByWave,
@@ -226,6 +227,8 @@ export async function listDemandInboxRows(input: {
 export async function listDemandInboxRowsPage(input: {
   assignment?: string
   demandKind?: string
+  demandKinds?: string[]
+  routingDispositions?: string[]
   integrationProfileId?: number
   waveId?: number
   sortBy?: string
@@ -407,15 +410,17 @@ export async function closeWave(input: {
   return CloseWave(dto.CloseWaveInput.createFrom(input));
 }
 
-/** Server-side filtered + paginated wave list (5.4). No filter fields yet — pagination only. */
-export async function listWavesFiltered(input: PaginationInput): Promise<dto.WavesPage> {
-  if (!isWailsRuntimeAvailable()) {
-    return dto.WavesPage.createFrom({
-      items: [],
-      pagination: { page: input.page, pageSize: input.pageSize, totalCount: 0, totalPages: 0 },
-    });
-  }
-  return ListWavesFiltered(dto.PaginationInput.createFrom(input));
+export async function listWavesFiltered(input: {
+  page: number
+  pageSize: number
+  sortBy?: string
+  sortDesc?: boolean
+  lifecycleStage?: string
+  nameKeyword?: string
+  waveType?: string
+}): Promise<dto.WavesPage> {
+  if (!isWailsRuntimeAvailable()) return dto.WavesPage.createFrom({ items: [], pagination: {} })
+  return ListWavesFiltered(dto.WaveListFilterInput.createFrom(input))
 }
 
 /** Unassign a demand document from a wave. */
@@ -425,6 +430,15 @@ export async function unassignDemandFromWave(input: {
 }): Promise<void> {
   assertWailsRuntime();
   return UnassignDemandFromWave(dto.UnassignDemandInput.createFrom(input));
+}
+
+/** Batch-return demand documents to the unassigned pool (single undo node). Hard-fail. */
+export async function batchUnassignDemandFromWave(input: {
+  waveId: number
+  docIds: number[]
+}): Promise<dto.BatchUnassignDemandResult> {
+  assertWailsRuntime()
+  return BatchUnassignDemandFromWave(dto.BatchUnassignDemandInput.createFrom(input))
 }
 
 export async function mapDemandLines(
