@@ -199,7 +199,17 @@ func (pe *PatchExecutor) assignDemand(op patchOp) error {
 
 // assignDemandTo creates the single wave-demand linkage row against db — the
 // shared executor DB for single-item ops, or a transaction handle for batch ops.
+//
+// The use-case side deletes unassigned rows via a soft delete, which still
+// occupies the (wave_id, demand_document_id) unique index slot (idx_wave_demand
+// carries no deleted_at column). Purge that residue with a hard delete first so
+// the re-created row does not collide — same treatment as batchAssignDemand.
 func (pe *PatchExecutor) assignDemandTo(db *gorm.DB, waveID, demandDocumentID uint) error {
+	if err := db.Unscoped().
+		Where("wave_id = ? AND demand_document_id = ?", waveID, demandDocumentID).
+		Delete(&persistence.WaveDemandAssignment{}).Error; err != nil {
+		return err
+	}
 	p := &persistence.WaveDemandAssignment{
 		WaveID:           waveID,
 		DemandDocumentID: demandDocumentID,

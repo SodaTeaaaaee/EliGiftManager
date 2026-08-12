@@ -877,6 +877,118 @@ func TestBatchUnassignUndoRedoRestoresAssignments(t *testing.T) {
 	assertAssigned(docB, false, "after redo")
 }
 
+// ── Test 9: single unassign → undo → redo restores the assignment ─────────────
+
+func TestSingleUnassignUndoRedoRestoresAssignment(t *testing.T) {
+	f := newHistoryIntegrationFixture(t)
+	ctx := context.Background()
+	waveID := mustCreateWave(t, f)
+
+	// Baseline node so the unassign node has a parent to undo to.
+	mustRecordNode(t, f, RecordNodeInput{
+		WaveID:         waveID,
+		CommandKind:    "baseline",
+		CommandSummary: "initial state",
+	})
+
+	// A create_rule node BELOW the unassign node gives the second undo a concrete
+	// target — undoing twice proves the chain head moved past the unassign node
+	// instead of staying stuck on it re-applying the same inverse.
+	rule := &domain.AllocationPolicyRule{
+		WaveID: waveID, ProductID: 502, ContributionQuantity: 2,
+		RuleKind: "direct", Priority: 1, Active: true,
+	}
+	if err := f.ruleRepo.Create(ctx, rule); err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	ruleJSON, err := json.Marshal(rule)
+	if err != nil {
+		t.Fatalf("marshal rule: %v", err)
+	}
+	mustRecordNode(t, f, RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         "create_rule",
+		CommandSummary:      "create rule",
+		PatchPayload:        fmt.Sprintf(`{"op":"create_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, waveID, ruleJSON),
+		InversePatchPayload: fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, rule.ID),
+	})
+
+	// Seed one wave-demand assignment, mirroring the pre-allocation state the
+	// controller's UnassignDemandFromWave operates on.
+	const docA = uint(9101)
+	if err := f.db.Create(&persistence.WaveDemandAssignment{WaveID: waveID, DemandDocumentID: docA}).Error; err != nil {
+		t.Fatalf("seed assignment %d: %v", docA, err)
+	}
+
+	assertAssigned := func(docID uint, want bool, label string) {
+		t.Helper()
+		exists, err := f.assignRepo.ExistsByDocument(ctx, docID)
+		if err != nil {
+			t.Fatalf("%s: ExistsByDocument(%d): %v", label, docID, err)
+		}
+		if exists != want {
+			t.Fatalf("%s: ExistsByDocument(%d) = %v, want %v", label, docID, exists, want)
+		}
+	}
+	assertAssigned(docA, true, "before single unassign")
+
+	// Mirror the controller's flow: the use case deletes via the repo (soft
+	// delete), then the history node is recorded with the exact payloads
+	// controller_wave_lifecycle.go emits (forward unassign_demand /
+	// inverse assign_demand). The forward payload only runs on redo.
+	if err := f.assignRepo.DeleteByWaveAndDocument(ctx, waveID, docA); err != nil {
+		t.Fatalf("use-case delete docA: %v", err)
+	}
+	forwardPayload := fmt.Sprintf(`{"op":"unassign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, docA)
+	inversePayload := fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, waveID, docA)
+	mustRecordNode(t, f, RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         "unassign_demand",
+		CommandSummary:      "unassign 1 demand",
+		PatchPayload:        forwardPayload,
+		InversePatchPayload: inversePayload,
+	})
+	assertAssigned(docA, false, "after single unassign")
+
+	// Undo once → inverse assign_demand restores the assignment. Before the fix
+	// this collided with the soft-deleted row that still occupies the
+	// idx_wave_demand unique slot (the unique index carries no deleted_at column).
+	if _, err := f.undoRedo.Undo(ctx, waveID); err != nil {
+		t.Fatalf("undo single unassign: %v", err)
+	}
+	assertAssigned(docA, true, "after undo")
+
+	// Undo a second time: the chain head must have moved past the unassign node
+	// onto the create_rule node — the rule gets deleted instead of the unassign
+	// undo re-failing on the same node.
+	if _, err := f.undoRedo.Undo(ctx, waveID); err != nil {
+		t.Fatalf("second undo (create_rule): %v", err)
+	}
+	rules, err := f.ruleRepo.ListByWave(ctx, waveID)
+	if err != nil {
+		t.Fatalf("list rules after second undo: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected 0 rules after second undo, got %d", len(rules))
+	}
+
+	// Redo twice → rule restored, then the unassign re-applied (assignment gone).
+	if _, err := f.undoRedo.Redo(ctx, waveID); err != nil {
+		t.Fatalf("redo create_rule: %v", err)
+	}
+	rules, err = f.ruleRepo.ListByWave(ctx, waveID)
+	if err != nil {
+		t.Fatalf("list rules after first redo: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule after first redo, got %d", len(rules))
+	}
+	if _, err := f.undoRedo.Redo(ctx, waveID); err != nil {
+		t.Fatalf("redo single unassign: %v", err)
+	}
+	assertAssigned(docA, false, "after redo")
+}
+
 func TestIntegration_FirstRecordedActionHasUndoableBaselineParent(t *testing.T) {
 	f := newHistoryIntegrationFixture(t)
 	waveID := mustCreateWave(t, f)
