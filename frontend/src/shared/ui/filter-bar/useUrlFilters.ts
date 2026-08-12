@@ -92,16 +92,31 @@ export interface UseUrlFiltersApi<S extends FilterSchema> {
   applySnapshot(snapshot: FilterSnapshot): void
 }
 
+export interface UseUrlFiltersOptions {
+  /**
+   * When false, filter state is fully local: neither the write-back watcher
+   * (state → route.query) nor the reverse watcher (route.query → state) is
+   * registered, and the initial state is NOT built from route.query. Used by
+   * dialog-hosted grids that share a route with another grid instance and
+   * must not cross-talk through the URL (e.g. the wave intake's pull dialog).
+   * Defaults to true.
+   */
+  syncToUrl?: boolean
+}
+
 /**
  * Builds URL-synced reactive filter state from a declarative schema.
  * Must be called during a component's `setup()` (it uses `useRoute`/`useRouter`
  * and registers an `onBeforeUnmount` cleanup).
  */
-export function useUrlFilters<S extends FilterSchema>(schema: S): UseUrlFiltersApi<S> {
+export function useUrlFilters<S extends FilterSchema>(schema: S, options?: UseUrlFiltersOptions): UseUrlFiltersApi<S> {
   const route = useRoute()
   const router = useRouter()
+  const syncToUrl = options?.syncToUrl !== false
 
-  const state = reactive(buildStateFromQuery(schema, route.query)) as FilterState<S>
+  // Localized instances start empty instead of picking up whatever the
+  // current route.query happens to carry for these keys.
+  const state = reactive(buildStateFromQuery(schema, syncToUrl ? route.query : {})) as FilterState<S>
 
   // Guards against the write-back watcher reacting to the very update it just
   // pushed to the router (self-triggered route.query change).
@@ -136,29 +151,31 @@ export function useUrlFilters<S extends FilterSchema>(schema: S): UseUrlFiltersA
     }, 0)
   }
 
-  watch(
-    () => schema.map((field) => (state as Record<string, string[] | string>)[field.key]),
-    scheduleQueryWrite,
-    { deep: true },
-  )
+  if (syncToUrl) {
+    watch(
+      () => schema.map((field) => (state as Record<string, string[] | string>)[field.key]),
+      scheduleQueryWrite,
+      { deep: true },
+    )
 
-  // Keep state in sync with external route.query changes (back/forward nav,
-  // a task-center deep link, another component editing the same query).
-  watch(
-    () => route.query,
-    (query) => {
-      if (suppressNextRouteSync) {
-        suppressNextRouteSync = false
-        return
-      }
-      const next = buildStateFromQuery(schema, query)
-      for (const field of schema) {
-        const target = state as Record<string, string[] | string>
-        const incoming = (next as Record<string, string[] | string>)[field.key]
-        target[field.key] = incoming
-      }
-    },
-  )
+    // Keep state in sync with external route.query changes (back/forward nav,
+    // a task-center deep link, another component editing the same query).
+    watch(
+      () => route.query,
+      (query) => {
+        if (suppressNextRouteSync) {
+          suppressNextRouteSync = false
+          return
+        }
+        const next = buildStateFromQuery(schema, query)
+        for (const field of schema) {
+          const target = state as Record<string, string[] | string>
+          const incoming = (next as Record<string, string[] | string>)[field.key]
+          target[field.key] = incoming
+        }
+      },
+    )
+  }
 
   function setEnumValues(key: FilterKey<S>, values: readonly string[]): void {
     const field = schema.find((f) => f.key === key)

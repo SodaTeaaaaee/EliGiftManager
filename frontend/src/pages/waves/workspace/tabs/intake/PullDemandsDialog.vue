@@ -20,8 +20,10 @@ const emit = defineEmits<{ 'update:show': [boolean]; pulled: [count: number] }>(
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
 
-// 未分派池：unscoped 实例，assignment 固定为 'unassigned'。
-const grid = useInboxGrid()
+// 未分派池：unscoped 实例，assignment 固定为 'unassigned'。syncFiltersToUrl
+// 关掉 URL 同步——弹窗与波内 intake 网格同路由同 schema，双向同步会把弹窗的
+// 筛选/assignment 写进 wave 路由 query（反之亦然），互相串扰。
+const grid = useInboxGrid({ syncFiltersToUrl: false })
 grid.assignment.value = 'unassigned'
 
 const columns = computed(() => createColumns(buildInboxColumns(t)))

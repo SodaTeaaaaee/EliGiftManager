@@ -48,6 +48,15 @@ export interface UseInboxGridOptions {
    * automatically.
    */
   waveId?: ComputedRef<number>
+  /**
+   * When false, the FilterBar schema state is fully local (passed through to
+   * `useUrlFilters({ syncToUrl: false })`), the bespoke `assignment` toggle
+   * stops mirroring into `route.query.assignment`, and the one-shot deep-link
+   * read of `route.query.assignment` is skipped. Used by dialog-hosted grid
+   * instances that share a route with another grid (e.g. the wave intake's
+   * pull dialog) and must not cross-talk through the URL. Defaults to true.
+   */
+  syncFiltersToUrl?: boolean
 }
 
 export interface UseInboxGridApi {
@@ -84,6 +93,7 @@ export interface UseInboxGridApi {
 export function useInboxGrid(options: UseInboxGridOptions = {}): UseInboxGridApi {
   const isWaveScoped = options.waveId != null
   const scopedWaveId = options.waveId
+  const syncFiltersToUrl = options.syncFiltersToUrl !== false
 
   const assignment = ref<InboxAssignmentFilter>('all') as Ref<InboxAssignmentFilter>
 
@@ -93,15 +103,16 @@ export function useInboxGrid(options: UseInboxGridOptions = {}): UseInboxGridApi
   // Deep-link support (unscoped mode only): `WaveIntakeTab.vue`'s "assign more
   // from inbox" affordance links to `/inbox?assignment=unassigned` — read it
   // once on init so the bespoke toggle (read-only init, unlike FilterBar's
-  // two-way URL sync) still honors an incoming deep link.
-  if (options.waveId == null) {
+  // two-way URL sync) still honors an incoming deep link. Skipped when the
+  // instance is URL-localized (syncFiltersToUrl=false).
+  if (options.waveId == null && syncFiltersToUrl) {
     const initialAssignment = route.query.assignment
     if (initialAssignment === 'assigned' || initialAssignment === 'unassigned') {
       assignment.value = initialAssignment
     }
   }
 
-  const filters = useUrlFilters(INBOX_GRID_FILTER_SCHEMA)
+  const filters = useUrlFilters(INBOX_GRID_FILTER_SCHEMA, { syncToUrl: syncFiltersToUrl })
 
   const rows = ref<DemandInboxRow[]>([]) as Ref<DemandInboxRow[]>
   const loading = ref(true)
@@ -201,13 +212,16 @@ export function useInboxGrid(options: UseInboxGridOptions = {}): UseInboxGridApi
   // unscoped mode it mirrors its 3-way state into `route.query.assignment`
   // ('all' removes the param) so the current view stays deep-linkable —
   // write-only, the one-shot init read above is the only URL -> state sync.
+  // The URL write-back is skipped when the instance is URL-localized.
   watch(assignment, () => {
     if (isWaveScoped) return
     page.value = 1
-    const nextQuery = { ...route.query }
-    if (assignment.value === 'all') delete nextQuery.assignment
-    else nextQuery.assignment = assignment.value
-    void router.replace({ query: nextQuery }).catch(() => { /* duplicated navigation */ })
+    if (syncFiltersToUrl) {
+      const nextQuery = { ...route.query }
+      if (assignment.value === 'all') delete nextQuery.assignment
+      else nextQuery.assignment = assignment.value
+      void router.replace({ query: nextQuery }).catch(() => { /* duplicated navigation */ })
+    }
     void fetchPage()
   })
 
