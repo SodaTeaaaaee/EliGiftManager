@@ -168,11 +168,17 @@ func (c *WaveController) BatchUnassignDemandFromWave(input dto.BatchUnassignDema
 		if result.SuccessCount == 0 {
 			return fmt.Errorf("batch unassign: no document could be unassigned")
 		}
+		successIDs := make([]uint, 0, len(result.Results))
+		for _, item := range result.Results {
+			if item.Success {
+				successIDs = append(successIDs, item.DemandDocumentID)
+			}
+		}
 		return c.recordWaveLifecycleHistory(ctx, tx, input.WaveID, preSnapshot, app.RecordNodeInput{
 			CommandKind:         "batch_unassign_demand",
 			CommandSummary:      fmt.Sprintf("batch unassign %d demand(s) from wave %d", result.SuccessCount, input.WaveID),
-			PatchPayload:        fmt.Sprintf(`{"op":"batch_unassign_demand","wave_id":%d,"demand_document_ids":%s}`, input.WaveID, jsonIDs(input.DocIDs)),
-			InversePatchPayload: fmt.Sprintf(`{"op":"batch_assign_demand","wave_id":%d,"demand_document_ids":%s}`, input.WaveID, jsonIDs(input.DocIDs)),
+			PatchPayload:        fmt.Sprintf(`{"op":"batch_unassign_demand","wave_id":%d,"demand_document_ids":%s}`, input.WaveID, jsonIDs(successIDs)),
+			InversePatchPayload: fmt.Sprintf(`{"op":"batch_assign_demand","wave_id":%d,"demand_document_ids":%s}`, input.WaveID, jsonIDs(successIDs)),
 		})
 	})
 	if txErr != nil {
