@@ -302,3 +302,49 @@ func TestListPaginationRepository_Shipments(t *testing.T) {
 		}
 	}
 }
+
+func TestListPaginationRepository_DemandDocumentsRoutingDispositionFilter(t *testing.T) {
+	db := setupListPaginationTestDB(t)
+	repo := NewListPaginationRepository(db)
+	ctx := context.Background()
+
+	docA := persistence.DemandDocument{Kind: "membership_entitlement", SourceDocumentNo: "A"}
+	docB := persistence.DemandDocument{Kind: "retail_order", SourceDocumentNo: "B"}
+	if err := db.Create(&docA).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&docB).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	lines := []persistence.DemandLine{
+		{DemandDocumentID: docA.ID, RoutingDisposition: "pending_intake"},
+		{DemandDocumentID: docA.ID, RoutingDisposition: "accepted"},
+		{DemandDocumentID: docB.ID, RoutingDisposition: "accepted"},
+	}
+	for i := range lines {
+		if err := db.Create(&lines[i]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	docs, total, err := repo.ListDemandDocumentsPage(ctx, domain.DemandInboxPageQuery{
+		RoutingDispositions: []string{"pending_intake"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(docs) != 1 || docs[0].ID != docA.ID {
+		t.Fatalf("want only docA (has pending_intake line), got total=%d docs=%v", total, docs)
+	}
+
+	docs, total, err = repo.ListDemandDocumentsPage(ctx, domain.DemandInboxPageQuery{
+		DemandKinds: []string{"retail_order"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 1 || len(docs) != 1 || docs[0].ID != docB.ID {
+		t.Fatalf("want only docB (retail_order), got total=%d docs=%v", total, docs)
+	}
+}

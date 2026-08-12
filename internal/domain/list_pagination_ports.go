@@ -29,6 +29,8 @@ type DemandInboxPageQuery struct {
 	DemandKind           string
 	IntegrationProfileID *uint
 	WaveID               *uint
+	RoutingDispositions  []string
+	DemandKinds          []string
 }
 
 type ShipmentByWavePageQuery struct {

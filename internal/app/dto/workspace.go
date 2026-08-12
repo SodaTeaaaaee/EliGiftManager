@@ -100,5 +100,6 @@ type DemandInboxRowDTO struct {
 	WaitingInputCount       int       `json:"waitingInputCount"`
 	DeferredCount           int       `json:"deferredCount"`
 	ExcludedCount           int       `json:"excludedCount"`
+	PendingIntakeCount      int       `json:"pendingIntakeCount"`
 	CreatedAt               time.Time `json:"createdAt" ts_type:"string"`
 }

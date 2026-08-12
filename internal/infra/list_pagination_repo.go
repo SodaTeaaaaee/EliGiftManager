@@ -190,8 +190,15 @@ func (r *listPaginationRepository) ListProductMastersPage(ctx context.Context, q
 
 func (r *listPaginationRepository) ListDemandDocumentsPage(ctx context.Context, q domain.DemandInboxPageQuery) ([]domain.DemandDocument, int64, error) {
 	query := r.db.WithContext(ctx).Model(&persistence.DemandDocument{})
-	if q.DemandKind != "" {
+	if len(q.DemandKinds) > 0 {
+		query = query.Where("demand_documents.kind IN ?", q.DemandKinds)
+	} else if q.DemandKind != "" {
 		query = query.Where("demand_documents.kind = ?", q.DemandKind)
+	}
+	if len(q.RoutingDispositions) > 0 {
+		query = query.Where(`EXISTS (SELECT 1 FROM demand_lines dl
+			WHERE dl.demand_document_id = demand_documents.id AND dl.deleted_at IS NULL
+			AND dl.routing_disposition IN ?)`, q.RoutingDispositions)
 	}
 	if q.IntegrationProfileID != nil {
 		query = query.Where("demand_documents.integration_profile_id = ?", *q.IntegrationProfileID)
@@ -219,7 +226,11 @@ func (r *listPaginationRepository) ListDemandDocumentsPage(ctx context.Context, 
 		"createdAt":        "demand_documents.created_at",
 	}, "demand_documents.id")
 	var rows []persistence.DemandDocument
-	if err := query.Order(order).Offset(q.Offset).Limit(q.Limit).Find(&rows).Error; err != nil {
+	findQuery := query.Order(order)
+	if q.Limit > 0 {
+		findQuery = findQuery.Offset(q.Offset).Limit(q.Limit)
+	}
+	if err := findQuery.Find(&rows).Error; err != nil {
 		return nil, 0, err
 	}
 	items := make([]domain.DemandDocument, len(rows))

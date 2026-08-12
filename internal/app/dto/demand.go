@@ -93,12 +93,21 @@ type DemandInboxFilterInput struct {
 	// IntegrationProfileID narrows results to documents bound to a specific integration
 	// profile. Server-side filter — added to eliminate client-side post-filtering of the
 	// full inbox result set.
-	IntegrationProfileID *uint  `json:"integrationProfileId"`
-	WaveID               *uint  `json:"waveId"`
-	SortBy               string `json:"sortBy"`
-	SortDir              string `json:"sortDir"`
-	Limit                int    `json:"limit"`
-	Offset               int    `json:"offset"`
+	IntegrationProfileID *uint `json:"integrationProfileId"`
+	WaveID               *uint `json:"waveId"`
+	// RoutingDispositions narrows to documents having at least one demand line whose
+	// routing_disposition is one of the given values (multi-value; AND'd with other
+	// filter dimensions). Backs the "待分诊" task-center deep link and the inbox
+	// triage filter.
+	RoutingDispositions []string `json:"routingDispositions"`
+	// DemandKinds narrows to the given kinds (multi-value). Takes precedence over the
+	// legacy single-value DemandKind field when non-empty; DemandKind remains accepted
+	// for backward compatibility with existing callers.
+	DemandKinds []string `json:"demandKinds"`
+	SortBy      string   `json:"sortBy"`
+	SortDir     string   `json:"sortDir"`
+	Limit       int      `json:"limit"`
+	Offset      int      `json:"offset"`
 }
 
 // DemandInboxRowListDTO wraps a page of demand inbox rows with pagination metadata.

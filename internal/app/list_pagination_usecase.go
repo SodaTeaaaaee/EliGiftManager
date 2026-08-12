@@ -100,7 +100,8 @@ func (uc *ListPaginationUseCase) ListDemandInboxRowsPage(ctx context.Context, in
 	input.Limit, input.Offset = dto.NormalizeListPagination(input.Limit, input.Offset)
 	docs, total, err := uc.demand.ListDemandDocumentsPage(ctx, domain.DemandInboxPageQuery{
 		ListPageQuery: domain.ListPageQuery{SortBy: input.SortBy, SortDir: input.SortDir, Limit: input.Limit, Offset: input.Offset},
-		Assignment:    input.Assignment, DemandKind: input.DemandKind, IntegrationProfileID: input.IntegrationProfileID, WaveID: input.WaveID,
+		Assignment:    input.Assignment, DemandKind: input.DemandKind, DemandKinds: input.DemandKinds,
+		RoutingDispositions: input.RoutingDispositions, IntegrationProfileID: input.IntegrationProfileID, WaveID: input.WaveID,
 	})
 	if err != nil {
 		return dto.DemandInboxPageResult{}, err
@@ -205,6 +206,8 @@ func AssembleDemandInboxRows(docs []domain.DemandDocument, assignments []domain.
 				if line.RecipientInputState == "waiting_for_input" || line.RecipientInputState == "partially_collected" {
 					row.WaitingInputCount++
 				}
+			case "pending_intake":
+				row.PendingIntakeCount++
 			case "deferred":
 				row.DeferredCount++
 			case "excluded_manual", "excluded_duplicate", "excluded_revoked":
