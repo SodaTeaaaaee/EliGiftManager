@@ -480,33 +480,177 @@ func NewExportUseCase(
 	}
 }
 
-// resolveSupplierPlatform prefers FactorySupplierPlatform; falls back to ConnectorKey
-// when the factory platform label is unset. ConnectorKey is the executor identity,
-// not the factory-facing platform label — never use it as the primary path.
-func resolveSupplierPlatform(profile *domain.IntegrationProfile) string {
-	if profile == nil {
-		return ""
-	}
-	if profile.FactorySupplierPlatform != "" {
-		return profile.FactorySupplierPlatform
-	}
-	return profile.ConnectorKey
-}
-
-// supplierOrderGroupKey identifies a unique execution boundary for grouping
-// fulfillment lines into a single SupplierOrder.
-type supplierOrderGroupKey struct {
-	IntegrationProfileID uint
-	TemplateID           uint
-}
-
+// ExportSupplierOrder is the compatibility entry point. It auto-selects a
+// factory profile only when exactly one valid profile can execute every
+// fulfillment line in the wave. Ambiguity is an error; callers that know the
+// intended factory should use ExportSupplierOrderForProfile.
 func (uc *exportUseCase) ExportSupplierOrder(ctx context.Context, waveID uint) ([]*domain.SupplierOrder, error) {
-	// Delete only existing draft orders for this wave (rebuild pattern for idempotency)
-	if err := uc.supplierRepo.DeleteDraftsByWave(ctx, waveID); err != nil {
+	if waveID == 0 {
+		return nil, fmt.Errorf("waveID is required")
+	}
+	if uc.profileRepo == nil || uc.bindingRepo == nil || uc.productRepo == nil || uc.fulfillRepo == nil {
+		return nil, fmt.Errorf("auto-select factory profile: profile, binding, product, and fulfillment repositories are required")
+	}
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
+	if err != nil {
+		return nil, fmt.Errorf("auto-select factory profile: list wave %d fulfillment lines: %w", waveID, err)
+	}
+	if len(fulfillLines) == 0 {
+		return nil, fmt.Errorf("wave %d has no fulfillment lines to export", waveID)
+	}
+	profiles, err := uc.profileRepo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("auto-select factory profile: list profiles: %w", err)
+	}
+
+	type candidate struct {
+		profile *domain.IntegrationProfile
+		binding *domain.IntegrationProfileTemplateBinding
+	}
+	var candidates []candidate
+	for i := range profiles {
+		profile := &profiles[i]
+		if ValidateProfileDocumentType(profile, "export_supplier_order") != nil || strings.TrimSpace(profile.FactorySupplierPlatform) == "" {
+			continue
+		}
+		binding, bindErr := uc.bindingRepo.FindDefaultByProfileAndType(ctx, profile.ID, "export_supplier_order")
+		if bindErr != nil || validateSupplierOrderBinding(profile.ID, binding) != nil {
+			continue
+		}
+		selected, selectErr := uc.selectFactoryFulfillmentLines(ctx, profile, fulfillLines)
+		if selectErr != nil || len(selected) != len(fulfillLines) {
+			continue
+		}
+		candidates = append(candidates, candidate{profile: profile, binding: binding})
+	}
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("wave %d has no uniquely executable factory profile; select a factory profile explicitly and verify product platforms and export_supplier_order binding", waveID)
+	}
+	if len(candidates) > 1 {
+		sort.Slice(candidates, func(i, j int) bool { return candidates[i].profile.ID < candidates[j].profile.ID })
+		parts := make([]string, len(candidates))
+		for i := range candidates {
+			parts[i] = fmt.Sprintf("%d(%s)", candidates[i].profile.ID, candidates[i].profile.ProfileKey)
+		}
+		return nil, fmt.Errorf("wave %d factory profile is ambiguous (%s); call ExportSupplierOrderForProfile with an explicit profile ID", waveID, strings.Join(parts, ", "))
+	}
+	return uc.exportSupplierOrderWithProfile(ctx, waveID, candidates[0].profile, candidates[0].binding, fulfillLines)
+}
+
+// ExportSupplierOrderForProfile explicitly selects the factory execution
+// profile and records that selection on the resulting SupplierOrder.
+func (uc *exportUseCase) ExportSupplierOrderForProfile(ctx context.Context, waveID, factoryProfileID uint) ([]*domain.SupplierOrder, error) {
+	if waveID == 0 {
+		return nil, fmt.Errorf("waveID is required")
+	}
+	if factoryProfileID == 0 {
+		return nil, fmt.Errorf("factoryProfileID is required")
+	}
+	if uc.profileRepo == nil || uc.bindingRepo == nil || uc.productRepo == nil || uc.fulfillRepo == nil {
+		return nil, fmt.Errorf("export supplier order: profile, binding, product, and fulfillment repositories are required")
+	}
+	profile, err := uc.profileRepo.FindByID(ctx, factoryProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("factory profile %d not found: %w", factoryProfileID, err)
+	}
+	if profile == nil {
+		return nil, fmt.Errorf("factory profile %d not found", factoryProfileID)
+	}
+	if err := ValidateProfileDocumentType(profile, "export_supplier_order"); err != nil {
+		return nil, fmt.Errorf("factory profile %d cannot export supplier orders: %w", factoryProfileID, err)
+	}
+	if strings.TrimSpace(profile.FactorySupplierPlatform) == "" {
+		return nil, fmt.Errorf("factory profile %d has no factorySupplierPlatform", factoryProfileID)
+	}
+	binding, err := uc.bindingRepo.FindDefaultByProfileAndType(ctx, factoryProfileID, "export_supplier_order")
+	if err != nil {
+		return nil, fmt.Errorf("factory profile %d export_supplier_order binding lookup: %w", factoryProfileID, err)
+	}
+	if err := validateSupplierOrderBinding(factoryProfileID, binding); err != nil {
 		return nil, err
 	}
+	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
+	if err != nil {
+		return nil, fmt.Errorf("list wave %d fulfillment lines: %w", waveID, err)
+	}
+	if len(fulfillLines) == 0 {
+		return nil, fmt.Errorf("wave %d has no fulfillment lines to export", waveID)
+	}
+	selectedLines, err := uc.selectFactoryFulfillmentLines(ctx, profile, fulfillLines)
+	if err != nil {
+		return nil, err
+	}
+	if len(selectedLines) == 0 {
+		return nil, fmt.Errorf("wave %d has no fulfillment lines for factory profile %d platform %q", waveID, profile.ID, profile.FactorySupplierPlatform)
+	}
+	return uc.exportSupplierOrderWithProfile(ctx, waveID, profile, binding, selectedLines)
+}
 
-	// Resolve basis stamp before persisting
+func validateSupplierOrderBinding(profileID uint, binding *domain.IntegrationProfileTemplateBinding) error {
+	if binding == nil {
+		return fmt.Errorf("factory profile %d has no default export_supplier_order binding", profileID)
+	}
+	if binding.IntegrationProfileID != profileID || binding.DocumentType != "export_supplier_order" || binding.TemplateID == 0 || !binding.IsDefault {
+		return fmt.Errorf("factory profile %d has an invalid default export_supplier_order binding", profileID)
+	}
+	return nil
+}
+
+func (uc *exportUseCase) selectFactoryFulfillmentLines(ctx context.Context, profile *domain.IntegrationProfile, lines []domain.FulfillmentLine) ([]domain.FulfillmentLine, error) {
+	productCache := make(map[uint]*domain.Product)
+	selected := make([]domain.FulfillmentLine, 0, len(lines))
+	for i := range lines {
+		fl := &lines[i]
+		if fl.ProductID == nil {
+			return nil, fmt.Errorf("fulfillment line %d has no product; cannot route to factory profile %d", fl.ID, profile.ID)
+		}
+		product, ok := productCache[*fl.ProductID]
+		if !ok {
+			found, err := uc.productRepo.FindByID(ctx, *fl.ProductID)
+			if err != nil {
+				return nil, fmt.Errorf("fulfillment line %d product %d lookup failed: %w", fl.ID, *fl.ProductID, err)
+			}
+			if found == nil {
+				return nil, fmt.Errorf("fulfillment line %d product %d not found", fl.ID, *fl.ProductID)
+			}
+			product = found
+			productCache[*fl.ProductID] = found
+		}
+		if product.SupplierPlatform != profile.FactorySupplierPlatform {
+			continue
+		}
+		if strings.TrimSpace(product.FactorySKU) == "" {
+			return nil, fmt.Errorf("fulfillment line %d product %d has no factory SKU", fl.ID, product.ID)
+		}
+		selected = append(selected, *fl)
+	}
+	return selected, nil
+}
+
+func (uc *exportUseCase) exportSupplierOrderWithProfile(
+	ctx context.Context,
+	waveID uint,
+	profile *domain.IntegrationProfile,
+	binding *domain.IntegrationProfileTemplateBinding,
+	fulfillLines []domain.FulfillmentLine,
+) ([]*domain.SupplierOrder, error) {
+	// Rebuild only after all routing checks succeed, so an invalid profile
+	// selection cannot delete a valid existing draft.
+	type factoryScopedDraftRebuilder interface {
+		DeleteDraftsByWaveAndFactoryProfile(context.Context, uint, uint) error
+	}
+	var rebuildErr error
+	if scoped, ok := uc.supplierRepo.(factoryScopedDraftRebuilder); ok {
+		rebuildErr = scoped.DeleteDraftsByWaveAndFactoryProfile(ctx, waveID, profile.ID)
+	} else {
+		// Test doubles and legacy repository implementations retain the original
+		// whole-wave rebuild behavior. Production repositories are profile-scoped.
+		rebuildErr = uc.supplierRepo.DeleteDraftsByWave(ctx, waveID)
+	}
+	if rebuildErr != nil {
+		return nil, rebuildErr
+	}
+
 	var basisNodeID, basisHash string
 	var pinNodeID uint
 	if uc.basisStamp != nil {
@@ -520,160 +664,50 @@ func (uc *exportUseCase) ExportSupplierOrder(ctx context.Context, waveID uint) (
 		}
 	}
 
-	// Get all fulfillment lines for the wave
-	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
-	if err != nil {
+	now := time.Now()
+	profileID := profile.ID
+	submissionMode := "csv"
+	if profile.SupportsAPIExport {
+		submissionMode = "api"
+	}
+	order := &domain.SupplierOrder{
+		WaveID:                      waveID,
+		FactoryIntegrationProfileID: &profileID,
+		SupplierPlatform:            profile.FactorySupplierPlatform,
+		TemplateID:                  fmt.Sprintf("%d", binding.TemplateID),
+		BatchNo:                     fmt.Sprintf("WAVE-%d-FACTORY-%d", waveID, profile.ID),
+		Status:                      "draft",
+		SubmissionMode:              submissionMode,
+		BasisHistoryNodeID:          basisNodeID,
+		BasisProjectionHash:         basisHash,
+		CreatedAt:                   now,
+		UpdatedAt:                   now,
+	}
+	productCache := make(map[uint]*domain.Product)
+	lines := make([]*domain.SupplierOrderLine, len(fulfillLines))
+	for i := range fulfillLines {
+		fl := &fulfillLines[i]
+		lines[i] = &domain.SupplierOrderLine{
+			FulfillmentLineID: fl.ID,
+			SupplierLineNo:    i + 1,
+			SupplierSKU:       resolveSupplierSKU(ctx, fl, uc.productRepo, productCache),
+			SubmittedQuantity: fl.Quantity,
+			Status:            "draft",
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}
+	}
+	var pin *domain.BasisPinParam
+	if pinNodeID != 0 {
+		pin = &domain.BasisPinParam{HistoryNodeID: pinNodeID, PinKind: "supplier_order_basis", RefType: "supplier_order"}
+	}
+	if err := uc.supplierRepo.AtomicCreateSupplierOrder(ctx, order, lines, pin); err != nil {
 		return nil, err
 	}
-
-	// Group lines by execution boundary (IntegrationProfileID + TemplateID).
-	// Lines whose DemandDocument has no IntegrationProfileID fall into the
-	// catch-all group (zero-value key), preserving backward-compatible behavior.
-	docCache := make(map[uint]*domain.DemandDocument)
-	profileCache := make(map[uint]*domain.IntegrationProfile)
-	groups := make(map[supplierOrderGroupKey][]int) // key → indices into fulfillLines
-
-	for i := range fulfillLines {
-		key := uc.resolveGroupKey(ctx, &fulfillLines[i], docCache, profileCache)
-		groups[key] = append(groups[key], i)
+	if err := uc.projectSupplierStateFromOrder(ctx, order, lines); err != nil {
+		return nil, err
 	}
-
-	// Sort keys for stable BatchNo assignment across identical inputs
-	sortedKeys := make([]supplierOrderGroupKey, 0, len(groups))
-	for k := range groups {
-		sortedKeys = append(sortedKeys, k)
-	}
-	sort.Slice(sortedKeys, func(i, j int) bool {
-		if sortedKeys[i].IntegrationProfileID != sortedKeys[j].IntegrationProfileID {
-			return sortedKeys[i].IntegrationProfileID < sortedKeys[j].IntegrationProfileID
-		}
-		return sortedKeys[i].TemplateID < sortedKeys[j].TemplateID
-	})
-
-	now := time.Now()
-	var results []*domain.SupplierOrder
-
-	for batchIdx, key := range sortedKeys {
-		indices := groups[key]
-
-		// Derive execution metadata from the resolved profile
-		supplierPlatform := ""
-		submissionMode := "csv"
-		templateID := ""
-		if key.IntegrationProfileID != 0 {
-			if profile, ok := profileCache[key.IntegrationProfileID]; ok {
-				supplierPlatform = resolveSupplierPlatform(profile)
-				if profile.SupportsAPIExport {
-					submissionMode = "api"
-				}
-			}
-		}
-		if key.TemplateID != 0 {
-			templateID = fmt.Sprintf("%d", key.TemplateID)
-		}
-
-		order := &domain.SupplierOrder{
-			WaveID:              waveID,
-			SupplierPlatform:    supplierPlatform,
-			TemplateID:          templateID,
-			BatchNo:             fmt.Sprintf("WAVE-%d-BATCH-%d", waveID, batchIdx+1),
-			Status:              "draft",
-			SubmissionMode:      submissionMode,
-			BasisHistoryNodeID:  basisNodeID,
-			BasisProjectionHash: basisHash,
-			CreatedAt:           now,
-			UpdatedAt:           now,
-		}
-
-		// Cache product lookups within this batch to avoid N+1.
-		productCache := make(map[uint]*domain.Product)
-
-		lines := make([]*domain.SupplierOrderLine, len(indices))
-		for li, flIdx := range indices {
-			fl := &fulfillLines[flIdx]
-			supplierSKU := resolveSupplierSKU(ctx, fl, uc.productRepo, productCache)
-			lines[li] = &domain.SupplierOrderLine{
-				FulfillmentLineID: fl.ID,
-				SupplierLineNo:    li + 1,
-				SupplierSKU:       supplierSKU,
-				SubmittedQuantity: fl.Quantity,
-				Status:            "draft",
-				CreatedAt:         now,
-				UpdatedAt:         now,
-			}
-		}
-
-		// Only the first order in the wave gets the basis pin (pin is per-wave, not per-order)
-		var pin *domain.BasisPinParam
-		if batchIdx == 0 && pinNodeID != 0 {
-			pin = &domain.BasisPinParam{
-				HistoryNodeID: pinNodeID,
-				PinKind:       "supplier_order_basis",
-				RefType:       "supplier_order",
-			}
-		}
-
-		if err := uc.supplierRepo.AtomicCreateSupplierOrder(ctx, order, lines, pin); err != nil {
-			return nil, err
-		}
-
-		if err := uc.projectSupplierStateFromOrder(ctx, order, lines); err != nil {
-			return nil, err
-		}
-		results = append(results, order)
-	}
-
-	return results, nil
-}
-
-// resolveGroupKey determines the execution boundary for a FulfillmentLine by
-// walking DemandDocument → IntegrationProfile → template binding. Lines that
-// cannot be resolved fall into the catch-all group (zero-value key).
-func (uc *exportUseCase) resolveGroupKey(
-	ctx context.Context,
-	fl *domain.FulfillmentLine,
-	docCache map[uint]*domain.DemandDocument,
-	profileCache map[uint]*domain.IntegrationProfile,
-) supplierOrderGroupKey {
-	if fl.DemandDocumentID == nil || uc.demandRepo == nil {
-		return supplierOrderGroupKey{}
-	}
-
-	docID := *fl.DemandDocumentID
-	doc, ok := docCache[docID]
-	if !ok {
-		found, err := uc.demandRepo.FindByID(ctx, docID)
-		if err != nil || found == nil {
-			return supplierOrderGroupKey{}
-		}
-		doc = found
-		docCache[docID] = doc
-	}
-
-	if doc.IntegrationProfileID == nil {
-		return supplierOrderGroupKey{}
-	}
-
-	profileID := *doc.IntegrationProfileID
-	if _, ok := profileCache[profileID]; !ok && uc.profileRepo != nil {
-		found, err := uc.profileRepo.FindByID(ctx, profileID)
-		if err != nil || found == nil {
-			// Profile ID known but not resolvable; still group by profile ID alone
-			return supplierOrderGroupKey{IntegrationProfileID: profileID}
-		}
-		profileCache[profileID] = found
-	}
-
-	// Resolve the default template binding for export_supplier_order
-	var templateID uint
-	if uc.bindingRepo != nil {
-		binding, err := uc.bindingRepo.FindDefaultByProfileAndType(ctx, profileID, "export_supplier_order")
-		if err == nil && binding != nil {
-			templateID = binding.TemplateID
-		}
-	}
-
-	return supplierOrderGroupKey{IntegrationProfileID: profileID, TemplateID: templateID}
+	return []*domain.SupplierOrder{order}, nil
 }
 
 // resolveSupplierSKU fills SupplierOrderLine.SupplierSKU from the wave Product

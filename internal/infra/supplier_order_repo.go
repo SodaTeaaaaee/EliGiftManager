@@ -104,6 +104,24 @@ func (r *supplierOrderRepository) DeleteDraftsByWave(ctx context.Context, waveID
 	})
 }
 
+// DeleteDraftsByWaveAndFactoryProfile rebuilds only the explicitly selected
+// factory slice. Legacy drafts with a NULL profile are included so the first
+// post-migration export replaces, rather than duplicates, pre-routing rows.
+func (r *supplierOrderRepository) DeleteDraftsByWaveAndFactoryProfile(ctx context.Context, waveID, factoryProfileID uint) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		matchingOrders := tx.Model(&persistence.SupplierOrder{}).
+			Select("id").
+			Where("wave_id = ? AND status = ? AND (factory_integration_profile_id = ? OR factory_integration_profile_id IS NULL)", waveID, "draft", factoryProfileID)
+		if err := tx.Where("supplier_order_id IN (?)", matchingOrders).Delete(&persistence.SupplierOrderLine{}).Error; err != nil {
+			return err
+		}
+		return tx.Where(
+			"wave_id = ? AND status = ? AND (factory_integration_profile_id = ? OR factory_integration_profile_id IS NULL)",
+			waveID, "draft", factoryProfileID,
+		).Delete(&persistence.SupplierOrder{}).Error
+	})
+}
+
 func (r *supplierOrderRepository) Update(ctx context.Context, order *domain.SupplierOrder) error {
 	po := persistence.SupplierOrderFromDomain(order)
 	po.ID = order.ID

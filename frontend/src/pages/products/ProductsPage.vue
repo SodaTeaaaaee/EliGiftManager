@@ -7,17 +7,19 @@
  */
 import { computed, h, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NModal, NSelect, NSwitch, NTag } from 'naive-ui'
+import { NButton, NModal, NSelect, NSpin, NSwitch, NTag } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
 import { FilterBar } from '@/shared/ui/filter-bar'
 import { DataGrid, createColumns, type DataGridColumnSpec } from '@/shared/ui/data-grid'
-import { useFeedback } from '@/shared/ui/feedback'
+import { ErrorBanner, useFeedback } from '@/shared/ui/feedback'
 import { importProductCatalog, listProfiles, pickCatalogImportFile } from '@/shared/api/bridge'
 import { useProductsPage } from './useProductsPage'
 import ProductEditDrawer from './ProductEditDrawer.vue'
 import BatchStockToWaveDialog from './BatchStockToWaveDialog.vue'
 import { localImageUrl, type ProductMaster } from '@/entities/product'
+import { canImportProductCatalog } from '@/pages/integrations/profileAvailability'
+import ImportEvidenceReference from '@/shared/ui/customer-resolution/ImportEvidenceReference.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
@@ -88,18 +90,29 @@ const showCatalogImport = ref(false)
 const catalogProfileId = ref<number | null>(null)
 const catalogProfiles = ref<SelectOption[]>([])
 const catalogImporting = ref(false)
+const catalogProfilesLoading = ref(false)
+const catalogProfilesError = ref<string | null>(null)
+const catalogImportEvidence = ref<{ importRunId: number; evidenceDisabled: boolean } | null>(null)
 
 async function openCatalogImport(): Promise<void> {
   showCatalogImport.value = true
   catalogProfileId.value = null
+  catalogProfilesLoading.value = true
+  catalogProfilesError.value = null
+  catalogImportEvidence.value = null
   try {
     const profiles = await listProfiles()
-    catalogProfiles.value = profiles.map((p) => ({
-      label: `${p.profileKey} (${p.factorySupplierPlatform || p.sourceChannel})`,
-      value: p.id,
-    }))
-  } catch {
+    catalogProfiles.value = profiles
+      .filter(canImportProductCatalog)
+      .map((p) => ({
+        label: `${p.profileKey} (${p.factorySupplierPlatform || p.sourceChannel})`,
+        value: p.id,
+      }))
+  } catch (err) {
     catalogProfiles.value = []
+    catalogProfilesError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    catalogProfilesLoading.value = false
   }
 }
 
@@ -114,6 +127,10 @@ async function runCatalogImport(): Promise<void> {
       importMode: 'skip_invalid',
       filePath: path,
     })
+    catalogImportEvidence.value = {
+      importRunId: result.importRunId,
+      evidenceDisabled: result.evidenceDisabled,
+    }
     if (result.errorCount > 0) {
       feedback.error(
         t('feedback.error'),
@@ -129,11 +146,10 @@ async function runCatalogImport(): Promise<void> {
       feedback.info(
         t('products.catalogImport.warnings', {
           count: result.warnings.length,
-          items: result.warnings.join('; '),
+          items: t('products.catalogImport.warningDetailsWithheld'),
         }),
       )
     }
-    showCatalogImport.value = false
     void page.load()
   } catch (err) {
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
@@ -301,17 +317,30 @@ const columns = computed(() => {
       style="width: 480px"
     >
       <p class="products-page__catalog-hint">{{ t('products.catalogImport.hint') }}</p>
+      <ImportEvidenceReference
+        v-if="catalogImportEvidence"
+        :import-run-id="catalogImportEvidence.importRunId"
+        :evidence-disabled="catalogImportEvidence.evidenceDisabled"
+      />
+      <NSpin v-if="catalogProfilesLoading" size="small" />
+      <ErrorBanner
+        v-else-if="catalogProfilesError"
+        :message="t('products.catalogImport.profileLoadFailed')"
+        :detail="catalogProfilesError"
+        @retry="openCatalogImport"
+      />
       <NSelect
+        v-else
         v-model:value="catalogProfileId"
         :options="catalogProfiles"
         filterable
         :placeholder="t('products.catalogImport.profilePlaceholder')"
       />
       <div class="products-page__catalog-actions">
-        <NButton @click="showCatalogImport = false">{{ t('common.cancel') }}</NButton>
+        <NButton @click="showCatalogImport = false">{{ catalogImportEvidence ? t('common.close') : t('common.cancel') }}</NButton>
         <NButton
           type="primary"
-          :disabled="catalogProfileId == null"
+          :disabled="catalogProfileId == null || catalogProfilesLoading || !!catalogProfilesError || catalogImportEvidence != null"
           :loading="catalogImporting"
           @click="runCatalogImport"
         >

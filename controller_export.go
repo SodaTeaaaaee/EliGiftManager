@@ -56,6 +56,17 @@ func NewExportController() *ExportController {
 // ExportSupplierOrder exports supplier orders from the given wave, grouped by execution boundary.
 // Returns all created draft orders for the wave.
 func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrderDTO, error) {
+	return c.exportSupplierOrder(waveID, nil)
+}
+
+// ExportSupplierOrderForProfile exports a wave through an explicitly selected
+// factory IntegrationProfile. The selected profile is persisted on every
+// created SupplierOrder for auditability.
+func (c *ExportController) ExportSupplierOrderForProfile(waveID, factoryProfileID uint) ([]dto.SupplierOrderDTO, error) {
+	return c.exportSupplierOrder(waveID, &factoryProfileID)
+}
+
+func (c *ExportController) exportSupplierOrder(waveID uint, factoryProfileID *uint) ([]dto.SupplierOrderDTO, error) {
 	ctx := appContext
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
 	if err != nil {
@@ -88,7 +99,13 @@ func (c *ExportController) ExportSupplierOrder(waveID uint) ([]dto.SupplierOrder
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
 
-		exported, exportErr := exportUC.ExportSupplierOrder(ctx, waveID)
+		var exported []*domain.SupplierOrder
+		var exportErr error
+		if factoryProfileID != nil {
+			exported, exportErr = exportUC.ExportSupplierOrderForProfile(ctx, waveID, *factoryProfileID)
+		} else {
+			exported, exportErr = exportUC.ExportSupplierOrder(ctx, waveID)
+		}
 		if exportErr != nil {
 			return exportErr
 		}
@@ -197,22 +214,23 @@ func domainToSupplierOrderDTO(so *domain.SupplierOrder) dto.SupplierOrderDTO {
 		return dto.SupplierOrderDTO{}
 	}
 	return dto.SupplierOrderDTO{
-		ID:                   so.ID,
-		WaveID:               so.WaveID,
-		SupplierPlatform:     so.SupplierPlatform,
-		TemplateID:           so.TemplateID,
-		BatchNo:              so.BatchNo,
-		ExternalOrderNo:      so.ExternalOrderNo,
-		SubmissionMode:       so.SubmissionMode,
-		SubmittedAt:          so.SubmittedAt,
-		Status:               so.Status,
-		RequestPayload:       so.RequestPayload,
-		ResponsePayload:      so.ResponsePayload,
-		BasisHistoryNodeID:   so.BasisHistoryNodeID,
-		BasisProjectionHash:  so.BasisProjectionHash,
-		BasisPayloadSnapshot: so.BasisPayloadSnapshot,
-		ExtraData:            so.ExtraData,
-		CreatedAt:            so.CreatedAt,
-		UpdatedAt:            so.UpdatedAt,
+		ID:                          so.ID,
+		WaveID:                      so.WaveID,
+		FactoryIntegrationProfileID: so.FactoryIntegrationProfileID,
+		SupplierPlatform:            so.SupplierPlatform,
+		TemplateID:                  so.TemplateID,
+		BatchNo:                     so.BatchNo,
+		ExternalOrderNo:             so.ExternalOrderNo,
+		SubmissionMode:              so.SubmissionMode,
+		SubmittedAt:                 so.SubmittedAt,
+		Status:                      so.Status,
+		RequestPayload:              so.RequestPayload,
+		ResponsePayload:             so.ResponsePayload,
+		BasisHistoryNodeID:          so.BasisHistoryNodeID,
+		BasisProjectionHash:         so.BasisProjectionHash,
+		BasisPayloadSnapshot:        so.BasisPayloadSnapshot,
+		ExtraData:                   so.ExtraData,
+		CreatedAt:                   so.CreatedAt,
+		UpdatedAt:                   so.UpdatedAt,
 	}
 }

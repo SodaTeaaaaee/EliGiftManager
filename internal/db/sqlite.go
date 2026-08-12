@@ -29,6 +29,10 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	if err := ensureDatabaseDir(cleanedPath); err != nil {
 		return nil, fmt.Errorf("initialize SQLite database failed: %w", err)
 	}
+	backup, err := backupDatabaseBeforeMigration(cleanedPath)
+	if err != nil {
+		return nil, fmt.Errorf("initialize SQLite database failed: pre-migration backup: %w", err)
+	}
 
 	db, err := gorm.Open(sqlite.Open(cleanedPath), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: false,
@@ -55,12 +59,21 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	db.Exec("PRAGMA foreign_keys = ON;")
 	db.Exec("PRAGMA busy_timeout = 5000;")
 
-	// AutoMigrate: V2 persistence models for the first vertical slice.
+	// Customer resolution and merge audit schema is critical data infrastructure.
+	// It is applied through the checksummed ledger before the legacy best-effort
+	// AutoMigrate set so partial failures remain visible and safely retryable.
+	if err := runSchemaMigrations(db, backup, customerResolutionMigrations()); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("initialize SQLite database failed: versioned migrations: %w", err)
+	}
+	if err := runBatchedDataMigrations(db, legacyCustomerDataMigrations()); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("initialize SQLite database failed: data migrations: %w", err)
+	}
+
+	// AutoMigrate remains for non-critical legacy schema until each area receives
+	// a versioned migration. Customer resolution models are intentionally absent.
 	if err := db.AutoMigrate(
-		&persistence.CustomerProfile{},
-		&persistence.CustomerMergeRecord{},
-		&persistence.CustomerIdentity{},
-		&persistence.CustomerAddress{},
 		&persistence.DemandDocument{},
 		&persistence.DemandLine{},
 		&persistence.Wave{},

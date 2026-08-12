@@ -1,4 +1,5 @@
 export { default as FieldMappingEditor } from './FieldMappingEditor.vue'
+export type { CatalogImageLayoutValue } from './types'
 export type { FieldMappingDestField, FieldMappingMode, FieldMappingValue } from './types'
 export {
   emptyFieldMapping,

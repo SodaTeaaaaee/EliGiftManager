@@ -54,3 +54,39 @@ func TestOrderedColumns_UsesColumnOrder(t *testing.T) {
 		t.Fatalf("remainder: %+v", cols)
 	}
 }
+
+func TestRenderMappedRow_AppliesTransformsDefaultsAndRequired(t *testing.T) {
+	t.Parallel()
+	r := NewTemplatePayloadRenderer()
+	rules := &TemplateMappingRules{
+		Columns: map[string]string{
+			"export.factory_sku": "SKU",
+			"export.quantity":    "Qty",
+		},
+		ColumnOrder: []string{"export.factory_sku", "export.quantity"},
+		Transforms: map[string][]string{
+			"export.factory_sku": {"trim"},
+			"export.quantity":    {"trim"},
+		},
+		Defaults: map[string]string{"export.quantity": " 3 "},
+		Required: []string{"export.factory_sku", "export.quantity"},
+	}
+	columns := r.orderedColumns(rules)
+	row, err := r.renderMappedRow(columns, rules, func(dest string) string {
+		if dest == "export.factory_sku" {
+			return " SKU-1 "
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatalf("renderMappedRow: %v", err)
+	}
+	if row[0] != "SKU-1" || row[1] != "3" {
+		t.Fatalf("row = %#v, want [SKU-1 3]", row)
+	}
+
+	_, err = r.renderMappedRow(columns, rules, func(string) string { return "" })
+	if err == nil || err.Error() != `required field "export.factory_sku" is missing or empty` {
+		t.Fatalf("required error = %v", err)
+	}
+}

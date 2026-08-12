@@ -1,17 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"gorm.io/gorm"
 )
 
 // DemandController exposes demand-intake Wails bindings.
 type DemandController struct {
+	gdb                  *gorm.DB
 	intakeUC             app.DemandIntakeUseCase
 	entitlementRoutingUC app.EntitlementRoutingUseCase
 	demandRepo           domain.DemandDocumentRepository
@@ -38,6 +42,7 @@ func NewDemandController() *DemandController {
 	addressRepo := infra.NewAddressRepository(gdb)
 	fulfillRepo := infra.NewFulfillmentRepository(gdb)
 	return &DemandController{
+		gdb:                  gdb,
 		intakeUC:             app.NewDemandIntakeUseCase(demandRepo),
 		entitlementRoutingUC: app.NewEntitlementRoutingUseCase(demandRepo, assignmentRepo),
 		demandRepo:           demandRepo,
@@ -53,15 +58,23 @@ func NewDemandController() *DemandController {
 	}
 }
 
+func (c *DemandController) requireCustomerResolutionWrites(ctx context.Context) error {
+	if gate, ok := c.profileRepo.(domain.CustomerResolutionFeatureGate); ok && gate != nil {
+		return gate.RequireFeature(ctx, domain.CustomerResolutionFeatureWrites)
+	}
+	if c.gdb != nil {
+		return infra.NewCustomerResolutionFeaturePolicyRepository(c.gdb).RequireFeature(ctx, domain.CustomerResolutionFeatureWrites)
+	}
+	return &domain.FeaturePolicyError{Code: domain.FeaturePolicyCodeUnavailable,
+		Feature: domain.CustomerResolutionFeatureWrites, Detail: "customer resolution feature gate is not configured"}
+}
+
 // ImportDemandDocument imports a DemandDocument with its DemandLines.
 func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dto.DemandDocumentDTO, error) {
 	ctx := appContext
-	if input.CustomerProfileID != nil {
-		if _, err := c.profileRepo.FindByID(ctx, *input.CustomerProfileID); err != nil {
-			return dto.DemandDocumentDTO{}, fmt.Errorf("customer profile %d does not exist", *input.CustomerProfileID)
-		}
+	if err := c.requireCustomerResolutionWrites(ctx); err != nil {
+		return dto.DemandDocumentDTO{}, err
 	}
-
 	// Silent override — backend is the final arbiter for profile-driven fields.
 	// When an integration profile is selected, DemandKind / SourceChannel /
 	// SourceSurface are dictated by the profile configuration; any values the
@@ -72,7 +85,7 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 	effectiveSourceChannel := input.SourceChannel
 	effectiveSourceSurface := input.SourceSurface
 
-	var resolvedProfileID *uint
+	var integrationProfile *domain.IntegrationProfile
 	if input.IntegrationProfileID != nil {
 		profile, err := c.integrationProfile.FindByID(ctx, *input.IntegrationProfileID)
 		if err != nil {
@@ -87,33 +100,12 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 		if profile.SourceSurface != "" {
 			effectiveSourceSurface = profile.SourceSurface
 		}
-
-		// Auto-resolve CustomerProfile via identity when SourceCustomerRef is provided.
-		if input.CustomerProfileID == nil && input.SourceCustomerRef != "" && effectiveSourceChannel != "" {
-			identityType := app.ResolveIdentityStrategy(profile.IdentityStrategy)
-			pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(ctx, effectiveSourceChannel, input.SourceCustomerRef, identityType)
-			if resolveErr != nil {
-				return dto.DemandDocumentDTO{}, fmt.Errorf("identity resolution failed: %w", resolveErr)
-			}
-			resolvedProfileID = &pid
-		}
+		integrationProfile = profile
+	}
+	if c.gdb == nil {
+		return dto.DemandDocumentDTO{}, fmt.Errorf("demand import database is not configured")
 	}
 
-	effectiveCustomerProfileID := input.CustomerProfileID
-	if resolvedProfileID != nil {
-		effectiveCustomerProfileID = resolvedProfileID
-	}
-
-	doc := domain.DemandDocument{
-		Kind:                 effectiveKind,
-		CaptureMode:          input.CaptureMode,
-		SourceChannel:        effectiveSourceChannel,
-		SourceSurface:        effectiveSourceSurface,
-		SourceDocumentNo:     input.SourceDocumentNo,
-		SourceCustomerRef:    input.SourceCustomerRef,
-		CustomerProfileID:    effectiveCustomerProfileID,
-		IntegrationProfileID: input.IntegrationProfileID,
-	}
 	lines := make([]*domain.DemandLine, len(input.Lines))
 	for i, l := range input.Lines {
 		lines[i] = &domain.DemandLine{
@@ -132,15 +124,70 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 			RequestedQuantity:     l.RequestedQuantity,
 		}
 	}
-	if err := c.intakeUC.ImportDemand(ctx, &doc, lines); err != nil {
+
+	var imported domain.DemandDocument
+	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		profileRepo := infra.NewProfileRepository(tx)
+		if input.CustomerProfileID != nil {
+			if _, err := profileRepo.FindByID(ctx, *input.CustomerProfileID); err != nil {
+				return fmt.Errorf("customer profile %d does not exist", *input.CustomerProfileID)
+			}
+		}
+
+		effectiveCustomerProfileID := input.CustomerProfileID
+		originID := (*uint)(nil)
+		resolver := app.NewDemandCustomerResolutionService(profileRepo, infra.NewCustomerProfileOriginRepository(tx))
+		if integrationProfile != nil && (input.CustomerProfileID == nil ||
+			integrationProfile.IdentityStrategy == app.IdentityStrategyOrderScopedProvisional) {
+			resolved, resolveErr := resolver.Resolve(ctx, app.DemandCustomerResolutionInput{
+				IntegrationProfileID: integrationProfile.ID,
+				IdentityStrategy:     integrationProfile.IdentityStrategy,
+				SourceChannel:        effectiveSourceChannel,
+				SourceDocumentNo:     input.SourceDocumentNo,
+				SourceCustomerRef:    input.SourceCustomerRef,
+				DisplayName:          input.SourceCustomerRef,
+				ObservedAt:           time.Now().UTC(),
+			})
+			if resolveErr != nil {
+				return fmt.Errorf("customer resolution: %w", resolveErr)
+			}
+			effectiveCustomerProfileID = resolved.CustomerProfileID
+			originID = resolved.OriginID
+		}
+
+		doc := domain.DemandDocument{
+			Kind:                 effectiveKind,
+			CaptureMode:          input.CaptureMode,
+			SourceChannel:        effectiveSourceChannel,
+			SourceSurface:        effectiveSourceSurface,
+			SourceDocumentNo:     input.SourceDocumentNo,
+			SourceCustomerRef:    input.SourceCustomerRef,
+			CustomerProfileID:    effectiveCustomerProfileID,
+			IntegrationProfileID: input.IntegrationProfileID,
+		}
+		if err := app.NewDemandIntakeUseCase(infra.NewDemandRepository(tx)).ImportDemand(ctx, &doc, lines); err != nil {
+			return err
+		}
+		if originID != nil {
+			if err := resolver.AttachOriginDocument(ctx, *originID, doc.ID); err != nil {
+				return err
+			}
+		}
+		imported = doc
+		return nil
+	})
+	if err != nil {
 		return dto.DemandDocumentDTO{}, err
 	}
-	return domainToDemandDTO(&doc), nil
+	return domainToDemandDTO(&imported), nil
 }
 
 // ImportDemandFromCSV imports a demand document using a template-driven CSV pipeline.
 func (c *DemandController) ImportDemandFromCSV(input dto.ImportDemandTemplateInput) (dto.DemandDocumentDTO, error) {
 	ctx := appContext
+	if err := c.requireCustomerResolutionWrites(ctx); err != nil {
+		return dto.DemandDocumentDTO{}, err
+	}
 	profile, err := c.integrationProfile.FindByID(ctx, input.IntegrationProfileID)
 	if err != nil {
 		return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d not found: %w", input.IntegrationProfileID, err)
@@ -153,29 +200,52 @@ func (c *DemandController) ImportDemandFromCSV(input dto.ImportDemandTemplateInp
 	if err != nil {
 		return dto.DemandDocumentDTO{}, fmt.Errorf("template pipeline: %w", err)
 	}
-	var customerProfileID *uint
-	if input.SourceCustomerRef != "" && profile.SourceChannel != "" {
-		identityType := app.ResolveIdentityStrategy(profile.IdentityStrategy)
-		pid, resolveErr := c.identityResolution.ResolveOrCreateProfile(ctx, profile.SourceChannel, input.SourceCustomerRef, identityType)
+	if c.gdb == nil {
+		return dto.DemandDocumentDTO{}, fmt.Errorf("demand import database is not configured")
+	}
+	var imported domain.DemandDocument
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		resolver := app.NewDemandCustomerResolutionService(
+			infra.NewProfileRepository(tx),
+			infra.NewCustomerProfileOriginRepository(tx),
+		)
+		resolved, resolveErr := resolver.Resolve(ctx, app.DemandCustomerResolutionInput{
+			IntegrationProfileID: profile.ID,
+			IdentityStrategy:     profile.IdentityStrategy,
+			SourceChannel:        profile.SourceChannel,
+			SourceDocumentNo:     input.SourceDocumentNo,
+			SourceCustomerRef:    input.SourceCustomerRef,
+			DisplayName:          input.SourceCustomerRef,
+			ObservedAt:           time.Now().UTC(),
+		})
 		if resolveErr != nil {
-			return dto.DemandDocumentDTO{}, fmt.Errorf("identity resolution: %w", resolveErr)
+			return fmt.Errorf("customer resolution: %w", resolveErr)
 		}
-		customerProfileID = &pid
-	}
-	doc := domain.DemandDocument{
-		Kind:                 profile.DemandKind,
-		CaptureMode:          "document_import",
-		SourceChannel:        profile.SourceChannel,
-		SourceSurface:        profile.SourceSurface,
-		SourceDocumentNo:     input.SourceDocumentNo,
-		SourceCustomerRef:    input.SourceCustomerRef,
-		CustomerProfileID:    customerProfileID,
-		IntegrationProfileID: &profile.ID,
-	}
-	if err := c.intakeUC.ImportDemand(ctx, &doc, mappedLines); err != nil {
+		doc := domain.DemandDocument{
+			Kind:                 profile.DemandKind,
+			CaptureMode:          "document_import",
+			SourceChannel:        profile.SourceChannel,
+			SourceSurface:        profile.SourceSurface,
+			SourceDocumentNo:     input.SourceDocumentNo,
+			SourceCustomerRef:    input.SourceCustomerRef,
+			CustomerProfileID:    resolved.CustomerProfileID,
+			IntegrationProfileID: &profile.ID,
+		}
+		if err := app.NewDemandIntakeUseCase(infra.NewDemandRepository(tx)).ImportDemand(ctx, &doc, mappedLines); err != nil {
+			return err
+		}
+		if resolved.OriginID != nil {
+			if err := resolver.AttachOriginDocument(ctx, *resolved.OriginID, doc.ID); err != nil {
+				return err
+			}
+		}
+		imported = doc
+		return nil
+	})
+	if err != nil {
 		return dto.DemandDocumentDTO{}, err
 	}
-	return domainToDemandDTO(&doc), nil
+	return domainToDemandDTO(&imported), nil
 }
 
 // ListDemandDocuments lists all demand documents.

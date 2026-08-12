@@ -13,10 +13,12 @@
 import { computed, reactive, ref } from 'vue'
 import {
   pickTabularFile,
+  pickCatalogImportFile,
   parseTabularFile,
   createProfile,
   createDocumentTemplate,
   bindTemplateToProfile,
+  setDefaultBinding,
 } from '@/shared/api/bridge'
 import {
   PLATFORM_PRESETS,
@@ -25,7 +27,6 @@ import {
 } from '@/shared/lib/demand-intake/platform-presets'
 import {
   emptyFieldMapping,
-  serializeMappingRules,
   type FieldMappingValue,
 } from '@/shared/ui/field-mapping'
 import type { IntegrationProfile } from '@/entities/profile'
@@ -39,6 +40,10 @@ import {
   type DemandKind,
   type FactoryProfileCapabilities,
 } from './deriveProfileDefaults'
+import {
+  buildIntakeTemplatePlan,
+  canProceedFromSample,
+} from './intakeTemplatePlan'
 
 export type { BusinessSurfaceChoice } from './deriveProfileDefaults'
 
@@ -47,120 +52,23 @@ export type { BusinessSurfaceChoice } from './deriveProfileDefaults'
  * non-default binding if one already exists. Known backend gap: no update-in-place for
  * existing default bindings.
  *
- * Returns `'ok' | 'degraded'` — never throws on the default-bind conflict itself.
- * A hard failure on the non-default bind still throws.
+ * When a default already exists, create a non-default binding and then atomically
+ * promote it through SetDefaultBinding. This keeps remap mode honest: the freshly
+ * saved template is the one subsequent imports actually use.
  */
 async function bindAsDefaultOrDegrade(input: {
   integrationProfileId: number
   documentType: string
   templateId: number
-}): Promise<'ok' | 'degraded'> {
+}): Promise<'ok'> {
   try {
     await bindTemplateToProfile({ ...input, isDefault: true })
     return 'ok'
   } catch {
-    await bindTemplateToProfile({ ...input, isDefault: false })
-    return 'degraded'
+    const binding = await bindTemplateToProfile({ ...input, isDefault: false })
+    await setDefaultBinding(binding.id)
+    return 'ok'
   }
-}
-
-/**
- * Legal dest-key prefixes for each document type (mirrors backend
- * `destCatalogByDocType` in mapping_dest_registry.go). Used to keep demand
- * `line.*` / `recipient.*` seeds out of factory product/shipment/export templates.
- */
-function allowedDestPrefixesForDocType(docType: string): readonly string[] {
-  switch (docType) {
-    case 'import_product_catalog':
-      return ['product.']
-    case 'import_supplier_shipment':
-      return ['shipment.']
-    case 'export_supplier_order':
-      return ['export.']
-    case 'import_entitlement':
-    case 'import_sales_order':
-      return ['line.', 'document.', 'recipient.']
-    case 'import_carrier_mapping':
-      return ['carrier.']
-    case 'export_source_tracking_update':
-      return ['tracking.', 'export.']
-    default:
-      return []
-  }
-}
-
-function destAllowedForDocType(dest: string, docType: string): boolean {
-  const key = dest.trim()
-  if (!key) return false
-  const prefixes = allowedDestPrefixesForDocType(docType)
-  if (prefixes.some((p) => key.startsWith(p))) return true
-  // Demand imports still accept bare (unprefixed) v1 line dest keys.
-  if (
-    (docType === 'import_entitlement' || docType === 'import_sales_order') &&
-    !key.includes('.')
-  ) {
-    return true
-  }
-  return false
-}
-
-function filterRecordKeys<T>(
-  record: Record<string, T> | undefined,
-  keep: (dest: string) => boolean,
-): Record<string, T> {
-  const out: Record<string, T> = {}
-  for (const [k, v] of Object.entries(record ?? {})) {
-    if (keep(k)) out[k] = v
-  }
-  return out
-}
-
-/**
- * Project the wizard mapping onto dests legal for `docType`.
- * Returns null when no source columns/positions remain — caller should emit
- * empty mappingRules (`""`) so CreateDocumentTemplate skips dest validation
- * instead of rejecting demand-line seeds on factory doc types.
- */
-function filterMappingForDocType(
-  mapping: FieldMappingValue,
-  docType: string,
-): FieldMappingValue | null {
-  const keep = (dest: string) => destAllowedForDocType(dest, docType)
-  const columns = filterRecordKeys(mapping.columns, keep)
-  const positions = filterRecordKeys(mapping.positions, keep)
-  const defaults = filterRecordKeys(mapping.defaults, keep)
-  const transforms = mapping.transforms ? filterRecordKeys(mapping.transforms, keep) : undefined
-  const columnOrder = (mapping.columnOrder ?? []).filter(keep)
-  const required = mapping.required?.filter(keep)
-
-  const hasSource =
-    mapping.mode === 'positional'
-      ? Object.keys(positions).length > 0
-      : Object.keys(columns).length > 0
-  if (!hasSource) return null
-
-  return {
-    version: mapping.version ?? 2,
-    mode: mapping.mode,
-    hasHeader: mapping.hasHeader,
-    columns,
-    positions,
-    defaults,
-    transforms,
-    columnOrder,
-    required,
-  }
-}
-
-/**
- * Serialize mapping for a specific document type.
- * Empty string = no rules (backend CreateDocumentTemplate skips Parse/Validate).
- * Never serialize an empty columns object — ParseMappingRules rejects that shape.
- */
-function mappingRulesJSONForDocType(mapping: FieldMappingValue, docType: string): string {
-  const filtered = filterMappingForDocType(mapping, docType)
-  if (!filtered) return ''
-  return serializeMappingRules(filtered)
 }
 
 export type IntakeWizardStepKey = 'platformPreset' | 'businessSurface' | 'sampleUpload' | 'capabilities' | 'confirm'
@@ -322,13 +230,30 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions = {}) 
     pickError.value = ''
     let path: string
     try {
-      path = await pickTabularFile()
+      path = isFactorySurface.value && factoryCapabilities.supportsImportProductCatalog
+        ? await pickCatalogImportFile()
+        : await pickTabularFile()
     } catch (err) {
       pickError.value = err instanceof Error ? err.message : String(err)
       return
     }
     if (!path) return
     csvPath.value = path
+    if (path.toLowerCase().endsWith('.zip')) {
+      csvHeaders.value = []
+      csvRows.value = []
+      mapping.value = {
+        ...mapping.value,
+        imageLayout: mapping.value.imageLayout ?? {
+          enabled: true,
+          matchField: 'product.name',
+          namePattern: '{match}#{nn}',
+          coverPick: 'lowest_nn',
+          tabularGlob: '*.csv',
+        },
+      }
+      return
+    }
     parsing.value = true
     try {
       const preview = await parseTabularFile(path, mapping.value.hasHeader !== false)
@@ -356,13 +281,6 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions = {}) 
     if (idx > 0) current.value = steps.value[idx - 1]
   }
 
-  function mappingIsConfigured(value: FieldMappingValue): boolean {
-    if (value.mode === 'positional') {
-      return Object.keys(value.positions ?? {}).length > 0 || Object.keys(value.defaults).length > 0
-    }
-    return Object.keys(value.columns).length > 0 || Object.keys(value.defaults).length > 0
-  }
-
   /** Gates the Next/Finish button per-step — WizardFrame's `canNext` prop. */
   const canProceedFromCurrentStep = computed<boolean>(() => {
     switch (current.value) {
@@ -374,14 +292,12 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions = {}) 
         }
         return sourceSurface.value.trim().length > 0
       case 'sampleUpload': {
-        // Factory may skip sample file if operator only needs profile flags.
-        if (isFactorySurface.value && !csvPath.value && csvHeaders.value.length === 0) {
-          return true
-        }
-        const hasFile = csvPath.value.length > 0 || csvHeaders.value.length > 0
-        if (!hasFile) return false
-        if (mapping.value.mode === 'positional') return mappingIsConfigured(mapping.value) || csvHeaders.value.length > 0
-        return csvHeaders.value.length > 0
+        return canProceedFromSample({
+          isFactorySurface: isFactorySurface.value,
+          filePath: csvPath.value,
+          detectedHeaders: csvHeaders.value,
+          mapping: mapping.value,
+        })
       }
       case 'capabilities':
         if (isFactorySurface.value) {
@@ -420,34 +336,25 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions = {}) 
     bindWarning.value = ''
     persisting.value = true
     try {
-      const format = csvPath.value.toLowerCase().endsWith('.xlsx') || csvPath.value.toLowerCase().endsWith('.xls')
-        ? 'xlsx'
-        : 'csv'
-
-      let anyDegraded = false
       let templatesCreated = 0
       let templatesFailed = 0
 
       if (isRemapMode.value && existingProfile) {
         const docType = documentType.value
-        // Remap still scopes mapping to the target docType namespace.
-        const rulesJSON = mappingRulesJSONForDocType(mapping.value, docType)
+        const [planned] = buildIntakeTemplatePlan(mapping.value, [docType], csvPath.value)
+        if (!planned) throw new Error(i18n.global.t('intakeWizard.confirm.mappingRequired'))
         const template = await createDocumentTemplate({
           templateKey: `${existingProfile.profileKey}-remap-${Date.now()}`,
           documentType: docType,
-          format,
-          mappingRules: rulesJSON,
+          format: planned.format,
+          mappingRules: planned.mappingRules,
           extraData: '',
         })
-        const bindResult = await bindAsDefaultOrDegrade({
+        await bindAsDefaultOrDegrade({
           integrationProfileId: existingProfile.id,
           documentType: docType,
           templateId: template.id,
         })
-        if (bindResult === 'degraded') anyDegraded = true
-        if (anyDegraded) {
-          bindWarning.value = i18n.global.t('intakeWizard.confirm.bindConflict')
-        }
         return existingProfile
       }
 
@@ -492,25 +399,24 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions = {}) 
         ? documentTypesForFactoryCaps(factoryCapabilities)
         : [documentType.value]
 
-      for (const docType of docTypes) {
+      const templatePlan = buildIntakeTemplatePlan(mapping.value, docTypes, csvPath.value)
+      templatesFailed += docTypes.length - templatePlan.length
+
+      for (const planned of templatePlan) {
         try {
-          // Per-docType filter: demand line.* seeds never go into factory caps;
-          // multi-cap factory mappings are projected onto each namespace.
-          const rulesJSON = mappingRulesJSONForDocType(mapping.value, docType)
           const template = await createDocumentTemplate({
-            templateKey: `${profileKey.value.trim()}-${docType}-default`,
-            documentType: docType,
-            format,
-            mappingRules: rulesJSON,
+            templateKey: `${profileKey.value.trim()}-${planned.documentType}-default`,
+            documentType: planned.documentType,
+            format: planned.format,
+            mappingRules: planned.mappingRules,
             extraData: '',
           })
-          const bindResult = await bindAsDefaultOrDegrade({
+          await bindAsDefaultOrDegrade({
             integrationProfileId: profile.id,
-            documentType: docType,
+            documentType: planned.documentType,
             templateId: template.id,
           })
           templatesCreated += 1
-          if (bindResult === 'degraded') anyDegraded = true
         } catch {
           templatesFailed += 1
         }
@@ -520,8 +426,6 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions = {}) 
         bindWarning.value = i18n.global.t('intakeWizard.confirm.templateAllFailed')
       } else if (templatesFailed > 0) {
         bindWarning.value = i18n.global.t('intakeWizard.confirm.templatePartial')
-      } else if (anyDegraded) {
-        bindWarning.value = i18n.global.t('intakeWizard.confirm.bindConflict')
       }
       return profile
     } catch (err) {

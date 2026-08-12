@@ -25,14 +25,18 @@ import { StatusBadge } from '@/shared/ui/status'
 import { useFeedback } from '@/shared/ui/feedback'
 import { createCustomerProfile } from '@/shared/api/bridge'
 import type { CustomerProfileDTO } from '@/entities/customer'
-import type { MergeProfilesResult, UndoCustomerMergeResult } from '@/entities/merge'
+import type { ExecuteCustomerMergeResult, ExecuteCustomerMergeUndoResult } from '@/entities/merge'
 import { useCustomerList } from './useCustomersPage'
 import SuggestedMergesList from './customer-detail/SuggestedMergesList.vue'
 import MergePreviewDialog from './customer-detail/MergePreviewDialog.vue'
+import { useCustomerResolutionFeaturePolicy } from '@/shared/composables/useCustomerResolutionFeaturePolicy'
+import { customerResolutionWriteAccess } from '@/shared/lib/customer-resolution'
 
 const { t } = useI18n({ useScope: 'global' })
 const router = useRouter()
 const feedback = useFeedback()
+const featurePolicy = useCustomerResolutionFeaturePolicy()
+const customerWriteAccess = computed(() => customerResolutionWriteAccess(featurePolicy.policy.value))
 
 const {
   loading,
@@ -50,7 +54,10 @@ const {
   onSort,
 } = useCustomerList()
 
-onMounted(refresh)
+onMounted(() => {
+  void refresh()
+  void featurePolicy.load()
+})
 
 function openDetail(profile: CustomerProfileDTO): void {
   router.push({ name: 'customer-detail', params: { id: profile.id } })
@@ -80,7 +87,18 @@ const platformSelectOptions = computed<SelectOption[]>(() => [
 
 const columns = computed(() => {
   const specs: DataGridColumnSpec<CustomerProfileDTO>[] = [
-    { type: 'text', key: 'displayName', title: t('customerList.columns.displayName'), minWidth: 180 },
+    {
+      type: 'text',
+      key: 'displayName',
+      title: t('customerList.columns.displayName'),
+      minWidth: 180,
+      render: (row) => h('div', { class: 'customers-page__name-cell' }, [
+        h('span', row.displayName),
+        row.matchedHistoricalName
+          ? h('small', t('customerList.matchedHistoricalName', { name: row.matchedHistoricalName }))
+          : null,
+      ]),
+    },
     {
       type: 'status',
       key: 'profileType',
@@ -157,12 +175,13 @@ const profileTypeOptions = computed<SelectOption[]>(() => [
 ])
 
 function openCreate(): void {
+  if (!customerWriteAccess.value.canCreateProfile) return
   createName.value = ''
   createType.value = 'manual'
   showCreate.value = true
 }
 
-const canCreate = computed(() => !creating.value && createName.value.trim().length > 0)
+const canCreate = computed(() => customerWriteAccess.value.canCreateProfile && !creating.value && createName.value.trim().length > 0)
 
 async function handleCreate(): Promise<void> {
   if (!canCreate.value) return
@@ -187,9 +206,12 @@ async function handleCreate(): Promise<void> {
 
 const mergeSourceId = ref<number | null>(null)
 const mergeTargetId = ref<number | null>(null)
+const mergeCandidateId = ref<number | null>(null)
 const showMergePreview = ref(false)
+const suggestedMergesRef = ref<InstanceType<typeof SuggestedMergesList> | null>(null)
 
-function onSuggestedPreview(payload: { sourceProfileId: number; targetProfileId: number }): void {
+function onSuggestedPreview(payload: { candidateId: number; sourceProfileId: number; targetProfileId: number }): void {
+  mergeCandidateId.value = payload.candidateId
   mergeSourceId.value = payload.sourceProfileId
   mergeTargetId.value = payload.targetProfileId
   showMergePreview.value = true
@@ -200,14 +222,15 @@ function onMergePreviewVisibility(visible: boolean): void {
   if (!visible) {
     mergeSourceId.value = null
     mergeTargetId.value = null
+    mergeCandidateId.value = null
   }
 }
 
-function onMerged(_result: MergeProfilesResult): void {
-  void refresh()
+async function onMerged(_result: ExecuteCustomerMergeResult): Promise<void> {
+  await Promise.all([refresh(), suggestedMergesRef.value?.refetch()])
 }
 
-async function onMergeUndone(result: UndoCustomerMergeResult): Promise<void> {
+async function onMergeUndone(result: ExecuteCustomerMergeUndoResult): Promise<void> {
   await refresh()
   await router.push({ name: 'customer-detail', params: { id: result.restoredSourceProfileId } })
 }
@@ -217,9 +240,12 @@ async function onMergeUndone(result: UndoCustomerMergeResult): Promise<void> {
   <div class="customers-page">
     <PageHeader :title="t('customerList.title')" :description="t('customerList.subtitle')">
       <template #actions>
-        <NButton type="primary" @click="openCreate">{{ t('customerList.createAction') }}</NButton>
+        <NButton type="primary" :disabled="!customerWriteAccess.canCreateProfile" @click="openCreate">{{ t('customerList.createAction') }}</NButton>
       </template>
     </PageHeader>
+    <p v-if="!customerWriteAccess.canCreateProfile" class="customers-page__writes-disabled">
+      {{ t('customerDetail.writesDisabledReason') }}
+    </p>
 
     <SectionCard flat>
       <div class="customers-page__filters">
@@ -243,7 +269,7 @@ async function onMergeUndone(result: UndoCustomerMergeResult): Promise<void> {
       </div>
     </SectionCard>
 
-    <SuggestedMergesList @preview="onSuggestedPreview" />
+    <SuggestedMergesList ref="suggestedMergesRef" @preview="onSuggestedPreview" />
 
     <DataGrid
       :columns="columns"
@@ -292,10 +318,10 @@ async function onMergeUndone(result: UndoCustomerMergeResult): Promise<void> {
     >
       <NForm label-placement="top">
         <NFormItem :label="t('customerDetail.profile.displayNameLabel')">
-          <NInput v-model:value="createName" :disabled="creating" @keydown.enter.prevent="handleCreate" />
+          <NInput v-model:value="createName" :disabled="creating || !customerWriteAccess.canCreateProfile" @keydown.enter.prevent="handleCreate" />
         </NFormItem>
         <NFormItem :label="t('customerDetail.profile.profileTypeLabel')">
-          <NSelect v-model:value="createType" :options="profileTypeOptions" :disabled="creating" />
+          <NSelect v-model:value="createType" :options="profileTypeOptions" :disabled="creating || !customerWriteAccess.canCreateProfile" />
         </NFormItem>
       </NForm>
       <template #footer>
@@ -312,6 +338,7 @@ async function onMergeUndone(result: UndoCustomerMergeResult): Promise<void> {
       :show="showMergePreview"
       :source-profile-id="mergeSourceId"
       :target-profile-id="mergeTargetId"
+      :candidate-id="mergeCandidateId"
       @update:show="onMergePreviewVisibility"
       @merged="onMerged"
       @undone="onMergeUndone"
@@ -331,6 +358,12 @@ async function onMergeUndone(result: UndoCustomerMergeResult): Promise<void> {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
+}
+
+.customers-page__writes-disabled {
+  margin: 0;
+  color: var(--status-warning-fg);
+  font-size: var(--font-size-xs);
 }
 
 .customers-page__filter-keyword {
@@ -389,5 +422,16 @@ async function onMergeUndone(result: UndoCustomerMergeResult): Promise<void> {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
+}
+
+.customers-page__name-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.customers-page__name-cell small {
+  color: var(--status-info-fg);
+  font-size: var(--font-size-xs);
 }
 </style>

@@ -55,8 +55,8 @@ function handleSkinChange(value: string): void {
   themeStore.setSkinId(value);
 }
 
-function handleLocaleChange(value: SupportedLocale): void {
-  setLocale(value);
+async function handleLocaleChange(value: SupportedLocale): Promise<void> {
+  await setLocale(value);
 }
 
 /** Section registry — drives both the TOC pills and the staggered reveal list. */

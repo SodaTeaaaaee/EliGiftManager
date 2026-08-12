@@ -22,6 +22,9 @@ func newMockAddressRepo() *mockAddressRepo {
 	return &mockAddressRepo{addrs: make(map[uint]*domain.CustomerAddress)}
 }
 
+func (m *mockAddressRepo) FeatureEnabled(context.Context, string) (bool, error) { return true, nil }
+func (m *mockAddressRepo) RequireFeature(context.Context, string) error         { return nil }
+
 func (m *mockAddressRepo) next() uint { m.lastID++; return m.lastID }
 
 func (m *mockAddressRepo) Create(ctx context.Context, addr *domain.CustomerAddress) error {

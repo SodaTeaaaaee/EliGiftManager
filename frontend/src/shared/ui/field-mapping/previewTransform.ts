@@ -47,6 +47,7 @@ export function applyMapping(
   const columns = mapping.columns ?? {}
   const positions = mapping.positions ?? {}
   const mappingDefaults = mapping.defaults ?? {}
+  const transforms = mapping.transforms ?? {}
 
   const destFields = new Set<string>([
     ...Object.keys(mode === 'positional' ? positions : columns),
@@ -63,23 +64,45 @@ export function applyMapping(
     for (const destField of destFields) {
       const defaultValue = mappingDefaults[destField]
       if (defaultValue !== undefined && defaultValue !== '') {
-        values[destField] = defaultValue
+        values[destField] = applyPreviewTransforms(defaultValue, transforms[destField])
         continue
       }
       if (mode === 'positional') {
         const idx = positions[destField]
-        values[destField] =
+        values[destField] = applyPreviewTransforms(
           typeof idx === 'number' && idx >= 0 && idx < orderedCells.length
             ? (orderedCells[idx] ?? '')
-            : ''
+            : '',
+          transforms[destField],
+        )
         continue
       }
       const sourceColumn = columns[destField]
       const columnValue = sourceColumn !== undefined ? row[sourceColumn] : undefined
-      values[destField] = columnValue ?? ''
+      values[destField] = applyPreviewTransforms(columnValue ?? '', transforms[destField])
     }
     return { values }
   })
+}
+
+/** Mirrors the backend's supported TemplateMappingRules transforms. */
+export function applyPreviewTransforms(value: string, transforms: string[] | undefined): string {
+  let next = value
+  for (const transform of transforms ?? []) {
+    if (transform === 'trim') next = next.trim()
+    else if (transform === 'strip_quotes') {
+      if (
+        next.length >= 2 &&
+        ((next.startsWith('"') && next.endsWith('"')) ||
+          (next.startsWith("'") && next.endsWith("'")))
+      ) {
+        next = next.slice(1, -1)
+      }
+    } else if (transform === 'strip_leading_quote') {
+      next = next.startsWith("'") ? next.slice(1) : next
+    }
+  }
+  return next
 }
 
 function isFieldMappingValue(value: unknown): value is FieldMappingValue {

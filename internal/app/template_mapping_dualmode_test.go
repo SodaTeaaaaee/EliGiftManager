@@ -37,7 +37,11 @@ func seedDualModeFixture(t *testing.T, gdb *gorm.DB) (profileID uint, svc *Templ
 	ctx := context.Background()
 
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
-	profile := &domain.IntegrationProfile{ProfileKey: "test-profile", SourceChannel: "test"}
+	profile := &domain.IntegrationProfile{
+		ProfileKey: "test-profile", SourceChannel: "test",
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+	}
 	if err := profileRepo.Create(ctx, profile); err != nil {
 		t.Fatalf("create profile: %v", err)
 	}

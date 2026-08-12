@@ -290,10 +290,19 @@ func ValidateMappingRulesConfig(docType string, rules *TemplateMappingRules) err
 			}
 		}
 	}
+	seenOrder := make(map[string]struct{}, len(rules.ColumnOrder))
 	for _, dest := range rules.ColumnOrder {
 		if !IsLegalDest(docType, dest) {
 			return fmt.Errorf("illegal dest %q in columnOrder for document type %q", dest, docType)
 		}
+		key := NormalizeDestKey(dest)
+		if _, exists := mapped[key]; !exists {
+			return fmt.Errorf("columnOrder dest %q is not present in columns or positions", dest)
+		}
+		if _, duplicate := seenOrder[key]; duplicate {
+			return fmt.Errorf("duplicate dest %q in columnOrder", dest)
+		}
+		seenOrder[key] = struct{}{}
 	}
 
 	seenRequired := make(map[string]struct{}, len(rules.Required))

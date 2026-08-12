@@ -71,6 +71,9 @@ func (e *documentExportExecutor) Execute(
 	items []domain.ChannelSyncItem,
 	profile *domain.IntegrationProfile,
 ) (*ChannelSyncExecutionResult, error) {
+	if err := ValidateProfileDocumentType(profile, "export_source_tracking_update"); err != nil {
+		return nil, fmt.Errorf("document_export: %w", err)
+	}
 	generatedAt := time.Now().Format(time.RFC3339)
 
 	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
@@ -148,6 +151,8 @@ func (e *documentExportExecutor) tryTemplateExport(
 		}
 		data = xlsxBytes
 		ext = "xlsx"
+	case "xls":
+		return "", nil, nil, false, fmt.Errorf("document_export: BIFF .xls output is not supported; update tracking template %d to format xlsx", tmpl.ID)
 	default:
 		// JSON / api_payload / empty → keep the structured JSON fallback.
 		return "", nil, nil, false, nil

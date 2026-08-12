@@ -25,6 +25,7 @@ import (
 type scenarioAState struct {
 	gdb                 *gorm.DB
 	profileID           uint
+	factoryProfileID    uint
 	waveID              uint
 	secondWaveID        uint
 	documentIDs         []uint
@@ -60,6 +61,9 @@ func setupScenarioATestDB(t *testing.T) *gorm.DB {
 		&persistence.CustomerMergeRecord{},
 		&persistence.CustomerIdentity{},
 		&persistence.CustomerAddress{},
+		&persistence.CustomerNameObservation{},
+		&persistence.CustomerNameEvent{},
+		&persistence.CustomerProfileOrigin{},
 		&persistence.DemandDocument{},
 		&persistence.DemandLine{},
 		&persistence.Wave{},
@@ -89,6 +93,7 @@ func setupScenarioATestDB(t *testing.T) *gorm.DB {
 	); err != nil {
 		t.Fatalf("scenario A setup: complete AutoMigrate: %v", err)
 	}
+	seedEnabledFeaturePolicyForRootTest(t, gdb)
 	if err := gdb.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_binding_one_default
 		ON integration_profile_template_bindings (integration_profile_id, document_type)
 		WHERE is_default = true`).Error; err != nil {
@@ -221,7 +226,7 @@ func TestScenarioA_MonthlyMemberWave(t *testing.T) {
 	if !t.Run("01 import patreon members", func(t *testing.T) {
 		profileRepo := infra.NewIntegrationProfileRepository(s.gdb)
 		profile := &domain.IntegrationProfile{
-			ProfileKey: "scenario-a-patreon", SourceChannel: "patreon", SourceSurface: "members",
+			ProfileKey: "scenario-a-patreon", SourceChannel: "patreon", SourceSurface: "membership",
 			DemandKind: "membership_entitlement", InitialAllocationStrategy: "policy_driven",
 			IdentityStrategy: "platform_uid", EntitlementAuthorityMode: "upstream_authoritative",
 			RecipientInputMode: "per_recipient", ReferenceStrategy: "member_level",
@@ -471,8 +476,28 @@ func TestScenarioA_MonthlyMemberWave(t *testing.T) {
 	}
 
 	if !t.Run("06 factory order and file", func(t *testing.T) {
+		factoryProfile := persistence.IntegrationProfile{
+			ProfileKey: "scenario-a-factory", SourceSurface: "factory",
+			SupportsExportSupplierOrder: true, FactorySupplierPlatform: "factory-a",
+		}
+		if err := s.gdb.Create(&factoryProfile).Error; err != nil {
+			t.Fatalf("create factory profile: %v", err)
+		}
+		s.factoryProfileID = factoryProfile.ID
+		orderTemplate := persistence.DocumentTemplate{
+			TemplateKey: "scenario-a-supplier-order", DocumentType: "export_supplier_order", Format: "xlsx",
+			MappingRules: `{"version":2,"mode":"header","columns":{"export.factory_sku":"SKU","export.quantity":"Qty"},"columnOrder":["export.factory_sku","export.quantity"]}`,
+		}
+		if err := s.gdb.Create(&orderTemplate).Error; err != nil {
+			t.Fatalf("create supplier-order template: %v", err)
+		}
+		if err := s.gdb.Create(&persistence.IntegrationProfileTemplateBinding{
+			IntegrationProfileID: factoryProfile.ID, DocumentType: "export_supplier_order", TemplateID: orderTemplate.ID, IsDefault: true,
+		}).Error; err != nil {
+			t.Fatalf("bind supplier-order template: %v", err)
+		}
 		exportController := NewExportController()
-		orders, err := exportController.ExportSupplierOrder(s.waveID)
+		orders, err := exportController.ExportSupplierOrderForProfile(s.waveID, factoryProfile.ID)
 		if err != nil {
 			t.Fatalf("ExportSupplierOrder: %v", err)
 		}
@@ -523,7 +548,7 @@ func TestScenarioA_MonthlyMemberWave(t *testing.T) {
 		// test-side adapter renders those IDs into the surveyed return template and parses it.
 		path := scenarioARenderFactoryReturn(t, s.supplierOrderLines)
 		entries := scenarioAParseFactoryReturn(t, path)
-		result, err := NewShipmentController().ImportShipments(dto.ImportShipmentInput{WaveID: s.waveID, IntegrationProfileID: s.profileID, ImportMode: "reject_all", Entries: entries})
+		result, err := NewShipmentController().ImportShipments(dto.ImportShipmentInput{WaveID: s.waveID, IntegrationProfileID: s.factoryProfileID, ImportMode: "reject_all", Entries: entries})
 		if err != nil {
 			t.Fatalf("ImportShipments: %v", err)
 		}

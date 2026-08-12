@@ -40,6 +40,7 @@ type CustomerProfilePageRepository interface {
 	ListCustomerProfilesPage(context.Context, CustomerProfilePageQuery) ([]CustomerProfile, int64, error)
 	ListCustomerIdentitiesByProfileIDs(context.Context, []uint) ([]CustomerIdentity, error)
 	ListCustomerAddressesByProfileIDs(context.Context, []uint) ([]CustomerAddress, error)
+	FindMatchedCustomerHistoricalNames(context.Context, []uint, string) (map[uint]string, error)
 	ListCustomerIdentityPlatforms(context.Context) ([]string, error)
 }
 

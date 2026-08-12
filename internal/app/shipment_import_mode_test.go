@@ -81,6 +81,11 @@ func TestImportShipmentsSkipInvalidMode(t *testing.T) {
 	if len(shipmentRepo.shipments) != 2 {
 		t.Errorf("persisted shipments = %d, want 2", len(shipmentRepo.shipments))
 	}
+	for _, shipment := range shipmentRepo.shipments {
+		if shipment.SupplierPlatform != "test" {
+			t.Errorf("shipment SupplierPlatform = %q, want supplier order platform test", shipment.SupplierPlatform)
+		}
+	}
 }
 
 // TestImportShipmentsRejectAllMode: 3 groups, 1 invalid → 0 succeed, errors reported, nothing persisted.

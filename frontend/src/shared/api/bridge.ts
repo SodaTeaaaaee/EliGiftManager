@@ -47,6 +47,7 @@ import { GetActionCenterSummary } from "../../../wailsjs/go/main/ActionCenterCon
 import { RevealInFolder, GetDataDir } from "../../../wailsjs/go/main/FileSystemController";
 import {
   ExportSupplierOrder,
+  ExportSupplierOrderForProfile,
   GenerateSupplierOrderFile,
   GetSupplierOrderByWave,
   ListLinesBySupplierOrder,
@@ -69,6 +70,7 @@ import {
   VoidShipment,
 } from "../../../wailsjs/go/main/ShipmentController";
 import {
+  BindInternalCarrier,
   CreateChannelSyncJob,
   CreateCarrierMapping,
   DeleteCarrierMapping,
@@ -77,10 +79,12 @@ import {
   ListCarrierMappings,
   ListChannelSyncJobsByWave,
   ListConnectorCapabilities,
+  ListExternalCarriers,
   ListIntegrationProfiles,
   PlanChannelClosure,
   RecordChannelClosureDecision,
   RetryChannelSyncJob,
+  RegisterExternalCarrier,
 } from "../../../wailsjs/go/main/ChannelSyncController";
 import {
   CreateProfile,
@@ -125,12 +129,39 @@ import {
   DeleteCustomerProfile,
   AddCustomerIdentity,
   DeleteCustomerIdentity,
-  GetMergeSuggestions,
-  DismissMergeSuggestion,
-  SaveSettings,
-  GetSettings,
+  ListCustomerNameObservations,
+  ListCustomerProfileOrigins,
+  PinCustomerDisplayName,
+  UnpinCustomerDisplayName,
   GetCustomerFulfillmentHistory,
 } from "../../../wailsjs/go/main/CustomerProfileController";
+import {
+  DismissMergeCandidate,
+  GetMergeCandidate,
+  GetMergePolicy,
+  GetMergeScanRun,
+  ListMergeCandidates,
+  ScanMergeCandidates,
+  UpdateMergePolicy,
+} from "../../../wailsjs/go/main/MergeGovernanceController";
+import {
+  GetCustomerResolutionFeaturePolicy,
+  UpdateCustomerResolutionFeaturePolicy,
+} from '../../../wailsjs/go/main/CustomerResolutionFeaturePolicyController'
+import {
+  GetImportEvidenceRetention,
+  GetImportRunDetail,
+  ListImportRuns,
+  ListImportRunsPage,
+  PruneExpiredImportEvidence,
+  SetImportEvidenceRetention,
+} from '../../../wailsjs/go/main/ImportEvidenceController'
+import {
+  ExecuteCustomerSplit,
+  GetCustomerSplitHistory,
+  ListCustomerSplitHistory,
+  PreviewCustomerSplit,
+} from '../../../wailsjs/go/main/SplitController'
 import { dto } from "../../../wailsjs/go/models";
 import {
   ListCustomerIdentityPlatforms,
@@ -261,15 +292,19 @@ export async function importDemandCSV(input: {
   rows?: Record<string, string>[];
   /** Preferred for positional / multi-format sheets — backend re-reads with hasHeader from mapping rules. */
   filePath?: string;
+  /** Optional one-request mapping override. It is validated but never persisted as a template/binding. */
+  mappingRules?: string;
 }): Promise<dto.ImportDemandCSVResult> {
   assertWailsRuntime();
-  return ImportDemandCSV(
-    dto.ImportDemandCSVInput.createFrom({
-      ...input,
-      rows: input.rows ?? [],
-      filePath: input.filePath ?? "",
-    }),
-  );
+  const request = dto.ImportDemandCSVInput.createFrom({
+    ...input,
+    rows: input.rows ?? [],
+    filePath: input.filePath ?? "",
+  }) as dto.ImportDemandCSVInput & { mappingRules: string }
+  // Keep this explicit assignment compatible with runtimes generated before the
+  // optional DTO field existed: createFrom() otherwise drops unknown properties.
+  request.mappingRules = input.mappingRules ?? ""
+  return ImportDemandCSV(request)
 }
 
 /** Import a demand document. Accepts a plain object matching CreateDemandInput shape. */
@@ -482,6 +517,14 @@ export async function exportSupplierOrder(
 ): Promise<dto.SupplierOrderDTO[]> {
   assertWailsRuntime();
   return ExportSupplierOrder(waveId);
+}
+
+export async function exportSupplierOrderForProfile(
+  waveId: number,
+  factoryProfileId: number,
+): Promise<dto.SupplierOrderDTO[]> {
+  assertWailsRuntime();
+  return ExportSupplierOrderForProfile(waveId, factoryProfileId);
 }
 
 export async function listSupplierOrders(): Promise<dto.SupplierOrderDTO[]> {
@@ -776,6 +819,28 @@ export async function importCarrierMappings(input: {
       rows: input.rows ?? [],
     }),
   )
+}
+
+export async function listExternalCarriers(profileId: number): Promise<dto.ExternalCarrierDTO[]> {
+  assertWailsRuntime()
+  return ListExternalCarriers(profileId)
+}
+
+export async function registerExternalCarrier(input: {
+  integrationProfileId: number
+  externalCarrierCode: string
+  externalCarrierName: string
+}): Promise<dto.ExternalCarrierDTO> {
+  assertWailsRuntime()
+  return RegisterExternalCarrier(dto.RegisterExternalCarrierInput.createFrom(input))
+}
+
+export async function bindInternalCarrier(input: {
+  externalCarrierId: number
+  internalCarrierCode: string
+}): Promise<dto.ExternalCarrierDTO> {
+  assertWailsRuntime()
+  return BindInternalCarrier(dto.BindInternalCarrierInput.createFrom(input))
 }
 
 export async function listConnectorCapabilities(): Promise<Record<string, any>> {
@@ -1460,35 +1525,101 @@ export async function validateStepAccess(waveId: number, stepKey: string): Promi
 // ── MergeController ──
 
 import {
-  MergeProfiles as _MergeProfiles,
-  PreviewMergeProfiles as _PreviewMergeProfiles,
+  ExecuteCustomerMerge as _ExecuteCustomerMerge,
+  GetCustomerMergeHistory as _GetCustomerMergeHistory,
+  ListCustomerMergeHistory as _ListCustomerMergeHistory,
+  PreviewCustomerMerge as _PreviewCustomerMerge,
 } from "../../../wailsjs/go/main/MergeController";
-import { UndoCustomerMerge as _UndoCustomerMerge } from "../../../wailsjs/go/main/MergeUndoController";
+import {
+  DryRunCustomerMergeUndo as _DryRunCustomerMergeUndo,
+  ExecuteCustomerMergeUndo as _ExecuteCustomerMergeUndo,
+} from "../../../wailsjs/go/main/MergeUndoController";
 
-export async function mergeProfiles(input: {
+export interface CustomerMergePreviewRequest {
   sourceProfileId: number
   targetProfileId: number
-}): Promise<dto.MergeProfilesResult> {
-  assertWailsRuntime()
-  return _MergeProfiles(dto.MergeProfilesInput.createFrom(input))
+  candidateId?: number
+  primaryIdentitySelections?: Array<{ namespace: string; identityType: string; identityId: number }>
+  defaultAddressId?: number
+  displayNameResolution?: string
 }
 
-/**
- * Read-only merge preview (never mutates data) — both sides' full identity/
- * address lists, field conflicts (displayName/profileType), and duplicate-
- * identity warnings. Always call this before `mergeProfiles`.
- */
-export async function previewMergeProfiles(
-  sourceProfileId: number,
-  targetProfileId: number,
-): Promise<dto.MergeProfilesPreviewResult> {
+export async function previewCustomerMerge(input: CustomerMergePreviewRequest): Promise<dto.CustomerMergePreviewResult> {
   assertWailsRuntime()
-  return _PreviewMergeProfiles(sourceProfileId, targetProfileId)
+  return _PreviewCustomerMerge(dto.CustomerMergePreviewInput.createFrom({
+    ...input,
+    primaryIdentitySelections: input.primaryIdentitySelections ?? [],
+    displayNameResolution: input.displayNameResolution ?? 'keep_target',
+  }))
 }
 
-export async function undoCustomerMerge(input: { mergeId: number }): Promise<dto.UndoCustomerMergeResult> {
+export interface ExecuteCustomerMergeRequest {
+  operationKey: string
+  previewToken: string
+  sourceProfileId: number
+  targetProfileId: number
+  expectedSourceRowVersion: number
+  expectedTargetRowVersion: number
+  candidateId?: number
+  expectedCandidateRowVersion: number
+  expectedEvidenceHash: string
+  expectedPolicyVersion: number
+  expectedPolicyRevisionId?: number
+  primaryIdentitySelections?: Array<{ namespace: string; identityType: string; identityId: number }>
+  defaultAddressId?: number
+  displayNameResolution: string
+  actorRef: string
+  decisionReason: string
+}
+
+export async function executeCustomerMerge(input: ExecuteCustomerMergeRequest): Promise<dto.ExecuteCustomerMergeResult> {
   assertWailsRuntime()
-  return _UndoCustomerMerge(dto.UndoCustomerMergeInput.createFrom(input))
+  return _ExecuteCustomerMerge(dto.ExecuteCustomerMergeInput.createFrom({
+    ...input,
+    primaryIdentitySelections: input.primaryIdentitySelections ?? [],
+  }))
+}
+
+export async function listCustomerMergeHistory(input: {
+  profileId: number
+  candidateId?: number
+  status?: string
+  beforeCreatedAt?: string
+  beforeId?: number
+  limit?: number
+}): Promise<dto.CustomerMergeHistoryPage> {
+  assertWailsRuntime()
+  return _ListCustomerMergeHistory(dto.CustomerMergeHistoryQuery.createFrom({
+    profileId: input.profileId,
+    candidateId: input.candidateId ?? 0,
+    status: input.status ?? '',
+    beforeCreatedAt: input.beforeCreatedAt,
+    beforeId: input.beforeId ?? 0,
+    limit: input.limit ?? 50,
+  }))
+}
+
+export async function getCustomerMergeHistory(mergeId: number): Promise<dto.CustomerMergeHistoryDetail> {
+  assertWailsRuntime()
+  return _GetCustomerMergeHistory(mergeId)
+}
+
+export async function dryRunCustomerMergeUndo(mergeId: number): Promise<dto.CustomerMergeUndoDryRunResult> {
+  assertWailsRuntime()
+  return _DryRunCustomerMergeUndo(dto.CustomerMergeUndoDryRunInput.createFrom({ mergeId }))
+}
+
+export async function executeCustomerMergeUndo(input: {
+  mergeId: number
+  undoOperationKey: string
+  eligibilityToken: string
+  expectedSourceRowVersion: number
+  expectedTargetRowVersion: number
+  actorRef: string
+  reason: string
+}): Promise<dto.ExecuteCustomerMergeUndoResult> {
+  assertWailsRuntime()
+  return _ExecuteCustomerMergeUndo(dto.ExecuteCustomerMergeUndoInput.createFrom(input))
 }
 
 // ── CustomerProfileController ──
@@ -1537,6 +1668,9 @@ export async function updateCustomerProfile(input: {
   displayName: string
   profileType: string
   extraData: string
+  expectedRowVersion: number
+  actorRef: string
+  idempotencyKey: string
 }): Promise<dto.CustomerProfileDTO> {
   assertWailsRuntime()
   return UpdateCustomerProfile(dto.UpdateCustomerProfileInput.createFrom(input))
@@ -1564,34 +1698,228 @@ export async function deleteCustomerIdentity(id: number): Promise<void> {
   return DeleteCustomerIdentity(id)
 }
 
-export async function getMergeSuggestions(): Promise<dto.MergeSuggestionDTO[]> {
+export async function listCustomerNameObservations(profileId: number): Promise<dto.CustomerNameObservationDTO[]> {
   if (!isWailsRuntimeAvailable()) return []
-  return GetMergeSuggestions()
+  return ListCustomerNameObservations(profileId)
 }
 
-export async function dismissMergeSuggestion(id: number): Promise<void> {
+export async function listCustomerProfileOrigins(profileId: number): Promise<dto.CustomerProfileOriginDTO[]> {
   assertWailsRuntime()
-  return DismissMergeSuggestion(id)
+  return ListCustomerProfileOrigins(profileId)
 }
 
-export async function saveSettings(settings: {
-  autoMergeCrossPlatform: boolean
-  autoMergeByEmail: boolean
-  autoMergeByPhone: boolean
+export async function pinCustomerDisplayName(input: {
+  profileId: number
+  name: string
+  expectedRowVersion: number
+  actorRef: string
+  idempotencyKey: string
+}): Promise<dto.CustomerProfileDTO> {
+  assertWailsRuntime()
+  return PinCustomerDisplayName(dto.PinCustomerDisplayNameInput.createFrom(input))
+}
+
+export async function unpinCustomerDisplayName(input: {
+  profileId: number
+  expectedRowVersion: number
+  actorRef: string
+  idempotencyKey: string
+}): Promise<dto.CustomerProfileDTO> {
+  assertWailsRuntime()
+  return UnpinCustomerDisplayName(dto.UnpinCustomerDisplayNameInput.createFrom(input))
+}
+
+// ── MergeGovernanceController ──
+
+export async function getMergePolicy(): Promise<dto.MergePolicyDTO> {
+  assertWailsRuntime()
+  return GetMergePolicy()
+}
+
+export async function updateMergePolicy(input: {
+  expectedRevision: number
+  rules: {
+    candidateDetectionEnabled: boolean
+    emailEvidenceMode: string
+    phoneEvidenceMode: string
+    executionMode: string
+  }
+  actorRef: string
+}): Promise<dto.MergePolicyDTO> {
+  assertWailsRuntime()
+  return UpdateMergePolicy(dto.UpdateMergePolicyInput.createFrom(input))
+}
+
+export async function scanMergeCandidates(): Promise<dto.MergeScanRunDTO> {
+  assertWailsRuntime()
+  return ScanMergeCandidates()
+}
+
+export async function getMergeScanRun(id: number): Promise<dto.MergeScanRunDTO> {
+  assertWailsRuntime()
+  return GetMergeScanRun(id)
+}
+
+export async function listMergeCandidates(status: string = ''): Promise<dto.MergeCandidateDTO[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  return ListMergeCandidates(status)
+}
+
+export async function getMergeCandidate(id: number): Promise<dto.MergeCandidateDTO> {
+  assertWailsRuntime()
+  return GetMergeCandidate(id)
+}
+
+export async function dismissMergeCandidate(input: {
+  id: number
+  evidenceHash: string
+  policyVersion: number
 }): Promise<void> {
   assertWailsRuntime()
-  return SaveSettings(dto.SystemSettingsDTO.createFrom(settings))
+  return DismissMergeCandidate(dto.DismissMergeCandidateInput.createFrom(input))
 }
 
-export async function getSettings(): Promise<dto.SystemSettingsDTO> {
-  if (!isWailsRuntimeAvailable()) {
-    return dto.SystemSettingsDTO.createFrom({
-      autoMergeCrossPlatform: false,
-      autoMergeByEmail: false,
-      autoMergeByPhone: false,
-    })
+// ── CustomerResolutionFeaturePolicyController ──
+
+export async function getCustomerResolutionFeaturePolicy(): Promise<dto.CustomerResolutionFeaturePolicyDTO> {
+  assertWailsRuntime()
+  return GetCustomerResolutionFeaturePolicy()
+}
+
+export async function updateCustomerResolutionFeaturePolicy(input: {
+  expectedRevision: number
+  customerResolutionWritesEnabled: boolean
+  candidateScanEnabled: boolean
+  mergeExecutionEnabled: boolean
+  splitExecutionEnabled: boolean
+  importEvidenceEnabled: boolean
+  carrierRegistryWritesEnabled: boolean
+  actorRef: string
+  reason: string
+}): Promise<dto.CustomerResolutionFeaturePolicyDTO> {
+  assertWailsRuntime()
+  return UpdateCustomerResolutionFeaturePolicy(dto.UpdateCustomerResolutionFeaturePolicyInput.createFrom(input))
+}
+
+// ── ImportEvidenceController ──
+
+export async function listImportRuns(limit = 100): Promise<dto.ImportRunSummaryDTO[]> {
+  assertWailsRuntime()
+  return ListImportRuns(limit)
+}
+
+export async function listImportRunsPage(input: {
+  limit?: number
+  cursor?: string
+  status?: string
+  profileId?: number
+  documentType?: string
+} = {}): Promise<dto.ImportRunPageDTO> {
+  assertWailsRuntime()
+  return ListImportRunsPage(dto.ListImportRunsPageInput.createFrom({
+    limit: input.limit ?? 50,
+    cursor: input.cursor ?? '',
+    status: input.status ?? '',
+    profileId: input.profileId,
+    documentType: input.documentType ?? '',
+  }))
+}
+
+export async function getImportRunDetail(id: number): Promise<dto.ImportRunDetailDTO> {
+  assertWailsRuntime()
+  return GetImportRunDetail(id)
+}
+
+export async function getImportEvidenceRetention(): Promise<dto.ImportEvidenceRetentionDTO> {
+  assertWailsRuntime()
+  return GetImportEvidenceRetention()
+}
+
+export async function setImportEvidenceRetention(retentionDays: number): Promise<dto.ImportEvidenceRetentionDTO> {
+  assertWailsRuntime()
+  return SetImportEvidenceRetention(dto.SetImportEvidenceRetentionInput.createFrom({ retentionDays }))
+}
+
+export async function pruneExpiredImportEvidence(): Promise<Record<string, number>> {
+  assertWailsRuntime()
+  return PruneExpiredImportEvidence()
+}
+
+// ── SplitController ──
+
+export interface CustomerSplitPlanRequest {
+  sourceProfileId: number
+  targetStrategy: string
+  newProfileDisplayName: string
+  newProfileType: string
+  targetPrimaryIdentityIds?: number[]
+  targetDefaultAddressId?: number
+  targetDisplayNameObservationId?: number
+  sourceDisplayNameResolution: string
+  selection: {
+    identityIds?: number[]
+    addressIds?: number[]
+    demandDocumentIds?: number[]
+    nameObservationIds?: number[]
+    originIds?: number[]
   }
-  return GetSettings()
+}
+
+function splitPlanDTO(input: CustomerSplitPlanRequest): dto.CustomerSplitPreviewInput {
+  return dto.CustomerSplitPreviewInput.createFrom({
+    ...input,
+    targetPrimaryIdentityIds: input.targetPrimaryIdentityIds ?? [],
+    selection: dto.CustomerSplitSelection.createFrom({
+      identityIds: input.selection.identityIds ?? [],
+      addressIds: input.selection.addressIds ?? [],
+      demandDocumentIds: input.selection.demandDocumentIds ?? [],
+      nameObservationIds: input.selection.nameObservationIds ?? [],
+      originIds: input.selection.originIds ?? [],
+    }),
+  })
+}
+
+export async function previewCustomerSplit(input: CustomerSplitPlanRequest): Promise<dto.CustomerSplitPreviewResult> {
+  assertWailsRuntime()
+  return PreviewCustomerSplit(splitPlanDTO(input))
+}
+
+export async function executeCustomerSplit(input: {
+  operationKey: string
+  planToken: string
+  expectedSourceRowVersion: number
+  expectedTargetRowVersion: number
+  actorRef: string
+  decisionReason: string
+  plan: CustomerSplitPlanRequest
+}): Promise<dto.ExecuteCustomerSplitResult> {
+  assertWailsRuntime()
+  return ExecuteCustomerSplit(dto.ExecuteCustomerSplitInput.createFrom({
+    ...input,
+    plan: splitPlanDTO(input.plan),
+  }))
+}
+
+export async function listCustomerSplitHistory(input: {
+  profileId: number
+  status?: string
+  beforeCreatedAt?: string
+  beforeId?: number
+  limit?: number
+}): Promise<dto.CustomerSplitHistoryPage> {
+  assertWailsRuntime()
+  return ListCustomerSplitHistory(dto.CustomerSplitHistoryQuery.createFrom({
+    profileId: input.profileId,
+    status: input.status ?? '',
+    beforeCreatedAt: input.beforeCreatedAt,
+    beforeId: input.beforeId ?? 0,
+    limit: input.limit ?? 50,
+  }))
+}
+
+export async function getCustomerSplitHistory(splitId: number): Promise<dto.CustomerSplitHistoryDetail> {
+  assertWailsRuntime()
+  return GetCustomerSplitHistory(splitId)
 }
 
 /** Cross-wave fulfillment history for a customer profile. Soft-fail — returns []. */

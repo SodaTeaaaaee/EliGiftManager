@@ -50,9 +50,12 @@ func NewTemplateMappingService(
 //	  "required": []
 //	}
 type TemplateMappingRules struct {
-	Version     int                 `json:"version"`
-	Mode        string              `json:"mode"`
-	HasHeader   bool                `json:"hasHeader"`
+	Version   int    `json:"version"`
+	Mode      string `json:"mode"`
+	HasHeader bool   `json:"hasHeader"`
+	// SheetName is the exact worksheet name used by xlsx renderers/readers when
+	// the external document contract names a sheet. It has no effect on CSV.
+	SheetName   string              `json:"sheetName,omitempty"`
 	Columns     map[string]string   `json:"columns"`
 	Positions   map[string]int      `json:"positions"`
 	Defaults    map[string]string   `json:"defaults"`
@@ -410,6 +413,9 @@ func (s *TemplateMappingService) BuildImportPipeline(ctx context.Context, profil
 		}
 		if line.UpdatedAt.IsZero() {
 			line.UpdatedAt = now
+		}
+		if line.SourceLineNo == 0 {
+			line.SourceLineNo = i + 1
 		}
 		lines = append(lines, line)
 	}

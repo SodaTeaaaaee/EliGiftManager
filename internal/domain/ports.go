@@ -219,6 +219,12 @@ type IntegrationProfileRepository interface {
 	Delete(ctx context.Context, id uint) error
 }
 
+// IntegrationProfileReferenceRepository reports secondary references that must
+// gate soft deletion of an integration profile.
+type IntegrationProfileReferenceRepository interface {
+	CountReferences(ctx context.Context, profileID uint) (map[string]int64, error)
+}
+
 // FulfillmentAdjustmentRepository defines persistence operations for FulfillmentAdjustment.
 type FulfillmentAdjustmentRepository interface {
 	Create(ctx context.Context, adj *FulfillmentAdjustment) error

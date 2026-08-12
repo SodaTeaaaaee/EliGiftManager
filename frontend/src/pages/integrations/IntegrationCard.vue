@@ -25,14 +25,26 @@ const CAPABILITY_KEYS = [
   'allowsManualClosure',
 ] as const
 
-const enabledCapabilityCount = computed(() => CAPABILITY_KEYS.filter((key) => props.profile[key]).length)
+const FACTORY_CAPABILITY_KEYS = [
+  'supportsExportSupplierOrder',
+  'supportsImportProductCatalog',
+  'supportsImportSupplierShipment',
+] as const
+
+const visibleCapabilityKeys = computed(() =>
+  props.profile.sourceSurface === 'factory' ? FACTORY_CAPABILITY_KEYS : CAPABILITY_KEYS,
+)
+const enabledCapabilityCount = computed(() => visibleCapabilityKeys.value.filter((key) => props.profile[key]).length)
 </script>
 
 <template>
   <button type="button" class="integration-card" @click="$emit('click')">
     <header class="integration-card__header">
       <h3 class="integration-card__title">{{ profile.profileKey }}</h3>
-      <StatusBadge dimension="demandKind" :value="profile.demandKind" size="sm" />
+      <span v-if="profile.sourceSurface === 'factory'" class="integration-card__surface-label">
+        {{ profile.factorySupplierPlatform || profile.sourceSurface }}
+      </span>
+      <StatusBadge v-else dimension="demandKind" :value="profile.demandKind" size="sm" />
     </header>
     <p class="integration-card__channel">{{ profile.sourceChannel || '—' }} · {{ profile.sourceSurface || '—' }}</p>
     <dl class="integration-card__zones">
@@ -42,7 +54,7 @@ const enabledCapabilityCount = computed(() => CAPABILITY_KEYS.filter((key) => pr
       </div>
       <div class="integration-card__zone">
         <dt>{{ t('integrations.card.capabilities') }}</dt>
-        <dd>{{ enabledCapabilityCount }}/{{ CAPABILITY_KEYS.length }}</dd>
+        <dd>{{ enabledCapabilityCount }}/{{ visibleCapabilityKeys.length }}</dd>
       </div>
       <div class="integration-card__zone">
         <dt>{{ t('integrations.card.templates') }}</dt>
@@ -101,6 +113,11 @@ const enabledCapabilityCount = computed(() => CAPABILITY_KEYS.filter((key) => pr
   font-family: var(--font-body);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+.integration-card__surface-label {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .integration-card__zones {

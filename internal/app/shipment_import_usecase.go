@@ -10,11 +10,28 @@ import (
 )
 
 type shipmentImportUseCase struct {
-	shipmentRepo domain.ShipmentRepository
-	supplierRepo domain.SupplierOrderRepository
-	fulfillRepo  domain.FulfillmentLineRepository
-	basisStamp   *BasisStampService
-	reconcile    *shipmentReconcileDeps
+	shipmentRepo     domain.ShipmentRepository
+	supplierRepo     domain.SupplierOrderRepository
+	fulfillRepo      domain.FulfillmentLineRepository
+	basisStamp       *BasisStampService
+	reconcile        *shipmentReconcileDeps
+	evidence         *ImportEvidenceUseCase
+	externalRegistry *ExternalCarrierUseCase
+}
+
+func WithShipmentImportEvidence(uc ShipmentImportUseCase, evidence *ImportEvidenceUseCase) ShipmentImportUseCase {
+	s, ok := uc.(*shipmentImportUseCase)
+	if ok {
+		s.evidence = evidence
+	}
+	return uc
+}
+func WithShipmentExternalCarrierRegistry(uc ShipmentImportUseCase, registry *ExternalCarrierUseCase) ShipmentImportUseCase {
+	s, ok := uc.(*shipmentImportUseCase)
+	if ok {
+		s.externalRegistry = registry
+	}
+	return uc
 }
 
 // NewShipmentImportUseCase constructs a ShipmentImportUseCase.
@@ -44,6 +61,74 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 	mode := input.ImportMode
 	if mode == "" {
 		mode = "skip_invalid"
+	}
+	var run *domain.ImportRun
+	var records []domain.ImportRawRecord
+	if uc.evidence != nil {
+		rows := make([]any, len(input.Entries))
+		unmapped := make([]map[string]string, len(input.Entries))
+		for i, entry := range input.Entries {
+			rows[i] = entry
+			unmapped[i] = map[string]string{}
+		}
+		var err error
+		run, records, err = uc.evidence.StartImportEvidence(ctx, "supplier_shipment", input.IntegrationProfileID, mode, "", `{"source":"mapped_entries"}`, rows, unmapped, nil)
+		if err != nil {
+			return nil, fmt.Errorf("start shipment import evidence: %w", err)
+		}
+	}
+	result, err := uc.importShipmentsCore(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if run != nil {
+		result.ImportRunID = run.ID
+		for i := range records {
+			markImportEvidenceSuccess(records, i, "shipment", 0)
+		}
+		for _, itemErr := range result.Errors {
+			markImportEvidenceFailure(records, itemErr.EntryIndex, "shipment_import_error", itemErr.Reason, nil)
+		}
+		status := "completed"
+		if result.ErrorCount > 0 {
+			status = "partial_success"
+		}
+		if mode == "reject_all" && result.ErrorCount > 0 {
+			status = "rejected"
+		}
+		if err := uc.evidence.CompleteImportEvidence(ctx, run, records, status); err != nil {
+			return nil, err
+		}
+	} else if uc.evidence != nil {
+		result.EvidenceDisabled = true
+	}
+	return result, nil
+}
+
+type shipmentImportCoreOutcome struct {
+	result                 *dto.ImportShipmentResult
+	successfulEntryIndices map[int]struct{}
+}
+
+func (uc *shipmentImportUseCase) importShipmentsCore(ctx context.Context, input dto.ImportShipmentInput) (*dto.ImportShipmentResult, error) {
+	outcome, err := uc.importShipmentsCoreWithOutcome(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	return outcome.result, nil
+}
+
+// importShipmentsCoreWithOutcome exposes which compacted input entries were
+// actually persisted. Map-and-reconcile needs that internal bookkeeping to
+// stage side effects (such as carrier observation) until after the whole-file
+// gate and to apply them only to successful physical source rows.
+func (uc *shipmentImportUseCase) importShipmentsCoreWithOutcome(ctx context.Context, input dto.ImportShipmentInput) (*shipmentImportCoreOutcome, error) {
+	mode := input.ImportMode
+	if mode == "" {
+		mode = "skip_invalid"
+	}
+	if mode != "reject_all" && mode != "skip_invalid" {
+		return nil, fmt.Errorf("invalid importMode %q: must be \"reject_all\" or \"skip_invalid\"", mode)
 	}
 
 	// 1. Validate that the wave has at least one supplier order.
@@ -85,6 +170,10 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 	result := &dto.ImportShipmentResult{
 		TotalProcessed: len(input.Entries),
 	}
+	outcome := &shipmentImportCoreOutcome{
+		result:                 result,
+		successfulEntryIndices: make(map[int]struct{}, len(input.Entries)),
+	}
 
 	// Resolve basis stamp once for the wave (same wave for all entries).
 	var basisNodeID, basisHash string
@@ -107,6 +196,7 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 		groupErr           []dto.ImportShipmentError
 		groupLines         []*domain.ShipmentLine
 		groupSupplierOrder uint
+		groupPlatform      string
 		firstEntry         dto.ImportShipmentEntry
 		shipmentIndex      int
 	}
@@ -143,6 +233,23 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 				groupErr = append(groupErr, dto.ImportShipmentError{
 					EntryIndex: idx,
 					Reason:     fmt.Sprintf("supplier order line %d belongs to order %d which is not in wave %d", e.SupplierOrderLineID, sol.SupplierOrderID, input.WaveID),
+				})
+				continue
+			}
+			if input.IntegrationProfileID != 0 && so.FactoryIntegrationProfileID != nil && *so.FactoryIntegrationProfileID != input.IntegrationProfileID {
+				groupErr = append(groupErr, dto.ImportShipmentError{
+					EntryIndex: idx,
+					Reason: fmt.Sprintf(
+						"supplier order %d belongs to factory profile %d, not import profile %d",
+						so.ID, *so.FactoryIntegrationProfileID, input.IntegrationProfileID,
+					),
+				})
+				continue
+			}
+			if groupSupplierOrderID != 0 && groupSupplierOrderID != sol.SupplierOrderID {
+				groupErr = append(groupErr, dto.ImportShipmentError{
+					EntryIndex: idx,
+					Reason:     fmt.Sprintf("external shipment %q mixes supplier orders %d and %d", grp.externalNo, groupSupplierOrderID, sol.SupplierOrderID),
 				})
 				continue
 			}
@@ -222,8 +329,14 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 			groupErr:           groupErr,
 			groupLines:         groupLines,
 			groupSupplierOrder: groupSupplierOrderID,
-			firstEntry:         firstEntry,
-			shipmentIndex:      i + 1,
+			groupPlatform: func() string {
+				if order := supplierOrderByID[groupSupplierOrderID]; order != nil {
+					return order.SupplierPlatform
+				}
+				return ""
+			}(),
+			firstEntry:    firstEntry,
+			shipmentIndex: i + 1,
 		})
 	}
 
@@ -242,12 +355,13 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 
 	// 5. reject_all early-return: if any error exists, return without persisting anything.
 	if mode == "reject_all" && len(allErrors) > 0 {
-		return &dto.ImportShipmentResult{
+		outcome.result = &dto.ImportShipmentResult{
 			TotalProcessed: len(input.Entries),
 			SuccessCount:   0,
 			ErrorCount:     len(allErrors),
 			Errors:         allErrors,
-		}, nil
+		}
+		return outcome, nil
 	}
 
 	// 6. Persistence pass — skip_invalid: persist valid groups, record errors for invalid ones.
@@ -277,6 +391,7 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 		shipmentNo := fmt.Sprintf("IMP-%d-%d", input.WaveID, vg.shipmentIndex)
 		shipment := &domain.Shipment{
 			SupplierOrderID:     vg.groupSupplierOrder,
+			SupplierPlatform:    vg.groupPlatform,
 			ShipmentNo:          shipmentNo,
 			ExternalShipmentNo:  vg.firstEntry.ExternalShipmentNo,
 			CarrierCode:         vg.firstEntry.CarrierCode,
@@ -301,6 +416,9 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 
 		// Persist atomically.
 		if createErr := uc.shipmentRepo.AtomicCreateShipment(ctx, shipment, vg.groupLines, pin); createErr != nil {
+			if mode == "reject_all" {
+				return nil, fmt.Errorf("persist shipment group %q: %w", vg.grp.externalNo, createErr)
+			}
 			for _, idx := range vg.grp.indices {
 				result.Errors = append(result.Errors, dto.ImportShipmentError{
 					EntryIndex: idx,
@@ -320,7 +438,19 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 			})
 		}
 		if len(stateUpdates) > 0 {
-			_ = uc.fulfillRepo.BulkUpdateStates(ctx, stateUpdates)
+			if updateErr := uc.fulfillRepo.BulkUpdateStates(ctx, stateUpdates); updateErr != nil {
+				if mode == "reject_all" {
+					return nil, fmt.Errorf("project shipment group %q supplier state: %w", vg.grp.externalNo, updateErr)
+				}
+				for _, idx := range vg.grp.indices {
+					result.Errors = append(result.Errors, dto.ImportShipmentError{
+						EntryIndex: idx,
+						Reason:     fmt.Sprintf("project supplier state failed: %v", updateErr),
+					})
+				}
+				result.ErrorCount += len(vg.grp.indices)
+				continue
+			}
 		}
 
 		// Collect result DTO.
@@ -353,7 +483,10 @@ func (uc *shipmentImportUseCase) ImportShipments(ctx context.Context, input dto.
 		}
 		result.CreatedShipments = append(result.CreatedShipments, shipmentDTO)
 		result.SuccessCount += len(vg.grp.indices)
+		for _, idx := range vg.grp.indices {
+			outcome.successfulEntryIndices[idx] = struct{}{}
+		}
 	}
 
-	return result, nil
+	return outcome, nil
 }

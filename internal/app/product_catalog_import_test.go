@@ -109,8 +109,10 @@ func TestImportProductCatalog_ZipWithImages(t *testing.T) {
 	profileRepo := newMockIntegrationProfileRepoSimple()
 	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
 		ID: 1, ProfileKey: "factory",
-		FactorySupplierPlatform: "test-platform",
-		ConnectorKey:            "factory-a",
+		SourceSurface:                string(domain.SourceSurfaceFactory),
+		SupportsImportProductCatalog: true,
+		FactorySupplierPlatform:      "test-platform",
+		ConnectorKey:                 "factory-a",
 	})
 	templateRepo := newMockDocumentTemplateRepo()
 	bindingRepo := newMockProfileTemplateBindingRepo()
@@ -242,6 +244,7 @@ func TestImportProductCatalog_ZipWithoutImageLayout(t *testing.T) {
 	profileRepo := newMockIntegrationProfileRepoSimple()
 	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
 		ID: 1, ProfileKey: "factory", ConnectorKey: "plat",
+		SourceSurface: string(domain.SourceSurfaceFactory), SupportsImportProductCatalog: true,
 	})
 	templateRepo := newMockDocumentTemplateRepo()
 	bindingRepo := newMockProfileTemplateBindingRepo()
@@ -291,7 +294,7 @@ func TestImportProductCatalog_ZipWithNestedRootDir(t *testing.T) {
 
 	zipPath := filepath.Join(t.TempDir(), "nested-catalog.zip")
 	if err := writeTestZip(zipPath, map[string]string{
-		path.Join(rootName, "a.csv"):                    csvBody,
+		path.Join(rootName, "a.csv"):                     csvBody,
 		path.Join(rootName, "主图", "NestedWidget#01.png"): string(coverBytes),
 		path.Join(rootName, "详情", "NestedWidget#02.png"): string(detailBytes),
 	}); err != nil {
@@ -306,8 +309,10 @@ func TestImportProductCatalog_ZipWithNestedRootDir(t *testing.T) {
 	profileRepo := newMockIntegrationProfileRepoSimple()
 	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
 		ID: 1, ProfileKey: "factory",
-		FactorySupplierPlatform: "test-platform",
-		ConnectorKey:            "factory-a",
+		SourceSurface:                string(domain.SourceSurfaceFactory),
+		SupportsImportProductCatalog: true,
+		FactorySupplierPlatform:      "test-platform",
+		ConnectorKey:                 "factory-a",
 	})
 	templateRepo := newMockDocumentTemplateRepo()
 	bindingRepo := newMockProfileTemplateBindingRepo()

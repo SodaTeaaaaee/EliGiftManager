@@ -21,12 +21,20 @@ func newAddressBatchUseCase() app.AddressBatchUseCase {
 // a per-entry result (partial-success semantics).
 func (c *AddressController) BatchBindAddressToLines(entries []dto.BindAddressEntry) ([]dto.AddressBatchItemResult, error) {
 	ctx := appContext
-	return newAddressBatchUseCase().BatchBindAddressToLines(ctx, entries)
+	uc := c.batchUC
+	if uc == nil {
+		uc = newAddressBatchUseCase()
+	}
+	return uc.BatchBindAddressToLines(ctx, entries)
 }
 
 // BindDefaultAddressesForWave binds the recipient's default address to every
 // address-missing fulfillment line in the given wave.
 func (c *AddressController) BindDefaultAddressesForWave(waveID uint) ([]dto.AddressBatchItemResult, error) {
 	ctx := appContext
-	return newAddressBatchUseCase().BindDefaultAddressesForWave(ctx, waveID)
+	uc := c.batchUC
+	if uc == nil {
+		uc = newAddressBatchUseCase()
+	}
+	return uc.BindDefaultAddressesForWave(ctx, waveID)
 }

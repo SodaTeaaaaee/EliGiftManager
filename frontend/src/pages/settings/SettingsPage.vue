@@ -15,10 +15,9 @@
  * - Data directory: resolved via the `getDataDir()` bridge wrapper (hard
  *   -fail — a missing/unresolvable data dir is a real error state), opened
  *   via the already-existing `revealInFolder()` wrapper.
- * - Auto-merge: three independent toggles over `getSettings()`/
- *   `saveSettings()` (backed by `SystemSettingsDTO`), each paired with a
- *   "这会做什么" explanatory line per plan §3.7. Save-on-toggle (no separate
- *   save button), mirroring the old tree's `SettingsPage.vue` UX.
+ * - Duplicate-customer governance: versioned MergePolicy controls candidate
+ *   detection only. Every save uses revision CAS and explicitly runs a scan;
+ *   execution remains read-only `suggest_only` in this UI.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -27,15 +26,22 @@ import type { SelectOption } from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
-import { useFeedback } from '@/shared/ui/feedback'
+import { ErrorBanner, useFeedback } from '@/shared/ui/feedback'
+import { isMergePolicyRevisionConflict } from '@/shared/lib/customer-resolution'
 import { useThemeStore, type Density, type ThemePreference } from '@/shared/theme/theme'
 import { useAppLocale, type SupportedLocale } from '@/shared/i18n'
 import { listSkins } from '@/skins'
 import { useOperatorRosterStore } from '@/shared/model/operator-roster'
-import { getDataDir, getSettings, revealInFolder, saveSettings } from '@/shared/api/bridge'
+import { getDataDir, getMergePolicy, revealInFolder, scanMergeCandidates, updateMergePolicy } from '@/shared/api/bridge'
+import type { MergePolicyDTO, MergeScanRunDTO } from '@/entities/merge'
+import AdvancedFeaturePolicySettings from './AdvancedFeaturePolicySettings.vue'
+import ImportEvidenceSettings from './ImportEvidenceSettings.vue'
+import { useCustomerResolutionFeaturePolicy } from '@/shared/composables/useCustomerResolutionFeaturePolicy'
 
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
+const featurePolicy = useCustomerResolutionFeaturePolicy()
+const candidateWritesEnabled = computed(() => featurePolicy.isEnabled('candidateScanEnabled'))
 
 // ── Appearance ──
 
@@ -81,8 +87,8 @@ function handleSkinChange(value: string): void {
 
 const { locale, localeOptions, setLocale } = useAppLocale()
 
-function handleLocaleChange(value: SupportedLocale): void {
-  setLocale(value)
+async function handleLocaleChange(value: SupportedLocale): Promise<void> {
+  await setLocale(value)
 }
 
 // ── Operator roster ──
@@ -134,56 +140,111 @@ async function handleOpenDataDir(): Promise<void> {
   }
 }
 
-// ── Auto-merge ──
+// ── Duplicate-customer governance ──
 
-const autoMergeCrossPlatform = ref(false)
-const autoMergeByEmail = ref(false)
-const autoMergeByPhone = ref(false)
-const autoMergeSaving = ref(false)
+const mergePolicy = ref<MergePolicyDTO | null>(null)
+const candidateDetectionEnabled = ref(false)
+const emailEvidenceMode = ref('off')
+const phoneEvidenceMode = ref('off')
+const mergePolicyLoading = ref(false)
+const mergePolicySaving = ref(false)
+const mergeScanRunning = ref(false)
+const mergeScanRun = ref<MergeScanRunDTO | null>(null)
+const mergePolicyError = ref<string | null>(null)
+const mergePolicyErrorKind = ref<'load' | 'save' | null>(null)
 
-async function loadAutoMergeSettings(): Promise<void> {
-  const settings = await getSettings()
-  autoMergeCrossPlatform.value = settings.autoMergeCrossPlatform
-  autoMergeByEmail.value = settings.autoMergeByEmail
-  autoMergeByPhone.value = settings.autoMergeByPhone
-}
+const emailEvidenceEnabled = computed(() => emailEvidenceMode.value !== 'off')
+const phoneEvidenceEnabled = computed(() => phoneEvidenceMode.value !== 'off')
+const emailEvidenceDormant = computed(() => emailEvidenceEnabled.value && !candidateDetectionEnabled.value)
+const phoneEvidenceDormant = computed(() => phoneEvidenceEnabled.value && !candidateDetectionEnabled.value)
 
-async function persistAutoMergeSettings(): Promise<void> {
-  autoMergeSaving.value = true
+async function loadMergePolicy(): Promise<void> {
+  mergePolicyLoading.value = true
+  mergePolicyError.value = null
+  mergePolicyErrorKind.value = null
   try {
-    await saveSettings({
-      autoMergeCrossPlatform: autoMergeCrossPlatform.value,
-      autoMergeByEmail: autoMergeByEmail.value,
-      autoMergeByPhone: autoMergeByPhone.value,
-    })
-    feedback.success(t('settings.feedback.settingsSaved'))
+    const policy = await getMergePolicy()
+    mergePolicy.value = policy
+    candidateDetectionEnabled.value = policy.rules.candidateDetectionEnabled
+    emailEvidenceMode.value = policy.rules.emailEvidenceMode
+    phoneEvidenceMode.value = policy.rules.phoneEvidenceMode
   } catch (err) {
-    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
-    // Reload the persisted state so the toggles don't drift from the backend on a failed save.
-    void loadAutoMergeSettings()
+    mergePolicyError.value = err instanceof Error ? err.message : String(err)
+    mergePolicyErrorKind.value = 'load'
   } finally {
-    autoMergeSaving.value = false
+    mergePolicyLoading.value = false
   }
 }
 
-function handleAutoMergeCrossPlatformChange(value: boolean): void {
-  autoMergeCrossPlatform.value = value
-  void persistAutoMergeSettings()
+async function runMergeScan(): Promise<void> {
+  if (!candidateWritesEnabled.value) return
+  mergeScanRunning.value = true
+  try {
+    mergeScanRun.value = await scanMergeCandidates()
+    await loadMergePolicy()
+  } catch (err) {
+    feedback.error(t('settings.mergePolicy.scanFailed'), err instanceof Error ? err.message : String(err))
+  } finally {
+    mergeScanRunning.value = false
+  }
 }
 
-function handleAutoMergeByEmailChange(value: boolean): void {
-  autoMergeByEmail.value = value
-  void persistAutoMergeSettings()
+async function persistMergePolicy(): Promise<void> {
+  if (!mergePolicy.value) return
+  mergePolicySaving.value = true
+  mergePolicyError.value = null
+  mergePolicyErrorKind.value = null
+  try {
+    mergePolicy.value = await updateMergePolicy({
+      expectedRevision: mergePolicy.value.revision,
+      rules: {
+        candidateDetectionEnabled: candidateDetectionEnabled.value,
+        emailEvidenceMode: emailEvidenceMode.value,
+        phoneEvidenceMode: phoneEvidenceMode.value,
+        executionMode: 'suggest_only',
+      },
+      actorRef: 'local_user',
+    })
+    feedback.success(t('settings.feedback.settingsSaved'))
+    if (candidateWritesEnabled.value) await runMergeScan()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (isMergePolicyRevisionConflict(err)) {
+      feedback.error(t('settings.mergePolicy.revisionConflict'), message)
+      await loadMergePolicy()
+    } else {
+      mergePolicyError.value = message
+      mergePolicyErrorKind.value = 'save'
+      feedback.error(t('settings.mergePolicy.saveFailed'), message)
+    }
+  } finally {
+    mergePolicySaving.value = false
+  }
 }
 
-function handleAutoMergeByPhoneChange(value: boolean): void {
-  autoMergeByPhone.value = value
-  void persistAutoMergeSettings()
+function handleCandidateDetectionChange(value: boolean): void {
+  candidateDetectionEnabled.value = value
+  void persistMergePolicy()
+}
+
+function handleEmailEvidenceChange(value: boolean): void {
+  emailEvidenceMode.value = value
+    ? (mergePolicy.value?.rules.emailEvidenceMode === 'legacy_raw_exact' ? 'legacy_raw_exact' : 'normalized_verified')
+    : 'off'
+  void persistMergePolicy()
+}
+
+function handlePhoneEvidenceChange(value: boolean): void {
+  phoneEvidenceMode.value = value
+    ? (mergePolicy.value?.rules.phoneEvidenceMode === 'legacy_raw_exact' ? 'legacy_raw_exact' : 'normalized')
+    : 'off'
+  void persistMergePolicy()
 }
 
 onMounted(() => {
+  void featurePolicy.load()
   void loadDataDir()
-  void loadAutoMergeSettings()
+  void loadMergePolicy()
 })
 </script>
 
@@ -264,35 +325,83 @@ onMounted(() => {
       </div>
     </SectionCard>
 
-    <SectionCard :title="t('settings.sections.autoMerge')">
+    <SectionCard :title="t('settings.sections.mergePolicy')" :description="t('settings.mergePolicy.description')">
+      <ErrorBanner
+        v-if="mergePolicyError"
+        :message="mergePolicyErrorKind === 'save' ? t('settings.mergePolicy.saveFailed') : t('settings.mergePolicy.loadFailed')"
+        :detail="mergePolicyError"
+        @retry="mergePolicyErrorKind === 'save' ? persistMergePolicy() : loadMergePolicy()"
+      />
       <div class="settings-page__toggle-list">
         <div class="settings-page__toggle-row">
           <div class="settings-page__toggle-copy">
-            <span class="settings-page__toggle-label">{{ t('settings.autoMerge.crossPlatformLabel') }}</span>
-            <span class="settings-page__toggle-desc">{{ t('settings.autoMerge.crossPlatformDesc') }}</span>
+            <span class="settings-page__toggle-label">{{ t('settings.mergePolicy.detectionLabel') }}</span>
+            <span class="settings-page__toggle-desc">{{ t('settings.mergePolicy.detectionDesc') }}</span>
           </div>
           <NSwitch
-            :value="autoMergeCrossPlatform"
-            :disabled="autoMergeSaving"
-            @update:value="handleAutoMergeCrossPlatformChange"
+            :value="candidateDetectionEnabled"
+            :disabled="mergePolicyLoading || mergePolicySaving || mergeScanRunning || !mergePolicy"
+            @update:value="handleCandidateDetectionChange"
           />
         </div>
         <div class="settings-page__toggle-row">
           <div class="settings-page__toggle-copy">
-            <span class="settings-page__toggle-label">{{ t('settings.autoMerge.byEmailLabel') }}</span>
-            <span class="settings-page__toggle-desc">{{ t('settings.autoMerge.byEmailDesc') }}</span>
+            <span class="settings-page__toggle-label">{{ t('settings.mergePolicy.emailLabel') }}</span>
+            <span class="settings-page__toggle-desc">{{ t('settings.mergePolicy.emailDesc') }}</span>
+            <span v-if="emailEvidenceDormant" class="settings-page__toggle-desc">{{ t('settings.mergePolicy.dormant') }}</span>
           </div>
-          <NSwitch :value="autoMergeByEmail" :disabled="autoMergeSaving" @update:value="handleAutoMergeByEmailChange" />
+          <NSwitch
+            :value="emailEvidenceEnabled"
+            :disabled="!candidateDetectionEnabled || mergePolicySaving || mergeScanRunning"
+            @update:value="handleEmailEvidenceChange"
+          />
         </div>
         <div class="settings-page__toggle-row">
           <div class="settings-page__toggle-copy">
-            <span class="settings-page__toggle-label">{{ t('settings.autoMerge.byPhoneLabel') }}</span>
-            <span class="settings-page__toggle-desc">{{ t('settings.autoMerge.byPhoneDesc') }}</span>
+            <span class="settings-page__toggle-label">{{ t('settings.mergePolicy.phoneLabel') }}</span>
+            <span class="settings-page__toggle-desc">{{ t('settings.mergePolicy.phoneDesc') }}</span>
+            <span v-if="phoneEvidenceDormant" class="settings-page__toggle-desc">{{ t('settings.mergePolicy.dormant') }}</span>
           </div>
-          <NSwitch :value="autoMergeByPhone" :disabled="autoMergeSaving" @update:value="handleAutoMergeByPhoneChange" />
+          <NSwitch
+            :value="phoneEvidenceEnabled"
+            :disabled="!candidateDetectionEnabled || mergePolicySaving || mergeScanRunning"
+            @update:value="handlePhoneEvidenceChange"
+          />
         </div>
-        <p class="settings-page__hint">{{ t('settings.autoMerge.saveHint') }}</p>
+        <div class="settings-page__toggle-row">
+          <div class="settings-page__toggle-copy">
+            <span class="settings-page__toggle-label">{{ t('settings.mergePolicy.executionLabel') }}</span>
+            <span class="settings-page__toggle-desc">{{ t('settings.mergePolicy.executionDesc') }}</span>
+          </div>
+          <code>{{ t('settings.mergePolicy.executionValue') }}</code>
+        </div>
+        <div class="settings-page__scan-summary">
+          <NButton :loading="mergeScanRunning" :disabled="mergePolicySaving || !mergePolicy || !candidateWritesEnabled" @click="runMergeScan">
+            {{ t('settings.mergePolicy.scanAction') }}
+          </NButton>
+          <span v-if="mergeScanRun && mergeScanRun.status === 'completed'">
+            {{ t('settings.mergePolicy.scanCompleted', {
+              profiles: mergeScanRun.profilesScanned,
+              pairs: mergeScanRun.pairsEvaluated,
+              created: mergeScanRun.candidatesCreated,
+              updated: mergeScanRun.candidatesUpdated,
+              blocked: mergeScanRun.candidatesBlocked,
+            }) }}
+          </span>
+          <span v-else-if="mergeScanRun?.errorMessage" class="settings-page__scan-error">
+            {{ mergeScanRun.errorMessage }}
+          </span>
+          <span v-else-if="mergePolicy?.needsScan">{{ t('settings.mergePolicy.scanNeeded') }}</span>
+        </div>
       </div>
+    </SectionCard>
+
+    <SectionCard :title="t('settings.sections.featurePolicy')" :description="t('settings.featurePolicy.description')">
+      <AdvancedFeaturePolicySettings />
+    </SectionCard>
+
+    <SectionCard :title="t('settings.sections.importEvidence')" :description="t('settings.importEvidence.description')">
+      <ImportEvidenceSettings />
     </SectionCard>
   </div>
 </template>
@@ -406,6 +515,19 @@ onMounted(() => {
   flex-direction: column;
   gap: var(--space-1);
   min-width: 0;
+}
+
+.settings-page__scan-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.settings-page__scan-error {
+  color: var(--status-error-fg);
 }
 
 .settings-page__toggle-label {

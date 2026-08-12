@@ -37,10 +37,13 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		&persistence.FulfillmentLine{},
 		&persistence.WaveDemandAssignment{},
 		&persistence.MergeSuggestion{},
+		&persistence.CustomerNameObservation{},
+		&persistence.CustomerNameEvent{},
 	)
 	if err != nil {
 		t.Fatalf("failed to auto-migrate: %v", err)
 	}
+	seedEnabledFeaturePolicyForFocusedDB(t, db)
 
 	return db
 }
@@ -62,7 +65,9 @@ func setupUsecase(t *testing.T, db *gorm.DB) (*CustomerProfileUseCase, ProfileMe
 	settingsSvc := service.NewSettingsService()
 
 	suggestionRepo := infra.NewMergeSuggestionRepository(db)
-	cpUseCase := NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, suggestionRepo)
+	nameService := NewCustomerNameObservationService(profileRepo,
+		infra.NewCustomerNameObservationRepository(db), infra.NewCustomerNameEventRepository(db))
+	cpUseCase := NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, suggestionRepo, nameService)
 	mergeUseCase := NewProfileMergeUseCase(profileRepo, addressRepo, demandRepo, mergeRepo)
 
 	return cpUseCase, mergeUseCase
@@ -249,8 +254,10 @@ func TestCustomerProfileUseCase_AutoMergeSuggestions(t *testing.T) {
 		t.Fatalf("AddCustomerIdentity for p2 failed: %v", err)
 	}
 
-	// Auto-merge triggers on AddCustomerIdentity automatically!
-	// Retrieve suggestions
+	// Legacy suggestions now require an explicit detection call.
+	if err := uc.DetectMergeSuggestions(context.Background()); err != nil {
+		t.Fatalf("DetectMergeSuggestions failed: %v", err)
+	}
 	suggestions, err := uc.GetMergeSuggestions(context.Background())
 	if err != nil {
 		t.Fatalf("GetMergeSuggestions failed: %v", err)
@@ -349,7 +356,9 @@ func TestCustomerProfileUseCase_AutoMergeSuggestionsByPhone(t *testing.T) {
 		t.Fatalf("create address 2 failed: %v", err)
 	}
 
-	// Retrieve suggestions (which triggers DetectMergeSuggestions)
+	if err := uc.DetectMergeSuggestions(context.Background()); err != nil {
+		t.Fatalf("DetectMergeSuggestions failed: %v", err)
+	}
 	suggestions, err := uc.GetMergeSuggestions(context.Background())
 	if err != nil {
 		t.Fatalf("GetMergeSuggestions failed: %v", err)

@@ -3,6 +3,7 @@ package infra
 import (
 	"context"
 	"strings"
+	"unicode"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
@@ -42,9 +43,17 @@ func (r *listPaginationRepository) ListCustomerProfilesPage(ctx context.Context,
 	}
 	if keyword := strings.TrimSpace(q.Keyword); keyword != "" {
 		like := "%" + strings.ToLower(keyword) + "%"
-		query = query.Where(`LOWER(customer_profiles.display_name) LIKE ? OR EXISTS
+		predicate := `LOWER(customer_profiles.display_name) LIKE ? OR EXISTS
 			(SELECT 1 FROM customer_identities ci WHERE ci.customer_profile_id = customer_profiles.id
-			AND ci.deleted_at IS NULL AND LOWER(ci.identity_value) LIKE ?)`, like, like)
+			AND ci.deleted_at IS NULL AND LOWER(ci.identity_value) LIKE ?)`
+		args := []any{like, like}
+		if r.db.Migrator().HasTable("customer_name_observations") {
+			predicate += ` OR EXISTS (SELECT 1 FROM customer_name_observations cno
+				WHERE cno.customer_profile_id = customer_profiles.id AND cno.deleted_at IS NULL
+				AND cno.is_active = true AND (LOWER(cno.name) LIKE ? OR cno.normalized_name LIKE ?))`
+			args = append(args, like, "%"+normalizeNameSearch(keyword)+"%")
+		}
+		query = query.Where(predicate, args...)
 	}
 	var total int64
 	if err := query.Count(&total).Error; err != nil {
@@ -64,6 +73,42 @@ func (r *listPaginationRepository) ListCustomerProfilesPage(ctx context.Context,
 		items[i] = *persistence.CustomerProfileToDomain(&rows[i])
 	}
 	return items, total, nil
+}
+
+func (r *listPaginationRepository) FindMatchedCustomerHistoricalNames(ctx context.Context, ids []uint, keyword string) (map[uint]string, error) {
+	result := make(map[uint]string)
+	keyword = strings.TrimSpace(keyword)
+	if len(ids) == 0 || keyword == "" || !r.db.Migrator().HasTable("customer_name_observations") {
+		return result, nil
+	}
+	type matchRow struct {
+		CustomerProfileID uint
+		Name              string
+	}
+	var rows []matchRow
+	like := "%" + strings.ToLower(keyword) + "%"
+	if err := r.db.WithContext(ctx).Table("customer_name_observations").
+		Select("customer_profile_id, name").
+		Where("customer_profile_id IN ? AND deleted_at IS NULL AND is_active = ?", ids, true).
+		Where("LOWER(name) LIKE ? OR normalized_name LIKE ?", like, "%"+normalizeNameSearch(keyword)+"%").
+		Order("last_seen_at DESC, id DESC").Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if _, exists := result[row.CustomerProfileID]; !exists {
+			result[row.CustomerProfileID] = row.Name
+		}
+	}
+	return result, nil
+}
+
+func normalizeNameSearch(value string) string {
+	return strings.Map(func(r rune) rune {
+		if unicode.IsSpace(r) {
+			return -1
+		}
+		return unicode.ToLower(r)
+	}, strings.TrimSpace(value))
 }
 
 func (r *listPaginationRepository) ListCustomerIdentitiesByProfileIDs(ctx context.Context, ids []uint) ([]domain.CustomerIdentity, error) {

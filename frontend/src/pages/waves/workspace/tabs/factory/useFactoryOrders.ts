@@ -6,7 +6,7 @@
  *   order's lines (`listLinesBySupplierOrder`), fetched in parallel via
  *   `Promise.all` — replacing the old tree's sequential N+1 await loop
  *   (`frontend/src/pages/wave-workspace/WaveExportStep.vue:62-64`).
- * - `regenerate()` — the (re)export action (`exportSupplierOrder`). Every
+ * - `regenerate(profileId)` — the profile-scoped (re)export action. Every
  *   call is followed by a full `loadAll()` re-fetch (the backend's
  *   `DeleteDraftsByWave` rebuild only ever touches `draft` orders, so
  *   already-submitted/accepted orders re-fetch unchanged alongside any
@@ -21,19 +21,22 @@
  * afterward via a `changed` emit.
  */
 import { onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
-import { exportSupplierOrder, getSupplierOrderByWave, listLinesBySupplierOrder } from '@/shared/api/bridge'
+import { exportSupplierOrderForProfile, getSupplierOrderByWave, listLinesBySupplierOrder, listProfiles } from '@/shared/api/bridge'
 import { useWaveWorkspaceContext } from '@/shared/lib/wave-workspace/useWaveWorkspace'
 import type { dto } from '@/../wailsjs/go/models'
+import { eligibleFactoryProfiles } from './factoryProfileSelection'
 
 export interface UseFactoryOrdersApi {
   waveId: ComputedRef<number>
   orders: Ref<dto.SupplierOrderDTO[]>
   linesByOrder: Ref<Map<number, dto.SupplierOrderLineDTO[]>>
   loading: Ref<boolean>
+  error: Ref<string | null>
   /** True once the initial load has settled — gates the empty state so it never flashes on first paint. */
   ready: Ref<boolean>
+  factoryProfiles: Ref<dto.IntegrationProfileDTO[]>
   loadAll(): Promise<void>
-  regenerate(): Promise<dto.SupplierOrderDTO[]>
+  regenerate(factoryProfileId: number): Promise<dto.SupplierOrderDTO[]>
 }
 
 export function useFactoryOrders(): UseFactoryOrdersApi {
@@ -42,10 +45,13 @@ export function useFactoryOrders(): UseFactoryOrdersApi {
   const orders = ref<dto.SupplierOrderDTO[]>([]) as Ref<dto.SupplierOrderDTO[]>
   const linesByOrder = ref<Map<number, dto.SupplierOrderLineDTO[]>>(new Map()) as Ref<Map<number, dto.SupplierOrderLineDTO[]>>
   const loading = ref(false)
+  const error = ref<string | null>(null)
   const ready = ref(false)
+  const factoryProfiles = ref<dto.IntegrationProfileDTO[]>([]) as Ref<dto.IntegrationProfileDTO[]>
 
   async function loadAll(): Promise<void> {
     loading.value = true
+    error.value = null
     try {
       const fetchedOrders = await getSupplierOrderByWave(ctx.waveId.value)
       const lineLists = await Promise.all(fetchedOrders.map((order) => listLinesBySupplierOrder(order.id)))
@@ -53,14 +59,18 @@ export function useFactoryOrders(): UseFactoryOrdersApi {
       fetchedOrders.forEach((order, index) => nextLines.set(order.id, lineLists[index] ?? []))
       orders.value = fetchedOrders
       linesByOrder.value = nextLines
+      const profiles = await listProfiles()
+      factoryProfiles.value = eligibleFactoryProfiles(profiles)
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err)
     } finally {
       loading.value = false
       ready.value = true
     }
   }
 
-  async function regenerate(): Promise<dto.SupplierOrderDTO[]> {
-    const result = await exportSupplierOrder(ctx.waveId.value)
+  async function regenerate(factoryProfileId: number): Promise<dto.SupplierOrderDTO[]> {
+    const result = await exportSupplierOrderForProfile(ctx.waveId.value, factoryProfileId)
     await loadAll()
     await ctx.refresh()
     return result
@@ -73,5 +83,5 @@ export function useFactoryOrders(): UseFactoryOrdersApi {
     void loadAll()
   })
 
-  return { waveId: ctx.waveId, orders, linesByOrder, loading, ready, loadAll, regenerate }
+  return { waveId: ctx.waveId, orders, linesByOrder, loading, error, ready, factoryProfiles, loadAll, regenerate }
 }

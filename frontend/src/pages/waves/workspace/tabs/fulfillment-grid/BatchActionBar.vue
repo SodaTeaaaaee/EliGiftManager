@@ -14,15 +14,18 @@
  * included. This keeps the action faithful to "batch action bar acts on the
  * current selection" rather than reaching outside it.
  */
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton } from 'naive-ui'
 import { useFeedback } from '@/shared/ui/feedback'
 import { useGlossary } from '@/shared/i18n/glossary'
 import { batchBindAddressToLines, listAddressesByProfile } from '@/shared/api/bridge'
 import { exportRowsToCsv, type CsvColumnSpec } from '@/shared/lib/csv/exportRowsToCsv'
+import { useCustomerResolutionFeaturePolicy } from '@/shared/composables/useCustomerResolutionFeaturePolicy'
+import { customerResolutionWriteAccess } from '@/shared/lib/customer-resolution'
 import type { FulfillmentGridRow } from './useFulfillmentGrid'
 import BatchAdjustDialog from './BatchAdjustDialog.vue'
+import { bindDefaultAddressesForRows } from './addressWriteFlow'
 
 const props = defineProps<{
   selectedRows: FulfillmentGridRow[]
@@ -36,6 +39,11 @@ const emit = defineEmits<{
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
 const { label: glossaryLabel } = useGlossary()
+const featurePolicy = useCustomerResolutionFeaturePolicy()
+const addressWritesEnabled = computed(
+  () => customerResolutionWriteAccess(featurePolicy.policy.value).canManageAddresses,
+)
+void featurePolicy.load()
 
 const showAdjustDialog = ref(false)
 const bindingAddress = ref(false)
@@ -55,43 +63,21 @@ function handleAdjustSuccess(payload: { successCount: number; failureCount: numb
 }
 
 async function handleBindDefaultAddress(): Promise<void> {
-  const rowsWithProfile = props.selectedRows.filter((row) => row.customerProfileId != null)
-  const noProfileCount = props.selectedRows.length - rowsWithProfile.length
-  if (rowsWithProfile.length === 0) {
-    feedback.error(t('fulfillmentGrid.batch.someFailed', { count: props.selectedRows.length }))
-    return
-  }
+  if (!addressWritesEnabled.value || bindingAddress.value || props.selectedRows.length === 0) return
 
   bindingAddress.value = true
   try {
-    const defaultAddressByProfile = new Map<number, number | null>()
-    const entries: Array<{ fulfillmentLineId: number; customerAddressId: number }> = []
-    let unresolvedCount = noProfileCount
-
-    for (const row of rowsWithProfile) {
-      const profileId = row.customerProfileId as number
-      if (!defaultAddressByProfile.has(profileId)) {
-        const addresses = await listAddressesByProfile(profileId)
-        const defaultAddress = addresses.find((address) => address.isDefault)
-        defaultAddressByProfile.set(profileId, defaultAddress ? defaultAddress.id : null)
-      }
-      const addressId = defaultAddressByProfile.get(profileId) ?? null
-      if (addressId == null) {
-        unresolvedCount += 1
-        continue
-      }
-      entries.push({ fulfillmentLineId: row.fulfillmentLineId, customerAddressId: addressId })
-    }
-
-    if (entries.length === 0) {
-      feedback.error(t('fulfillmentGrid.batch.someFailed', { count: props.selectedRows.length }))
+    const outcome = await bindDefaultAddressesForRows(
+      addressWritesEnabled.value,
+      props.selectedRows,
+      { listAddressesByProfile, batchBindAddressToLines },
+    )
+    if (!outcome) return
+    if (!outcome.attempted) {
+      feedback.error(t('fulfillmentGrid.batch.someFailed', { count: outcome.failureCount }))
       return
     }
-
-    const results = await batchBindAddressToLines(entries)
-    const successCount = results.filter((result) => result.success).length
-    const failureCount = results.length - successCount + unresolvedCount
-    reportOutcome('fulfillmentGrid.batch.bindDefaultAddress', successCount, failureCount)
+    reportOutcome('fulfillmentGrid.batch.bindDefaultAddress', outcome.successCount, outcome.failureCount)
     emit('done')
   } catch (err) {
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
@@ -156,14 +142,18 @@ function handleExportCsv(): void {
     <span class="batch-action-bar__count">
       {{ t('fulfillmentGrid.batch.selectedCount', { n: selectedRows.length }) }}
     </span>
+    <span v-if="!addressWritesEnabled" class="batch-action-bar__disabled-reason">
+      {{ t('fulfillmentGrid.address.writesDisabledReason') }}
+    </span>
     <div class="batch-action-bar__actions">
       <NButton size="small" :disabled="selectedRows.length === 0" @click="showAdjustDialog = true">
         {{ t('fulfillmentGrid.batch.adjust') }}
       </NButton>
       <NButton
+        data-testid="batch-bind-default-address"
         size="small"
         :loading="bindingAddress"
-        :disabled="selectedRows.length === 0"
+        :disabled="selectedRows.length === 0 || !addressWritesEnabled"
         @click="handleBindDefaultAddress"
       >
         {{ t('fulfillmentGrid.batch.bindDefaultAddress') }}
@@ -189,6 +179,11 @@ function handleExportCsv(): void {
 
 .batch-action-bar__count {
   font-weight: var(--font-weight-medium);
+}
+
+.batch-action-bar__disabled-reason {
+  color: var(--status-warning-fg);
+  font-size: var(--font-size-xs);
 }
 
 .batch-action-bar__actions {

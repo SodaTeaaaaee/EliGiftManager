@@ -28,6 +28,92 @@ var validDocumentFormats = map[string]bool{
 	"zip":         true, // product catalog archives (tabular sheet + images)
 }
 
+func validateDocumentFormat(docType, format string) error {
+	if !validDocumentFormats[format] {
+		return fmt.Errorf("invalid format: %q", format)
+	}
+	if format == "xls" && (docType == "export_supplier_order" || docType == "export_source_tracking_update") {
+		return fmt.Errorf("format %q is read-only for imports; %s output supports xlsx (recommended) or csv, not BIFF .xls", format, docType)
+	}
+	return nil
+}
+
+// ResolveDemandImportDocumentType resolves the demand-import template type from
+// the profile when callers omit documentType, then verifies that an explicit or
+// inferred type belongs to that profile. DemandKind is authoritative: retail
+// profiles must never silently fall back to the entitlement importer.
+func ResolveDemandImportDocumentType(profile *domain.IntegrationProfile, requested string) (string, error) {
+	if profile == nil {
+		return "", fmt.Errorf("integration profile is required")
+	}
+
+	docType := strings.TrimSpace(requested)
+	if docType == "" {
+		switch profile.DemandKind {
+		case string(domain.DemandKindMembershipEntitlement):
+			docType = "import_entitlement"
+		case string(domain.DemandKindRetailOrder):
+			docType = "import_sales_order"
+		default:
+			return "", fmt.Errorf("profile %d has unsupported demandKind %q for demand import", profile.ID, profile.DemandKind)
+		}
+	}
+	if docType != "import_entitlement" && docType != "import_sales_order" {
+		return "", fmt.Errorf("documentType %q is not a demand import type", docType)
+	}
+	if err := ValidateProfileDocumentType(profile, docType); err != nil {
+		return "", err
+	}
+	return docType, nil
+}
+
+// ValidateProfileDocumentType enforces the legal ownership of document
+// templates. Demand imports are tied to the profile's surface and DemandKind;
+// factory document types require the corresponding explicit capability; and
+// operational demand-platform documents require their execution settings.
+func ValidateProfileDocumentType(profile *domain.IntegrationProfile, docType string) error {
+	if profile == nil {
+		return fmt.Errorf("integration profile is required")
+	}
+
+	docType = strings.TrimSpace(docType)
+	allowed := false
+	switch docType {
+	case "import_entitlement":
+		allowed = profile.SourceSurface == string(domain.SourceSurfaceMembership) &&
+			profile.DemandKind == string(domain.DemandKindMembershipEntitlement)
+	case "import_sales_order":
+		allowed = profile.SourceSurface == string(domain.SourceSurfaceRetail) &&
+			profile.DemandKind == string(domain.DemandKindRetailOrder)
+	case "import_product_catalog":
+		allowed = profile.SourceSurface == string(domain.SourceSurfaceFactory) && profile.SupportsImportProductCatalog
+	case "export_supplier_order":
+		allowed = profile.SourceSurface == string(domain.SourceSurfaceFactory) && profile.SupportsExportSupplierOrder
+	case "import_supplier_shipment":
+		allowed = profile.SourceSurface == string(domain.SourceSurfaceFactory) && profile.SupportsImportSupplierShipment
+	case "export_source_tracking_update":
+		allowed = profile.SourceSurface != string(domain.SourceSurfaceFactory) &&
+			(profile.SourceSurface == string(domain.SourceSurfaceMembership) || profile.SourceSurface == string(domain.SourceSurfaceRetail)) &&
+			profile.TrackingSyncMode == "document_export"
+	case "import_carrier_mapping":
+		allowed = profile.SourceSurface != string(domain.SourceSurfaceFactory) &&
+			(profile.SourceSurface == string(domain.SourceSurfaceMembership) || profile.SourceSurface == string(domain.SourceSurfaceRetail)) &&
+			profile.RequiresCarrierMapping
+	default:
+		return fmt.Errorf("invalid documentType: %q", docType)
+	}
+	if !allowed {
+		return fmt.Errorf(
+			"documentType %q is not supported by profile %d (surface=%q demandKind=%q)",
+			docType,
+			profile.ID,
+			profile.SourceSurface,
+			profile.DemandKind,
+		)
+	}
+	return nil
+}
+
 type templateManagementUseCase struct {
 	templateRepo domain.DocumentTemplateRepository
 	bindingRepo  domain.ProfileTemplateBindingRepository
@@ -53,8 +139,8 @@ func (uc *templateManagementUseCase) CreateDocumentTemplate(ctx context.Context,
 	if !validDocumentTypes[input.DocumentType] {
 		return nil, fmt.Errorf("invalid documentType: %q", input.DocumentType)
 	}
-	if !validDocumentFormats[input.Format] {
-		return nil, fmt.Errorf("invalid format: %q", input.Format)
+	if err := validateDocumentFormat(input.DocumentType, input.Format); err != nil {
+		return nil, err
 	}
 	if strings.TrimSpace(input.MappingRules) != "" {
 		rules, err := ParseMappingRules(input.MappingRules)
@@ -95,16 +181,15 @@ func (uc *templateManagementUseCase) UpdateDocumentTemplate(ctx context.Context,
 	if input.ID == 0 {
 		return nil, fmt.Errorf("id must not be empty")
 	}
-	if !validDocumentFormats[input.Format] {
-		return nil, fmt.Errorf("invalid format: %q", input.Format)
-	}
-
 	existing, err := uc.templateRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, fmt.Errorf("look up template %d: %w", input.ID, err)
 	}
 	if existing == nil {
 		return nil, fmt.Errorf("template %d not found", input.ID)
+	}
+	if err := validateDocumentFormat(existing.DocumentType, input.Format); err != nil {
+		return nil, err
 	}
 
 	// TemplateKey and DocumentType are immutable — only Format/MappingRules/ExtraData may change.
@@ -176,6 +261,9 @@ func (uc *templateManagementUseCase) BindTemplateToProfile(ctx context.Context, 
 	if t.DocumentType != input.DocumentType {
 		return nil, fmt.Errorf("template %d has documentType %q, cannot bind as %q", input.TemplateID, t.DocumentType, input.DocumentType)
 	}
+	if err := validateDocumentFormat(t.DocumentType, t.Format); err != nil {
+		return nil, fmt.Errorf("template %d: %w", t.ID, err)
+	}
 
 	// Validate profile exists.
 	profile, err := uc.profileRepo.FindByID(ctx, input.IntegrationProfileID)
@@ -184,6 +272,9 @@ func (uc *templateManagementUseCase) BindTemplateToProfile(ctx context.Context, 
 	}
 	if profile == nil {
 		return nil, fmt.Errorf("integration profile %d not found", input.IntegrationProfileID)
+	}
+	if err := ValidateProfileDocumentType(profile, input.DocumentType); err != nil {
+		return nil, err
 	}
 
 	// Enforce uniqueness: only one default binding per (profileID, documentType)
@@ -248,6 +339,30 @@ func (uc *templateManagementUseCase) SetDefaultBinding(ctx context.Context, bind
 	}
 	if binding.IsDefault {
 		return nil
+	}
+
+	profile, err := uc.profileRepo.FindByID(ctx, binding.IntegrationProfileID)
+	if err != nil {
+		return fmt.Errorf("look up integration profile %d: %w", binding.IntegrationProfileID, err)
+	}
+	if profile == nil {
+		return fmt.Errorf("integration profile %d not found", binding.IntegrationProfileID)
+	}
+	if err := ValidateProfileDocumentType(profile, binding.DocumentType); err != nil {
+		return err
+	}
+	t, err := uc.templateRepo.FindByID(ctx, binding.TemplateID)
+	if err != nil {
+		return fmt.Errorf("look up template %d: %w", binding.TemplateID, err)
+	}
+	if t == nil {
+		return fmt.Errorf("template %d not found", binding.TemplateID)
+	}
+	if t.DocumentType != binding.DocumentType {
+		return fmt.Errorf("template %d has documentType %q, cannot set binding as %q", binding.TemplateID, t.DocumentType, binding.DocumentType)
+	}
+	if err := validateDocumentFormat(t.DocumentType, t.Format); err != nil {
+		return fmt.Errorf("template %d: %w", t.ID, err)
 	}
 
 	// Clear any existing default for the same (profile, documentType), then promote this row.

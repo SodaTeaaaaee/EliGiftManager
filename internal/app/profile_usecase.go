@@ -18,6 +18,17 @@ type profileManagementUseCase struct {
 	templateBindingRepo domain.ProfileTemplateBindingRepository
 	closureDecisionRepo domain.ChannelClosureDecisionRepository
 	executorProvider    ExecutorProvider
+	referenceRepo       domain.IntegrationProfileReferenceRepository
+}
+
+// WithIntegrationProfileReferenceRepo enables deletion guards for references
+// outside the core profile repositories kept in the constructor for compatibility.
+func WithIntegrationProfileReferenceRepo(uc ProfileManagementUseCase, repo domain.IntegrationProfileReferenceRepository) ProfileManagementUseCase {
+	impl, ok := uc.(*profileManagementUseCase)
+	if ok {
+		impl.referenceRepo = repo
+	}
+	return uc
 }
 
 func NewProfileManagementUseCase(
@@ -92,9 +103,10 @@ func validateProfileEnums(input dto.CreateProfileInput) error {
 		"close_after_shipment":            true,
 	}
 	validIdentityStrategy := map[string]bool{
-		"platform_uid":      true,
-		"email":             true,
-		"external_buyer_id": true,
+		"platform_uid":                         true,
+		"email":                                true,
+		"external_buyer_id":                    true,
+		IdentityStrategyOrderScopedProvisional: true,
 	}
 	validRecipientInputMode := map[string]bool{
 		"none":              true,
@@ -247,6 +259,20 @@ func (uc *profileManagementUseCase) UpdateProfile(ctx context.Context, input dto
 	if err := validateExecutionReadiness(enumInput, uc.executorProvider); err != nil {
 		return nil, err
 	}
+	candidate := profileFromCreateInput(enumInput)
+	candidate.ID = profile.ID
+	bindings, err := uc.templateBindingRepo.ListByProfile(ctx, profile.ID)
+	if err != nil {
+		return nil, fmt.Errorf("validate default template bindings: %w", err)
+	}
+	for _, binding := range bindings {
+		if !binding.IsDefault {
+			continue
+		}
+		if err := ValidateProfileDocumentType(candidate, binding.DocumentType); err != nil {
+			return nil, fmt.Errorf("profile update would invalidate default binding %d for %q: %w", binding.ID, binding.DocumentType, err)
+		}
+	}
 
 	profile.ProfileKey = input.ProfileKey
 	profile.SourceChannel = input.SourceChannel
@@ -312,6 +338,18 @@ func (uc *profileManagementUseCase) DeleteProfile(ctx context.Context, id uint) 
 	}
 	if closureCount > 0 {
 		return fmt.Errorf("cannot delete profile: referenced by closure decisions")
+	}
+
+	if uc.referenceRepo != nil {
+		references, refErr := uc.referenceRepo.CountReferences(ctx, id)
+		if refErr != nil {
+			return fmt.Errorf("failed to check extended profile references: %w", refErr)
+		}
+		for _, kind := range []string{"carrier mappings", "supplier orders", "customer identities", "customer profile origins", "customer name observations"} {
+			if references[kind] > 0 {
+				return fmt.Errorf("cannot delete profile: %d %s still reference it", references[kind], kind)
+			}
+		}
 	}
 
 	return uc.repo.Delete(ctx, id)

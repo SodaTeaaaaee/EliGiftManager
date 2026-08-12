@@ -25,6 +25,9 @@ func NewAddressManagementUseCase(
 }
 
 func (uc *addressManagementUseCase) CreateAddress(ctx context.Context, input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error) {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return nil, err
+	}
 	if input.Label == "" {
 		return nil, fmt.Errorf("address label is required")
 	}
@@ -69,6 +72,9 @@ func (uc *addressManagementUseCase) CreateAddress(ctx context.Context, input dto
 }
 
 func (uc *addressManagementUseCase) UpdateAddress(ctx context.Context, input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error) {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return nil, err
+	}
 	existing, err := uc.addressRepo.FindByID(ctx, input.ID)
 	if err != nil {
 		return nil, err
@@ -108,6 +114,9 @@ func (uc *addressManagementUseCase) UpdateAddress(ctx context.Context, input dto
 }
 
 func (uc *addressManagementUseCase) DeleteAddress(ctx context.Context, id uint) error {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return err
+	}
 	return uc.addressRepo.SoftDelete(ctx, id)
 }
 
@@ -133,6 +142,9 @@ func (uc *addressManagementUseCase) ListAddressesByProfile(ctx context.Context, 
 }
 
 func (uc *addressManagementUseCase) BindAddressToLine(ctx context.Context, input dto.BindAddressInput) (*dto.CustomerAddressDTO, error) {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return nil, err
+	}
 	addr, err := uc.addressRepo.FindByID(ctx, input.CustomerAddressID)
 	if err != nil {
 		return nil, fmt.Errorf("address not found: %w", err)
@@ -155,6 +167,9 @@ func (uc *addressManagementUseCase) BindAddressToLine(ctx context.Context, input
 }
 
 func (uc *addressManagementUseCase) UnbindAddressFromLine(ctx context.Context, fulfillmentLineID uint) error {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return err
+	}
 	line, err := uc.fulfillmentRepo.FindByID(ctx, fulfillmentLineID)
 	if err != nil {
 		return fmt.Errorf("fulfillment line not found: %w", err)
@@ -173,6 +188,9 @@ func (uc *addressManagementUseCase) UnbindAddressFromLine(ctx context.Context, f
 // Hit → update non-empty draft fields onto the existing row.
 // Miss → create a new address (label defaults to "import"; IsDefault honouring draft).
 func (uc *addressManagementUseCase) UpsertAddressFromImport(ctx context.Context, customerProfileID uint, draft RecipientAddressDraft) (*dto.CustomerAddressDTO, error) {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return nil, err
+	}
 	if customerProfileID == 0 {
 		return nil, fmt.Errorf("upsert address from import: customerProfileID is required")
 	}

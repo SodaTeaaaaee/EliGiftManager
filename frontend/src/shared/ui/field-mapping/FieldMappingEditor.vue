@@ -40,6 +40,11 @@ const props = withDefaults(
     positionPlaceholder?: string
     columnOrderLabel?: string
     columnOrderPlaceholder?: string
+    /** Read-only review mode for template-driven imports. */
+    readonly?: boolean
+    /** Optional detected source metadata. */
+    inputFormat?: string
+    sheetName?: string
     /** Per-cell validator deciding the red-highlight. Defaults to the demand-intake rule. */
     validate?: (destField: string, value: string) => string | undefined
   }>(),
@@ -52,6 +57,9 @@ const props = withDefaults(
     positionPlaceholder: undefined,
     columnOrderLabel: undefined,
     columnOrderPlaceholder: undefined,
+    readonly: false,
+    inputFormat: undefined,
+    sheetName: undefined,
     // Function prop defaults are used as-is (not as factories) — must be the validator itself.
     validate: (destField: string, value: string) => validateDestFieldValue(destField, value),
   },
@@ -79,6 +87,19 @@ const sourceHeaderOptions = computed<SelectOption[]>(() =>
   props.sourceHeaders.map((header) => ({ label: header, value: header })),
 )
 
+const transformOptions = computed<SelectOption[]>(() => [
+  { label: t('intakeWizard.mapping.transformTrim'), value: 'trim' },
+  { label: t('intakeWizard.mapping.transformStripQuotes'), value: 'strip_quotes' },
+  { label: t('intakeWizard.mapping.transformStripLeadingQuote'), value: 'strip_leading_quote' },
+])
+
+const mappedSourceHeaders = computed(() => new Set(Object.values(props.modelValue.columns ?? {})))
+const unmappedSourceHeaders = computed(() =>
+  mode.value === 'header'
+    ? props.sourceHeaders.filter((header) => !mappedSourceHeaders.value.has(header))
+    : [],
+)
+
 function patch(partial: Partial<FieldMappingValue>): void {
   emit('update:modelValue', {
     version: props.modelValue.version ?? 2,
@@ -90,6 +111,8 @@ function patch(partial: Partial<FieldMappingValue>): void {
     transforms: props.modelValue.transforms,
     columnOrder: props.modelValue.columnOrder,
     required: props.modelValue.required,
+    sheetName: props.modelValue.sheetName,
+    imageLayout: props.modelValue.imageLayout,
     ...partial,
   })
 }
@@ -100,6 +123,10 @@ function handleModeChange(next: FieldMappingMode): void {
 
 function handleHasHeaderChange(next: boolean): void {
   patch({ hasHeader: next, version: 2 })
+}
+
+function handleSheetNameChange(next: string): void {
+  patch({ sheetName: next })
 }
 
 function columnValue(destField: string): string | null {
@@ -146,6 +173,28 @@ function handleDefaultChange(destField: string, value: string): void {
   patch({ defaults })
 }
 
+function transformValue(destField: string): string[] {
+  return props.modelValue.transforms?.[destField] ?? []
+}
+
+function handleTransformChange(destField: string, value: string[]): void {
+  const transforms = { ...(props.modelValue.transforms ?? {}) }
+  if (value.length > 0) transforms[destField] = value
+  else delete transforms[destField]
+  patch({ transforms })
+}
+
+function isRequired(destField: string): boolean {
+  return (props.modelValue.required ?? []).includes(destField)
+}
+
+function handleRequiredChange(destField: string, value: boolean): void {
+  const required = new Set(props.modelValue.required ?? [])
+  if (value) required.add(destField)
+  else required.delete(destField)
+  patch({ required: [...required] })
+}
+
 const columnOrderText = computed(() => (props.modelValue.columnOrder ?? []).join(', '))
 
 function handleColumnOrderChange(value: string): void {
@@ -178,7 +227,9 @@ const previewColumns = computed(() =>
           return h('span', { class: 'field-mapping-editor__cell field-mapping-editor__cell--unmapped' }, props.unmappedLabel)
         }
         const value = (row[field.key] as string | undefined) ?? ''
-        const error = props.validate(field.key, value)
+        const error = isRequired(field.key) && value.trim() === ''
+          ? 'required'
+          : props.validate(field.key, value)
         return h(
           'span',
           {
@@ -195,22 +246,38 @@ const previewColumns = computed(() =>
 <template>
   <div class="field-mapping-editor">
     <div class="field-mapping-editor__meta">
+      <div v-if="inputFormat || sheetName" class="field-mapping-editor__source-meta">
+        <span v-if="inputFormat">{{ t('intakeWizard.mapping.inputFormat') }}: {{ inputFormat }}</span>
+        <span v-if="sheetName">{{ t('intakeWizard.mapping.sheetName') }}: {{ sheetName }}</span>
+      </div>
+      <div
+        v-if="['XLS', 'XLSX'].includes((inputFormat ?? '').toUpperCase()) || modelValue.sheetName"
+        class="field-mapping-editor__meta-row"
+      >
+        <span class="field-mapping-editor__meta-label">{{ t('intakeWizard.mapping.sheetName') }}</span>
+        <NInput
+          :value="modelValue.sheetName ?? sheetName ?? ''"
+          :disabled="readonly"
+          @update:value="handleSheetNameChange"
+        />
+      </div>
       <div v-if="modeLabel" class="field-mapping-editor__meta-row">
         <span class="field-mapping-editor__meta-label">{{ modeLabel }}</span>
-        <NRadioGroup :value="mode" @update:value="(v) => handleModeChange(v as FieldMappingMode)">
-          <NRadioButton value="header">{{ resolvedModeHeaderLabel }}</NRadioButton>
-          <NRadioButton value="positional">{{ resolvedModePositionalLabel }}</NRadioButton>
+        <NRadioGroup :value="mode" :disabled="readonly" @update:value="(v) => handleModeChange(v as FieldMappingMode)">
+          <NRadioButton value="header" :disabled="readonly">{{ resolvedModeHeaderLabel }}</NRadioButton>
+          <NRadioButton value="positional" :disabled="readonly">{{ resolvedModePositionalLabel }}</NRadioButton>
         </NRadioGroup>
       </div>
       <div v-if="hasHeaderLabel" class="field-mapping-editor__meta-row">
         <span class="field-mapping-editor__meta-label">{{ hasHeaderLabel }}</span>
-        <NSwitch :value="hasHeader" @update:value="handleHasHeaderChange" />
+        <NSwitch :value="hasHeader" :disabled="readonly" @update:value="handleHasHeaderChange" />
       </div>
       <div v-if="columnOrderLabel" class="field-mapping-editor__meta-row field-mapping-editor__meta-row--wide">
         <span class="field-mapping-editor__meta-label">{{ columnOrderLabel }}</span>
         <NInput
           :value="columnOrderText"
           :placeholder="columnOrderPlaceholder"
+          :disabled="readonly"
           @update:value="handleColumnOrderChange"
         />
       </div>
@@ -234,7 +301,9 @@ const previewColumns = computed(() =>
             :options="sourceHeaderOptions"
             clearable
             filterable
+            :tag="!readonly"
             :placeholder="unmappedLabel"
+            :disabled="readonly"
             @update:value="(value) => handleColumnChange(field.key, value)"
           />
           <NInputNumber
@@ -245,16 +314,41 @@ const previewColumns = computed(() =>
             :precision="0"
             :placeholder="positionPlaceholder ?? '0'"
             clearable
+            :disabled="readonly"
             @update:value="(value) => handlePositionChange(field.key, value)"
           />
           <NInput
             class="field-mapping-editor__default-input"
             :value="defaultValue(field.key)"
             :placeholder="fixedValuePlaceholder"
+            :disabled="readonly"
             @update:value="(value) => handleDefaultChange(field.key, value)"
           />
+          <NSelect
+            class="field-mapping-editor__transform-select"
+            :value="transformValue(field.key)"
+            :options="transformOptions"
+            :disabled="readonly"
+            multiple
+            clearable
+            :placeholder="t('intakeWizard.mapping.transformsLabel')"
+            @update:value="(value) => handleTransformChange(field.key, value)"
+          />
+          <label class="field-mapping-editor__required-control">
+            <NSwitch
+              :value="isRequired(field.key)"
+              :disabled="readonly"
+              @update:value="(value) => handleRequiredChange(field.key, value)"
+            />
+            <span>{{ t('intakeWizard.mapping.requiredLabel') }}</span>
+          </label>
         </div>
       </div>
+    </div>
+
+    <div v-if="unmappedSourceHeaders.length" class="field-mapping-editor__unmapped-sources">
+      <strong>{{ t('intakeWizard.mapping.unmappedSourceColumns') }}</strong>
+      <span>{{ unmappedSourceHeaders.join(', ') }}</span>
     </div>
 
     <div class="field-mapping-editor__preview">
@@ -275,6 +369,22 @@ const previewColumns = computed(() =>
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+
+.field-mapping-editor__source-meta,
+.field-mapping-editor__unmapped-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.field-mapping-editor__unmapped-sources {
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
 }
 
 .field-mapping-editor__meta-row {
@@ -357,6 +467,7 @@ const previewColumns = computed(() =>
 
 .field-mapping-editor__field-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
 }
@@ -370,6 +481,18 @@ const previewColumns = computed(() =>
 .field-mapping-editor__default-input {
   flex: 1;
   min-width: 0;
+}
+
+.field-mapping-editor__transform-select {
+  flex: 2 1 220px;
+}
+
+.field-mapping-editor__required-control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .field-mapping-editor__preview-title {

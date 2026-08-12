@@ -28,6 +28,10 @@ type TxRepos struct {
 	Profile           domain.IntegrationProfileRepository
 	Address           domain.CustomerMergeAddressRepository
 	CustomerMerge     domain.CustomerMergeRecordRepository
+	NameObservation   domain.CustomerNameObservationRepository
+	CustomerOrigin    domain.CustomerProfileOriginRepository
+	MergeExecution    domain.MergeExecutionStore
+	SplitExecution    domain.SplitExecutionStore
 	Binding           domain.ProfileTemplateBindingRepository
 	Mapping           domain.CarrierMappingRepository
 }
@@ -55,6 +59,10 @@ func NewTxRepos(tx *gorm.DB) *TxRepos {
 		Profile:           NewIntegrationProfileRepository(tx),
 		Address:           NewCustomerMergeAddressRepository(tx),
 		CustomerMerge:     NewCustomerMergeRecordRepository(tx),
+		NameObservation:   NewCustomerNameObservationRepository(tx),
+		CustomerOrigin:    NewCustomerProfileOriginRepository(tx),
+		MergeExecution:    NewMergeExecutionStore(tx),
+		SplitExecution:    NewSplitExecutionStore(tx),
 		Binding:           NewProfileTemplateBindingRepository(tx),
 		Mapping:           NewCarrierMappingRepository(tx),
 	}

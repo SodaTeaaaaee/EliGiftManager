@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -224,5 +225,38 @@ func TestGenerateSupplierOrderFile_EmbedsLineIDsForReconciliation(t *testing.T) 
 	}
 	if !seen[line1.ID] || !seen[line2.ID] {
 		t.Errorf("expected embedded line IDs to include %d and %d, got %v", line1.ID, line2.ID, payload.Lines)
+	}
+}
+
+func TestGenerateSupplierOrderFileRejectsXLSWithoutFallback(t *testing.T) {
+	t.Parallel()
+	db := newSupplierOrderLifecycleTestDB(t)
+	repo := infra.NewSupplierOrderRepository(db)
+	ctx := context.Background()
+	order := mustCreateSupplierOrder(t, ctx, repo, string(domain.SupplierOrderStatusDraft))
+	_ = mustCreateSupplierOrderLine(t, ctx, repo, order.ID, 1, 1)
+	order.TemplateID = "99"
+	if err := repo.Update(ctx, order); err != nil {
+		t.Fatalf("set template ID: %v", err)
+	}
+
+	templates := &mockTemplateRepoForExport{templates: map[uint]*domain.DocumentTemplate{
+		99: {
+			ID: 99, DocumentType: "export_supplier_order", Format: "xls",
+			MappingRules: `{"version":2,"mode":"header","columns":{"export.factory_sku":"SKU"}}`,
+		},
+	}}
+	outputDir := t.TempDir()
+	writer := NewSupplierOrderFileWriter(repo, outputDir, &SupplierOrderFileWriterOptions{TemplateRepo: templates})
+	result, err := writer.GenerateSupplierOrderFile(ctx, order.ID)
+	if err == nil || !strings.Contains(err.Error(), "BIFF .xls output is not supported") || !strings.Contains(err.Error(), "xlsx") {
+		t.Fatalf("expected actionable xls error, result=%+v err=%v", result, err)
+	}
+	entries, readErr := os.ReadDir(outputDir)
+	if readErr != nil {
+		t.Fatalf("read output dir: %v", readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("unexpected fallback artifact: %v", entries)
 	}
 }

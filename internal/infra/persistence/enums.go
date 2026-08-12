@@ -199,9 +199,10 @@ const (
 type IdentityStrategy string
 
 const (
-	IdentityStrategyPlatformUID     IdentityStrategy = "platform_uid"
-	IdentityStrategyEmail           IdentityStrategy = "email"
-	IdentityStrategyExternalBuyerID IdentityStrategy = "external_buyer_id"
+	IdentityStrategyPlatformUID            IdentityStrategy = "platform_uid"
+	IdentityStrategyEmail                  IdentityStrategy = "email"
+	IdentityStrategyExternalBuyerID        IdentityStrategy = "external_buyer_id"
+	IdentityStrategyOrderScopedProvisional IdentityStrategy = "order_scoped_provisional"
 )
 
 // IntegrationProfile: EntitlementAuthorityMode

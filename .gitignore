@@ -72,3 +72,6 @@ frontend-legacy/node_modules/
 frontend-legacy/dist/*
 frontend-legacy/coverage/
 frontend-legacy/*.tsbuildinfo
+
+# Handoff documents
+docs/handoff/

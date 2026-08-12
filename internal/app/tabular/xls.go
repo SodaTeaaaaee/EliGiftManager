@@ -15,12 +15,30 @@ func readXLS(path string, opts ReadOptions) (*Sheet, error) {
 	if wb == nil {
 		return nil, fmt.Errorf("open xls file %q: nil workbook", path)
 	}
-	if opts.SheetIndex < 0 || opts.SheetIndex >= wb.NumSheets() {
-		return nil, fmt.Errorf("xls sheet index %d out of range [0,%d)", opts.SheetIndex, wb.NumSheets())
+	sheetIndex := opts.SheetIndex
+	if name := strings.TrimSpace(opts.SheetName); name != "" {
+		sheetIndex = -1
+		available := make([]string, 0, wb.NumSheets())
+		for i := 0; i < wb.NumSheets(); i++ {
+			candidate := wb.GetSheet(i)
+			if candidate == nil {
+				continue
+			}
+			available = append(available, candidate.Name)
+			if candidate.Name == name {
+				sheetIndex = i
+			}
+		}
+		if sheetIndex < 0 {
+			return nil, fmt.Errorf("xls sheet %q not found (available: %s)", name, strings.Join(available, ", "))
+		}
 	}
-	ws := wb.GetSheet(opts.SheetIndex)
+	if sheetIndex < 0 || sheetIndex >= wb.NumSheets() {
+		return nil, fmt.Errorf("xls sheet index %d out of range [0,%d)", sheetIndex, wb.NumSheets())
+	}
+	ws := wb.GetSheet(sheetIndex)
 	if ws == nil {
-		return nil, fmt.Errorf("xls file %q: sheet %d is nil", path, opts.SheetIndex)
+		return nil, fmt.Errorf("xls file %q: sheet %d is nil", path, sheetIndex)
 	}
 
 	// Discover the max column width so short rows pad consistently enough for

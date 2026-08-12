@@ -42,6 +42,7 @@ type DemandMappingUseCase interface {
 // ExportUseCase handles exporting supplier orders from a wave.
 type ExportUseCase interface {
 	ExportSupplierOrder(ctx context.Context, waveID uint) ([]*domain.SupplierOrder, error)
+	ExportSupplierOrderForProfile(ctx context.Context, waveID, factoryProfileID uint) ([]*domain.SupplierOrder, error)
 }
 
 // ShipmentUseCase handles shipment creation and lifecycle.

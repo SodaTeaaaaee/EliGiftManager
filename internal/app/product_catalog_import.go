@@ -26,8 +26,17 @@ type catalogImportDeps struct {
 	templateMapping *TemplateMappingService
 	profileRepo     domain.IntegrationProfileRepository
 	assetStore      *service.AssetStore
+	evidence        *ImportEvidenceUseCase
 	// extractRoot overrides data/tmp/catalog-import parent (tests only).
 	extractRoot string
+}
+
+func WithCatalogImportEvidence(uc ProductUseCase, evidence *ImportEvidenceUseCase) ProductUseCase {
+	p, ok := uc.(*productUseCase)
+	if ok && p.catalog != nil {
+		p.catalog.evidence = evidence
+	}
+	return uc
 }
 
 // WithCatalogImportDeps attaches template/profile/asset collaborators for catalog import.
@@ -102,6 +111,24 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 	if err != nil {
 		return nil, err
 	}
+	var evidenceRun *domain.ImportRun
+	var evidenceRecords []domain.ImportRawRecord
+	if uc.catalog.evidence != nil {
+		evidenceRows, unmapped := importEvidenceRows(orderedRows, headers, headerRows)
+		assets := make([][]map[string]string, len(evidenceRows))
+		if strings.EqualFold(filepath.Ext(input.FilePath), ".zip") && len(assets) > 0 {
+			metadata, metadataErr := zipAssetMetadata(input.FilePath)
+			if metadataErr != nil {
+				return nil, metadataErr
+			}
+			assets[0] = metadata
+		}
+		parserMetadata := fmt.Sprintf(`{"hasHeader":%t,"sheetName":%q}`, rules.HasHeader, rules.SheetName)
+		evidenceRun, evidenceRecords, err = uc.catalog.evidence.StartImportEvidence(ctx, "product_catalog", input.IntegrationProfileID, mode, input.FilePath, parserMetadata, evidenceRows, unmapped, assets)
+		if err != nil {
+			return nil, fmt.Errorf("start catalog import evidence: %w", err)
+		}
+	}
 
 	type pendingMaster struct {
 		idx    int
@@ -122,6 +149,7 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 		}
 		rowWarnings.add(i, warnings)
 		if mapErr != nil {
+			markImportEvidenceFailure(evidenceRecords, i, "mapping_error", mapErr.Error(), warnings)
 			rowErrors = append(rowErrors, dto.ImportProductCatalogError{RowIndex: i, Reason: mapErr.Error()})
 			if mode == "reject_all" {
 				break
@@ -131,6 +159,7 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 
 		master, buildErr := buildProductMasterFromApplied(applied, defaultPlatform)
 		if buildErr != nil {
+			markImportEvidenceFailure(evidenceRecords, i, "validation_error", buildErr.Error(), warnings)
 			rowErrors = append(rowErrors, dto.ImportProductCatalogError{RowIndex: i, Reason: buildErr.Error()})
 			if mode == "reject_all" {
 				break
@@ -138,34 +167,42 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 			continue
 		}
 
-		if rules.ImageLayout != nil && rules.ImageLayout.Enabled {
-			if attachErr := attachCatalogImages(master, rules.ImageLayout, imageRoot, uc.catalog.assetStore); attachErr != nil {
-				rowErrors = append(rowErrors, dto.ImportProductCatalogError{
-					RowIndex: i, Reason: fmt.Sprintf("images: %v", attachErr),
-				})
-				if mode == "reject_all" {
-					break
-				}
-				// skip_invalid: still upsert the master without images.
-			}
-		}
-
 		pending = append(pending, pendingMaster{idx: i, master: master})
 	}
 
 	result := &dto.ImportProductCatalogResult{
-		TotalProcessed: total,
-		ErrorCount:     len(rowErrors),
-		Errors:         rowErrors,
-		Warnings:       rowWarnings.warnings(),
+		ImportRunID:      importEvidenceRunID(evidenceRun),
+		EvidenceDisabled: uc.catalog.evidence != nil && evidenceRun == nil,
+		TotalProcessed:   total,
+		ErrorCount:       len(rowErrors),
+		Errors:           rowErrors,
+		Warnings:         rowWarnings.warnings(),
 	}
 	if mode == "reject_all" && len(rowErrors) > 0 {
 		result.SuccessCount = 0
+		if evidenceRun != nil {
+			if err := uc.catalog.evidence.CompleteImportEvidence(ctx, evidenceRun, evidenceRecords, "rejected"); err != nil {
+				return nil, err
+			}
+		}
 		return result, nil
 	}
 
 	now := time.Now()
 	for _, p := range pending {
+		// Image files are only materialised after reject_all has passed the full
+		// validation gate. The controller supplies a staging store for reject_all.
+		if rules.ImageLayout != nil && rules.ImageLayout.Enabled {
+			if attachErr := attachCatalogImages(p.master, rules.ImageLayout, imageRoot, uc.catalog.assetStore); attachErr != nil {
+				if mode == "reject_all" {
+					return nil, fmt.Errorf("attach catalog images for row %d: %w", p.idx, attachErr)
+				}
+				result.Errors = append(result.Errors, dto.ImportProductCatalogError{
+					RowIndex: p.idx, Reason: fmt.Sprintf("images: %v", attachErr),
+				})
+				result.ErrorCount++
+			}
+		}
 		existing, findErr := uc.masterRepo.FindByPlatformAndSKU(ctx, p.master.SupplierPlatform, p.master.FactorySKU)
 		if findErr == nil && existing != nil {
 			// Upsert: overwrite mutable fields, keep ID / timestamps base.
@@ -186,25 +223,28 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 			}
 			existing.UpdatedAt = now
 			if err := uc.masterRepo.Update(ctx, existing); err != nil {
+				if mode == "reject_all" {
+					return nil, fmt.Errorf("update product catalog row %d: %w", p.idx, err)
+				}
 				result.Errors = append(result.Errors, dto.ImportProductCatalogError{
 					RowIndex: p.idx, Reason: fmt.Sprintf("update: %v", err),
 				})
 				result.ErrorCount++
-				if mode == "reject_all" {
-					// Should not reach here — reject_all already gated above.
-					return result, nil
-				}
 				continue
 			}
 			result.UpdatedCount++
 			result.SuccessCount++
 			result.Masters = append(result.Masters, productMasterToDTO(existing))
+			markImportEvidenceSuccess(evidenceRecords, p.idx, "product_master", existing.ID)
 			continue
 		}
 
 		p.master.CreatedAt = now
 		p.master.UpdatedAt = now
 		if err := uc.masterRepo.Create(ctx, p.master); err != nil {
+			if mode == "reject_all" {
+				return nil, fmt.Errorf("create product catalog row %d: %w", p.idx, err)
+			}
 			result.Errors = append(result.Errors, dto.ImportProductCatalogError{
 				RowIndex: p.idx, Reason: fmt.Sprintf("create: %v", err),
 			})
@@ -214,6 +254,16 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 		result.CreatedCount++
 		result.SuccessCount++
 		result.Masters = append(result.Masters, productMasterToDTO(p.master))
+		markImportEvidenceSuccess(evidenceRecords, p.idx, "product_master", p.master.ID)
+	}
+	if evidenceRun != nil {
+		status := "completed"
+		if result.ErrorCount > 0 {
+			status = "partial_success"
+		}
+		if err := uc.catalog.evidence.CompleteImportEvidence(ctx, evidenceRun, evidenceRecords, status); err != nil {
+			return nil, err
+		}
 	}
 
 	return result, nil
@@ -313,6 +363,7 @@ func loadImportRows(
 		sheet, readErr := tabular.ReadTabularFile(tabularPath, tabular.ReadOptions{
 			HasHeader: rules.HasHeader,
 			Encoding:  "auto",
+			SheetName: rules.SheetName,
 		})
 		if readErr != nil {
 			return nil, nil, nil, 0, "", cleanup, fmt.Errorf("read tabular file: %w", readErr)

@@ -18,9 +18,14 @@ import (
 
 type CustomerProfile struct {
 	gorm.Model
-	DisplayName string      `gorm:"not null"`
-	ProfileType ProfileType `gorm:"type:text;not null;default:'member'"`
-	ExtraData   string      `gorm:"type:text"` // JSON
+	DisplayName              string      `gorm:"not null"`
+	ProfileType              ProfileType `gorm:"type:text;not null;default:'member'"`
+	Status                   string      `gorm:"type:text;not null;default:'active';index"`
+	MergedIntoProfileID      *uint       `gorm:"index"`
+	RowVersion               uint64      `gorm:"not null;default:1"`
+	DisplayNameMode          string      `gorm:"type:text;not null;default:'auto';index"`
+	DisplayNameObservationID *uint       `gorm:"index"`
+	ExtraData                string      `gorm:"type:text"` // JSON
 }
 
 func (CustomerProfile) TableName() string { return "customer_profiles" }
@@ -28,12 +33,41 @@ func (CustomerProfile) TableName() string { return "customer_profiles" }
 // ---- CustomerMergeRecord ----
 
 type CustomerMergeRecord struct {
-	ID              uint       `gorm:"primaryKey;autoIncrement"`
-	SourceProfileID uint       `gorm:"not null;index"`
-	TargetProfileID uint       `gorm:"not null;index"`
-	Payload         string     `gorm:"type:text;not null"`
-	CreatedAt       time.Time  `gorm:"not null"`
-	UndoneAt        *time.Time `gorm:"index"`
+	ID                     uint   `gorm:"primaryKey;autoIncrement"`
+	SourceProfileID        uint   `gorm:"not null;index"`
+	TargetProfileID        uint   `gorm:"not null;index"`
+	MergeCandidateID       *uint  `gorm:"index"`
+	MergePolicyRevisionID  *uint  `gorm:"index"`
+	MergeMode              string `gorm:"type:text;not null;default:'manual'"`
+	DecisionSource         string `gorm:"type:text;not null;default:''"`
+	DecisionReason         string `gorm:"type:text;not null;default:''"`
+	ActorRef               string `gorm:"type:text;not null;default:''"`
+	CorrelationID          string `gorm:"type:text;not null;default:'';index"`
+	SourceRowVersion       uint64 `gorm:"not null;default:0"`
+	TargetRowVersion       uint64 `gorm:"not null;default:0"`
+	EvidenceSnapshot       string `gorm:"type:text;not null;default:''"`
+	Payload                string `gorm:"type:text;not null"`
+	RowVersion             uint64 `gorm:"not null;default:1"`
+	OperationKey           string `gorm:"type:text;not null;default:''"`
+	CommandHash            string `gorm:"type:text;not null;default:''"`
+	PreviewHash            string `gorm:"type:text;not null;default:''"`
+	MovePlanHash           string `gorm:"type:text;not null;default:''"`
+	Status                 string `gorm:"type:text;not null;default:'completed'"`
+	DependsOnMergeRecordID *uint
+	SourceRowVersionAfter  uint64 `gorm:"not null;default:0"`
+	TargetRowVersionAfter  uint64 `gorm:"not null;default:0"`
+	SourceProfileSnapshot  string `gorm:"type:text;not null;default:''"`
+	TargetProfileSnapshot  string `gorm:"type:text;not null;default:''"`
+	CompletedAt            *time.Time
+	UndoOperationKey       string `gorm:"type:text;not null;default:''"`
+	LastUndoPlanHash       string `gorm:"type:text;not null;default:''"`
+	LastUndoCheckedAt      *time.Time
+	UndoneBy               string     `gorm:"type:text;not null;default:''"`
+	UndoReason             string     `gorm:"type:text;not null;default:''"`
+	UndoneSourceRowVersion uint64     `gorm:"not null;default:0"`
+	UndoneTargetRowVersion uint64     `gorm:"not null;default:0"`
+	CreatedAt              time.Time  `gorm:"not null"`
+	UndoneAt               *time.Time `gorm:"index"`
 }
 
 func (CustomerMergeRecord) TableName() string { return "customer_merge_records" }
@@ -42,12 +76,21 @@ func (CustomerMergeRecord) TableName() string { return "customer_merge_records" 
 
 type CustomerIdentity struct {
 	gorm.Model
-	CustomerProfileID uint         `gorm:"index;not null"`
-	IdentityPlatform  string       `gorm:"not null;index:idx_identity_platform_value,priority:1"`
-	IdentityValue     string       `gorm:"not null;index:idx_identity_platform_value,priority:2"`
-	IdentityType      IdentityType `gorm:"type:text;not null"`
-	IsPrimary         bool         `gorm:"not null;default:false"`
-	ExtraData         string       `gorm:"type:text"` // JSON
+	CustomerProfileID          uint         `gorm:"index;not null"`
+	IdentityPlatform           string       `gorm:"not null;index:idx_identity_platform_value,priority:1"`
+	IdentityValue              string       `gorm:"not null;index:idx_identity_platform_value,priority:2"`
+	IdentityType               IdentityType `gorm:"type:text;not null"`
+	Namespace                  string       `gorm:"type:text;not null;default:'';index"`
+	NormalizedValue            string       `gorm:"type:text;not null;default:'';index"`
+	NormalizationVersion       string       `gorm:"type:text;not null;default:''"`
+	Authority                  string       `gorm:"type:text;not null;default:'';index"`
+	VerificationStatus         string       `gorm:"type:text;not null;default:'unverified';index"`
+	SourceIntegrationProfileID *uint        `gorm:"index"`
+	ResolutionStatus           string       `gorm:"type:text;not null;default:'unresolved';index"`
+	FirstSeenAt                *time.Time
+	LastSeenAt                 *time.Time
+	IsPrimary                  bool   `gorm:"not null;default:false"`
+	ExtraData                  string `gorm:"type:text"` // JSON
 }
 
 func (CustomerIdentity) TableName() string { return "customer_identities" }
@@ -56,22 +99,26 @@ func (CustomerIdentity) TableName() string { return "customer_identities" }
 
 type CustomerAddress struct {
 	gorm.Model
-	CustomerProfileID uint `gorm:"index;not null"`
-	Label             string
-	RecipientName     string
-	Phone             string
-	Country           string
-	Province          string
-	City              string
-	District          string
-	AddressLine1      string
-	AddressLine2      string
-	PostalCode        string
-	IsDefault         bool                    `gorm:"not null;default:false"`
-	IsTest            bool                    `gorm:"not null;default:false"`
-	ValidationStatus  AddressValidationStatus `gorm:"type:text;not null;default:'unvalidated'"`
-	ValidationDetail  string                  `gorm:"type:text"` // JSON
-	ExtraData         string                  `gorm:"type:text"` // JSON
+	CustomerProfileID    uint `gorm:"index;not null"`
+	Label                string
+	RecipientName        string
+	Phone                string
+	NormalizedPhone      string `gorm:"type:text;not null;default:'';index"`
+	AddressFingerprint   string `gorm:"type:text;not null;default:'';index"`
+	NormalizationVersion string `gorm:"type:text;not null;default:''"`
+	QualityStatus        string `gorm:"type:text;not null;default:'unknown';index"`
+	Country              string
+	Province             string
+	City                 string
+	District             string
+	AddressLine1         string
+	AddressLine2         string
+	PostalCode           string
+	IsDefault            bool                    `gorm:"not null;default:false"`
+	IsTest               bool                    `gorm:"not null;default:false"`
+	ValidationStatus     AddressValidationStatus `gorm:"type:text;not null;default:'unvalidated'"`
+	ValidationDetail     string                  `gorm:"type:text"` // JSON
+	ExtraData            string                  `gorm:"type:text"` // JSON
 }
 
 func (CustomerAddress) TableName() string { return "customer_addresses" }
@@ -202,20 +249,21 @@ func (AllocationPolicyRule) TableName() string { return "allocation_policy_rules
 
 type SupplierOrder struct {
 	gorm.Model
-	WaveID               uint `gorm:"index;not null"`
-	SupplierPlatform     string
-	TemplateID           string
-	BatchNo              string
-	ExternalOrderNo      string
-	SubmissionMode       SubmissionMode `gorm:"type:text;not null;default:'csv'"`
-	SubmittedAt          *time.Time
-	Status               SupplierOrderStatus `gorm:"type:text;not null;default:'draft'"`
-	RequestPayload       string              `gorm:"type:text"` // JSON
-	ResponsePayload      string              `gorm:"type:text"` // JSON
-	BasisHistoryNodeID   string
-	BasisProjectionHash  string
-	BasisPayloadSnapshot string `gorm:"type:text"` // JSON
-	ExtraData            string `gorm:"type:text"` // JSON
+	WaveID                      uint  `gorm:"index;not null"`
+	FactoryIntegrationProfileID *uint `gorm:"index"`
+	SupplierPlatform            string
+	TemplateID                  string
+	BatchNo                     string
+	ExternalOrderNo             string
+	SubmissionMode              SubmissionMode `gorm:"type:text;not null;default:'csv'"`
+	SubmittedAt                 *time.Time
+	Status                      SupplierOrderStatus `gorm:"type:text;not null;default:'draft'"`
+	RequestPayload              string              `gorm:"type:text"` // JSON
+	ResponsePayload             string              `gorm:"type:text"` // JSON
+	BasisHistoryNodeID          string
+	BasisProjectionHash         string
+	BasisPayloadSnapshot        string `gorm:"type:text"` // JSON
+	ExtraData                   string `gorm:"type:text"` // JSON
 }
 
 func (SupplierOrder) TableName() string { return "supplier_orders" }
@@ -326,31 +374,31 @@ func (ChannelSyncItem) TableName() string { return "channel_sync_items" }
 
 type IntegrationProfile struct {
 	gorm.Model
-	ProfileKey                string `gorm:"uniqueIndex;not null"`
-	SourceChannel             string
-	SourceSurface             string
-	DemandKind                ProfileDemandKind         `gorm:"type:text;not null;default:'membership_entitlement'"`
-	InitialAllocationStrategy InitialAllocationStrategy `gorm:"type:text;not null;default:'policy_driven'"`
-	IdentityStrategy          IdentityStrategy          `gorm:"type:text;not null;default:'platform_uid'"`
-	EntitlementAuthorityMode  EntitlementAuthorityMode  `gorm:"type:text;not null;default:'local_policy'"`
-	RecipientInputMode        RecipientInputMode        `gorm:"type:text;not null;default:'none'"`
-	ReferenceStrategy         ReferenceStrategy         `gorm:"type:text;not null;default:'member_level'"`
-	TrackingSyncMode          TrackingSyncMode          `gorm:"type:text;not null;default:'manual_confirmation'"`
-	ClosurePolicy             ClosurePolicy             `gorm:"type:text;not null;default:'close_after_sync'"`
-	SupportsPartialShipment            bool                      `gorm:"not null;default:false"`
-	SupportsAPIImport                  bool                      `gorm:"not null;default:false"`
-	SupportsAPIExport                  bool                      `gorm:"not null;default:false"`
-	RequiresCarrierMapping             bool                      `gorm:"not null;default:false"`
-	RequiresExternalOrderNo            bool                      `gorm:"not null;default:false"`
-	AllowsManualClosure                bool                      `gorm:"not null;default:false"`
-	SupportsExportSupplierOrder        bool                      `gorm:"not null;default:false"`
-	SupportsImportProductCatalog       bool                      `gorm:"not null;default:false"`
-	SupportsImportSupplierShipment     bool                      `gorm:"not null;default:false"`
-	ConnectorKey                       string
-	FactorySupplierPlatform            string
-	SupportedLocales                   string `gorm:"type:text"`
-	DefaultLocale                      string
-	ExtraData                          string `gorm:"type:text"`
+	ProfileKey                     string `gorm:"uniqueIndex;not null"`
+	SourceChannel                  string
+	SourceSurface                  string
+	DemandKind                     ProfileDemandKind         `gorm:"type:text;not null;default:'membership_entitlement'"`
+	InitialAllocationStrategy      InitialAllocationStrategy `gorm:"type:text;not null;default:'policy_driven'"`
+	IdentityStrategy               IdentityStrategy          `gorm:"type:text;not null;default:'platform_uid'"`
+	EntitlementAuthorityMode       EntitlementAuthorityMode  `gorm:"type:text;not null;default:'local_policy'"`
+	RecipientInputMode             RecipientInputMode        `gorm:"type:text;not null;default:'none'"`
+	ReferenceStrategy              ReferenceStrategy         `gorm:"type:text;not null;default:'member_level'"`
+	TrackingSyncMode               TrackingSyncMode          `gorm:"type:text;not null;default:'manual_confirmation'"`
+	ClosurePolicy                  ClosurePolicy             `gorm:"type:text;not null;default:'close_after_sync'"`
+	SupportsPartialShipment        bool                      `gorm:"not null;default:false"`
+	SupportsAPIImport              bool                      `gorm:"not null;default:false"`
+	SupportsAPIExport              bool                      `gorm:"not null;default:false"`
+	RequiresCarrierMapping         bool                      `gorm:"not null;default:false"`
+	RequiresExternalOrderNo        bool                      `gorm:"not null;default:false"`
+	AllowsManualClosure            bool                      `gorm:"not null;default:false"`
+	SupportsExportSupplierOrder    bool                      `gorm:"not null;default:false"`
+	SupportsImportProductCatalog   bool                      `gorm:"not null;default:false"`
+	SupportsImportSupplierShipment bool                      `gorm:"not null;default:false"`
+	ConnectorKey                   string
+	FactorySupplierPlatform        string
+	SupportedLocales               string `gorm:"type:text"`
+	DefaultLocale                  string
+	ExtraData                      string `gorm:"type:text"`
 }
 
 func (IntegrationProfile) TableName() string { return "integration_profiles" }

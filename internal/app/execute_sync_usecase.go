@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -63,37 +64,15 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(ctx context.Context, jobID u
 	// so that each call can use a different executor per profile/connector.
 	executor, err := uc.executorProvider.Resolve(profile)
 	if err != nil {
-		job.Status = "failed"
-		job.ErrorMessage = err.Error()
-		job.FinishedAt = &now
-		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(ctx, job)
-		for i := range items {
-			items[i].Status = "failed"
-			items[i].ErrorMessage = err.Error()
-			items[i].UpdatedAt = now
-			_ = uc.channelSyncRepo.SaveItem(ctx, &items[i])
-		}
-		uc.projectSyncStateToFulfillment(ctx, items)
-		return nil, fmt.Errorf("resolve executor: %w", err)
+		persistErr := uc.persistExecutionFailure(ctx, job, items, err, now)
+		return nil, fmt.Errorf("resolve executor: %w", errors.Join(err, persistErr))
 	}
 
 	// Execute — if executor fails, persist job as failed before returning the error.
 	result, err := executor.Execute(ctx, job, items, profile)
 	if err != nil {
-		job.Status = "failed"
-		job.ErrorMessage = err.Error()
-		job.FinishedAt = &now
-		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(ctx, job)
-		for i := range items {
-			items[i].Status = "failed"
-			items[i].ErrorMessage = err.Error()
-			items[i].UpdatedAt = now
-			_ = uc.channelSyncRepo.SaveItem(ctx, &items[i])
-		}
-		uc.projectSyncStateToFulfillment(ctx, items)
-		return nil, fmt.Errorf("executor failed: %w", err)
+		persistErr := uc.persistExecutionFailure(ctx, job, items, err, now)
+		return nil, fmt.Errorf("executor failed: %w", errors.Join(err, persistErr))
 	}
 
 	// Update each item
@@ -114,7 +93,9 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(ctx context.Context, jobID u
 	}
 
 	// Project sync state to fulfillment lines
-	uc.projectSyncStateToFulfillment(ctx, updatedItems)
+	if err := uc.projectSyncStateToFulfillment(ctx, updatedItems); err != nil {
+		return nil, fmt.Errorf("project sync state to fulfillment: %w", err)
+	}
 
 	// Update job aggregate
 	job.Status = result.AggregateStatus
@@ -132,9 +113,9 @@ func (uc *executeSyncUseCase) ExecuteChannelSyncJob(ctx context.Context, jobID u
 
 // projectSyncStateToFulfillment projects each ChannelSyncItem.Status back into
 // the corresponding FulfillmentLine.ChannelSyncState.
-func (uc *executeSyncUseCase) projectSyncStateToFulfillment(ctx context.Context, items []domain.ChannelSyncItem) {
+func (uc *executeSyncUseCase) projectSyncStateToFulfillment(ctx context.Context, items []domain.ChannelSyncItem) error {
 	if uc.fulfillmentRepo == nil {
-		return
+		return nil
 	}
 	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(items))
 	for _, item := range items {
@@ -148,8 +129,40 @@ func (uc *executeSyncUseCase) projectSyncStateToFulfillment(ctx context.Context,
 		})
 	}
 	if len(updates) > 0 {
-		_ = uc.fulfillmentRepo.BulkUpdateStates(ctx, updates)
+		if err := uc.fulfillmentRepo.BulkUpdateStates(ctx, updates); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+func (uc *executeSyncUseCase) persistExecutionFailure(
+	ctx context.Context,
+	job *domain.ChannelSyncJob,
+	items []domain.ChannelSyncItem,
+	cause error,
+	now time.Time,
+) error {
+	job.Status = "failed"
+	job.ErrorMessage = cause.Error()
+	job.FinishedAt = &now
+	job.UpdatedAt = now
+	var persistErrors []error
+	if err := uc.channelSyncRepo.SaveJob(ctx, job); err != nil {
+		persistErrors = append(persistErrors, fmt.Errorf("save failed job state: %w", err))
+	}
+	for i := range items {
+		items[i].Status = "failed"
+		items[i].ErrorMessage = cause.Error()
+		items[i].UpdatedAt = now
+		if err := uc.channelSyncRepo.SaveItem(ctx, &items[i]); err != nil {
+			persistErrors = append(persistErrors, fmt.Errorf("save failed item %d state: %w", items[i].ID, err))
+		}
+	}
+	if err := uc.projectSyncStateToFulfillment(ctx, items); err != nil {
+		persistErrors = append(persistErrors, fmt.Errorf("project failed fulfillment state: %w", err))
+	}
+	return errors.Join(persistErrors...)
 }
 
 func syncItemStatusToFulfillmentState(status string) string {

@@ -16,6 +16,18 @@ type AssetStore struct {
 	root string
 }
 
+// AssetStage isolates files produced by an import until its database
+// transaction is ready to commit. Commit publishes the staged files; Rollback
+// removes both the staging directory and files newly published by this stage.
+type AssetStage struct {
+	finalRoot string
+	stageRoot string
+	store     *AssetStore
+	published []string
+	committed bool
+	finalized bool
+}
+
 // NewAssetStore creates an AssetStore rooted at ResolveAssetsDir().
 func NewAssetStore() (*AssetStore, error) {
 	root, err := ResolveAssetsDir()
@@ -28,6 +40,106 @@ func NewAssetStore() (*AssetStore, error) {
 // NewAssetStoreAt creates an AssetStore rooted at the given directory (for tests).
 func NewAssetStoreAt(root string) *AssetStore {
 	return &AssetStore{root: root}
+}
+
+// BeginStage creates an isolated store below the final asset root.
+func (s *AssetStore) BeginStage() (*AssetStage, error) {
+	if s == nil || strings.TrimSpace(s.root) == "" {
+		return nil, fmt.Errorf("asset store: root is empty")
+	}
+	parent := filepath.Join(s.root, ".staging")
+	if err := os.MkdirAll(parent, 0o755); err != nil {
+		return nil, fmt.Errorf("asset stage: mkdir: %w", err)
+	}
+	root, err := os.MkdirTemp(parent, "catalog-")
+	if err != nil {
+		return nil, fmt.Errorf("asset stage: create: %w", err)
+	}
+	return &AssetStage{
+		finalRoot: s.root,
+		stageRoot: root,
+		store:     NewAssetStoreAt(root),
+	}, nil
+}
+
+// Store returns the isolated AssetStore used while importing.
+func (s *AssetStage) Store() *AssetStore {
+	if s == nil {
+		return nil
+	}
+	return s.store
+}
+
+// Commit publishes staged files. Existing content-addressed files are reused.
+func (s *AssetStage) Commit() error {
+	if s == nil || s.finalized {
+		return fmt.Errorf("asset stage: invalid state")
+	}
+	if s.committed {
+		return nil
+	}
+	err := filepath.WalkDir(s.stageRoot, func(src string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(s.stageRoot, src)
+		if relErr != nil {
+			return relErr
+		}
+		dst := filepath.Join(s.finalRoot, rel)
+		if _, statErr := os.Stat(dst); statErr == nil {
+			return nil
+		} else if !os.IsNotExist(statErr) {
+			return statErr
+		}
+		if mkdirErr := os.MkdirAll(filepath.Dir(dst), 0o755); mkdirErr != nil {
+			return mkdirErr
+		}
+		if renameErr := os.Rename(src, dst); renameErr != nil {
+			return renameErr
+		}
+		s.published = append(s.published, dst)
+		return nil
+	})
+	if err != nil {
+		_ = s.Rollback()
+		return fmt.Errorf("asset stage: publish: %w", err)
+	}
+	s.committed = true
+	return nil
+}
+
+// Finalize keeps published files and removes the staging directory.
+func (s *AssetStage) Finalize() error {
+	if s == nil || s.finalized {
+		return nil
+	}
+	s.finalized = true
+	if err := os.RemoveAll(s.stageRoot); err != nil {
+		return fmt.Errorf("asset stage: finalize: %w", err)
+	}
+	return nil
+}
+
+// Rollback removes files newly published by this stage and its staging tree.
+func (s *AssetStage) Rollback() error {
+	if s == nil || s.finalized {
+		return nil
+	}
+	var firstErr error
+	for i := len(s.published) - 1; i >= 0; i-- {
+		if err := os.Remove(s.published[i]); err != nil && !os.IsNotExist(err) && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if err := os.RemoveAll(s.stageRoot); err != nil && firstErr == nil {
+		firstErr = err
+	}
+	s.finalized = true
+	return firstErr
 }
 
 // StoreBytes writes data under the content-addressed layout and returns the

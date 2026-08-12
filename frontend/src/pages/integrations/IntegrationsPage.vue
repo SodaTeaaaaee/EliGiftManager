@@ -14,8 +14,8 @@ import { NButton, NModal, NSpin } from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
-import { ErrorBanner } from '@/shared/ui/feedback'
-import { listProfiles } from '@/shared/api/bridge'
+import { ErrorBanner, useFeedback } from '@/shared/ui/feedback'
+import { listProfiles, seedDefaultProfiles } from '@/shared/api/bridge'
 import { useWindowFocusRefresh } from '@/shared/lib/useWindowFocusRefresh'
 import type { IntegrationProfile } from '@/entities/profile'
 import IntegrationCard from './IntegrationCard.vue'
@@ -23,6 +23,7 @@ import IntegrationDetailDrawer from './IntegrationDetailDrawer.vue'
 import IntakeWizard from './wizard/IntakeWizard.vue'
 
 const { t } = useI18n({ useScope: 'global' })
+const feedback = useFeedback()
 
 const profiles = ref<IntegrationProfile[]>([])
 const loading = ref(true)
@@ -66,6 +67,20 @@ const showEmpty = computed(
 // ── Create wizard ──
 
 const showWizard = ref(false)
+const seedingDefaults = ref(false)
+
+async function installDefaultProfiles(): Promise<void> {
+  seedingDefaults.value = true
+  try {
+    await seedDefaultProfiles()
+    await loadProfiles()
+    feedback.success(t('integrations.defaultsInstalled'))
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    seedingDefaults.value = false
+  }
+}
 
 function openWizard(): void {
   showWizard.value = true
@@ -103,6 +118,9 @@ function handleDetailChanged(): void {
   <div class="integrations-page">
     <PageHeader :title="t('integrations.title')" :description="t('integrations.subtitle')">
       <template #actions>
+        <NButton :loading="seedingDefaults" @click="installDefaultProfiles">
+          {{ t('integrations.installDefaults') }}
+        </NButton>
         <NButton type="primary" @click="openWizard">{{ t('integrations.newIntegration') }}</NButton>
       </template>
     </PageHeader>

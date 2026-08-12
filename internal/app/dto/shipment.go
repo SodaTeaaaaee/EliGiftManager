@@ -73,6 +73,8 @@ type ImportShipmentEntry struct {
 
 // ImportShipmentResult contains the outcome of a bulk shipment import.
 type ImportShipmentResult struct {
+	ImportRunID      uint                  `json:"importRunId"`
+	EvidenceDisabled bool                  `json:"evidenceDisabled"`
 	CreatedShipments []ShipmentDTO         `json:"createdShipments"`
 	Errors           []ImportShipmentError `json:"errors"`
 	TotalProcessed   int                   `json:"totalProcessed"`

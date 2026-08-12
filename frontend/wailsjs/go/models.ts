@@ -576,6 +576,20 @@ export namespace dto {
 	        this.customerAddressId = source["customerAddressId"];
 	    }
 	}
+	export class BindInternalCarrierInput {
+	    externalCarrierId: number;
+	    internalCarrierCode: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BindInternalCarrierInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.externalCarrierId = source["externalCarrierId"];
+	        this.internalCarrierCode = source["internalCarrierCode"];
+	    }
+	}
 	export class BindTemplateToProfileInput {
 	    integrationProfileId: number;
 	    documentType: string;
@@ -1420,10 +1434,562 @@ export namespace dto {
 	        this.updatedAt = source["updatedAt"];
 	    }
 	}
+	export class MergeOperationEventDTO {
+	    eventType: string;
+	    status: string;
+	    actorRef: string;
+	    reasonCode: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeOperationEventDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.eventType = source["eventType"];
+	        this.status = source["status"];
+	        this.actorRef = source["actorRef"];
+	        this.reasonCode = source["reasonCode"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class MergePlannedEntity {
+	    entityType: string;
+	    entityId: number;
+	    mutationKind: string;
+	    fromProfileId: number;
+	    toProfileId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergePlannedEntity(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entityType = source["entityType"];
+	        this.entityId = source["entityId"];
+	        this.mutationKind = source["mutationKind"];
+	        this.fromProfileId = source["fromProfileId"];
+	        this.toProfileId = source["toProfileId"];
+	    }
+	}
+	export class MergeEntityCounts {
+	    identities: number;
+	    addresses: number;
+	    demandDocuments: number;
+	    nameObservations: number;
+	    nameEvents: number;
+	    origins: number;
+	    profileMutations: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeEntityCounts(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.identities = source["identities"];
+	        this.addresses = source["addresses"];
+	        this.demandDocuments = source["demandDocuments"];
+	        this.nameObservations = source["nameObservations"];
+	        this.nameEvents = source["nameEvents"];
+	        this.origins = source["origins"];
+	        this.profileMutations = source["profileMutations"];
+	    }
+	}
+	export class CustomerMergeHistoryDetail {
+	    mergeId: number;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    sourceDisplayName: string;
+	    targetDisplayName: string;
+	    status: string;
+	    mergeMode: string;
+	    actorRef: string;
+	    decisionReason: string;
+	    candidateId?: number;
+	    policyRevisionId?: number;
+	    counts: MergeEntityCounts;
+	    auditLevel: string;
+	    createdAt: string;
+	    undoneAt?: string;
+	    canRequestUndoDryRun: boolean;
+	    plannedEntities: MergePlannedEntity[];
+	    events: MergeOperationEventDTO[];
+	    evidenceSnapshot: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergeHistoryDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.sourceDisplayName = source["sourceDisplayName"];
+	        this.targetDisplayName = source["targetDisplayName"];
+	        this.status = source["status"];
+	        this.mergeMode = source["mergeMode"];
+	        this.actorRef = source["actorRef"];
+	        this.decisionReason = source["decisionReason"];
+	        this.candidateId = source["candidateId"];
+	        this.policyRevisionId = source["policyRevisionId"];
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.auditLevel = source["auditLevel"];
+	        this.createdAt = source["createdAt"];
+	        this.undoneAt = source["undoneAt"];
+	        this.canRequestUndoDryRun = source["canRequestUndoDryRun"];
+	        this.plannedEntities = this.convertValues(source["plannedEntities"], MergePlannedEntity);
+	        this.events = this.convertValues(source["events"], MergeOperationEventDTO);
+	        this.evidenceSnapshot = source["evidenceSnapshot"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerMergeHistoryItem {
+	    mergeId: number;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    sourceDisplayName: string;
+	    targetDisplayName: string;
+	    status: string;
+	    mergeMode: string;
+	    actorRef: string;
+	    decisionReason: string;
+	    candidateId?: number;
+	    policyRevisionId?: number;
+	    counts: MergeEntityCounts;
+	    auditLevel: string;
+	    createdAt: string;
+	    undoneAt?: string;
+	    canRequestUndoDryRun: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergeHistoryItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.sourceDisplayName = source["sourceDisplayName"];
+	        this.targetDisplayName = source["targetDisplayName"];
+	        this.status = source["status"];
+	        this.mergeMode = source["mergeMode"];
+	        this.actorRef = source["actorRef"];
+	        this.decisionReason = source["decisionReason"];
+	        this.candidateId = source["candidateId"];
+	        this.policyRevisionId = source["policyRevisionId"];
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.auditLevel = source["auditLevel"];
+	        this.createdAt = source["createdAt"];
+	        this.undoneAt = source["undoneAt"];
+	        this.canRequestUndoDryRun = source["canRequestUndoDryRun"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerMergeHistoryPage {
+	    items: CustomerMergeHistoryItem[];
+	    nextCreatedAt?: string;
+	    nextId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergeHistoryPage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], CustomerMergeHistoryItem);
+	        this.nextCreatedAt = source["nextCreatedAt"];
+	        this.nextId = source["nextId"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerMergeHistoryQuery {
+	    profileId: number;
+	    candidateId: number;
+	    status: string;
+	    beforeCreatedAt?: string;
+	    beforeId: number;
+	    limit: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergeHistoryQuery(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.candidateId = source["candidateId"];
+	        this.status = source["status"];
+	        this.beforeCreatedAt = source["beforeCreatedAt"];
+	        this.beforeId = source["beforeId"];
+	        this.limit = source["limit"];
+	    }
+	}
+	export class PrimaryIdentitySelection {
+	    namespace: string;
+	    identityType: string;
+	    identityId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrimaryIdentitySelection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.identityType = source["identityType"];
+	        this.identityId = source["identityId"];
+	    }
+	}
+	export class CustomerMergePreviewInput {
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    candidateId?: number;
+	    primaryIdentitySelections: PrimaryIdentitySelection[];
+	    defaultAddressId?: number;
+	    displayNameResolution: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergePreviewInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.candidateId = source["candidateId"];
+	        this.primaryIdentitySelections = this.convertValues(source["primaryIdentitySelections"], PrimaryIdentitySelection);
+	        this.defaultAddressId = source["defaultAddressId"];
+	        this.displayNameResolution = source["displayNameResolution"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class DisplayNameOption {
+	    resolution: string;
+	    displayName: string;
+	    profileId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DisplayNameOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.resolution = source["resolution"];
+	        this.displayName = source["displayName"];
+	        this.profileId = source["profileId"];
+	    }
+	}
+	export class DefaultAddressOption {
+	    addressId: number;
+	    customerProfileId: number;
+	    displayValue: string;
+	    currentDefault: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new DefaultAddressOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.addressId = source["addressId"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.displayValue = source["displayValue"];
+	        this.currentDefault = source["currentDefault"];
+	    }
+	}
+	export class PrimaryIdentityOption {
+	    namespace: string;
+	    identityType: string;
+	    identityId: number;
+	    customerProfileId: number;
+	    displayValue: string;
+	    currentPrimary: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new PrimaryIdentityOption(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.namespace = source["namespace"];
+	        this.identityType = source["identityType"];
+	        this.identityId = source["identityId"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.displayValue = source["displayValue"];
+	        this.currentPrimary = source["currentPrimary"];
+	    }
+	}
+	export class MergeBlocker {
+	    code: string;
+	    entityType: string;
+	    entityId: number;
+	    detail: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeBlocker(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.code = source["code"];
+	        this.entityType = source["entityType"];
+	        this.entityId = source["entityId"];
+	        this.detail = source["detail"];
+	    }
+	}
+	export class CustomerMergePreviewResult {
+	    previewToken: string;
+	    previewHash: string;
+	    generatedAt: string;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    sourceStatus: string;
+	    targetStatus: string;
+	    sourceRowVersion: number;
+	    targetRowVersion: number;
+	    candidateId?: number;
+	    candidateRowVersion: number;
+	    evidenceHash: string;
+	    policyVersion: number;
+	    policyRevisionId?: number;
+	    dependsOnMergeRecordId?: number;
+	    plannedEntities: MergePlannedEntity[];
+	    frozenDemandDocumentIds: number[];
+	    counts: MergeEntityCounts;
+	    blockers: MergeBlocker[];
+	    canExecute: boolean;
+	    primaryIdentityOptions: PrimaryIdentityOption[];
+	    recommendedPrimaryIdentitySelections: PrimaryIdentitySelection[];
+	    defaultAddressOptions: DefaultAddressOption[];
+	    recommendedDefaultAddressId?: number;
+	    displayNameOptions: DisplayNameOption[];
+	    recommendedDisplayNameResolution: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergePreviewResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.previewToken = source["previewToken"];
+	        this.previewHash = source["previewHash"];
+	        this.generatedAt = source["generatedAt"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.sourceStatus = source["sourceStatus"];
+	        this.targetStatus = source["targetStatus"];
+	        this.sourceRowVersion = source["sourceRowVersion"];
+	        this.targetRowVersion = source["targetRowVersion"];
+	        this.candidateId = source["candidateId"];
+	        this.candidateRowVersion = source["candidateRowVersion"];
+	        this.evidenceHash = source["evidenceHash"];
+	        this.policyVersion = source["policyVersion"];
+	        this.policyRevisionId = source["policyRevisionId"];
+	        this.dependsOnMergeRecordId = source["dependsOnMergeRecordId"];
+	        this.plannedEntities = this.convertValues(source["plannedEntities"], MergePlannedEntity);
+	        this.frozenDemandDocumentIds = source["frozenDemandDocumentIds"];
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.blockers = this.convertValues(source["blockers"], MergeBlocker);
+	        this.canExecute = source["canExecute"];
+	        this.primaryIdentityOptions = this.convertValues(source["primaryIdentityOptions"], PrimaryIdentityOption);
+	        this.recommendedPrimaryIdentitySelections = this.convertValues(source["recommendedPrimaryIdentitySelections"], PrimaryIdentitySelection);
+	        this.defaultAddressOptions = this.convertValues(source["defaultAddressOptions"], DefaultAddressOption);
+	        this.recommendedDefaultAddressId = source["recommendedDefaultAddressId"];
+	        this.displayNameOptions = this.convertValues(source["displayNameOptions"], DisplayNameOption);
+	        this.recommendedDisplayNameResolution = source["recommendedDisplayNameResolution"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerMergeUndoDryRunInput {
+	    mergeId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergeUndoDryRunInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	    }
+	}
+	export class CustomerMergeUndoDryRunResult {
+	    mergeId: number;
+	    eligible: boolean;
+	    eligibilityToken: string;
+	    generatedAt: string;
+	    sourceRowVersion: number;
+	    targetRowVersion: number;
+	    restoreCounts: MergeEntityCounts;
+	    blockers: MergeBlocker[];
+	    warnings: string[];
+	    auditLevel: string;
+	    dependentMergeIds: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerMergeUndoDryRunResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	        this.eligible = source["eligible"];
+	        this.eligibilityToken = source["eligibilityToken"];
+	        this.generatedAt = source["generatedAt"];
+	        this.sourceRowVersion = source["sourceRowVersion"];
+	        this.targetRowVersion = source["targetRowVersion"];
+	        this.restoreCounts = this.convertValues(source["restoreCounts"], MergeEntityCounts);
+	        this.blockers = this.convertValues(source["blockers"], MergeBlocker);
+	        this.warnings = source["warnings"];
+	        this.auditLevel = source["auditLevel"];
+	        this.dependentMergeIds = source["dependentMergeIds"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerNameObservationDTO {
+	    id: number;
+	    kind: string;
+	    value: string;
+	    source: string;
+	    firstSeenAt?: string;
+	    lastSeenAt?: string;
+	    count: number;
+	    isDisplayNameSource: boolean;
+	    originProfileId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerNameObservationDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.kind = source["kind"];
+	        this.value = source["value"];
+	        this.source = source["source"];
+	        this.firstSeenAt = source["firstSeenAt"];
+	        this.lastSeenAt = source["lastSeenAt"];
+	        this.count = source["count"];
+	        this.isDisplayNameSource = source["isDisplayNameSource"];
+	        this.originProfileId = source["originProfileId"];
+	    }
+	}
 	export class CustomerProfileDTO {
 	    id: number;
 	    displayName: string;
 	    profileType: string;
+	    status: string;
+	    mergedIntoProfileId?: number;
+	    rowVersion: number;
+	    displayNameMode: string;
+	    displayNameObservationId?: number;
+	    matchedHistoricalName?: string;
 	    extraData: string;
 	    createdAt: string;
 	    updatedAt: string;
@@ -1440,6 +2006,12 @@ export namespace dto {
 	        this.id = source["id"];
 	        this.displayName = source["displayName"];
 	        this.profileType = source["profileType"];
+	        this.status = source["status"];
+	        this.mergedIntoProfileId = source["mergedIntoProfileId"];
+	        this.rowVersion = source["rowVersion"];
+	        this.displayNameMode = source["displayNameMode"];
+	        this.displayNameObservationId = source["displayNameObservationId"];
+	        this.matchedHistoricalName = source["matchedHistoricalName"];
 	        this.extraData = source["extraData"];
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
@@ -1465,6 +2037,32 @@ export namespace dto {
 		    }
 		    return a;
 		}
+	}
+	export class CustomerProfileOriginDTO {
+	    id: number;
+	    customerProfileId: number;
+	    originKind: string;
+	    sourceIntegrationProfileId?: number;
+	    externalRef: string;
+	    sourceDocumentId?: number;
+	    lastSeenAt?: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerProfileOriginDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.customerProfileId = source["customerProfileId"];
+	        this.originKind = source["originKind"];
+	        this.sourceIntegrationProfileId = source["sourceIntegrationProfileId"];
+	        this.externalRef = source["externalRef"];
+	        this.sourceDocumentId = source["sourceDocumentId"];
+	        this.lastSeenAt = source["lastSeenAt"];
+	        this.createdAt = source["createdAt"];
+	    }
 	}
 	export class CustomerProfilePageFilterInput {
 	    keyword: string;
@@ -1522,6 +2120,402 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class CustomerResolutionFeaturePolicyDTO {
+	    revision: number;
+	    customerResolutionWritesEnabled: boolean;
+	    candidateScanEnabled: boolean;
+	    mergeExecutionEnabled: boolean;
+	    splitExecutionEnabled: boolean;
+	    importEvidenceEnabled: boolean;
+	    carrierRegistryWritesEnabled: boolean;
+	    actorRef: string;
+	    reason: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerResolutionFeaturePolicyDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.revision = source["revision"];
+	        this.customerResolutionWritesEnabled = source["customerResolutionWritesEnabled"];
+	        this.candidateScanEnabled = source["candidateScanEnabled"];
+	        this.mergeExecutionEnabled = source["mergeExecutionEnabled"];
+	        this.splitExecutionEnabled = source["splitExecutionEnabled"];
+	        this.importEvidenceEnabled = source["importEvidenceEnabled"];
+	        this.carrierRegistryWritesEnabled = source["carrierRegistryWritesEnabled"];
+	        this.actorRef = source["actorRef"];
+	        this.reason = source["reason"];
+	        this.updatedAt = source["updatedAt"];
+	    }
+	}
+	export class CustomerSplitOperationEventDTO {
+	    eventType: string;
+	    status: string;
+	    actorRef: string;
+	    reasonCode: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitOperationEventDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.eventType = source["eventType"];
+	        this.status = source["status"];
+	        this.actorRef = source["actorRef"];
+	        this.reasonCode = source["reasonCode"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class CustomerSplitMovedEntityDTO {
+	    entityType: string;
+	    entityId: number;
+	    fromProfileId: number;
+	    toProfileId: number;
+	    mutationKind: string;
+	    beforeSnapshot: string;
+	    afterSnapshot: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitMovedEntityDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.entityType = source["entityType"];
+	        this.entityId = source["entityId"];
+	        this.fromProfileId = source["fromProfileId"];
+	        this.toProfileId = source["toProfileId"];
+	        this.mutationKind = source["mutationKind"];
+	        this.beforeSnapshot = source["beforeSnapshot"];
+	        this.afterSnapshot = source["afterSnapshot"];
+	    }
+	}
+	export class CustomerSplitHistoryDetail {
+	    splitId: number;
+	    operationType: string;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    targetStrategy: string;
+	    status: string;
+	    actorRef: string;
+	    decisionReason: string;
+	    counts: MergeEntityCounts;
+	    createdAt: string;
+	    completedAt?: string;
+	    directUndoSupported: boolean;
+	    reverseOperationKind: string;
+	    movedEntities: CustomerSplitMovedEntityDTO[];
+	    events: CustomerSplitOperationEventDTO[];
+	    planHash: string;
+	    reverseGuidance: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitHistoryDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.splitId = source["splitId"];
+	        this.operationType = source["operationType"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.targetStrategy = source["targetStrategy"];
+	        this.status = source["status"];
+	        this.actorRef = source["actorRef"];
+	        this.decisionReason = source["decisionReason"];
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.createdAt = source["createdAt"];
+	        this.completedAt = source["completedAt"];
+	        this.directUndoSupported = source["directUndoSupported"];
+	        this.reverseOperationKind = source["reverseOperationKind"];
+	        this.movedEntities = this.convertValues(source["movedEntities"], CustomerSplitMovedEntityDTO);
+	        this.events = this.convertValues(source["events"], CustomerSplitOperationEventDTO);
+	        this.planHash = source["planHash"];
+	        this.reverseGuidance = source["reverseGuidance"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerSplitHistoryItem {
+	    splitId: number;
+	    operationType: string;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    targetStrategy: string;
+	    status: string;
+	    actorRef: string;
+	    decisionReason: string;
+	    counts: MergeEntityCounts;
+	    createdAt: string;
+	    completedAt?: string;
+	    directUndoSupported: boolean;
+	    reverseOperationKind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitHistoryItem(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.splitId = source["splitId"];
+	        this.operationType = source["operationType"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.targetStrategy = source["targetStrategy"];
+	        this.status = source["status"];
+	        this.actorRef = source["actorRef"];
+	        this.decisionReason = source["decisionReason"];
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.createdAt = source["createdAt"];
+	        this.completedAt = source["completedAt"];
+	        this.directUndoSupported = source["directUndoSupported"];
+	        this.reverseOperationKind = source["reverseOperationKind"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerSplitHistoryPage {
+	    items: CustomerSplitHistoryItem[];
+	    hasMore: boolean;
+	    nextBefore?: string;
+	    nextId: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitHistoryPage(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], CustomerSplitHistoryItem);
+	        this.hasMore = source["hasMore"];
+	        this.nextBefore = source["nextBefore"];
+	        this.nextId = source["nextId"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class CustomerSplitHistoryQuery {
+	    profileId: number;
+	    status: string;
+	    beforeCreatedAt?: string;
+	    beforeId: number;
+	    limit: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitHistoryQuery(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.status = source["status"];
+	        this.beforeCreatedAt = source["beforeCreatedAt"];
+	        this.beforeId = source["beforeId"];
+	        this.limit = source["limit"];
+	    }
+	}
+	
+	
+	export class CustomerSplitSelection {
+	    identityIds: number[];
+	    addressIds: number[];
+	    demandDocumentIds: number[];
+	    nameObservationIds: number[];
+	    originIds: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitSelection(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.identityIds = source["identityIds"];
+	        this.addressIds = source["addressIds"];
+	        this.demandDocumentIds = source["demandDocumentIds"];
+	        this.nameObservationIds = source["nameObservationIds"];
+	        this.originIds = source["originIds"];
+	    }
+	}
+	export class CustomerSplitPreviewInput {
+	    sourceProfileId: number;
+	    targetStrategy: string;
+	    newProfileDisplayName: string;
+	    newProfileType: string;
+	    targetPrimaryIdentityIds: number[];
+	    targetDefaultAddressId?: number;
+	    targetDisplayNameObservationId?: number;
+	    sourceDisplayNameResolution: string;
+	    selection: CustomerSplitSelection;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitPreviewInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetStrategy = source["targetStrategy"];
+	        this.newProfileDisplayName = source["newProfileDisplayName"];
+	        this.newProfileType = source["newProfileType"];
+	        this.targetPrimaryIdentityIds = source["targetPrimaryIdentityIds"];
+	        this.targetDefaultAddressId = source["targetDefaultAddressId"];
+	        this.targetDisplayNameObservationId = source["targetDisplayNameObservationId"];
+	        this.sourceDisplayNameResolution = source["sourceDisplayNameResolution"];
+	        this.selection = this.convertValues(source["selection"], CustomerSplitSelection);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SplitImmutableHistoryDTO {
+	    waveParticipantSnapshotIds: number[];
+	    fulfillmentLineIds: number[];
+	    willRewrite: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new SplitImmutableHistoryDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveParticipantSnapshotIds = source["waveParticipantSnapshotIds"];
+	        this.fulfillmentLineIds = source["fulfillmentLineIds"];
+	        this.willRewrite = source["willRewrite"];
+	    }
+	}
+	export class CustomerSplitPreviewResult {
+	    planToken: string;
+	    planHash: string;
+	    generatedAt: string;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    targetStrategy: string;
+	    sourceRowVersion: number;
+	    targetRowVersion: number;
+	    sourceDisplayNameAfter: string;
+	    targetDisplayNameAfter: string;
+	    plannedEntities: MergePlannedEntity[];
+	    counts: MergeEntityCounts;
+	    blockers: MergeBlocker[];
+	    immutableHistory: SplitImmutableHistoryDTO;
+	    canExecute: boolean;
+	    directUndoSupported: boolean;
+	    reverseOperationKind: string;
+	    unsupportedTargetStrategyHint: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CustomerSplitPreviewResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.planToken = source["planToken"];
+	        this.planHash = source["planHash"];
+	        this.generatedAt = source["generatedAt"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.targetStrategy = source["targetStrategy"];
+	        this.sourceRowVersion = source["sourceRowVersion"];
+	        this.targetRowVersion = source["targetRowVersion"];
+	        this.sourceDisplayNameAfter = source["sourceDisplayNameAfter"];
+	        this.targetDisplayNameAfter = source["targetDisplayNameAfter"];
+	        this.plannedEntities = this.convertValues(source["plannedEntities"], MergePlannedEntity);
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.blockers = this.convertValues(source["blockers"], MergeBlocker);
+	        this.immutableHistory = this.convertValues(source["immutableHistory"], SplitImmutableHistoryDTO);
+	        this.canExecute = source["canExecute"];
+	        this.directUndoSupported = source["directUndoSupported"];
+	        this.reverseOperationKind = source["reverseOperationKind"];
+	        this.unsupportedTargetStrategyHint = source["unsupportedTargetStrategyHint"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
 	export class DemandCSVImportError {
 	    rowIndex: number;
 	    reason: string;
@@ -1882,6 +2876,23 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class DismissMergeCandidateInput {
+	    id: number;
+	    evidenceHash: string;
+	    policyVersion: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new DismissMergeCandidateInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.evidenceHash = source["evidenceHash"];
+	        this.policyVersion = source["policyVersion"];
+	    }
+	}
+	
 	export class DocumentTemplateDTO {
 	    id: number;
 	    templateKey: string;
@@ -1907,6 +2918,268 @@ export namespace dto {
 	        this.createdAt = source["createdAt"];
 	        this.updatedAt = source["updatedAt"];
 	    }
+	}
+	export class ExecuteCustomerMergeInput {
+	    operationKey: string;
+	    previewToken: string;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    expectedSourceRowVersion: number;
+	    expectedTargetRowVersion: number;
+	    candidateId?: number;
+	    expectedCandidateRowVersion: number;
+	    expectedEvidenceHash: string;
+	    expectedPolicyVersion: number;
+	    expectedPolicyRevisionId?: number;
+	    primaryIdentitySelections: PrimaryIdentitySelection[];
+	    defaultAddressId?: number;
+	    displayNameResolution: string;
+	    actorRef: string;
+	    decisionReason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecuteCustomerMergeInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.operationKey = source["operationKey"];
+	        this.previewToken = source["previewToken"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.expectedSourceRowVersion = source["expectedSourceRowVersion"];
+	        this.expectedTargetRowVersion = source["expectedTargetRowVersion"];
+	        this.candidateId = source["candidateId"];
+	        this.expectedCandidateRowVersion = source["expectedCandidateRowVersion"];
+	        this.expectedEvidenceHash = source["expectedEvidenceHash"];
+	        this.expectedPolicyVersion = source["expectedPolicyVersion"];
+	        this.expectedPolicyRevisionId = source["expectedPolicyRevisionId"];
+	        this.primaryIdentitySelections = this.convertValues(source["primaryIdentitySelections"], PrimaryIdentitySelection);
+	        this.defaultAddressId = source["defaultAddressId"];
+	        this.displayNameResolution = source["displayNameResolution"];
+	        this.actorRef = source["actorRef"];
+	        this.decisionReason = source["decisionReason"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ExecuteCustomerMergeResult {
+	    mergeId: number;
+	    operationKey: string;
+	    status: string;
+	    counts: MergeEntityCounts;
+	    sourceRowVersion: number;
+	    targetRowVersion: number;
+	    candidateStatus: string;
+	    undoDryRunRequired: boolean;
+	    idempotentReplay: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecuteCustomerMergeResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	        this.operationKey = source["operationKey"];
+	        this.status = source["status"];
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.sourceRowVersion = source["sourceRowVersion"];
+	        this.targetRowVersion = source["targetRowVersion"];
+	        this.candidateStatus = source["candidateStatus"];
+	        this.undoDryRunRequired = source["undoDryRunRequired"];
+	        this.idempotentReplay = source["idempotentReplay"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ExecuteCustomerMergeUndoInput {
+	    mergeId: number;
+	    undoOperationKey: string;
+	    eligibilityToken: string;
+	    expectedSourceRowVersion: number;
+	    expectedTargetRowVersion: number;
+	    actorRef: string;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecuteCustomerMergeUndoInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	        this.undoOperationKey = source["undoOperationKey"];
+	        this.eligibilityToken = source["eligibilityToken"];
+	        this.expectedSourceRowVersion = source["expectedSourceRowVersion"];
+	        this.expectedTargetRowVersion = source["expectedTargetRowVersion"];
+	        this.actorRef = source["actorRef"];
+	        this.reason = source["reason"];
+	    }
+	}
+	export class ExecuteCustomerMergeUndoResult {
+	    mergeId: number;
+	    status: string;
+	    restoredSourceProfileId: number;
+	    targetProfileId: number;
+	    restoreCounts: MergeEntityCounts;
+	    idempotentReplay: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecuteCustomerMergeUndoResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.mergeId = source["mergeId"];
+	        this.status = source["status"];
+	        this.restoredSourceProfileId = source["restoredSourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.restoreCounts = this.convertValues(source["restoreCounts"], MergeEntityCounts);
+	        this.idempotentReplay = source["idempotentReplay"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ExecuteCustomerSplitInput {
+	    operationKey: string;
+	    planToken: string;
+	    expectedSourceRowVersion: number;
+	    expectedTargetRowVersion: number;
+	    actorRef: string;
+	    decisionReason: string;
+	    plan: CustomerSplitPreviewInput;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecuteCustomerSplitInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.operationKey = source["operationKey"];
+	        this.planToken = source["planToken"];
+	        this.expectedSourceRowVersion = source["expectedSourceRowVersion"];
+	        this.expectedTargetRowVersion = source["expectedTargetRowVersion"];
+	        this.actorRef = source["actorRef"];
+	        this.decisionReason = source["decisionReason"];
+	        this.plan = this.convertValues(source["plan"], CustomerSplitPreviewInput);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ExecuteCustomerSplitResult {
+	    splitId: number;
+	    operationKey: string;
+	    status: string;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    counts: MergeEntityCounts;
+	    sourceRowVersion: number;
+	    targetRowVersion: number;
+	    idempotentReplay: boolean;
+	    directUndoSupported: boolean;
+	    reverseOperationKind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExecuteCustomerSplitResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.splitId = source["splitId"];
+	        this.operationKey = source["operationKey"];
+	        this.status = source["status"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.counts = this.convertValues(source["counts"], MergeEntityCounts);
+	        this.sourceRowVersion = source["sourceRowVersion"];
+	        this.targetRowVersion = source["targetRowVersion"];
+	        this.idempotentReplay = source["idempotentReplay"];
+	        this.directUndoSupported = source["directUndoSupported"];
+	        this.reverseOperationKind = source["reverseOperationKind"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class ExecuteSyncResult {
 	    jobId: number;
@@ -1951,6 +3224,38 @@ export namespace dto {
 		    }
 		    return a;
 		}
+	}
+	export class ExternalCarrierDTO {
+	    id: number;
+	    integrationProfileId: number;
+	    canonicalKey: string;
+	    externalCarrierCode: string;
+	    externalCarrierName: string;
+	    nameKeyStrategy: string;
+	    internalCarrierCode?: string;
+	    status: string;
+	    conflictReason: string;
+	    createdAt: string;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExternalCarrierDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.canonicalKey = source["canonicalKey"];
+	        this.externalCarrierCode = source["externalCarrierCode"];
+	        this.externalCarrierName = source["externalCarrierName"];
+	        this.nameKeyStrategy = source["nameKeyStrategy"];
+	        this.internalCarrierCode = source["internalCarrierCode"];
+	        this.status = source["status"];
+	        this.conflictReason = source["conflictReason"];
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	    }
 	}
 	
 	
@@ -2084,6 +3389,8 @@ export namespace dto {
 	    }
 	}
 	export class ImportCarrierMappingsResult {
+	    importRunId: number;
+	    evidenceDisabled: boolean;
 	    createdCount: number;
 	    updatedCount: number;
 	    totalProcessed: number;
@@ -2091,6 +3398,7 @@ export namespace dto {
 	    errorCount: number;
 	    errors: ImportCarrierMappingError[];
 	    mappings: CarrierMappingDTO[];
+	    externalCarriers: ExternalCarrierDTO[];
 	    warnings: string[];
 	
 	    static createFrom(source: any = {}) {
@@ -2099,6 +3407,8 @@ export namespace dto {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.importRunId = source["importRunId"];
+	        this.evidenceDisabled = source["evidenceDisabled"];
 	        this.createdCount = source["createdCount"];
 	        this.updatedCount = source["updatedCount"];
 	        this.totalProcessed = source["totalProcessed"];
@@ -2106,6 +3416,7 @@ export namespace dto {
 	        this.errorCount = source["errorCount"];
 	        this.errors = this.convertValues(source["errors"], ImportCarrierMappingError);
 	        this.mappings = this.convertValues(source["mappings"], CarrierMappingDTO);
+	        this.externalCarriers = this.convertValues(source["externalCarriers"], ExternalCarrierDTO);
 	        this.warnings = source["warnings"];
 	    }
 	
@@ -2133,6 +3444,7 @@ export namespace dto {
 	    sourceDocumentNo: string;
 	    sourceCustomerRef: string;
 	    importMode: string;
+	    mappingRules: string;
 	    rows: any[];
 	    filePath: string;
 	
@@ -2147,11 +3459,14 @@ export namespace dto {
 	        this.sourceDocumentNo = source["sourceDocumentNo"];
 	        this.sourceCustomerRef = source["sourceCustomerRef"];
 	        this.importMode = source["importMode"];
+	        this.mappingRules = source["mappingRules"];
 	        this.rows = source["rows"];
 	        this.filePath = source["filePath"];
 	    }
 	}
 	export class ImportDemandCSVResult {
+	    importRunId: number;
+	    evidenceDisabled: boolean;
 	    document?: DemandDocumentDTO;
 	    errors: DemandCSVImportError[];
 	    totalProcessed: number;
@@ -2165,6 +3480,8 @@ export namespace dto {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.importRunId = source["importRunId"];
+	        this.evidenceDisabled = source["evidenceDisabled"];
 	        this.document = this.convertValues(source["document"], DemandDocumentDTO);
 	        this.errors = this.convertValues(source["errors"], DemandCSVImportError);
 	        this.totalProcessed = source["totalProcessed"];
@@ -2209,6 +3526,22 @@ export namespace dto {
 	        this.sourceDocumentNo = source["sourceDocumentNo"];
 	        this.sourceCustomerRef = source["sourceCustomerRef"];
 	        this.rows = source["rows"];
+	    }
+	}
+	export class ImportEvidenceRetentionDTO {
+	    retentionDays: number;
+	    revision: number;
+	    updatedAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportEvidenceRetentionDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.retentionDays = source["retentionDays"];
+	        this.revision = source["revision"];
+	        this.updatedAt = source["updatedAt"];
 	    }
 	}
 	export class ImportProductCatalogError {
@@ -2278,6 +3611,8 @@ export namespace dto {
 	    }
 	}
 	export class ImportProductCatalogResult {
+	    importRunId: number;
+	    evidenceDisabled: boolean;
 	    createdCount: number;
 	    updatedCount: number;
 	    totalProcessed: number;
@@ -2293,6 +3628,8 @@ export namespace dto {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.importRunId = source["importRunId"];
+	        this.evidenceDisabled = source["evidenceDisabled"];
 	        this.createdCount = source["createdCount"];
 	        this.updatedCount = source["updatedCount"];
 	        this.totalProcessed = source["totalProcessed"];
@@ -2321,6 +3658,153 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class ImportRawRecordDetailDTO {
+	    id: number;
+	    rowIndex: number;
+	    rawLogicalRow: string;
+	    unmappedSource: string;
+	    parserMetadata: string;
+	    warningCodes: string;
+	    assetMembers: string;
+	    outcome: string;
+	    errorCode: string;
+	    errorMessage: string;
+	    resultType: string;
+	    resultId?: number;
+	    expiresAt?: string;
+	    createdAt: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportRawRecordDetailDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.rowIndex = source["rowIndex"];
+	        this.rawLogicalRow = source["rawLogicalRow"];
+	        this.unmappedSource = source["unmappedSource"];
+	        this.parserMetadata = source["parserMetadata"];
+	        this.warningCodes = source["warningCodes"];
+	        this.assetMembers = source["assetMembers"];
+	        this.outcome = source["outcome"];
+	        this.errorCode = source["errorCode"];
+	        this.errorMessage = source["errorMessage"];
+	        this.resultType = source["resultType"];
+	        this.resultId = source["resultId"];
+	        this.expiresAt = source["expiresAt"];
+	        this.createdAt = source["createdAt"];
+	    }
+	}
+	export class ImportRunSummaryDTO {
+	    id: number;
+	    importKind: string;
+	    integrationProfileId?: number;
+	    sourceFormat: string;
+	    sourceFileName: string;
+	    importMode: string;
+	    status: string;
+	    retentionDays: number;
+	    retentionPolicyVersion: number;
+	    expiresAt?: string;
+	    recordCount: number;
+	    successCount: number;
+	    failureCount: number;
+	    quarantinedCount: number;
+	    createdAt: string;
+	    completedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportRunSummaryDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.importKind = source["importKind"];
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.sourceFormat = source["sourceFormat"];
+	        this.sourceFileName = source["sourceFileName"];
+	        this.importMode = source["importMode"];
+	        this.status = source["status"];
+	        this.retentionDays = source["retentionDays"];
+	        this.retentionPolicyVersion = source["retentionPolicyVersion"];
+	        this.expiresAt = source["expiresAt"];
+	        this.recordCount = source["recordCount"];
+	        this.successCount = source["successCount"];
+	        this.failureCount = source["failureCount"];
+	        this.quarantinedCount = source["quarantinedCount"];
+	        this.createdAt = source["createdAt"];
+	        this.completedAt = source["completedAt"];
+	    }
+	}
+	export class ImportRunDetailDTO {
+	    run: ImportRunSummaryDTO;
+	    records: ImportRawRecordDetailDTO[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportRunDetailDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.run = this.convertValues(source["run"], ImportRunSummaryDTO);
+	        this.records = this.convertValues(source["records"], ImportRawRecordDetailDTO);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportRunPageDTO {
+	    items: ImportRunSummaryDTO[];
+	    nextCursor: string;
+	    hasMore: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportRunPageDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.items = this.convertValues(source["items"], ImportRunSummaryDTO);
+	        this.nextCursor = source["nextCursor"];
+	        this.hasMore = source["hasMore"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class ImportShipmentEntry {
 	    supplierOrderLineId: number;
 	    fulfillmentLineId: number;
@@ -2482,6 +3966,8 @@ export namespace dto {
 		}
 	}
 	export class ImportShipmentResult {
+	    importRunId: number;
+	    evidenceDisabled: boolean;
 	    createdShipments: ShipmentDTO[];
 	    errors: ImportShipmentError[];
 	    totalProcessed: number;
@@ -2495,6 +3981,8 @@ export namespace dto {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.importRunId = source["importRunId"];
+	        this.evidenceDisabled = source["evidenceDisabled"];
 	        this.createdShipments = this.convertValues(source["createdShipments"], ShipmentDTO);
 	        this.errors = this.convertValues(source["errors"], ImportShipmentError);
 	        this.totalProcessed = source["totalProcessed"];
@@ -2617,6 +4105,26 @@ export namespace dto {
 	        this.supportsImportSupplierShipment = source["supportsImportSupplierShipment"];
 	    }
 	}
+	export class ListImportRunsPageInput {
+	    limit: number;
+	    cursor: string;
+	    status: string;
+	    profileId?: number;
+	    documentType: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ListImportRunsPageInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.limit = source["limit"];
+	        this.cursor = source["cursor"];
+	        this.status = source["status"];
+	        this.profileId = source["profileId"];
+	        this.documentType = source["documentType"];
+	    }
+	}
 	export class MapAndReconcileShipmentsInput {
 	    waveId: number;
 	    integrationProfileId: number;
@@ -2653,6 +4161,158 @@ export namespace dto {
 	        this.submittedAt = source["submittedAt"];
 	    }
 	}
+	
+	export class MergeEvidenceDTO {
+	    id: number;
+	    evidenceKind: string;
+	    polarity: string;
+	    explanationCode: string;
+	    confidence: number;
+	    valueHash: string;
+	    maskedValue: string;
+	    observedAt?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeEvidenceDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.evidenceKind = source["evidenceKind"];
+	        this.polarity = source["polarity"];
+	        this.explanationCode = source["explanationCode"];
+	        this.confidence = source["confidence"];
+	        this.valueHash = source["valueHash"];
+	        this.maskedValue = source["maskedValue"];
+	        this.observedAt = source["observedAt"];
+	    }
+	}
+	export class MergeCandidateDTO {
+	    id: number;
+	    sourceProfileId: number;
+	    targetProfileId: number;
+	    status: string;
+	    confidence: number;
+	    explanationCode: string;
+	    evidenceHash: string;
+	    policyVersion: number;
+	    policyRevisionId?: number;
+	    blockerCodes: string[];
+	    lastEvaluatedAt?: string;
+	    expiresAt?: string;
+	    evidence: MergeEvidenceDTO[];
+	    createdAt: string;
+	    updatedAt: string;
+	    rowVersion: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeCandidateDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.sourceProfileId = source["sourceProfileId"];
+	        this.targetProfileId = source["targetProfileId"];
+	        this.status = source["status"];
+	        this.confidence = source["confidence"];
+	        this.explanationCode = source["explanationCode"];
+	        this.evidenceHash = source["evidenceHash"];
+	        this.policyVersion = source["policyVersion"];
+	        this.policyRevisionId = source["policyRevisionId"];
+	        this.blockerCodes = source["blockerCodes"];
+	        this.lastEvaluatedAt = source["lastEvaluatedAt"];
+	        this.expiresAt = source["expiresAt"];
+	        this.evidence = this.convertValues(source["evidence"], MergeEvidenceDTO);
+	        this.createdAt = source["createdAt"];
+	        this.updatedAt = source["updatedAt"];
+	        this.rowVersion = source["rowVersion"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
+	
+	
+	
+	export class MergePolicyRulesDTO {
+	    candidateDetectionEnabled: boolean;
+	    emailEvidenceMode: string;
+	    phoneEvidenceMode: string;
+	    executionMode: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergePolicyRulesDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.candidateDetectionEnabled = source["candidateDetectionEnabled"];
+	        this.emailEvidenceMode = source["emailEvidenceMode"];
+	        this.phoneEvidenceMode = source["phoneEvidenceMode"];
+	        this.executionMode = source["executionMode"];
+	    }
+	}
+	export class MergePolicyDTO {
+	    id: number;
+	    policyKey: string;
+	    revision: number;
+	    rules: MergePolicyRulesDTO;
+	    needsScan: boolean;
+	    lastScanAt?: string;
+	    revisionTime: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergePolicyDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.policyKey = source["policyKey"];
+	        this.revision = source["revision"];
+	        this.rules = this.convertValues(source["rules"], MergePolicyRulesDTO);
+	        this.needsScan = source["needsScan"];
+	        this.lastScanAt = source["lastScanAt"];
+	        this.revisionTime = source["revisionTime"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class MergePreviewAddress {
 	    id: number;
 	    label: string;
@@ -2839,6 +4499,38 @@ export namespace dto {
 	        this.undoAvailable = source["undoAvailable"];
 	    }
 	}
+	export class MergeScanRunDTO {
+	    id: number;
+	    policyVersion: number;
+	    status: string;
+	    startedAt: string;
+	    completedAt?: string;
+	    profilesScanned: number;
+	    pairsEvaluated: number;
+	    candidatesCreated: number;
+	    candidatesUpdated: number;
+	    candidatesBlocked: number;
+	    errorMessage: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MergeScanRunDTO(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.policyVersion = source["policyVersion"];
+	        this.status = source["status"];
+	        this.startedAt = source["startedAt"];
+	        this.completedAt = source["completedAt"];
+	        this.profilesScanned = source["profilesScanned"];
+	        this.pairsEvaluated = source["pairsEvaluated"];
+	        this.candidatesCreated = source["candidatesCreated"];
+	        this.candidatesUpdated = source["candidatesUpdated"];
+	        this.candidatesBlocked = source["candidatesBlocked"];
+	        this.errorMessage = source["errorMessage"];
+	    }
+	}
 	export class MergeSuggestionDTO {
 	    id: number;
 	    sourceProfileId: number;
@@ -2900,6 +4592,26 @@ export namespace dto {
 	    }
 	}
 	
+	export class PinCustomerDisplayNameInput {
+	    profileId: number;
+	    name: string;
+	    expectedRowVersion: number;
+	    actorRef: string;
+	    idempotencyKey: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PinCustomerDisplayNameInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.name = source["name"];
+	        this.expectedRowVersion = source["expectedRowVersion"];
+	        this.actorRef = source["actorRef"];
+	        this.idempotencyKey = source["idempotencyKey"];
+	    }
+	}
 	export class PlanChannelClosureInput {
 	    waveId: number;
 	    integrationProfileId: number;
@@ -2954,6 +4666,8 @@ export namespace dto {
 		    return a;
 		}
 	}
+	
+	
 	export class ProductDTO {
 	    id: number;
 	    waveId: number;
@@ -3214,7 +4928,35 @@ export namespace dto {
 		    return a;
 		}
 	}
+	export class RegisterExternalCarrierInput {
+	    integrationProfileId: number;
+	    externalCarrierCode: string;
+	    externalCarrierName: string;
 	
+	    static createFrom(source: any = {}) {
+	        return new RegisterExternalCarrierInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.integrationProfileId = source["integrationProfileId"];
+	        this.externalCarrierCode = source["externalCarrierCode"];
+	        this.externalCarrierName = source["externalCarrierName"];
+	    }
+	}
+	
+	export class SetImportEvidenceRetentionInput {
+	    retentionDays: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SetImportEvidenceRetentionInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.retentionDays = source["retentionDays"];
+	    }
+	}
 	export class ShipmentByWavePageFilterInput {
 	    waveId: number;
 	    sortBy: string;
@@ -3351,9 +5093,11 @@ export namespace dto {
 	        this.masterIds = source["masterIds"];
 	    }
 	}
+	
 	export class SupplierOrderDTO {
 	    id: number;
 	    waveId: number;
+	    factoryIntegrationProfileId?: number;
 	    supplierPlatform: string;
 	    templateId: string;
 	    batchNo: string;
@@ -3378,6 +5122,7 @@ export namespace dto {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.waveId = source["waveId"];
+	        this.factoryIntegrationProfileId = source["factoryIntegrationProfileId"];
 	        this.supplierPlatform = source["supplierPlatform"];
 	        this.templateId = source["templateId"];
 	        this.batchNo = source["batchNo"];
@@ -3540,6 +5285,24 @@ export namespace dto {
 	        this.restoredDemandDocumentCount = source["restoredDemandDocumentCount"];
 	    }
 	}
+	export class UnpinCustomerDisplayNameInput {
+	    profileId: number;
+	    expectedRowVersion: number;
+	    actorRef: string;
+	    idempotencyKey: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UnpinCustomerDisplayNameInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.profileId = source["profileId"];
+	        this.expectedRowVersion = source["expectedRowVersion"];
+	        this.actorRef = source["actorRef"];
+	        this.idempotencyKey = source["idempotencyKey"];
+	    }
+	}
 	export class UpdateAddressInput {
 	    id: number;
 	    customerProfileId: number;
@@ -3615,6 +5378,9 @@ export namespace dto {
 	    displayName: string;
 	    profileType: string;
 	    extraData: string;
+	    expectedRowVersion: number;
+	    actorRef: string;
+	    idempotencyKey: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateCustomerProfileInput(source);
@@ -3626,6 +5392,37 @@ export namespace dto {
 	        this.displayName = source["displayName"];
 	        this.profileType = source["profileType"];
 	        this.extraData = source["extraData"];
+	        this.expectedRowVersion = source["expectedRowVersion"];
+	        this.actorRef = source["actorRef"];
+	        this.idempotencyKey = source["idempotencyKey"];
+	    }
+	}
+	export class UpdateCustomerResolutionFeaturePolicyInput {
+	    expectedRevision: number;
+	    customerResolutionWritesEnabled: boolean;
+	    candidateScanEnabled: boolean;
+	    mergeExecutionEnabled: boolean;
+	    splitExecutionEnabled: boolean;
+	    importEvidenceEnabled: boolean;
+	    carrierRegistryWritesEnabled: boolean;
+	    actorRef: string;
+	    reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateCustomerResolutionFeaturePolicyInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.expectedRevision = source["expectedRevision"];
+	        this.customerResolutionWritesEnabled = source["customerResolutionWritesEnabled"];
+	        this.candidateScanEnabled = source["candidateScanEnabled"];
+	        this.mergeExecutionEnabled = source["mergeExecutionEnabled"];
+	        this.splitExecutionEnabled = source["splitExecutionEnabled"];
+	        this.importEvidenceEnabled = source["importEvidenceEnabled"];
+	        this.carrierRegistryWritesEnabled = source["carrierRegistryWritesEnabled"];
+	        this.actorRef = source["actorRef"];
+	        this.reason = source["reason"];
 	    }
 	}
 	
@@ -3646,6 +5443,40 @@ export namespace dto {
 	        this.mappingRules = source["mappingRules"];
 	        this.extraData = source["extraData"];
 	    }
+	}
+	export class UpdateMergePolicyInput {
+	    expectedRevision: number;
+	    rules: MergePolicyRulesDTO;
+	    actorRef: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateMergePolicyInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.expectedRevision = source["expectedRevision"];
+	        this.rules = this.convertValues(source["rules"], MergePolicyRulesDTO);
+	        this.actorRef = source["actorRef"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class UpdateProductMasterInput {
 	    id: number;

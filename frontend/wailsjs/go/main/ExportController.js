@@ -6,6 +6,10 @@ export function ExportSupplierOrder(arg1) {
   return window['go']['main']['ExportController']['ExportSupplierOrder'](arg1);
 }
 
+export function ExportSupplierOrderForProfile(arg1, arg2) {
+  return window['go']['main']['ExportController']['ExportSupplierOrderForProfile'](arg1, arg2);
+}
+
 export function GenerateSupplierOrderFile(arg1) {
   return window['go']['main']['ExportController']['GenerateSupplierOrderFile'](arg1);
 }

@@ -38,12 +38,28 @@ export function GetSettings() {
   return window['go']['main']['CustomerProfileController']['GetSettings']();
 }
 
+export function ListCustomerNameObservations(arg1) {
+  return window['go']['main']['CustomerProfileController']['ListCustomerNameObservations'](arg1);
+}
+
+export function ListCustomerProfileOrigins(arg1) {
+  return window['go']['main']['CustomerProfileController']['ListCustomerProfileOrigins'](arg1);
+}
+
 export function ListCustomerProfiles(arg1, arg2, arg3) {
   return window['go']['main']['CustomerProfileController']['ListCustomerProfiles'](arg1, arg2, arg3);
 }
 
+export function PinCustomerDisplayName(arg1) {
+  return window['go']['main']['CustomerProfileController']['PinCustomerDisplayName'](arg1);
+}
+
 export function SaveSettings(arg1) {
   return window['go']['main']['CustomerProfileController']['SaveSettings'](arg1);
+}
+
+export function UnpinCustomerDisplayName(arg1) {
+  return window['go']['main']['CustomerProfileController']['UnpinCustomerDisplayName'](arg1);
 }
 
 export function UpdateCustomerProfile(arg1) {

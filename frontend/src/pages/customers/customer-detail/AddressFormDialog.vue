@@ -26,6 +26,7 @@ import type { CustomerAddressDTO } from '@/entities/address'
 const props = defineProps<{
   show: boolean
   customerProfileId: number
+  writesEnabled: boolean
   /** `null` = create mode; otherwise the address being edited. */
   address: CustomerAddressDTO | null
 }>()
@@ -135,6 +136,7 @@ const phonePattern = /^1[3-9]\d{9}$/
 const canSubmit = computed(
   () =>
     !submitting.value &&
+    props.writesEnabled &&
     recipientName.value.trim().length > 0 &&
     phonePattern.test(phone.value.trim()) &&
     !!province.value,
@@ -145,7 +147,7 @@ function close(): void {
 }
 
 async function handleSubmit(): Promise<void> {
-  if (!canSubmit.value) return
+  if (!canSubmit.value || !props.writesEnabled) return
   submitting.value = true
   try {
     const payload = {
@@ -191,14 +193,15 @@ async function handleSubmit(): Promise<void> {
     @update:show="(v: boolean) => emit('update:show', v)"
   >
     <NForm label-placement="top">
+      <p v-if="!writesEnabled" class="address-form-dialog__disabled">{{ t('customerDetail.writesDisabledReason') }}</p>
       <NFormItem :label="t('address.fields.label')">
-        <NInput v-model:value="label" :disabled="submitting" />
+        <NInput v-model:value="label" :disabled="submitting || !writesEnabled" />
       </NFormItem>
       <NFormItem :label="t('address.fields.recipientName')">
-        <NInput v-model:value="recipientName" :disabled="submitting" />
+        <NInput v-model:value="recipientName" :disabled="submitting || !writesEnabled" />
       </NFormItem>
       <NFormItem :label="t('address.fields.phone')">
-        <NInput v-model:value="phone" :disabled="submitting" />
+        <NInput v-model:value="phone" :disabled="submitting || !writesEnabled" />
       </NFormItem>
       <p class="address-form-dialog__hint">{{ t('address.cascadeHint') }}</p>
       <div class="address-form-dialog__region-row">
@@ -207,7 +210,7 @@ async function handleSubmit(): Promise<void> {
             v-model:value="province"
             :options="provinceOptions"
             :placeholder="t('address.cascadePlaceholder.province')"
-            :disabled="submitting"
+            :disabled="submitting || !writesEnabled"
             filterable
           />
         </NFormItem>
@@ -216,25 +219,25 @@ async function handleSubmit(): Promise<void> {
             v-model:value="city"
             :options="cityOptions"
             :placeholder="t('address.cascadePlaceholder.city')"
-            :disabled="submitting || !province"
+            :disabled="submitting || !province || !writesEnabled"
             filterable
           />
         </NFormItem>
         <NFormItem :label="t('address.fields.district')">
-          <NInput v-model:value="district" :placeholder="t('address.cascadePlaceholder.district')" :disabled="submitting" />
+          <NInput v-model:value="district" :placeholder="t('address.cascadePlaceholder.district')" :disabled="submitting || !writesEnabled" />
         </NFormItem>
       </div>
       <NFormItem :label="t('address.fields.addressLine1')">
-        <NInput v-model:value="addressLine1" :disabled="submitting" />
+        <NInput v-model:value="addressLine1" :disabled="submitting || !writesEnabled" />
       </NFormItem>
       <NFormItem :label="t('address.fields.addressLine2')">
-        <NInput v-model:value="addressLine2" :disabled="submitting" />
+        <NInput v-model:value="addressLine2" :disabled="submitting || !writesEnabled" />
       </NFormItem>
       <NFormItem :label="t('address.fields.postalCode')">
-        <NInput v-model:value="postalCode" :disabled="submitting" />
+        <NInput v-model:value="postalCode" :disabled="submitting || !writesEnabled" />
       </NFormItem>
       <NFormItem :label="t('address.fields.isDefault')">
-        <NSwitch v-model:value="isDefault" :disabled="submitting" />
+        <NSwitch v-model:value="isDefault" :disabled="submitting || !writesEnabled" />
       </NFormItem>
     </NForm>
     <template #footer>
@@ -254,6 +257,12 @@ async function handleSubmit(): Promise<void> {
   font-family: var(--font-body);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+.address-form-dialog__disabled {
+  margin: 0 0 var(--space-2);
+  color: var(--status-warning-fg);
+  font-size: var(--font-size-xs);
 }
 
 .address-form-dialog__region-row {

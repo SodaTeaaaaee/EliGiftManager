@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log/slog"
 	"os"
 
+	application "github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/middleware"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -41,6 +44,26 @@ func main() {
 	}
 	database.SetDefaultDB(db)
 	defer sqlDB.Close()
+	featurePolicyRepo := infra.NewCustomerResolutionFeaturePolicyRepository(db)
+	featurePolicy, err := featurePolicyRepo.GetFeaturePolicy(context.Background())
+	if err != nil {
+		logger.Error("load customer resolution feature policy", "error", err)
+		os.Exit(1)
+	}
+	if err := migrateLegacyMergePolicy(context.Background(), db); err != nil {
+		logger.Error("migrate legacy merge policy", "error", err)
+		os.Exit(1)
+	}
+	if featurePolicy.ImportEvidenceEnabled {
+		evidenceUC := application.NewImportEvidenceUseCase(infra.NewImportEvidenceRepository(db))
+		if runsDeleted, recordsDeleted, pruneErr := evidenceUC.PruneExpired(context.Background()); pruneErr != nil {
+			logger.Error("prune expired import evidence", "error", pruneErr)
+		} else if runsDeleted > 0 || recordsDeleted > 0 {
+			logger.Info("pruned expired import evidence", "runs_deleted", runsDeleted, "records_deleted", recordsDeleted)
+		}
+	} else {
+		logger.Warn("import evidence disabled by customer resolution feature policy; cold-start pruning skipped")
+	}
 
 	zoom := LoadZoom()
 
@@ -77,9 +100,13 @@ func main() {
 			NewAddressController(),
 			NewMergeController(),
 			NewMergeUndoController(),
+			NewSplitController(),
 			NewCustomerProfileController(),
+			NewMergeGovernanceController(),
 			NewActionCenterController(),
 			NewFileSystemController(),
+			NewImportEvidenceController(),
+			NewCustomerResolutionFeaturePolicyController(),
 		},
 	})
 	if err != nil {

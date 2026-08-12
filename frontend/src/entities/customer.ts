@@ -22,6 +22,9 @@ export type CreateCustomerIdentityInput = dto.CreateCustomerIdentityInput
 export type MergeSuggestionDTO = dto.MergeSuggestionDTO
 export type SystemSettingsDTO = dto.SystemSettingsDTO
 export type CustomerFulfillmentHistoryRowDTO = dto.CustomerFulfillmentHistoryRowDTO
+export type CustomerNameObservationDTO = dto.CustomerNameObservationDTO
+export type PinCustomerDisplayNameInput = dto.PinCustomerDisplayNameInput
+export type UnpinCustomerDisplayNameInput = dto.UnpinCustomerDisplayNameInput
 // NOTE: CustomerAddressDTO is already re-exported by `./address.ts` — do not
 // duplicate it here (index.ts's `export type *` would collide).
 

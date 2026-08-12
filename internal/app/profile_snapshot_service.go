@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -53,10 +54,13 @@ func ResolveEffectiveProfile(ctx context.Context, doc *domain.DemandDocument, pr
 	// Prefer the bound snapshot — this is the stable, wave-time view of the profile.
 	if doc.BoundProfileSnapshot != "" {
 		snap, err := ParseProfileSnapshot(doc.BoundProfileSnapshot)
-		if err == nil && snap != nil {
-			return snap, nil
+		if err != nil {
+			return nil, fmt.Errorf("parse bound profile snapshot for demand document %d: %w", doc.ID, err)
 		}
-		// Corrupt snapshot: fall through to live lookup rather than hard-failing.
+		if snap == nil {
+			return nil, fmt.Errorf("demand document %d has an empty bound profile snapshot", doc.ID)
+		}
+		return snap, nil
 	}
 
 	// Fallback: live profile lookup for documents assigned before snapshot capture was introduced.

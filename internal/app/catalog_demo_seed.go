@@ -17,7 +17,50 @@ const (
 	// Shipment return template for the same factory_rouzao_demo profile.
 	ShipmentDemoTemplateKey = "shipment_rouzao_csv_demo"
 	ShipmentDemoDocType     = "import_supplier_shipment"
+
+	// Supplier-order export contract for the independent Rouzao batch-order
+	// workbook sample. This template is deliberately independent of the catalog
+	// and shipment-return samples.
+	SupplierOrderDemoTemplateKey = "supplier_order_rouzao_xlsx_demo"
+	SupplierOrderDemoDocType     = "export_supplier_order"
 )
+
+// SupplierOrderDemoMappingRules defines the exact six-column worksheet emitted
+// for the Rouzao batch-order workbook. columnOrder is authoritative; SheetName
+// is consumed by the xlsx renderer.
+const SupplierOrderDemoMappingRules = `{
+  "version": 2,
+  "mode": "header",
+  "hasHeader": true,
+  "sheetName": "工作表1",
+  "columns": {
+    "export.third_party_order_no": "第三方订单号",
+    "export.recipient_name": "收件人",
+    "export.phone": "联系电话",
+    "export.address": "收件地址",
+    "export.factory_sku": "商家编码",
+    "export.quantity": "下单数量"
+  },
+  "columnOrder": [
+    "export.third_party_order_no",
+    "export.recipient_name",
+    "export.phone",
+    "export.address",
+    "export.factory_sku",
+    "export.quantity"
+  ],
+  "transforms": {
+    "export.recipient_name": ["trim"],
+    "export.phone": ["trim"],
+    "export.address": ["trim"],
+    "export.factory_sku": ["trim"]
+  },
+  "required": [
+    "export.third_party_order_no",
+    "export.factory_sku",
+    "export.quantity"
+  ]
+}`
 
 // CatalogDemoMappingRules is the v2 MappingRules JSON for the rouzao product-list
 // sample (SampleData/工厂平台——柔造). Chinese header and directory names are
@@ -81,7 +124,8 @@ const ShipmentDemoMappingRules = `{
 // SeedCatalogDemo ensures a factory-side demo profile, an import_product_catalog
 // DocumentTemplate (zip-friendly MappingRules with imageLayout), an
 // import_supplier_shipment DocumentTemplate (rouzao 13-column express return),
-// and default IntegrationProfileTemplateBindings for both document types.
+// an export_supplier_order DocumentTemplate (exact six-column xlsx contract),
+// and default IntegrationProfileTemplateBindings for all three document types.
 //
 // Idempotent:
 //   - profile: skip create when ProfileKey already exists
@@ -128,6 +172,15 @@ func SeedCatalogDemo(
 		return nil, err
 	}
 
+	orderTmpl, err := ensureSupplierOrderDemoTemplate(ctx, templateRepo)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := ensureSupplierOrderDemoBinding(ctx, bindingRepo, profile.ID, orderTmpl.ID); err != nil {
+		return nil, err
+	}
+
 	return profile, nil
 }
 
@@ -137,6 +190,12 @@ func ensureCatalogDemoProfile(
 ) (*domain.IntegrationProfile, error) {
 	existing, err := profileRepo.FindByProfileKey(ctx, CatalogDemoProfileKey)
 	if err == nil && existing != nil {
+		if !existing.SupportsExportSupplierOrder {
+			existing.SupportsExportSupplierOrder = true
+			if err := profileRepo.Update(ctx, existing); err != nil {
+				return nil, fmt.Errorf("seed catalog demo profile %q capability update: %w", CatalogDemoProfileKey, err)
+			}
+		}
 		return existing, nil
 	}
 
@@ -149,6 +208,7 @@ func ensureCatalogDemoProfile(
 		FactorySupplierPlatform:        "rouzao",
 		SupportsImportProductCatalog:   true,
 		SupportsImportSupplierShipment: true,
+		SupportsExportSupplierOrder:    true,
 		// Factory demo does not channel-sync; keep readiness green without a connector.
 		TrackingSyncMode: "unsupported",
 	}
@@ -244,6 +304,46 @@ func ensureShipmentDemoBinding(
 	profileID, templateID uint,
 ) error {
 	return ensureDemoBinding(ctx, bindingRepo, profileID, templateID, ShipmentDemoDocType, "shipment")
+}
+
+func ensureSupplierOrderDemoTemplate(
+	ctx context.Context,
+	templateRepo domain.DocumentTemplateRepository,
+) (*domain.DocumentTemplate, error) {
+	existing, err := templateRepo.FindByKey(ctx, SupplierOrderDemoTemplateKey)
+	if err != nil {
+		return nil, fmt.Errorf("seed supplier order demo template lookup %q: %w", SupplierOrderDemoTemplateKey, err)
+	}
+	if existing != nil {
+		return existing, nil
+	}
+
+	rules, err := ParseMappingRules(SupplierOrderDemoMappingRules)
+	if err != nil {
+		return nil, fmt.Errorf("seed supplier order demo mapping rules invalid: %w", err)
+	}
+	if err := ValidateMappingRulesConfig(SupplierOrderDemoDocType, rules); err != nil {
+		return nil, fmt.Errorf("seed supplier order demo mapping rules illegal: %w", err)
+	}
+
+	tmpl := &domain.DocumentTemplate{
+		TemplateKey:  SupplierOrderDemoTemplateKey,
+		DocumentType: SupplierOrderDemoDocType,
+		Format:       "xlsx",
+		MappingRules: SupplierOrderDemoMappingRules,
+	}
+	if err := templateRepo.Create(ctx, tmpl); err != nil {
+		return nil, fmt.Errorf("seed supplier order demo template %q: %w", SupplierOrderDemoTemplateKey, err)
+	}
+	return tmpl, nil
+}
+
+func ensureSupplierOrderDemoBinding(
+	ctx context.Context,
+	bindingRepo domain.ProfileTemplateBindingRepository,
+	profileID, templateID uint,
+) error {
+	return ensureDemoBinding(ctx, bindingRepo, profileID, templateID, SupplierOrderDemoDocType, "supplier order")
 }
 
 func ensureDemoBinding(

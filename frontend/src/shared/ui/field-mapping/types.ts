@@ -19,6 +19,17 @@ export interface FieldMappingDestField {
 /** Mapping mode stored in TemplateMappingRules.mode. */
 export type FieldMappingMode = 'header' | 'positional'
 
+export interface CatalogImageLayoutValue {
+  enabled: boolean
+  matchField?: string
+  coverDir?: string
+  detailDir?: string
+  namePattern?: string
+  coverPick?: string
+  tabularGlob?: string
+  imageExts?: string[]
+}
+
 /**
  * The v-model shape — mirrors the backend's `TemplateMappingRules` JSON
  * (`internal/app/template_mapping_service.go`):
@@ -52,6 +63,10 @@ export interface FieldMappingValue {
   columnOrder?: string[]
   /** Dest keys that must be non-empty after mapping. */
   required?: string[]
+  /** Exact worksheet name for spreadsheet input/output templates. */
+  sheetName?: string
+  /** Optional catalog ZIP image association contract. */
+  imageLayout?: CatalogImageLayoutValue
 }
 
 /**
@@ -132,6 +147,10 @@ export function parseMappingRules(raw: string | undefined | null): FieldMappingV
       required: Array.isArray(parsed.required)
         ? parsed.required.map(ensureNamespacedDestKey)
         : undefined,
+      imageLayout: parsed.imageLayout && typeof parsed.imageLayout === 'object'
+        ? parsed.imageLayout
+        : undefined,
+      sheetName: typeof parsed.sheetName === 'string' ? parsed.sheetName : undefined,
     }
   } catch {
     return emptyFieldMapping()
@@ -168,5 +187,7 @@ export function serializeMappingRules(mapping: FieldMappingValue): string {
   if (mapping.required && mapping.required.length > 0) {
     rules.required = mapping.required.map(ensureNamespacedDestKey)
   }
+  if (mapping.imageLayout) rules.imageLayout = mapping.imageLayout
+  if (mapping.sheetName?.trim()) rules.sheetName = mapping.sheetName.trim()
   return JSON.stringify(rules)
 }

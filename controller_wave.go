@@ -228,11 +228,20 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 
 		// Capture profile snapshot onto the demand document at assignment time.
 		doc, docErr := demandRepoTx.FindByID(ctx, demandDocumentID)
-		if docErr == nil && doc != nil && doc.IntegrationProfileID != nil {
+		if docErr != nil {
+			return fmt.Errorf("load demand document %d for profile snapshot: %w", demandDocumentID, docErr)
+		}
+		if doc != nil && doc.IntegrationProfileID != nil {
 			profile, profErr := integrationProfileRepoTx.FindByID(ctx, *doc.IntegrationProfileID)
-			if profErr == nil && profile != nil {
-				snapshot := app.CaptureProfileSnapshot(profile)
-				_ = demandRepoTx.UpdateBoundProfileSnapshot(ctx, demandDocumentID, snapshot)
+			if profErr != nil {
+				return fmt.Errorf("load profile %d for demand document %d snapshot: %w", *doc.IntegrationProfileID, demandDocumentID, profErr)
+			}
+			if profile == nil {
+				return fmt.Errorf("profile %d for demand document %d snapshot not found", *doc.IntegrationProfileID, demandDocumentID)
+			}
+			snapshot := app.CaptureProfileSnapshot(profile)
+			if err := demandRepoTx.UpdateBoundProfileSnapshot(ctx, demandDocumentID, snapshot); err != nil {
+				return fmt.Errorf("persist profile snapshot for demand document %d: %w", demandDocumentID, err)
 			}
 		}
 

@@ -168,6 +168,23 @@ func TestValidateMappingRulesConfig_DuplicateColumnsAndPositions(t *testing.T) {
 	}
 }
 
+func TestValidateMappingRulesConfig_ColumnOrderMustReferenceMappedColumn(t *testing.T) {
+	t.Parallel()
+	rules, err := ParseMappingRules(`{
+		"version": 2,
+		"mode": "header",
+		"columns": {"export.factory_sku": "SKU"},
+		"columnOrder": ["export.quantity"]
+	}`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	err = ValidateMappingRulesConfig("export_supplier_order", rules)
+	if err == nil || !strings.Contains(err.Error(), "not present in columns") {
+		t.Fatalf("expected unmapped columnOrder error, got %v", err)
+	}
+}
+
 func TestValidateMappingRulesConfig_CatalogImageLayout(t *testing.T) {
 	t.Parallel()
 	rules, err := ParseMappingRules(`{

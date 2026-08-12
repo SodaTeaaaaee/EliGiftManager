@@ -61,6 +61,9 @@ func (e *csvExportExecutor) Execute(
 	items []domain.ChannelSyncItem,
 	profile *domain.IntegrationProfile,
 ) (*ChannelSyncExecutionResult, error) {
+	if err := ValidateProfileDocumentType(profile, "export_source_tracking_update"); err != nil {
+		return nil, fmt.Errorf("csv_export: %w", err)
+	}
 	generatedAt := time.Now().Format(time.RFC3339)
 
 	if err := os.MkdirAll(e.outputDir, 0o755); err != nil {
@@ -144,6 +147,8 @@ func (e *csvExportExecutor) tryTemplateExport(
 		}
 		data = xlsxBytes
 		ext = "xlsx"
+	case "xls":
+		return "", nil, false, fmt.Errorf("csv_export: BIFF .xls output is not supported; update tracking template %d to format xlsx", tmpl.ID)
 	default:
 		// Non-tabular tracking template formats fall through to hardcoded CSV.
 		return "", nil, false, nil

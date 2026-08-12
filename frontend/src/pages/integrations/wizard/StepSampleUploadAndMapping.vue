@@ -8,8 +8,12 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton } from 'naive-ui'
-import { FieldMappingEditor, type FieldMappingDestField } from '@/shared/ui/field-mapping'
+import { NButton, NInput, NSwitch } from 'naive-ui'
+import {
+  FieldMappingEditor,
+  type CatalogImageLayoutValue,
+  type FieldMappingDestField,
+} from '@/shared/ui/field-mapping'
 import { CalloutBar } from '@/shared/ui/guidance'
 import type { UseIntakeWizardStateApi } from './useIntakeWizardState'
 import {
@@ -52,6 +56,28 @@ const destFields = computed<FieldMappingDestField[]>(() => {
   return toDestFields([...new Set(keys)])
 })
 
+const inputFormat = computed(() => props.state.csvPath.value.split('.').pop()?.toUpperCase() ?? '')
+const isCatalogZip = computed(() =>
+  props.state.factoryCapabilities.supportsImportProductCatalog &&
+  props.state.csvPath.value.toLowerCase().endsWith('.zip'),
+)
+const imageLayout = computed<CatalogImageLayoutValue>(() =>
+  props.state.mapping.value.imageLayout ?? { enabled: true },
+)
+
+function patchImageLayout(partial: Partial<CatalogImageLayoutValue>): void {
+  props.state.mapping.value = {
+    ...props.state.mapping.value,
+    imageLayout: { ...imageLayout.value, ...partial },
+  }
+}
+
+function patchImageExtensions(value: string): void {
+  patchImageLayout({
+    imageExts: value.split(/[,，\s]+/).map((part) => part.trim()).filter(Boolean),
+  })
+}
+
 function handlePick(): void {
   void props.state.pickAndParseFile()
 }
@@ -87,6 +113,47 @@ function handlePick(): void {
 
     <CalloutBar v-if="state.pickError.value" tone="error" :message="state.pickError.value" />
 
+    <div v-if="isCatalogZip" class="step-sample-upload__image-layout">
+      <label class="step-sample-upload__layout-toggle">
+        <NSwitch
+          :value="imageLayout.enabled"
+          @update:value="(value) => patchImageLayout({ enabled: value })"
+        />
+        <span>{{ t('intakeWizard.sampleUpload.imageLayoutEnabled') }}</span>
+      </label>
+      <NInput
+        :value="imageLayout.tabularGlob"
+        :placeholder="t('intakeWizard.sampleUpload.tabularGlob')"
+        @update:value="(value) => patchImageLayout({ tabularGlob: value })"
+      />
+      <NInput
+        :value="imageLayout.matchField"
+        :placeholder="t('intakeWizard.sampleUpload.imageMatchField')"
+        @update:value="(value) => patchImageLayout({ matchField: value })"
+      />
+      <NInput
+        :value="imageLayout.coverDir"
+        :placeholder="t('intakeWizard.sampleUpload.coverDir')"
+        @update:value="(value) => patchImageLayout({ coverDir: value })"
+      />
+      <NInput
+        :value="imageLayout.detailDir"
+        :placeholder="t('intakeWizard.sampleUpload.detailDir')"
+        @update:value="(value) => patchImageLayout({ detailDir: value })"
+      />
+      <NInput
+        :value="imageLayout.namePattern"
+        :placeholder="t('intakeWizard.sampleUpload.imageNamePattern')"
+        @update:value="(value) => patchImageLayout({ namePattern: value })"
+      />
+      <NInput
+        :value="(imageLayout.imageExts ?? []).join(', ')"
+        :placeholder="t('intakeWizard.sampleUpload.imageExtensions')"
+        @update:value="patchImageExtensions"
+      />
+      <CalloutBar tone="info" :message="t('intakeWizard.sampleUpload.zipManualHeaders')" />
+    </div>
+
     <FieldMappingEditor
       v-if="state.csvPath.value || state.csvHeaders.value.length"
       :dest-fields="destFields"
@@ -105,6 +172,7 @@ function handlePick(): void {
       :position-placeholder="t('intakeWizard.mapping.positionPlaceholder')"
       :column-order-label="t('intakeWizard.mapping.columnOrderLabel')"
       :column-order-placeholder="t('intakeWizard.mapping.columnOrderPlaceholder')"
+      :input-format="inputFormat"
       @update:model-value="(value) => (state.mapping.value = value)"
     />
   </div>
@@ -127,5 +195,24 @@ function handlePick(): void {
   font-family: var(--font-body);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+.step-sample-upload__image-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.step-sample-upload__layout-toggle {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.step-sample-upload__image-layout :deep(.callout-bar) {
+  grid-column: 1 / -1;
 }
 </style>

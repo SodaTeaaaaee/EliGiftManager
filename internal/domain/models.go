@@ -53,67 +53,117 @@ func (s *SelectorPayload) Scan(src any) error {
 // ---- CustomerProfile ----
 
 type CustomerProfile struct {
-	ID          uint
-	DisplayName string
-	ProfileType string
-	ExtraData   string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                       uint
+	DisplayName              string
+	ProfileType              string
+	Status                   string
+	MergedIntoProfileID      *uint
+	RowVersion               uint64
+	DisplayNameMode          string
+	DisplayNameObservationID *uint
+	ExtraData                string
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
 }
 
 // CustomerMergePayload records the exact rows moved by a profile merge.
 type CustomerMergePayload struct {
-	IdentityIDs       []uint `json:"identityIds"`
-	AddressIDs        []uint `json:"addressIds"`
-	DemandDocumentIDs []uint `json:"demandDocumentIds"`
+	IdentityIDs        []uint `json:"identityIds"`
+	AddressIDs         []uint `json:"addressIds"`
+	DemandDocumentIDs  []uint `json:"demandDocumentIds"`
+	NameObservationIDs []uint `json:"nameObservationIds,omitempty"`
+	NameEventIDs       []uint `json:"nameEventIds,omitempty"`
+	OriginIDs          []uint `json:"originIds,omitempty"`
 }
 
 // CustomerMergeRecord is the durable audit record for a reversible profile merge.
 type CustomerMergeRecord struct {
-	ID              uint
-	SourceProfileID uint
-	TargetProfileID uint
-	Payload         string
-	CreatedAt       time.Time
-	UndoneAt        *time.Time
+	ID                     uint
+	SourceProfileID        uint
+	TargetProfileID        uint
+	MergeCandidateID       *uint
+	MergePolicyRevisionID  *uint
+	MergeMode              string
+	DecisionSource         string
+	DecisionReason         string
+	ActorRef               string
+	CorrelationID          string
+	SourceRowVersion       uint64
+	TargetRowVersion       uint64
+	EvidenceSnapshot       string
+	Payload                string
+	RowVersion             uint64
+	OperationKey           string
+	CommandHash            string
+	PreviewHash            string
+	MovePlanHash           string
+	Status                 string
+	DependsOnMergeRecordID *uint
+	SourceRowVersionAfter  uint64
+	TargetRowVersionAfter  uint64
+	SourceProfileSnapshot  string
+	TargetProfileSnapshot  string
+	CompletedAt            *time.Time
+	UndoOperationKey       string
+	LastUndoPlanHash       string
+	LastUndoCheckedAt      *time.Time
+	UndoneBy               string
+	UndoReason             string
+	UndoneSourceRowVersion uint64
+	UndoneTargetRowVersion uint64
+	CreatedAt              time.Time
+	UndoneAt               *time.Time
 }
 
 // ---- CustomerIdentity ----
 
 type CustomerIdentity struct {
-	ID                uint
-	CustomerProfileID uint
-	IdentityPlatform  string
-	IdentityValue     string
-	IdentityType      string
-	IsPrimary         bool
-	ExtraData         string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                         uint
+	CustomerProfileID          uint
+	IdentityPlatform           string
+	IdentityValue              string
+	IdentityType               string
+	Namespace                  string
+	NormalizedValue            string
+	NormalizationVersion       string
+	Authority                  string
+	VerificationStatus         string
+	SourceIntegrationProfileID *uint
+	ResolutionStatus           string
+	FirstSeenAt                *time.Time
+	LastSeenAt                 *time.Time
+	IsPrimary                  bool
+	ExtraData                  string
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 // ---- CustomerAddress ----
 
 type CustomerAddress struct {
-	ID                uint
-	CustomerProfileID uint
-	Label             string
-	RecipientName     string
-	Phone             string
-	Country           string
-	Province          string
-	City              string
-	District          string
-	AddressLine1      string
-	AddressLine2      string
-	PostalCode        string
-	IsDefault         bool
-	IsTest            bool
-	ValidationStatus  string
-	ValidationDetail  string
-	ExtraData         string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
+	ID                   uint
+	CustomerProfileID    uint
+	Label                string
+	RecipientName        string
+	Phone                string
+	NormalizedPhone      string
+	AddressFingerprint   string
+	NormalizationVersion string
+	QualityStatus        string
+	Country              string
+	Province             string
+	City                 string
+	District             string
+	AddressLine1         string
+	AddressLine2         string
+	PostalCode           string
+	IsDefault            bool
+	IsTest               bool
+	ValidationStatus     string
+	ValidationDetail     string
+	ExtraData            string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // ---- DemandDocument ----
@@ -239,23 +289,27 @@ type AllocationPolicyRule struct {
 // ---- SupplierOrder ----
 
 type SupplierOrder struct {
-	ID                   uint
-	WaveID               uint
-	SupplierPlatform     string
-	TemplateID           string
-	BatchNo              string
-	ExternalOrderNo      string
-	SubmissionMode       string
-	SubmittedAt          *time.Time
-	Status               string
-	RequestPayload       string
-	ResponsePayload      string
-	BasisHistoryNodeID   string
-	BasisProjectionHash  string
-	BasisPayloadSnapshot string
-	ExtraData            string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	ID     uint
+	WaveID uint
+	// FactoryIntegrationProfileID records the explicitly selected factory
+	// execution profile. Nil is retained only for legacy rows created before the
+	// factory-profile routing contract was introduced.
+	FactoryIntegrationProfileID *uint
+	SupplierPlatform            string
+	TemplateID                  string
+	BatchNo                     string
+	ExternalOrderNo             string
+	SubmissionMode              string
+	SubmittedAt                 *time.Time
+	Status                      string
+	RequestPayload              string
+	ResponsePayload             string
+	BasisHistoryNodeID          string
+	BasisProjectionHash         string
+	BasisPayloadSnapshot        string
+	ExtraData                   string
+	CreatedAt                   time.Time
+	UpdatedAt                   time.Time
 }
 
 // ---- SupplierOrderLine ----

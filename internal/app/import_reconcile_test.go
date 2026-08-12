@@ -268,7 +268,8 @@ func TestMatchReconcileCandidate_SupplierProductRefTiers(t *testing.T) {
 func TestParseSKUQuantityTokens(t *testing.T) {
 	t.Parallel()
 
-	// Sample shape from SampleData 柔造 规格&数量 (no real PII).
+	// Self-contained synthetic multi-token shape; it is not paired with a
+	// product-catalog fixture or any other sample document.
 	raw := "206068021_设计师款透明单插立牌-底座可印刷15cm * 1|205721969_设计师款10x15cm单面印烫色明信片哑膜款 * 3|63098307_设计师款异形软磁冰箱贴-5cm * 1"
 	tokens, err := ParseSKUQuantityTokens(raw)
 	if err != nil {
@@ -292,10 +293,10 @@ func TestParseSKUQuantityTokens(t *testing.T) {
 	for _, bad := range []string{
 		"",
 		"no_star_here",
-		"_label * 1",          // empty digit prefix
-		"ABC_label * 1",       // non-numeric prefix
-		"206068021_label * x", // non-int qty
-		"206068021_label * 0", // non-positive
+		"_label * 1",           // empty digit prefix
+		"ABC_label * 1",        // non-numeric prefix
+		"206068021_label * x",  // non-int qty
+		"206068021_label * 0",  // non-positive
 		"206068021_label * 1|", // trailing empty segment
 	} {
 		if _, err := ParseSKUQuantityTokens(bad); err == nil {
@@ -377,7 +378,9 @@ func TestMapAndReconcileShipments_ByExternalKey(t *testing.T) {
 	templateRepo := newMockDocumentTemplateRepo()
 	bindingRepo := newMockProfileTemplateBindingRepo()
 	profileRepo := newMockIntegrationProfileRepoSimple()
-	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{ID: 1, ProfileKey: "p1"})
+	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
+		ID: 1, ProfileKey: "p1", SourceSurface: string(domain.SourceSurfaceFactory), SupportsImportSupplierShipment: true,
+	})
 	tmpl := &domain.DocumentTemplate{
 		TemplateKey: "ship-return", DocumentType: "import_supplier_shipment", Format: "csv",
 		MappingRules: `{
@@ -545,7 +548,12 @@ func (m *mockIntegrationProfileRepoSimple) List(ctx context.Context) ([]domain.I
 	return out, nil
 }
 func (m *mockIntegrationProfileRepoSimple) Update(ctx context.Context, p *domain.IntegrationProfile) error {
-	panic("not implemented")
+	if p == nil || p.ID == 0 {
+		return fmt.Errorf("profile ID is required")
+	}
+	cp := *p
+	m.profiles[p.ID] = &cp
+	return nil
 }
 func (m *mockIntegrationProfileRepoSimple) Delete(ctx context.Context, id uint) error {
 	panic("not implemented")
@@ -555,7 +563,9 @@ func TestResolveByExternalOrAlias(t *testing.T) {
 	t.Parallel()
 	repo := newMockCarrierMappingRepoFull()
 	profileRepo := newMockIntegrationProfileRepoSimple()
-	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{ID: 1, ProfileKey: "p"})
+	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
+		ID: 1, ProfileKey: "p", SourceSurface: string(domain.SourceSurfaceRetail), RequiresCarrierMapping: true,
+	})
 	uc := NewCarrierMappingUseCase(repo, profileRepo)
 
 	aliases, _ := json.Marshal([]string{"SFKY", "顺丰快运"})
@@ -582,10 +592,64 @@ func TestResolveByExternalOrAlias(t *testing.T) {
 		t.Fatalf("alias: internal=%q err=%v", internal, err)
 	}
 
+	// External display name (factory returns often omit the code).
+	internal, name, err = uc.ResolveByExternalOrAlias(context.Background(), 1, " 顺丰 ")
+	if err != nil || internal != "SF" || name != "顺丰" {
+		t.Fatalf("external name: internal=%q name=%q err=%v", internal, name, err)
+	}
+
 	// Exact internal still works via ResolveCarrier
 	ext, _, err := uc.ResolveCarrier(context.Background(), 1, "SF")
 	if err != nil || ext != "shunfeng" {
 		t.Fatalf("internal resolve: ext=%q err=%v", ext, err)
+	}
+
+	_, err = uc.CreateMapping(context.Background(), dto.CreateCarrierMappingInput{
+		IntegrationProfileID: 1,
+		InternalCarrierCode:  "OTHER",
+		ExternalCarrierCode:  "other-code",
+		ExternalCarrierName:  "顺丰",
+	})
+	if err != nil {
+		t.Fatalf("create ambiguous name mapping: %v", err)
+	}
+	if _, _, err := uc.ResolveByExternalOrAlias(context.Background(), 1, "顺丰"); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected ambiguous name error, got %v", err)
+	}
+}
+
+func TestReconcileShipmentRowResolvesCarrierDisplayName(t *testing.T) {
+	t.Parallel()
+	carrierRepo := newMockCarrierMappingRepoFull()
+	profileRepo := newMockIntegrationProfileRepoSimple()
+	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{ID: 1, ProfileKey: "factory"})
+	carrierUC := NewCarrierMappingUseCase(carrierRepo, profileRepo)
+	if _, err := carrierUC.CreateMapping(context.Background(), dto.CreateCarrierMappingInput{
+		IntegrationProfileID: 1,
+		InternalCarrierCode:  "SF",
+		ExternalCarrierCode:  "shunfeng",
+		ExternalCarrierName:  "顺丰速运",
+	}); err != nil {
+		t.Fatalf("create mapping: %v", err)
+	}
+
+	fl := &domain.FulfillmentLine{ID: 42}
+	idx := &reconcileIndex{
+		byFLID: map[uint]*reconcileCandidate{42: {line: fl}},
+		solByFulfillment: map[uint]*domain.SupplierOrderLine{
+			42: {ID: 7, FulfillmentLineID: 42},
+		},
+	}
+	entries, err := reconcileShipmentRow(map[string]string{
+		"shipment.third_party_order_no": "42",
+		"shipment.carrier_name":         "顺丰速运",
+		"shipment.tracking_no":          "TRACK-1",
+	}, idx, carrierUC, context.Background(), 1)
+	if err != nil {
+		t.Fatalf("reconcileShipmentRow: %v", err)
+	}
+	if len(entries) != 1 || entries[0].CarrierCode != "SF" || entries[0].CarrierName != "顺丰速运" {
+		t.Fatalf("entries = %+v", entries)
 	}
 }
 
@@ -593,7 +657,9 @@ func TestImportCarrierMappings_UpsertByExternal(t *testing.T) {
 	t.Parallel()
 	repo := newMockCarrierMappingRepoFull()
 	profileRepo := newMockIntegrationProfileRepoSimple()
-	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{ID: 1, ProfileKey: "p"})
+	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
+		ID: 1, ProfileKey: "p", SourceSurface: string(domain.SourceSurfaceRetail), RequiresCarrierMapping: true,
+	})
 
 	templateRepo := newMockDocumentTemplateRepo()
 	bindingRepo := newMockProfileTemplateBindingRepo()
@@ -712,8 +778,10 @@ func TestImportProductCatalog_Upsert(t *testing.T) {
 	profileRepo := newMockIntegrationProfileRepoSimple()
 	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
 		ID: 1, ProfileKey: "factory",
-		FactorySupplierPlatform: "rouzao",
-		ConnectorKey:            "factory-a",
+		SourceSurface:                string(domain.SourceSurfaceFactory),
+		SupportsImportProductCatalog: true,
+		FactorySupplierPlatform:      "rouzao",
+		ConnectorKey:                 "factory-a",
 	})
 
 	templateRepo := newMockDocumentTemplateRepo()

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
@@ -52,6 +53,8 @@ func NewShipmentController() *ShipmentController {
 	masterRepo := infra.NewProductMasterRepository(gdb)
 	importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
 	importUC = app.WithShipmentReconcileDeps(importUC, mapping, productRepo, masterRepo, addressRepo, carrierUC)
+	importUC = app.WithShipmentImportEvidence(importUC, app.NewImportEvidenceUseCase(infra.NewImportEvidenceRepository(gdb)))
+	importUC = app.WithShipmentExternalCarrierRegistry(importUC, app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(gdb)))
 
 	return &ShipmentController{
 		shipmentUC:          app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
@@ -189,9 +192,13 @@ func domainToShipmentDTO(s *domain.Shipment) dto.ShipmentDTO {
 // Partial success is supported — failed groups are recorded in the result Errors slice.
 func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto.ImportShipmentResult, error) {
 	ctx := appContext
+	evidence := app.NewDeferredImportEvidenceUseCase(infra.NewImportEvidenceRepository(c.gdb))
+	if err := app.PrepareShipmentEntryImportEvidence(ctx, evidence, input); err != nil {
+		return dto.ImportShipmentResult{}, fmt.Errorf("prepare shipment import evidence: %w", err)
+	}
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
 	if err != nil {
-		return dto.ImportShipmentResult{}, err
+		return dto.ImportShipmentResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
 	}
 
 	var importResult *dto.ImportShipmentResult
@@ -214,6 +221,8 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
 		importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		importUC = app.WithShipmentImportEvidence(importUC, evidence)
+		importUC = app.WithShipmentExternalCarrierRegistry(importUC, app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(tx)))
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
@@ -223,6 +232,9 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 			return importErr
 		}
 		importResult = res
+		if res.SuccessCount == 0 {
+			return nil
+		}
 
 		projHash, hashErr := projHashSvc.ComputeHash(ctx, input.WaveID)
 		if hashErr != nil {
@@ -240,6 +252,9 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 		return recordErr
 	})
 	if err != nil {
+		return dto.ImportShipmentResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
+	}
+	if err := evidence.FinalizePending(ctx); err != nil {
 		return dto.ImportShipmentResult{}, err
 	}
 
@@ -250,9 +265,19 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 // then imports the reconciled entries. History recording mirrors ImportShipments.
 func (c *ShipmentController) MapAndReconcileShipments(input dto.MapAndReconcileShipmentsInput) (dto.ImportShipmentResult, error) {
 	ctx := appContext
+	baseProfileRepo := infra.NewIntegrationProfileRepository(c.gdb)
+	baseMapping := app.NewTemplateMappingService(infra.NewDocumentTemplateRepository(c.gdb), infra.NewProfileTemplateBindingRepository(c.gdb), baseProfileRepo)
+	evidence := app.NewDeferredImportEvidenceUseCase(infra.NewImportEvidenceRepository(c.gdb))
+	if err := app.PrepareTemplateImportEvidence(ctx, evidence, baseMapping, app.PrepareTemplateImportEvidenceInput{
+		ImportKind: "supplier_shipment", DocumentType: "import_supplier_shipment",
+		IntegrationProfileID: input.IntegrationProfileID, ImportMode: input.ImportMode,
+		FilePath: input.FilePath, Rows: input.Rows,
+	}); err != nil {
+		return dto.ImportShipmentResult{}, fmt.Errorf("prepare shipment import evidence: %w", err)
+	}
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
 	if err != nil {
-		return dto.ImportShipmentResult{}, err
+		return dto.ImportShipmentResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
 	}
 
 	var importResult *dto.ImportShipmentResult
@@ -285,6 +310,8 @@ func (c *ShipmentController) MapAndReconcileShipments(input dto.MapAndReconcileS
 		carrierUC := app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo)
 		masterRepo := infra.NewProductMasterRepository(tx)
 		importUC = app.WithShipmentReconcileDeps(importUC, mapping, productRepo, masterRepo, addressRepo, carrierUC)
+		importUC = app.WithShipmentImportEvidence(importUC, evidence)
+		importUC = app.WithShipmentExternalCarrierRegistry(importUC, app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(tx)))
 
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
@@ -317,6 +344,9 @@ func (c *ShipmentController) MapAndReconcileShipments(input dto.MapAndReconcileS
 		return recordErr
 	})
 	if err != nil {
+		return dto.ImportShipmentResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
+	}
+	if err := evidence.FinalizePending(ctx); err != nil {
 		return dto.ImportShipmentResult{}, err
 	}
 

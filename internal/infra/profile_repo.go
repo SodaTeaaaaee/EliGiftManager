@@ -2,6 +2,8 @@ package infra
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
@@ -11,6 +13,12 @@ import (
 type profileRepository struct {
 	db *gorm.DB
 }
+
+var (
+	_ domain.CustomerDisplayNameRepository   = (*profileRepository)(nil)
+	_ domain.CustomerProfileNativeRepository = (*profileRepository)(nil)
+	_ domain.StrongIdentityRepository        = (*profileRepository)(nil)
+)
 
 func NewProfileRepository(db *gorm.DB) domain.CustomerProfileRepository {
 	return &profileRepository{db: db}
@@ -35,12 +43,45 @@ func (r *profileRepository) Update(ctx context.Context, profile *domain.Customer
 	return r.db.WithContext(ctx).Save(p).Error
 }
 
+func (r *profileRepository) UpdateDisplayNameProjection(ctx context.Context, profileID uint, expectedVersion uint64, displayName, mode string, observationID *uint) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&persistence.CustomerProfile{}).
+		Where("id = ? AND row_version = ?", profileID, expectedVersion).
+		Updates(map[string]any{
+			"display_name":                displayName,
+			"display_name_mode":           mode,
+			"display_name_observation_id": observationID,
+			"row_version":                 gorm.Expr("row_version + 1"),
+			"updated_at":                  time.Now().UTC(),
+		})
+	return result.RowsAffected == 1, result.Error
+}
+
 func (r *profileRepository) FindByID(ctx context.Context, id uint) (*domain.CustomerProfile, error) {
 	var p persistence.CustomerProfile
 	if err := r.db.WithContext(ctx).First(&p, id).Error; err != nil {
 		return nil, err
 	}
 	return persistence.CustomerProfileToDomain(&p), nil
+}
+
+func (r *profileRepository) FindByIDIncludingDeleted(ctx context.Context, id uint) (*domain.CustomerProfile, error) {
+	var p persistence.CustomerProfile
+	if err := r.db.WithContext(ctx).Unscoped().First(&p, id).Error; err != nil {
+		return nil, err
+	}
+	return persistence.CustomerProfileToDomain(&p), nil
+}
+
+func (r *profileRepository) UpdateProfileMetadataCAS(ctx context.Context, profileID uint, expectedVersion uint64, profileType, extraData string) (bool, error) {
+	result := r.db.WithContext(ctx).Model(&persistence.CustomerProfile{}).
+		Where("id = ? AND status = ? AND row_version = ?", profileID, domain.CustomerProfileStatusActive, expectedVersion).
+		Updates(map[string]any{
+			"profile_type": profileType,
+			"extra_data":   extraData,
+			"row_version":  gorm.Expr("row_version + 1"),
+			"updated_at":   time.Now().UTC(),
+		})
+	return result.RowsAffected == 1, result.Error
 }
 
 func (r *profileRepository) List(ctx context.Context) ([]domain.CustomerProfile, error) {
@@ -97,6 +138,44 @@ func (r *profileRepository) FindIdentityByPlatformAndValue(ctx context.Context, 
 		return nil, err
 	}
 	return persistence.CustomerIdentityToDomain(&p), nil
+}
+
+func (r *profileRepository) ListByResolutionKey(ctx context.Context, namespace, identityType, normalizedValue string) ([]domain.CustomerIdentity, error) {
+	namespace = strings.ToLower(strings.TrimSpace(namespace))
+	normalizedValue = strings.TrimSpace(normalizedValue)
+	legacyValue := normalizedValue
+	if identityType == "email" {
+		legacyValue = strings.ToLower(legacyValue)
+	}
+	var rows []persistence.CustomerIdentity
+	query := r.db.WithContext(ctx).Where("identity_type = ?", identityType).
+		Where(`(namespace = ? AND normalized_value = ?) OR
+			((namespace = '' OR normalized_value = '') AND lower(trim(identity_platform)) = ? AND
+			 CASE WHEN identity_type = 'email' THEN lower(trim(identity_value)) ELSE trim(identity_value) END = ?)`,
+			namespace, normalizedValue, namespace, legacyValue)
+	if err := query.Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	result := make([]domain.CustomerIdentity, len(rows))
+	for i := range rows {
+		result[i] = *persistence.CustomerIdentityToDomain(&rows[i])
+	}
+	return result, nil
+}
+
+func (r *profileRepository) UpdateResolutionMetadata(ctx context.Context, identity *domain.CustomerIdentity) error {
+	return r.db.WithContext(ctx).Model(&persistence.CustomerIdentity{}).Where("id = ?", identity.ID).Updates(map[string]any{
+		"namespace":                     identity.Namespace,
+		"normalized_value":              identity.NormalizedValue,
+		"normalization_version":         identity.NormalizationVersion,
+		"authority":                     identity.Authority,
+		"verification_status":           identity.VerificationStatus,
+		"source_integration_profile_id": identity.SourceIntegrationProfileID,
+		"resolution_status":             identity.ResolutionStatus,
+		"first_seen_at":                 identity.FirstSeenAt,
+		"last_seen_at":                  identity.LastSeenAt,
+		"updated_at":                    time.Now().UTC(),
+	}).Error
 }
 
 func (r *profileRepository) UpdateIdentityProfileID(ctx context.Context, identityID uint, newProfileID uint) error {

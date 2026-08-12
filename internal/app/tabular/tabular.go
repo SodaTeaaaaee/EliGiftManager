@@ -13,6 +13,9 @@ type ReadOptions struct {
 	Format string
 	// SheetIndex selects the zero-based sheet for multi-sheet formats (xlsx/xls).
 	SheetIndex int
+	// SheetName selects an exact sheet name for multi-sheet formats. When set it
+	// takes precedence over SheetIndex.
+	SheetName string
 	// HasHeader treats the first row as column headers when true.
 	HasHeader bool
 	// Encoding controls CSV text decoding. "auto" (or empty) tries UTF-8 (with BOM)

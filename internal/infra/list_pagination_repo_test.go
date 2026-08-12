@@ -23,6 +23,7 @@ func setupListPaginationTestDB(t *testing.T) *gorm.DB {
 		&persistence.ProductMaster{}, &persistence.DemandDocument{}, &persistence.DemandLine{},
 		&persistence.WaveDemandAssignment{}, &persistence.SupplierOrder{}, &persistence.Shipment{},
 		&persistence.ShipmentLine{},
+		&persistence.CustomerNameObservation{},
 	); err != nil {
 		t.Fatal(err)
 	}

@@ -26,13 +26,25 @@ import {
   setDefaultBinding,
   unbindTemplate,
   listCarrierMappings,
+  listExternalCarriers,
+  bindInternalCarrier,
   deleteCarrierMapping,
   importCarrierMappings,
   pickTabularFile,
+  createDocumentTemplate,
+  bindTemplateToProfile,
 } from '@/shared/api/bridge'
 import type { IntegrationProfile } from '@/entities/profile'
 import type { dto } from '../../../wailsjs/go/models'
 import IntakeWizard from './wizard/IntakeWizard.vue'
+import { useCustomerResolutionFeaturePolicy } from '@/shared/composables/useCustomerResolutionFeaturePolicy'
+import {
+  captureProfileScope,
+  isProfileEntityActive,
+  isProfileLoadActive,
+  isProfileScopeActive,
+  type ProfileScope,
+} from './profileScopedFlow'
 
 function formatAliases(raw: string | undefined): string {
   if (!raw) return '—'
@@ -60,6 +72,29 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
+const featurePolicy = useCustomerResolutionFeaturePolicy()
+let profileScopeGeneration = 0
+let profileLoadSequence = 0
+
+function currentProfileScope(expectedProfileId?: number): ProfileScope | null {
+  if (!props.show) return null
+  const scope = captureProfileScope(props.profileId, profileScopeGeneration)
+  if (!scope || (expectedProfileId != null && scope.profileId !== expectedProfileId)) return null
+  return scope
+}
+
+function profileScopeIsCurrent(scope: ProfileScope): boolean {
+  return props.show && isProfileScopeActive(scope, props.profileId, profileScopeGeneration)
+}
+
+function profileEntityIsCurrent(scope: ProfileScope, entityProfileId: number): boolean {
+  return props.show && isProfileEntityActive(
+    scope,
+    props.profileId,
+    profileScopeGeneration,
+    entityProfileId,
+  )
+}
 
 const loading = ref(false)
 const loadError = ref('')
@@ -67,48 +102,181 @@ const profile = ref<IntegrationProfile | null>(null)
 const bindings = ref<dto.ProfileTemplateBindingDTO[]>([])
 const allTemplates = ref<dto.DocumentTemplateDTO[]>([])
 const carrierMappings = ref<dto.CarrierMappingDTO[]>([])
+const externalCarriers = ref<dto.ExternalCarrierDTO[]>([])
 const importingCarriers = ref(false)
 const deletingCarrierId = ref<number | null>(null)
+const lastCarrierImportEvidence = ref<{ importRunId: number; evidenceDisabled: boolean } | null>(null)
+const bindingExternalCarrier = ref<dto.ExternalCarrierDTO | null>(null)
+const internalCarrierCodeDraft = ref('')
+const bindingCarrier = ref(false)
+const carrierWritesEnabled = computed(() => featurePolicy.isEnabled('carrierRegistryWritesEnabled'))
+
+function carrierConflictCopy(carrier: dto.ExternalCarrierDTO): string {
+  return carrier.conflictReason
+}
 
 const boundTemplates = computed(() => {
   const templateIds = new Set(bindings.value.map((b) => b.templateId))
   return allTemplates.value.filter((tmpl) => templateIds.has(tmpl.id))
 })
 
+const documentTypeOptions = computed<SelectOption[]>(() => {
+  const values = profile.value?.sourceSurface === 'factory'
+    ? ['import_product_catalog', 'export_supplier_order', 'import_supplier_shipment']
+    : [
+        profile.value?.demandKind === 'retail_order' ? 'import_sales_order' : 'import_entitlement',
+        'import_carrier_mapping',
+        'export_source_tracking_update',
+      ]
+  return values.map((value) => ({ label: value, value }))
+})
+
+const templateFormatOptions = computed<SelectOption[]>(() => {
+  const values = templateDraft.documentType === 'import_product_catalog'
+    ? ['zip', 'csv', 'xlsx', 'xls']
+    : ['csv', 'xlsx', 'xls']
+  return values.map((value) => ({ label: value.toUpperCase(), value }))
+})
+
+const showTemplateCreator = ref(false)
+const creatingTemplate = ref(false)
+const templateCreateError = ref('')
+const templateDraft = reactive({
+  templateKey: '',
+  documentType: '',
+  format: '',
+  mappingRules: '',
+  isDefault: true,
+})
+
+function openTemplateCreator(): void {
+  if (!profile.value || !currentProfileScope(profile.value.id)) return
+  templateDraft.templateKey = `${profile.value.profileKey}-template-${Date.now()}`
+  templateDraft.documentType = ''
+  templateDraft.format = ''
+  templateDraft.mappingRules = ''
+  templateDraft.isDefault = true
+  templateCreateError.value = ''
+  showTemplateCreator.value = true
+}
+
+const canCreateTemplate = computed(() =>
+  profile.value?.id === props.profileId &&
+  templateDraft.templateKey.trim().length > 0 &&
+  templateDraft.documentType.length > 0 &&
+  templateDraft.format.length > 0 &&
+  templateDraft.mappingRules.trim().length > 0 &&
+  !creatingTemplate.value,
+)
+
+async function createAndBindTemplate(): Promise<void> {
+  if (!profile.value || !canCreateTemplate.value) return
+  const session = currentProfileScope(profile.value.id)
+  if (!session) return
+  const request = {
+    templateKey: templateDraft.templateKey.trim(),
+    documentType: templateDraft.documentType,
+    format: templateDraft.format,
+    mappingRules: templateDraft.mappingRules.trim(),
+    isDefault: templateDraft.isDefault,
+    hasExistingDefault: bindings.value.some(
+      (binding) => binding.documentType === templateDraft.documentType && binding.isDefault,
+    ),
+  }
+  templateCreateError.value = ''
+  try {
+    const parsed = JSON.parse(request.mappingRules) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(t('integrations.templates.mappingObjectRequired'))
+    }
+  } catch (err) {
+    templateCreateError.value = err instanceof Error ? err.message : String(err)
+    return
+  }
+
+  creatingTemplate.value = true
+  try {
+    const template = await createDocumentTemplate({
+      templateKey: request.templateKey,
+      documentType: request.documentType,
+      format: request.format,
+      mappingRules: request.mappingRules,
+      extraData: '',
+    })
+    if (!profileScopeIsCurrent(session)) return
+    try {
+      const binding = await bindTemplateToProfile({
+        integrationProfileId: session.profileId,
+        documentType: request.documentType,
+        templateId: template.id,
+        isDefault: request.isDefault && !request.hasExistingDefault,
+      })
+      if (!profileScopeIsCurrent(session)) return
+      if (request.isDefault && request.hasExistingDefault) {
+        await setDefaultBinding(binding.id)
+        if (!profileScopeIsCurrent(session)) return
+      }
+    } catch (err) {
+      if (!profileScopeIsCurrent(session)) return
+      templateCreateError.value = t('integrations.templates.createdButBindFailed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      await loadDetail()
+      return
+    }
+    feedback.success(t('integrations.templates.createdAndBound'))
+    showTemplateCreator.value = false
+    await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
+    emit('changed')
+  } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
+    templateCreateError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (profileScopeIsCurrent(session)) creatingTemplate.value = false
+  }
+}
+
 async function loadDetail(): Promise<void> {
-  if (!props.profileId) return
+  const session = currentProfileScope()
+  if (!session) return
+  const loadSequence = ++profileLoadSequence
   loading.value = true
   loadError.value = ''
   try {
-    const [p, b, templates, carriers] = await Promise.all([
-      getProfile(props.profileId),
-      listBindingsByProfile(props.profileId),
+    const [p, b, templates, carriers, observedCarriers] = await Promise.all([
+      getProfile(session.profileId),
+      listBindingsByProfile(session.profileId),
       listDocumentTemplates(),
-      listCarrierMappings(props.profileId),
+      listCarrierMappings(session.profileId),
+      listExternalCarriers(session.profileId),
+      featurePolicy.load(),
     ])
+    if (!props.show || !isProfileLoadActive(
+      { ...session, loadSequence },
+      props.profileId,
+      profileScopeGeneration,
+      profileLoadSequence,
+      p.id,
+    )) return
     profile.value = p
     bindings.value = b
     allTemplates.value = templates
     carrierMappings.value = carriers
+    externalCarriers.value = observedCarriers
     factoryPlatformDraft.value = p.factorySupplierPlatform ?? ''
   } catch (err) {
+    if (!profileScopeIsCurrent(session) || loadSequence !== profileLoadSequence) return
     profile.value = null
     bindings.value = []
     allTemplates.value = []
     carrierMappings.value = []
+    externalCarriers.value = []
     loadError.value = err instanceof Error ? err.message : String(err)
   } finally {
-    loading.value = false
+    if (profileScopeIsCurrent(session) && loadSequence === profileLoadSequence) loading.value = false
   }
 }
-
-watch(
-  () => [props.show, props.profileId] as const,
-  ([visible, id]) => {
-    if (visible && id) void loadDetail()
-  },
-  { immediate: true },
-)
 
 function close(): void {
   emit('update:show', false)
@@ -125,20 +293,36 @@ const CAPABILITY_KEYS = [
   'allowsManualClosure',
 ] as const
 
+const FACTORY_CAPABILITY_KEYS = [
+  'supportsExportSupplierOrder',
+  'supportsImportProductCatalog',
+  'supportsImportSupplierShipment',
+] as const
+
+type CapabilityKey = (typeof CAPABILITY_KEYS)[number] | (typeof FACTORY_CAPABILITY_KEYS)[number]
+const visibleCapabilityKeys = computed<readonly CapabilityKey[]>(() =>
+  profile.value?.sourceSurface === 'factory' ? FACTORY_CAPABILITY_KEYS : CAPABILITY_KEYS,
+)
+
 const editingCapabilities = ref(false)
-const capabilityDraft = reactive<Record<(typeof CAPABILITY_KEYS)[number], boolean>>({
+const capabilityDraft = reactive<Record<CapabilityKey, boolean>>({
   supportsPartialShipment: false,
   supportsApiImport: false,
   supportsApiExport: false,
   requiresCarrierMapping: false,
   requiresExternalOrderNo: false,
   allowsManualClosure: false,
+  supportsExportSupplierOrder: false,
+  supportsImportProductCatalog: false,
+  supportsImportSupplierShipment: false,
 })
 const savingCapabilities = ref(false)
 
 function startEditCapabilities(): void {
-  if (!profile.value) return
-  for (const key of CAPABILITY_KEYS) capabilityDraft[key] = profile.value[key]
+  if (!profile.value || !currentProfileScope(profile.value.id)) return
+  for (const key of [...CAPABILITY_KEYS, ...FACTORY_CAPABILITY_KEYS]) {
+    capabilityDraft[key] = profile.value[key]
+  }
   editingCapabilities.value = true
 }
 
@@ -179,25 +363,34 @@ function profileUpdateBase(p: IntegrationProfile) {
 
 async function saveCapabilities(): Promise<void> {
   if (!profile.value) return
+  const session = currentProfileScope(profile.value.id)
+  if (!session) return
+  const input = {
+    ...profileUpdateBase(profile.value),
+    supportsPartialShipment: capabilityDraft.supportsPartialShipment,
+    supportsApiImport: capabilityDraft.supportsApiImport,
+    supportsApiExport: capabilityDraft.supportsApiExport,
+    requiresCarrierMapping: capabilityDraft.requiresCarrierMapping,
+    requiresExternalOrderNo: capabilityDraft.requiresExternalOrderNo,
+    allowsManualClosure: capabilityDraft.allowsManualClosure,
+    supportsExportSupplierOrder: capabilityDraft.supportsExportSupplierOrder,
+    supportsImportProductCatalog: capabilityDraft.supportsImportProductCatalog,
+    supportsImportSupplierShipment: capabilityDraft.supportsImportSupplierShipment,
+  }
   savingCapabilities.value = true
   try {
-    await updateProfile({
-      ...profileUpdateBase(profile.value),
-      supportsPartialShipment: capabilityDraft.supportsPartialShipment,
-      supportsApiImport: capabilityDraft.supportsApiImport,
-      supportsApiExport: capabilityDraft.supportsApiExport,
-      requiresCarrierMapping: capabilityDraft.requiresCarrierMapping,
-      requiresExternalOrderNo: capabilityDraft.requiresExternalOrderNo,
-      allowsManualClosure: capabilityDraft.allowsManualClosure,
-    })
+    await updateProfile(input)
+    if (!profileScopeIsCurrent(session)) return
     feedback.success(t('feedback.success'))
     editingCapabilities.value = false
     await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
     emit('changed')
   } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
-    savingCapabilities.value = false
+    if (profileScopeIsCurrent(session)) savingCapabilities.value = false
   }
 }
 
@@ -208,35 +401,49 @@ const savingFactoryPlatform = ref(false)
 
 async function saveFactoryPlatform(): Promise<void> {
   if (!profile.value) return
+  const session = currentProfileScope(profile.value.id)
+  if (!session) return
+  const input = {
+    ...profileUpdateBase(profile.value),
+    factorySupplierPlatform: factoryPlatformDraft.value.trim(),
+  }
   savingFactoryPlatform.value = true
   try {
-    await updateProfile({
-      ...profileUpdateBase(profile.value),
-      factorySupplierPlatform: factoryPlatformDraft.value.trim(),
-    })
+    await updateProfile(input)
+    if (!profileScopeIsCurrent(session)) return
     feedback.success(t('feedback.success'))
     await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
     emit('changed')
   } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
-    savingFactoryPlatform.value = false
+    if (profileScopeIsCurrent(session)) savingFactoryPlatform.value = false
   }
 }
 
 // ── Carrier mappings ──
 
 async function handleImportCarrierMappings(): Promise<void> {
-  if (!profile.value) return
+  if (!profile.value || !carrierWritesEnabled.value) return
+  const session = currentProfileScope(profile.value.id)
+  if (!session) return
   importingCarriers.value = true
   try {
     const path = await pickTabularFile()
     if (!path) return
+    if (!profileScopeIsCurrent(session)) return
     const result = await importCarrierMappings({
-      integrationProfileId: profile.value.id,
+      integrationProfileId: session.profileId,
       importMode: 'skip_invalid',
       filePath: path,
     })
+    if (!profileScopeIsCurrent(session)) return
+    lastCarrierImportEvidence.value = {
+      importRunId: result.importRunId,
+      evidenceDisabled: result.evidenceDisabled,
+    }
     if (result.errorCount > 0) {
       feedback.error(
         t('feedback.error'),
@@ -252,30 +459,83 @@ async function handleImportCarrierMappings(): Promise<void> {
       feedback.info(
         t('integrations.carrierMappings.importWarnings', {
           count: result.warnings.length,
-          items: result.warnings.join('; '),
+          items: t('integrations.carrierMappings.warningDetailsWithheld'),
         }),
       )
     }
     await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
     emit('changed')
   } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
-    importingCarriers.value = false
+    if (profileScopeIsCurrent(session)) importingCarriers.value = false
   }
 }
 
-async function handleDeleteCarrierMapping(id: number): Promise<void> {
-  deletingCarrierId.value = id
+async function handleDeleteCarrierMapping(mapping: dto.CarrierMappingDTO): Promise<void> {
+  if (!carrierWritesEnabled.value) return
+  const session = currentProfileScope()
+  if (!session || !profileEntityIsCurrent(session, mapping.integrationProfileId)) return
+  deletingCarrierId.value = mapping.id
   try {
-    await deleteCarrierMapping(id)
+    await deleteCarrierMapping(mapping.id)
+    if (!profileScopeIsCurrent(session)) return
     feedback.success(t('feedback.success'))
     await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
     emit('changed')
   } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
-    deletingCarrierId.value = null
+    if (profileScopeIsCurrent(session)) deletingCarrierId.value = null
+  }
+}
+
+function openCarrierBinding(carrier: dto.ExternalCarrierDTO): void {
+  if (!carrierWritesEnabled.value) return
+  const session = currentProfileScope()
+  if (!session || !profileEntityIsCurrent(session, carrier.integrationProfileId)) return
+  bindingExternalCarrier.value = carrier
+  internalCarrierCodeDraft.value = carrier.internalCarrierCode ?? ''
+}
+
+function closeCarrierBinding(): void {
+  if (bindingCarrier.value) return
+  bindingExternalCarrier.value = null
+  internalCarrierCodeDraft.value = ''
+}
+
+async function saveCarrierBinding(): Promise<void> {
+  const carrier = bindingExternalCarrier.value
+  const session = currentProfileScope()
+  const internalCarrierCode = internalCarrierCodeDraft.value.trim()
+  if (
+    !carrier
+    || !session
+    || !internalCarrierCode
+    || bindingCarrier.value
+    || !carrierWritesEnabled.value
+    || !profileEntityIsCurrent(session, carrier.integrationProfileId)
+  ) return
+  bindingCarrier.value = true
+  try {
+    await bindInternalCarrier({
+      externalCarrierId: carrier.id,
+      internalCarrierCode,
+    })
+    if (!profileScopeIsCurrent(session)) return
+    bindingExternalCarrier.value = null
+    internalCarrierCodeDraft.value = ''
+    await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
+  } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
+    feedback.error(t('integrations.carrierRegistry.bindFailed'), err instanceof Error ? err.message : String(err))
+  } finally {
+    if (profileScopeIsCurrent(session)) bindingCarrier.value = false
   }
 }
 
@@ -290,49 +550,68 @@ function templateKeyFor(templateId: number): string {
 }
 
 async function handleSetDefault(binding: dto.ProfileTemplateBindingDTO): Promise<void> {
+  const session = currentProfileScope()
+  if (!session || !profileEntityIsCurrent(session, binding.integrationProfileId)) return
   settingDefaultId.value = binding.id
   try {
     await setDefaultBinding(binding.id)
+    if (!profileScopeIsCurrent(session)) return
     feedback.success(t('feedback.success'))
     await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
     emit('changed')
   } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
-    settingDefaultId.value = null
+    if (profileScopeIsCurrent(session)) settingDefaultId.value = null
   }
 }
 
 async function handleUnbind(binding: dto.ProfileTemplateBindingDTO): Promise<void> {
+  const session = currentProfileScope()
+  if (!session || !profileEntityIsCurrent(session, binding.integrationProfileId)) return
   unbindingId.value = binding.id
   try {
     await unbindTemplate(binding.id)
+    if (!profileScopeIsCurrent(session)) return
     feedback.success(t('feedback.success'))
     await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
     emit('changed')
   } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
-    unbindingId.value = null
+    if (profileScopeIsCurrent(session)) unbindingId.value = null
   }
 }
 
 // ── Re-run wizard (remap mode) ──
 
 const showRerunWizard = ref(false)
+const rerunWizardSession = ref<ProfileScope | null>(null)
 
 function openRerunWizard(): void {
+  if (!profile.value) return
+  const session = currentProfileScope(profile.value.id)
+  if (!session) return
+  rerunWizardSession.value = session
   showRerunWizard.value = true
 }
 
 function handleRerunDone(): void {
+  const session = rerunWizardSession.value
+  if (!session || !profileScopeIsCurrent(session)) return
   showRerunWizard.value = false
+  rerunWizardSession.value = null
   void loadDetail()
   emit('changed')
 }
 
 function handleRerunCancel(): void {
   showRerunWizard.value = false
+  rerunWizardSession.value = null
 }
 
 // ── Expert mode ──
@@ -348,14 +627,18 @@ const connectorOptions = computed<SelectOption[]>(() => connectorKeys.value.map(
 
 async function openExpertMode(): Promise<void> {
   if (!profile.value) return
+  const session = currentProfileScope(profile.value.id)
+  if (!session) return
   expertModeOpen.value = true
   expertConnectorKey.value = profile.value.connectorKey
   expertExtraDataRaw.value = profile.value.extraData || '{}'
   expertJsonError.value = ''
   try {
     const caps = await listConnectorCapabilities()
+    if (!profileScopeIsCurrent(session)) return
     connectorKeys.value = Object.keys(caps)
   } catch {
+    if (!profileScopeIsCurrent(session)) return
     connectorKeys.value = []
   }
 }
@@ -373,22 +656,88 @@ function validateExpertJson(): boolean {
 
 async function saveExpertMode(): Promise<void> {
   if (!profile.value || !validateExpertJson()) return
+  const session = currentProfileScope(profile.value.id)
+  if (!session) return
+  const input = {
+    ...profileUpdateBase(profile.value),
+    connectorKey: expertConnectorKey.value,
+    extraData: expertExtraDataRaw.value,
+  }
   savingExpert.value = true
   try {
-    await updateProfile({
-      ...profileUpdateBase(profile.value),
-      connectorKey: expertConnectorKey.value,
-      extraData: expertExtraDataRaw.value,
-    })
+    await updateProfile(input)
+    if (!profileScopeIsCurrent(session)) return
     feedback.success(t('feedback.success'))
     await loadDetail()
+    if (!profileScopeIsCurrent(session)) return
     emit('changed')
   } catch (err) {
+    if (!profileScopeIsCurrent(session)) return
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
-    savingExpert.value = false
+    if (profileScopeIsCurrent(session)) savingExpert.value = false
   }
 }
+
+function invalidateProfileScopedState(): void {
+  profile.value = null
+  bindings.value = []
+  allTemplates.value = []
+  carrierMappings.value = []
+  externalCarriers.value = []
+  loadError.value = ''
+  loading.value = false
+
+  lastCarrierImportEvidence.value = null
+  bindingExternalCarrier.value = null
+  internalCarrierCodeDraft.value = ''
+  bindingCarrier.value = false
+  importingCarriers.value = false
+  deletingCarrierId.value = null
+
+  showTemplateCreator.value = false
+  creatingTemplate.value = false
+  templateCreateError.value = ''
+  templateDraft.templateKey = ''
+  templateDraft.documentType = ''
+  templateDraft.format = ''
+  templateDraft.mappingRules = ''
+  templateDraft.isDefault = true
+
+  editingCapabilities.value = false
+  savingCapabilities.value = false
+  for (const key of [...CAPABILITY_KEYS, ...FACTORY_CAPABILITY_KEYS]) capabilityDraft[key] = false
+  factoryPlatformDraft.value = ''
+  savingFactoryPlatform.value = false
+
+  bindingsExpanded.value = false
+  settingDefaultId.value = null
+  unbindingId.value = null
+
+  showRerunWizard.value = false
+  rerunWizardSession.value = null
+
+  expertModeOpen.value = false
+  connectorKeys.value = []
+  expertConnectorKey.value = ''
+  expertExtraDataRaw.value = ''
+  expertJsonError.value = ''
+  savingExpert.value = false
+}
+
+watch(
+  () => [props.show, props.profileId] as const,
+  ([visible, id], previous) => {
+    const previousId = previous?.[1] ?? null
+    if (id !== previousId || !visible) {
+      profileScopeGeneration += 1
+      profileLoadSequence += 1
+      invalidateProfileScopedState()
+    }
+    if (visible && id) void loadDetail()
+  },
+  { immediate: true, flush: 'sync' },
+)
 </script>
 
 <template>
@@ -414,26 +763,32 @@ async function saveExpertMode(): Promise<void> {
             <dd>{{ profile.sourceChannel || '—' }}</dd>
             <dt>{{ t('integrations.detail.fields.sourceSurface') }}</dt>
             <dd>{{ profile.sourceSurface || '—' }}</dd>
-            <dt>{{ t('integrations.detail.fields.demandKind') }}</dt>
-            <dd><StatusBadge dimension="demandKind" :value="profile.demandKind" size="sm" /></dd>
-            <dt>{{ t('statusKit.dimensionNames.trackingSyncMode') }}</dt>
-            <dd><StatusBadge dimension="trackingSyncMode" :value="profile.trackingSyncMode" size="sm" /></dd>
-            <dt>{{ t('statusKit.dimensionNames.closurePolicy') }}</dt>
-            <dd><StatusBadge dimension="closurePolicy" :value="profile.closurePolicy" size="sm" /></dd>
+            <template v-if="profile.sourceSurface !== 'factory'">
+              <dt>{{ t('integrations.detail.fields.demandKind') }}</dt>
+              <dd><StatusBadge dimension="demandKind" :value="profile.demandKind" size="sm" /></dd>
+            </template>
+            <template v-if="profile.sourceSurface !== 'factory'">
+              <dt>{{ t('statusKit.dimensionNames.trackingSyncMode') }}</dt>
+              <dd><StatusBadge dimension="trackingSyncMode" :value="profile.trackingSyncMode" size="sm" /></dd>
+              <dt>{{ t('statusKit.dimensionNames.closurePolicy') }}</dt>
+              <dd><StatusBadge dimension="closurePolicy" :value="profile.closurePolicy" size="sm" /></dd>
+            </template>
             <dt>{{ t('integrations.detail.fields.connectorKey') }}</dt>
             <dd>{{ profile.connectorKey || '—' }}</dd>
-            <dt>{{ t('integrations.detail.fields.factorySupplierPlatform') }}</dt>
-            <dd class="integration-detail__factory-platform">
-              <NInput
-                v-model:value="factoryPlatformDraft"
-                size="small"
-                :placeholder="t('integrations.detail.fields.factorySupplierPlatformPlaceholder')"
-                style="max-width: 220px"
-              />
-              <NButton size="tiny" type="primary" :loading="savingFactoryPlatform" @click="saveFactoryPlatform">
-                {{ t('common.save') }}
-              </NButton>
-            </dd>
+            <template v-if="profile.sourceSurface === 'factory'">
+              <dt>{{ t('integrations.detail.fields.factorySupplierPlatform') }}</dt>
+              <dd class="integration-detail__factory-platform">
+                <NInput
+                  v-model:value="factoryPlatformDraft"
+                  size="small"
+                  :placeholder="t('integrations.detail.fields.factorySupplierPlatformPlaceholder')"
+                  style="max-width: 220px"
+                />
+                <NButton size="tiny" type="primary" :loading="savingFactoryPlatform" @click="saveFactoryPlatform">
+                  {{ t('common.save') }}
+                </NButton>
+              </dd>
+            </template>
           </dl>
         </SectionCard>
 
@@ -448,7 +803,7 @@ async function saveExpertMode(): Promise<void> {
             </template>
           </template>
           <dl class="integration-detail__kv">
-            <template v-for="key in CAPABILITY_KEYS" :key="key">
+            <template v-for="key in visibleCapabilityKeys" :key="key">
               <dt>{{ t(`intakeWizard.capabilities.${key}.label`) }}</dt>
               <dd>
                 <NSwitch
@@ -463,6 +818,11 @@ async function saveExpertMode(): Promise<void> {
         </SectionCard>
 
         <SectionCard :title="t('integrations.detail.sections.templates')" flat>
+          <template #actions>
+            <NButton size="small" @click="openTemplateCreator">
+              {{ t('integrations.templates.createAndBind') }}
+            </NButton>
+          </template>
           <EmptyState v-if="!boundTemplates.length" size="sm" :title="t('integrations.detail.noTemplates')" />
           <dl v-else class="integration-detail__kv">
             <template v-for="tmpl in boundTemplates" :key="tmpl.id">
@@ -474,10 +834,41 @@ async function saveExpertMode(): Promise<void> {
 
         <SectionCard :title="t('integrations.detail.sections.carrierMappings')" flat>
           <template #actions>
-            <NButton size="small" :loading="importingCarriers" @click="handleImportCarrierMappings">
+            <NButton size="small" :loading="importingCarriers" :disabled="!carrierWritesEnabled" @click="handleImportCarrierMappings">
               {{ t('integrations.carrierMappings.import') }}
             </NButton>
           </template>
+          <p v-if="!carrierWritesEnabled" class="integration-detail__carrier-policy-note">
+            {{ t('integrations.carrierRegistry.disabledReason') }}
+          </p>
+          <p v-if="lastCarrierImportEvidence" class="integration-detail__carrier-policy-note">
+            {{ lastCarrierImportEvidence.evidenceDisabled
+              ? t('integrations.carrierMappings.evidenceDisabled')
+              : t('integrations.carrierMappings.importRun', { id: lastCarrierImportEvidence.importRunId }) }}
+          </p>
+          <h4 class="integration-detail__carrier-subtitle">{{ t('integrations.carrierRegistry.observedTitle') }}</h4>
+          <p class="integration-detail__carrier-policy-note">{{ t('integrations.carrierRegistry.observedHint') }}</p>
+          <EmptyState v-if="!externalCarriers.length" size="sm" :title="t('integrations.carrierRegistry.empty')" />
+          <div v-else class="integration-detail__carriers">
+            <div v-for="carrier in externalCarriers" :key="carrier.id" class="integration-detail__carrier-row">
+              <div class="integration-detail__carrier-info">
+                <span class="integration-detail__carrier-code">{{ carrier.externalCarrierCode || '—' }}</span>
+                <span>{{ carrier.externalCarrierName || '—' }}</span>
+                <code>{{ carrier.status }}</code>
+              </div>
+              <div class="integration-detail__carrier-aliases">
+                <span v-if="carrier.internalCarrierCode">{{ carrier.internalCarrierCode }}</span>
+                <span v-else>{{ t('integrations.carrierRegistry.unbound') }}</span>
+                <span v-if="carrier.conflictReason" class="integration-detail__carrier-conflict">{{ carrierConflictCopy(carrier) }}</span>
+              </div>
+              <NButton size="tiny" :disabled="!carrierWritesEnabled" @click="openCarrierBinding(carrier)">
+                {{ t('integrations.carrierRegistry.bindAction') }}
+              </NButton>
+            </div>
+          </div>
+
+          <h4 class="integration-detail__carrier-subtitle">{{ t('integrations.carrierRegistry.mappingsTitle') }}</h4>
+          <p class="integration-detail__carrier-policy-note">{{ t('integrations.carrierRegistry.mappingsHint') }}</p>
           <EmptyState v-if="!carrierMappings.length" size="sm" :title="t('integrations.carrierMappings.empty')" />
           <div v-else class="integration-detail__carriers">
             <div v-for="mapping in carrierMappings" :key="mapping.id" class="integration-detail__carrier-row">
@@ -501,7 +892,8 @@ async function saveExpertMode(): Promise<void> {
               <NButton
                 size="tiny"
                 :loading="deletingCarrierId === mapping.id"
-                @click="handleDeleteCarrierMapping(mapping.id)"
+                :disabled="!carrierWritesEnabled"
+                @click="handleDeleteCarrierMapping(mapping)"
               >
                 {{ t('common.delete') }}
               </NButton>
@@ -571,14 +963,87 @@ async function saveExpertMode(): Promise<void> {
     </NSpin>
 
     <NModal
+      :show="bindingExternalCarrier != null"
+      preset="card"
+      :title="t('integrations.carrierRegistry.bindTitle')"
+      :style="{ width: 'min(520px, 94vw)' }"
+      @update:show="(v: boolean) => { if (!v) closeCarrierBinding() }"
+    >
+      <div class="integration-detail__template-form">
+        <p v-if="bindingExternalCarrier" class="integration-detail__carrier-policy-note">
+          {{ bindingExternalCarrier.externalCarrierCode || '—' }} · {{ bindingExternalCarrier.externalCarrierName || '—' }}
+        </p>
+        <label class="integration-detail__expert-label">{{ t('integrations.carrierRegistry.internalCode') }}</label>
+        <NInput v-model:value="internalCarrierCodeDraft" :placeholder="t('integrations.carrierRegistry.internalCodePlaceholder')" />
+        <div class="integration-detail__expert-actions">
+          <NButton :disabled="bindingCarrier" @click="closeCarrierBinding">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :loading="bindingCarrier" :disabled="!internalCarrierCodeDraft.trim() || !carrierWritesEnabled" @click="saveCarrierBinding">
+            {{ t('integrations.carrierRegistry.bindAction') }}
+          </NButton>
+        </div>
+      </div>
+    </NModal>
+
+    <NModal
       :show="showRerunWizard"
       preset="card"
       :title="t('integrations.actions.rerunWizard')"
       :style="{ width: 'min(760px, 94vw)' }"
       :mask-closable="false"
-      @update:show="(v: boolean) => (showRerunWizard = v)"
+      @update:show="(v: boolean) => { if (!v) handleRerunCancel() }"
     >
       <IntakeWizard v-if="showRerunWizard && profile" :existing-profile="profile" @done="handleRerunDone" @cancel="handleRerunCancel" />
+    </NModal>
+
+    <NModal
+      :show="showTemplateCreator"
+      preset="card"
+      :title="t('integrations.templates.createAndBind')"
+      :style="{ width: 'min(720px, 94vw)' }"
+      :mask-closable="false"
+      @update:show="(v: boolean) => (showTemplateCreator = v)"
+    >
+      <div class="integration-detail__template-form">
+        <label class="integration-detail__expert-label">{{ t('integrations.detail.fields.templateKey') }}</label>
+        <NInput v-model:value="templateDraft.templateKey" />
+
+        <label class="integration-detail__expert-label">{{ t('integrations.detail.fields.documentType') }}</label>
+        <NSelect v-model:value="templateDraft.documentType" :options="documentTypeOptions" filterable />
+
+        <label class="integration-detail__expert-label">{{ t('integrations.templates.format') }}</label>
+        <NSelect v-model:value="templateDraft.format" :options="templateFormatOptions" />
+
+        <label class="integration-detail__expert-label">{{ t('integrations.templates.mappingRules') }}</label>
+        <NInput
+          v-model:value="templateDraft.mappingRules"
+          type="textarea"
+          :autosize="{ minRows: 8, maxRows: 18 }"
+          :placeholder="t('integrations.templates.mappingPlaceholder')"
+        />
+
+        <label class="integration-detail__template-default">
+          <NSwitch v-model:value="templateDraft.isDefault" />
+          <span>{{ t('integrations.templates.setAsDefault') }}</span>
+        </label>
+
+        <ErrorBanner
+          v-if="templateCreateError"
+          :message="t('integrations.templates.createFailed')"
+          :detail="templateCreateError"
+        />
+
+        <div class="integration-detail__expert-actions">
+          <NButton :disabled="creatingTemplate" @click="showTemplateCreator = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :disabled="!canCreateTemplate"
+            :loading="creatingTemplate"
+            @click="createAndBindTemplate"
+          >
+            {{ t('integrations.templates.createAndBind') }}
+          </NButton>
+        </div>
+      </div>
     </NModal>
   </DetailDrawer>
 </template>
@@ -687,6 +1152,20 @@ async function saveExpertMode(): Promise<void> {
   gap: var(--space-2);
 }
 
+.integration-detail__template-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.integration-detail__template-default {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
 .integration-detail__factory-platform {
   display: flex;
   align-items: center;
@@ -738,5 +1217,22 @@ async function saveExpertMode(): Promise<void> {
 
 .integration-detail__carrier-aliases-label {
   color: var(--color-text-muted);
+}
+
+.integration-detail__carrier-subtitle {
+  margin: var(--space-4) 0 var(--space-1);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
+.integration-detail__carrier-policy-note {
+  margin: var(--space-1) 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+
+.integration-detail__carrier-conflict {
+  display: block;
+  color: var(--status-warning-fg);
 }
 </style>

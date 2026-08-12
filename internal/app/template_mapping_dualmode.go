@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -65,13 +66,35 @@ func (s *TemplateMappingService) BuildDemandImportPipelineWithMode(
 	headers []string,
 	importMode string,
 ) (*domain.DocumentTemplate, []DemandImportMappedRow, []RowMappingError, []string, error) {
-	t, err := s.ResolveImportTemplate(ctx, profileID, documentType)
+	return s.BuildDemandImportPipelineWithModeAndOverride(
+		ctx,
+		profileID,
+		documentType,
+		headerRows,
+		orderedRows,
+		headers,
+		importMode,
+		"",
+	)
+}
+
+// BuildDemandImportPipelineWithModeAndOverride behaves like
+// BuildDemandImportPipelineWithMode, but accepts request-scoped MappingRules.
+// A non-empty override is validated and used in-memory only; it never creates
+// or updates a DocumentTemplate or ProfileTemplateBinding.
+func (s *TemplateMappingService) BuildDemandImportPipelineWithModeAndOverride(
+	ctx context.Context,
+	profileID uint,
+	documentType string,
+	headerRows []map[string]string,
+	orderedRows [][]string,
+	headers []string,
+	importMode string,
+	mappingRulesOverride string,
+) (*domain.DocumentTemplate, []DemandImportMappedRow, []RowMappingError, []string, error) {
+	t, rules, err := s.ResolveDemandImportTemplateAndRules(ctx, profileID, documentType, mappingRulesOverride)
 	if err != nil {
 		return nil, nil, nil, nil, err
-	}
-	rules, err := ParseMappingRules(t.MappingRules)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("template %s: %w", t.TemplateKey, err)
 	}
 
 	now := time.Now()
@@ -108,15 +131,72 @@ func (s *TemplateMappingService) BuildDemandImportPipelineWithMode(
 		if row.Line.UpdatedAt.IsZero() {
 			row.Line.UpdatedAt = now
 		}
+		// Preserve the original logical data-row position (one-based) even when
+		// skip_invalid drops earlier rows. Channel tracking exports use this value
+		// as their stable external line reference, so it must never be re-numbered
+		// after filtering or retail order grouping.
+		if row.Line.SourceLineNo == 0 {
+			row.Line.SourceLineNo = i + 1
+		}
 		mapped = append(mapped, *row)
 	}
 
 	return t, mapped, rowErrors, rowWarnings.warnings(), nil
 }
 
+// ResolveDemandImportTemplateAndRules resolves either the persisted default
+// template or a validated request-scoped mapping override. Override validation
+// includes profile/document-type ownership, the legal dest registry, required
+// mappings, and the transform closed set.
+func (s *TemplateMappingService) ResolveDemandImportTemplateAndRules(
+	ctx context.Context,
+	profileID uint,
+	documentType string,
+	mappingRulesOverride string,
+) (*domain.DocumentTemplate, *TemplateMappingRules, error) {
+	if strings.TrimSpace(mappingRulesOverride) == "" {
+		return s.ResolveTemplateAndRules(ctx, profileID, documentType)
+	}
+
+	profile, err := s.profileRepo.FindByID(ctx, profileID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("look up integration profile %d: %w", profileID, err)
+	}
+	if profile == nil {
+		return nil, nil, fmt.Errorf("integration profile %d not found", profileID)
+	}
+	if err := ValidateProfileDocumentType(profile, documentType); err != nil {
+		return nil, nil, err
+	}
+
+	rules, err := ParseMappingRules(mappingRulesOverride)
+	if err != nil {
+		return nil, nil, fmt.Errorf("mappingRules override: %w", err)
+	}
+	if err := ValidateMappingRulesConfig(documentType, rules); err != nil {
+		return nil, nil, fmt.Errorf("mappingRules override: %w", err)
+	}
+
+	return &domain.DocumentTemplate{
+		TemplateKey:  "request_mapping_override",
+		DocumentType: documentType,
+		MappingRules: mappingRulesOverride,
+	}, rules, nil
+}
+
 // ResolveTemplateAndRules loads the default template binding and parses MappingRules.
 // Shared by catalog / shipment / carrier import entry points.
 func (s *TemplateMappingService) ResolveTemplateAndRules(ctx context.Context, profileID uint, documentType string) (*domain.DocumentTemplate, *TemplateMappingRules, error) {
+	profile, err := s.profileRepo.FindByID(ctx, profileID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("look up integration profile %d: %w", profileID, err)
+	}
+	if profile == nil {
+		return nil, nil, fmt.Errorf("integration profile %d not found", profileID)
+	}
+	if err := ValidateProfileDocumentType(profile, documentType); err != nil {
+		return nil, nil, err
+	}
 	t, err := s.ResolveImportTemplate(ctx, profileID, documentType)
 	if err != nil {
 		return nil, nil, err

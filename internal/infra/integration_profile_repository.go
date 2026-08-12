@@ -2,6 +2,8 @@ package infra
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
@@ -60,5 +62,17 @@ func (r *integrationProfileRepository) Update(ctx context.Context, profile *doma
 }
 
 func (r *integrationProfileRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&persistence.IntegrationProfile{}, id).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var profile persistence.IntegrationProfile
+		if err := tx.First(&profile, id).Error; err != nil {
+			return err
+		}
+		// SQLite unique indexes include soft-deleted rows. Rewrite the key before
+		// soft deletion so operators may recreate the same stable profile key.
+		deletedKey := fmt.Sprintf("%s__deleted_%d_%d", profile.ProfileKey, id, time.Now().UTC().UnixNano())
+		if err := tx.Model(&profile).Update("profile_key", deletedKey).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&profile).Error
+	})
 }

@@ -39,7 +39,6 @@ func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateS
 	if err != nil {
 		return nil, nil, fmt.Errorf("supplier order %d not found: %w", input.SupplierOrderID, err)
 	}
-
 	// 3. Validate each line (all checks outside transaction)
 	for _, li := range input.Lines {
 		// Validate supplier order line existence
@@ -93,7 +92,7 @@ func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateS
 	now := time.Now()
 	shipment := &domain.Shipment{
 		SupplierOrderID:      input.SupplierOrderID,
-		SupplierPlatform:     input.SupplierPlatform,
+		SupplierPlatform:     supplierOrder.SupplierPlatform,
 		ShipmentNo:           input.ShipmentNo,
 		ExternalShipmentNo:   input.ExternalShipmentNo,
 		CarrierCode:          input.CarrierCode,

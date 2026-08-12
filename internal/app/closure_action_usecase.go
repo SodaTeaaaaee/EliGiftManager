@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -182,8 +183,11 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(ctx context.Context, jobID uint)
 		job.ErrorMessage = err.Error()
 		job.FinishedAt = &now
 		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(ctx, job)
-		return nil, fmt.Errorf("resolve executor: %w", err)
+		persistErr := uc.channelSyncRepo.SaveJob(ctx, job)
+		if persistErr != nil {
+			persistErr = fmt.Errorf("save failed retry state: %w", persistErr)
+		}
+		return nil, fmt.Errorf("resolve executor: %w", errors.Join(err, persistErr))
 	}
 	result, err := executor.Execute(ctx, job, failedItems, profile)
 	if err != nil {
@@ -191,8 +195,11 @@ func (uc *retrySyncUseCase) RetryChannelSyncJob(ctx context.Context, jobID uint)
 		job.ErrorMessage = err.Error()
 		job.FinishedAt = &now
 		job.UpdatedAt = now
-		_ = uc.channelSyncRepo.SaveJob(ctx, job)
-		return nil, fmt.Errorf("executor failed: %w", err)
+		persistErr := uc.channelSyncRepo.SaveJob(ctx, job)
+		if persistErr != nil {
+			persistErr = fmt.Errorf("save failed retry state: %w", persistErr)
+		}
+		return nil, fmt.Errorf("executor failed: %w", errors.Join(err, persistErr))
 	}
 
 	// Update each retried item

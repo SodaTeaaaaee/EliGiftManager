@@ -94,37 +94,50 @@ func (uc *channelClosureUseCase) PlanChannelClosure(ctx context.Context, input d
 	return result, nil
 }
 
-// resolveEffectiveProfileForWave returns the bound snapshot from the first demand document
-// in the wave that references profileID. Falls back to a live profile lookup when no
-// snapshot is stored (backward compatibility for pre-binding data).
+// resolveEffectiveProfileForWave returns the single consistent bound snapshot for
+// all demand documents in the wave that reference profileID. It falls back to a
+// live profile only when none of those documents has a snapshot.
 func (uc *channelClosureUseCase) resolveEffectiveProfileForWave(ctx context.Context, waveID uint, profileID uint) (*dto.BoundProfileSnapshot, error) {
-	// Walk fulfillment lines to find a demand document with a bound snapshot for this profile.
 	fulfillLines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
-	if err == nil {
-		docCache := make(map[uint]*domain.DemandDocument)
-		for _, fl := range fulfillLines {
-			if fl.DemandDocumentID == nil {
-				continue
-			}
-			docID := *fl.DemandDocumentID
-			if _, seen := docCache[docID]; seen {
-				continue
-			}
-			doc, docErr := uc.demandRepo.FindByID(ctx, docID)
-			if docErr != nil {
-				continue
-			}
-			docCache[docID] = doc
-			if doc.IntegrationProfileID == nil || *doc.IntegrationProfileID != profileID {
-				continue
-			}
-			if doc.BoundProfileSnapshot != "" {
-				snap, parseErr := ParseProfileSnapshot(doc.BoundProfileSnapshot)
-				if parseErr == nil && snap != nil {
-					return snap, nil
-				}
-			}
+	if err != nil {
+		return nil, fmt.Errorf("list fulfillment lines for wave %d: %w", waveID, err)
+	}
+	docCache := make(map[uint]struct{})
+	var effective *dto.BoundProfileSnapshot
+	for _, fl := range fulfillLines {
+		if fl.DemandDocumentID == nil {
+			continue
 		}
+		docID := *fl.DemandDocumentID
+		if _, seen := docCache[docID]; seen {
+			continue
+		}
+		docCache[docID] = struct{}{}
+		doc, docErr := uc.demandRepo.FindByID(ctx, docID)
+		if docErr != nil {
+			return nil, fmt.Errorf("load demand document %d for wave profile snapshot: %w", docID, docErr)
+		}
+		if doc == nil || doc.IntegrationProfileID == nil || *doc.IntegrationProfileID != profileID || doc.BoundProfileSnapshot == "" {
+			continue
+		}
+		snap, parseErr := ParseProfileSnapshot(doc.BoundProfileSnapshot)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse bound profile snapshot for demand document %d: %w", docID, parseErr)
+		}
+		if snap == nil {
+			return nil, fmt.Errorf("demand document %d has an empty bound profile snapshot", docID)
+		}
+		if snap.ProfileID != profileID {
+			return nil, fmt.Errorf("demand document %d snapshot profile %d does not match requested profile %d", docID, snap.ProfileID, profileID)
+		}
+		if effective != nil && *effective != *snap {
+			return nil, fmt.Errorf("wave %d has inconsistent bound snapshots for profile %d", waveID, profileID)
+		}
+		copy := *snap
+		effective = &copy
+	}
+	if effective != nil {
+		return effective, nil
 	}
 
 	// Fallback: live profile lookup.

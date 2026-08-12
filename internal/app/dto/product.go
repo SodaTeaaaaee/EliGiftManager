@@ -73,13 +73,15 @@ type ImportProductCatalogInput struct {
 
 // ImportProductCatalogResult is the dual-mode outcome of a catalog import.
 type ImportProductCatalogResult struct {
-	CreatedCount   int                         `json:"createdCount"`
-	UpdatedCount   int                         `json:"updatedCount"`
-	TotalProcessed int                         `json:"totalProcessed"`
-	SuccessCount   int                         `json:"successCount"`
-	ErrorCount     int                         `json:"errorCount"`
-	Errors         []ImportProductCatalogError `json:"errors"`
-	Masters        []ProductMasterDTO          `json:"masters"`
+	ImportRunID      uint                        `json:"importRunId"`
+	EvidenceDisabled bool                        `json:"evidenceDisabled"`
+	CreatedCount     int                         `json:"createdCount"`
+	UpdatedCount     int                         `json:"updatedCount"`
+	TotalProcessed   int                         `json:"totalProcessed"`
+	SuccessCount     int                         `json:"successCount"`
+	ErrorCount       int                         `json:"errorCount"`
+	Errors           []ImportProductCatalogError `json:"errors"`
+	Masters          []ProductMasterDTO          `json:"masters"`
 	// Warnings are non-blocking, row-level mapping warnings (e.g. mapping
 	// dests outside the global legal vocabulary) — values are still kept and
 	// imported, but flagged so the operator can review them.

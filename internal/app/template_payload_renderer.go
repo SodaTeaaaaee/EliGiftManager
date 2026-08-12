@@ -135,9 +135,11 @@ func (r *TemplatePayloadRenderer) RenderSupplierExportCSVWithContext(
 	for _, line := range lines {
 		fl := fulfillLines[line.FulfillmentLineID]
 		rowCtx := r.buildExportRowContext(line, fl, products, addresses)
-		row := make([]string, len(columns))
-		for i, col := range columns {
-			row[i] = r.exportFieldValue(rowCtx, col.src)
+		row, err := r.renderMappedRow(columns, rules, func(dest string) string {
+			return r.exportFieldValue(rowCtx, dest)
+		})
+		if err != nil {
+			return "", fmt.Errorf("supplier export line %d: %w", line.SupplierLineNo, err)
 		}
 		if err := w.Write(row); err != nil {
 			return "", err
@@ -166,9 +168,10 @@ func (r *TemplatePayloadRenderer) RenderSupplierExportXLSX(
 	}
 
 	f := excelize.NewFile()
-	sheet := f.GetSheetName(0)
-	if sheet == "" {
-		sheet = "Sheet1"
+	defer f.Close()
+	sheet, err := configureWorkbookSheet(f, rules)
+	if err != nil {
+		return nil, err
 	}
 
 	for i, col := range columns {
@@ -183,12 +186,18 @@ func (r *TemplatePayloadRenderer) RenderSupplierExportXLSX(
 	for rowIdx, line := range lines {
 		fl := fulfillLines[line.FulfillmentLineID]
 		rowCtx := r.buildExportRowContext(line, fl, products, addresses)
-		for colIdx, col := range columns {
+		row, rowErr := r.renderMappedRow(columns, rules, func(dest string) string {
+			return r.exportFieldValue(rowCtx, dest)
+		})
+		if rowErr != nil {
+			return nil, fmt.Errorf("supplier export line %d: %w", line.SupplierLineNo, rowErr)
+		}
+		for colIdx := range columns {
 			cell, err := excelize.CoordinatesToCellName(colIdx+1, rowIdx+2)
 			if err != nil {
 				return nil, err
 			}
-			if err := f.SetCellValue(sheet, cell, r.exportFieldValue(rowCtx, col.src)); err != nil {
+			if err := f.SetCellValue(sheet, cell, row[colIdx]); err != nil {
 				return nil, err
 			}
 		}
@@ -272,9 +281,11 @@ func (r *TemplatePayloadRenderer) RenderTrackingExportCSV(
 
 	for i := range items {
 		rowCtx := TrackingRowContext{Item: &items[i]}
-		row := make([]string, len(columns))
-		for j, col := range columns {
-			row[j] = r.trackingFieldValue(rowCtx, col.src)
+		row, err := r.renderMappedRow(columns, rules, func(dest string) string {
+			return r.trackingFieldValue(rowCtx, dest)
+		})
+		if err != nil {
+			return "", fmt.Errorf("tracking export item %d: %w", items[i].ID, err)
 		}
 		if err := w.Write(row); err != nil {
 			return "", err
@@ -298,9 +309,10 @@ func (r *TemplatePayloadRenderer) RenderTrackingExportXLSX(
 	}
 
 	f := excelize.NewFile()
-	sheet := f.GetSheetName(0)
-	if sheet == "" {
-		sheet = "Sheet1"
+	defer f.Close()
+	sheet, err := configureWorkbookSheet(f, rules)
+	if err != nil {
+		return nil, err
 	}
 
 	for i, col := range columns {
@@ -314,12 +326,18 @@ func (r *TemplatePayloadRenderer) RenderTrackingExportXLSX(
 	}
 	for rowIdx := range items {
 		rowCtx := TrackingRowContext{Item: &items[rowIdx]}
-		for colIdx, col := range columns {
+		row, rowErr := r.renderMappedRow(columns, rules, func(dest string) string {
+			return r.trackingFieldValue(rowCtx, dest)
+		})
+		if rowErr != nil {
+			return nil, fmt.Errorf("tracking export item %d: %w", items[rowIdx].ID, rowErr)
+		}
+		for colIdx := range columns {
 			cell, err := excelize.CoordinatesToCellName(colIdx+1, rowIdx+2)
 			if err != nil {
 				return nil, err
 			}
-			if err := f.SetCellValue(sheet, cell, r.trackingFieldValue(rowCtx, col.src)); err != nil {
+			if err := f.SetCellValue(sheet, cell, row[colIdx]); err != nil {
 				return nil, err
 			}
 		}
@@ -334,6 +352,61 @@ func (r *TemplatePayloadRenderer) RenderTrackingExportXLSX(
 type exportColumn struct {
 	src    string
 	output string
+}
+
+// renderMappedRow applies the same transforms/defaults/required contract used
+// by import ApplyRow to values produced by an export renderer. Keeping the two
+// paths aligned prevents a template from validating successfully while its
+// export-time transforms or required fields are silently ignored.
+func (r *TemplatePayloadRenderer) renderMappedRow(
+	columns []exportColumn,
+	rules *TemplateMappingRules,
+	value func(dest string) string,
+) ([]string, error) {
+	values := make(map[string]string, len(columns))
+	for _, col := range columns {
+		v, err := applyTransforms(value(col.src), rules.Transforms[col.src])
+		if err != nil {
+			return nil, fmt.Errorf("field %q: %w", col.src, err)
+		}
+		values[col.src] = v
+	}
+	for dest, defaultValue := range rules.Defaults {
+		v, err := applyTransforms(defaultValue, rules.Transforms[dest])
+		if err != nil {
+			return nil, fmt.Errorf("default %q: %w", dest, err)
+		}
+		values[dest] = v
+	}
+	for _, dest := range rules.Required {
+		if strings.TrimSpace(values[dest]) == "" {
+			return nil, fmt.Errorf("required field %q is missing or empty", dest)
+		}
+	}
+
+	row := make([]string, len(columns))
+	for i, col := range columns {
+		row[i] = values[col.src]
+	}
+	return row, nil
+}
+
+func configureWorkbookSheet(f *excelize.File, rules *TemplateMappingRules) (string, error) {
+	sheet := f.GetSheetName(0)
+	if sheet == "" {
+		return "", fmt.Errorf("xlsx workbook has no default worksheet")
+	}
+	if rules == nil {
+		return sheet, nil
+	}
+	desired := strings.TrimSpace(rules.SheetName)
+	if desired == "" || desired == sheet {
+		return sheet, nil
+	}
+	if err := f.SetSheetName(sheet, desired); err != nil {
+		return "", fmt.Errorf("set xlsx sheet name %q: %w", desired, err)
+	}
+	return desired, nil
 }
 
 // orderedColumns returns export columns in a stable order.

@@ -763,6 +763,9 @@ func TestCreateShipmentPersistsShipmentAndLinesAtomically(t *testing.T) {
 	if lines[0].ShipmentID != shipment.ID {
 		t.Errorf("line shipment ID %d != shipment ID %d", lines[0].ShipmentID, shipment.ID)
 	}
+	if shipment.SupplierPlatform != "test" {
+		t.Errorf("SupplierPlatform = %q, want supplier order platform test", shipment.SupplierPlatform)
+	}
 }
 
 func TestCreateShipmentRollsBackWhenLinePersistenceFails(t *testing.T) {

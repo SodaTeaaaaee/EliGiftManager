@@ -1,11 +1,70 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/xuri/excelize/v2"
 )
+
+func TestSupplierOrderDemoTemplate_RendersExactWorkbookContract(t *testing.T) {
+	t.Parallel()
+
+	rules, err := ParseMappingRules(SupplierOrderDemoMappingRules)
+	if err != nil {
+		t.Fatalf("ParseMappingRules: %v", err)
+	}
+	if err := ValidateMappingRulesConfig(SupplierOrderDemoDocType, rules); err != nil {
+		t.Fatalf("ValidateMappingRulesConfig: %v", err)
+	}
+	if rules.SheetName != "工作表1" {
+		t.Fatalf("SheetName = %q, want 工作表1", rules.SheetName)
+	}
+
+	productID, addressID := uint(21), uint(31)
+	line := &domain.SupplierOrderLine{SupplierLineNo: 1, FulfillmentLineID: 11, SupplierSKU: "RZ-1", SubmittedQuantity: 2}
+	fl := &domain.FulfillmentLine{ID: 11, ProductID: &productID, CustomerAddressID: &addressID}
+	data, err := NewTemplatePayloadRenderer().RenderSupplierExportXLSX(
+		&domain.SupplierOrder{},
+		[]*domain.SupplierOrderLine{line},
+		map[uint]*domain.FulfillmentLine{11: fl},
+		map[uint]*domain.Product{productID: {ID: productID, FactorySKU: " RZ-1 "}},
+		map[uint]*domain.CustomerAddress{addressID: {
+			ID: addressID, RecipientName: " Receiver ", Phone: " 13800000000 ",
+			Province: "上海市", City: "上海市", District: "浦东新区", AddressLine1: "测试路1号",
+		}},
+		rules,
+	)
+	if err != nil {
+		t.Fatalf("RenderSupplierExportXLSX: %v", err)
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("OpenReader: %v", err)
+	}
+	defer f.Close()
+	if sheets := f.GetSheetList(); len(sheets) != 1 || sheets[0] != "工作表1" {
+		t.Fatalf("sheets = %v, want [工作表1]", sheets)
+	}
+	rows, err := f.GetRows("工作表1")
+	if err != nil {
+		t.Fatalf("GetRows: %v", err)
+	}
+	wantHeader := []string{"第三方订单号", "收件人", "联系电话", "收件地址", "商家编码", "下单数量"}
+	if len(rows) != 2 || len(rows[0]) != len(wantHeader) {
+		t.Fatalf("rows = %#v", rows)
+	}
+	for i := range wantHeader {
+		if rows[0][i] != wantHeader[i] {
+			t.Fatalf("header[%d] = %q, want %q", i, rows[0][i], wantHeader[i])
+		}
+	}
+	if rows[1][0] != "11" || rows[1][1] != "Receiver" || rows[1][2] != "13800000000" || rows[1][4] != "RZ-1" || rows[1][5] != "2" {
+		t.Fatalf("data row = %#v", rows[1])
+	}
+}
 
 func TestCatalogDemoMappingRules_Parseable(t *testing.T) {
 	t.Parallel()
@@ -124,6 +183,9 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 	if !p1.SupportsImportProductCatalog {
 		t.Error("SupportsImportProductCatalog = false, want true")
 	}
+	if !p1.SupportsExportSupplierOrder {
+		t.Error("SupportsExportSupplierOrder = false, want true")
+	}
 	if p1.ID == 0 {
 		t.Error("expected non-zero profile ID after create")
 	}
@@ -177,6 +239,17 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 	if shipB1.TemplateID != shipTmpl1.ID {
 		t.Errorf("shipment binding.TemplateID = %d, want %d", shipB1.TemplateID, shipTmpl1.ID)
 	}
+	orderTmpl1, err := templateRepo.FindByKey(ctx, SupplierOrderDemoTemplateKey)
+	if err != nil || orderTmpl1 == nil {
+		t.Fatalf("supplier order template after first seed: tmpl=%v err=%v", orderTmpl1, err)
+	}
+	if orderTmpl1.DocumentType != SupplierOrderDemoDocType || orderTmpl1.Format != "xlsx" {
+		t.Errorf("supplier order template = %+v", orderTmpl1)
+	}
+	orderB1, err := bindingRepo.FindDefaultByProfileAndType(ctx, p1.ID, SupplierOrderDemoDocType)
+	if err != nil || orderB1 == nil || orderB1.TemplateID != orderTmpl1.ID {
+		t.Fatalf("supplier order binding: binding=%v err=%v", orderB1, err)
+	}
 
 	// Snapshot IDs before second seed.
 	profileID := p1.ID
@@ -184,6 +257,8 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 	bindingID := b1.ID
 	shipTemplateID := shipTmpl1.ID
 	shipBindingID := shipB1.ID
+	orderTemplateID := orderTmpl1.ID
+	orderBindingID := orderB1.ID
 
 	// Second seed must not create duplicates.
 	p2, err := SeedCatalogDemo(ctx, profileRepo, templateRepo, bindingRepo)
@@ -213,13 +288,16 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list templates: %v", err)
 	}
-	var tmplCount, shipTmplCount int
+	var tmplCount, shipTmplCount, orderTmplCount int
 	for i := range allTemplates {
 		if allTemplates[i].TemplateKey == CatalogDemoTemplateKey {
 			tmplCount++
 		}
 		if allTemplates[i].TemplateKey == ShipmentDemoTemplateKey {
 			shipTmplCount++
+		}
+		if allTemplates[i].TemplateKey == SupplierOrderDemoTemplateKey {
+			orderTmplCount++
 		}
 	}
 	if tmplCount != 1 {
@@ -228,12 +306,15 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 	if shipTmplCount != 1 {
 		t.Errorf("shipment demo template count = %d, want 1", shipTmplCount)
 	}
+	if orderTmplCount != 1 {
+		t.Errorf("supplier order demo template count = %d, want 1", orderTmplCount)
+	}
 
 	bindings, err := bindingRepo.ListByProfile(ctx, profileID)
 	if err != nil {
 		t.Fatalf("list bindings: %v", err)
 	}
-	var defaultCatalogBindings, defaultShipBindings int
+	var defaultCatalogBindings, defaultShipBindings, defaultOrderBindings int
 	for i := range bindings {
 		if bindings[i].DocumentType == CatalogDemoDocType && bindings[i].IsDefault {
 			defaultCatalogBindings++
@@ -253,12 +334,21 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 				t.Errorf("shipment default binding TemplateID changed: got %d want %d", bindings[i].TemplateID, shipTemplateID)
 			}
 		}
+		if bindings[i].DocumentType == SupplierOrderDemoDocType && bindings[i].IsDefault {
+			defaultOrderBindings++
+			if bindings[i].ID != orderBindingID || bindings[i].TemplateID != orderTemplateID {
+				t.Errorf("supplier order default binding changed: %+v", bindings[i])
+			}
+		}
 	}
 	if defaultCatalogBindings != 1 {
 		t.Errorf("default catalog binding count = %d, want 1", defaultCatalogBindings)
 	}
 	if defaultShipBindings != 1 {
 		t.Errorf("default shipment binding count = %d, want 1", defaultShipBindings)
+	}
+	if defaultOrderBindings != 1 {
+		t.Errorf("default supplier order binding count = %d, want 1", defaultOrderBindings)
 	}
 }
 
@@ -292,6 +382,33 @@ func TestSeedCatalogDemo_ProfileOnlyWhenTemplateReposNil(t *testing.T) {
 	}
 	if p2.ID != p.ID {
 		t.Errorf("profile ID changed on re-seed: %d -> %d", p.ID, p2.ID)
+	}
+}
+
+func TestSeedCatalogDemoUpgradesExistingExportCapability(t *testing.T) {
+	t.Parallel()
+	profileRepo := newMockIntegrationProfileRepoSimple()
+	stale := &domain.IntegrationProfile{
+		ProfileKey:                     CatalogDemoProfileKey,
+		SourceSurface:                  string(domain.SourceSurfaceFactory),
+		FactorySupplierPlatform:        "rouzao",
+		SupportsImportProductCatalog:   true,
+		SupportsImportSupplierShipment: true,
+	}
+	if err := profileRepo.Create(context.Background(), stale); err != nil {
+		t.Fatalf("create stale profile: %v", err)
+	}
+
+	profile, err := SeedCatalogDemo(context.Background(), profileRepo, nil, nil)
+	if err != nil {
+		t.Fatalf("SeedCatalogDemo: %v", err)
+	}
+	if !profile.SupportsExportSupplierOrder {
+		t.Fatal("existing demo profile was not upgraded with SupportsExportSupplierOrder")
+	}
+	stored, err := profileRepo.FindByID(context.Background(), stale.ID)
+	if err != nil || !stored.SupportsExportSupplierOrder {
+		t.Fatalf("stored profile capability = %v, err=%v", stored, err)
 	}
 }
 

@@ -2,8 +2,8 @@
  * vue-i18n setup — the single entry point for the app's locale system.
  *
  * - `i18n`: the vue-i18n instance (composition/`legacy: false` mode).
- * - `setupI18n(app)`: installs `i18n` on the Vue app and syncs
- *   `document.documentElement.lang` to the resolved initial locale.
+ * - `setupI18n(app)`: loads the initial local message bundle, installs `i18n`,
+ *   and syncs `document.documentElement.lang` before the app mounts.
  * - `useLocaleStore()` / `useAppLocale()`: the Pinia-backed locale store,
  *   persisted under the `eligiftmanager:locale` localStorage key, falling
  *   back to the browser's language on first run.
@@ -12,17 +12,19 @@ import type { App } from 'vue'
 import { computed, ref } from 'vue'
 import { defineStore, storeToRefs } from 'pinia'
 import { createI18n } from 'vue-i18n'
-import { zhCN } from './locales/zh-CN'
-import { enUS } from './locales/en-US'
+import {
+  createLocaleRuntime,
+  SUPPORTED_LOCALES,
+  type LocaleApplyReason,
+  type SupportedLocale,
+} from './locale-loader'
 
-export type SupportedLocale = 'zh-CN' | 'en-US'
+export { SUPPORTED_LOCALES, type SupportedLocale } from './locale-loader'
 
 export interface LocaleOption {
   label: string
   value: SupportedLocale
 }
-
-export const SUPPORTED_LOCALES: readonly SupportedLocale[] = ['zh-CN', 'en-US']
 
 const LOCALE_STORAGE_KEY = 'eligiftmanager:locale'
 
@@ -87,15 +89,14 @@ function applyDocumentLang(value: SupportedLocale): void {
   }
 }
 
-/** The shared vue-i18n instance. `legacy: false` = Composition API mode throughout. */
+const initialLocale = resolveInitialLocale()
+
+/** The shared vue-i18n instance. Messages are installed before app mount. */
 export const i18n = createI18n({
   legacy: false,
-  locale: resolveInitialLocale(),
+  locale: initialLocale,
   fallbackLocale: 'zh-CN',
-  messages: {
-    'zh-CN': zhCN,
-    'en-US': enUS,
-  },
+  messages: {},
   // We report missing keys ourselves via `missing` below; avoid vue-i18n's
   // own console noise duplicating it.
   missingWarn: false,
@@ -108,37 +109,52 @@ export const i18n = createI18n({
   },
 })
 
-function getCurrentLocale(): SupportedLocale {
-  const value = i18n.global.locale.value
-  return isSupportedLocale(value) ? value : 'zh-CN'
+const activeLocale = ref<SupportedLocale>(initialLocale)
+
+function applyLocale(value: SupportedLocale, reason: LocaleApplyReason): void {
+  activeLocale.value = value
+  i18n.global.locale.value = value
+  applyDocumentLang(value)
+
+  // Normal bootstrap preserves the existing browser/persisted resolution.
+  // Explicit switches and a successful startup fallback record the locale
+  // that was actually applied, never a bundle that failed to load.
+  if (reason !== 'initialize') persistLocale(value)
 }
 
-/**
- * Pinia store holding the active locale. Call `setLocale` to switch — it
- * persists to localStorage, updates `document.documentElement.lang`, and
- * flips the live vue-i18n locale in one step.
- */
-export const useLocaleStore = defineStore('locale', () => {
-  const locale = ref<SupportedLocale>(getCurrentLocale())
-
-  function setLocale(value: SupportedLocale): void {
-    locale.value = value
-    persistLocale(value)
-    applyDocumentLang(value)
-    i18n.global.locale.value = value
-  }
-
-  return { locale, setLocale }
+const localeRuntime = createLocaleRuntime({
+  initialLocale,
+  fallbackLocale: 'zh-CN',
+  installMessages: (locale, messages) => {
+    i18n.global.setLocaleMessage(locale, messages)
+  },
+  applyLocale,
+  reportLoadError: (locale, error) => {
+    if (import.meta.env.DEV) {
+      console.warn(`[i18n] failed to load locale bundle "${locale}"`, error)
+    }
+  },
 })
 
 /**
- * Installs vue-i18n on the app and syncs the initial `<html lang>` attribute.
- * Call once during bootstrap (see `main.ts`'s `[P0-INTEGRATION]` marker),
- * before `app.mount(...)`.
+ * Pinia store holding the active locale. A switch commits only after its
+ * embedded message bundle loads; callers may await the boolean result.
  */
-export function setupI18n(app: App): void {
+export const useLocaleStore = defineStore('locale', () => {
+  async function setLocale(value: SupportedLocale): Promise<boolean> {
+    return localeRuntime.setLocale(value)
+  }
+
+  return { locale: activeLocale, setLocale }
+})
+
+/**
+ * Loads the initial message bundle and installs vue-i18n before app mount, so
+ * route components never render untranslated keys or flash another language.
+ */
+export async function setupI18n(app: App): Promise<void> {
+  await localeRuntime.initialize()
   app.use(i18n)
-  applyDocumentLang(getCurrentLocale())
 }
 
 /**

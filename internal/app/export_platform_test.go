@@ -12,37 +12,6 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
-func TestResolveSupplierPlatform_PrefersFactorySupplierPlatform(t *testing.T) {
-	t.Parallel()
-
-	p := &domain.IntegrationProfile{
-		FactorySupplierPlatform: "rouzao",
-		ConnectorKey:            "eli.local_export",
-	}
-	if got := resolveSupplierPlatform(p); got != "rouzao" {
-		t.Fatalf("got %q, want rouzao", got)
-	}
-}
-
-func TestResolveSupplierPlatform_FallsBackToConnectorKey(t *testing.T) {
-	t.Parallel()
-
-	p := &domain.IntegrationProfile{
-		FactorySupplierPlatform: "",
-		ConnectorKey:            "eli.local_export",
-	}
-	if got := resolveSupplierPlatform(p); got != "eli.local_export" {
-		t.Fatalf("got %q, want eli.local_export", got)
-	}
-}
-
-func TestResolveSupplierPlatform_NilProfile(t *testing.T) {
-	t.Parallel()
-	if got := resolveSupplierPlatform(nil); got != "" {
-		t.Fatalf("got %q, want empty", got)
-	}
-}
-
 func TestExportSupplierOrder_UsesFactorySupplierPlatform(t *testing.T) {
 	t.Parallel()
 
@@ -51,6 +20,7 @@ func TestExportSupplierOrder_UsesFactorySupplierPlatform(t *testing.T) {
 	demandRepo := newMockDemandRepo()
 	fulfillRepo := newMockFulfillRepo()
 	supplierRepo := newMockSupplierRepo()
+	productID := uint(401)
 
 	doc := &domain.DemandDocument{IntegrationProfileID: &profileID}
 	if err := demandRepo.Create(context.Background(), doc); err != nil {
@@ -60,18 +30,24 @@ func TestExportSupplierOrder_UsesFactorySupplierPlatform(t *testing.T) {
 		WaveID:           waveID,
 		Quantity:         2,
 		DemandDocumentID: &doc.ID,
+		ProductID:        &productID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	profileRepo := newMockProfileRepoForExport(&domain.IntegrationProfile{
-		ID:                      profileID,
-		ConnectorKey:            "eli.local_export",
-		FactorySupplierPlatform: "rouzao",
+		ID:                          profileID,
+		SourceSurface:               string(domain.SourceSurfaceFactory),
+		SupportsExportSupplierOrder: true,
+		FactorySupplierPlatform:     "rouzao",
 	})
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, &mockBindingRepo{}, nil)
+	bindingRepo := &mockBindingRepo{defaultTemplateByProfile: map[uint]uint{profileID: 51}}
+	productRepo := &mockProductRepoForExport{products: map[uint]*domain.Product{
+		productID: {ID: productID, WaveID: waveID, SupplierPlatform: "rouzao", FactorySKU: "RZ-1"},
+	}}
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, bindingRepo, productRepo)
 
-	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
+	orders, err := exportUC.ExportSupplierOrderForProfile(context.Background(), waveID, profileID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder: %v", err)
 	}
@@ -83,7 +59,7 @@ func TestExportSupplierOrder_UsesFactorySupplierPlatform(t *testing.T) {
 	}
 }
 
-func TestExportSupplierOrder_FallsBackToConnectorKey(t *testing.T) {
+func TestExportSupplierOrder_RejectsMissingFactorySupplierPlatform(t *testing.T) {
 	t.Parallel()
 
 	waveID := uint(78)
@@ -105,21 +81,15 @@ func TestExportSupplierOrder_FallsBackToConnectorKey(t *testing.T) {
 	}
 
 	profileRepo := newMockProfileRepoForExport(&domain.IntegrationProfile{
-		ID:                      profileID,
-		ConnectorKey:            "eli.csv_export",
-		FactorySupplierPlatform: "",
+		ID:                          profileID,
+		SourceSurface:               string(domain.SourceSurfaceFactory),
+		SupportsExportSupplierOrder: true,
 	})
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, &mockBindingRepo{}, nil)
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, &mockBindingRepo{}, &mockProductRepoForExport{products: map[uint]*domain.Product{}})
 
-	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
-	if err != nil {
-		t.Fatalf("ExportSupplierOrder: %v", err)
-	}
-	if len(orders) != 1 {
-		t.Fatalf("expected 1 order, got %d", len(orders))
-	}
-	if orders[0].SupplierPlatform != "eli.csv_export" {
-		t.Fatalf("SupplierPlatform = %q, want eli.csv_export fallback", orders[0].SupplierPlatform)
+	_, err := exportUC.ExportSupplierOrderForProfile(context.Background(), waveID, profileID)
+	if err == nil || !strings.Contains(err.Error(), "factorySupplierPlatform") {
+		t.Fatalf("expected missing factorySupplierPlatform error, got %v", err)
 	}
 }
 
@@ -168,11 +138,17 @@ func TestExportSupplierOrder_FillsSupplierSKUFromFactorySKU(t *testing.T) {
 
 	productRepo := &mockProductRepoForExport{
 		products: map[uint]*domain.Product{
-			productID: {ID: productID, WaveID: waveID, FactorySKU: "RZ-SKU-001"},
+			productID: {ID: productID, WaveID: waveID, SupplierPlatform: "rouzao", FactorySKU: "RZ-SKU-001"},
 		},
 	}
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil, productRepo)
-	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
+	profileID := uint(11)
+	profileRepo := newMockProfileRepoForExport(&domain.IntegrationProfile{
+		ID: profileID, SourceSurface: string(domain.SourceSurfaceFactory),
+		SupportsExportSupplierOrder: true, FactorySupplierPlatform: "rouzao",
+	})
+	bindingRepo := &mockBindingRepo{defaultTemplateByProfile: map[uint]uint{profileID: 52}}
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, profileRepo, bindingRepo, productRepo)
+	orders, err := exportUC.ExportSupplierOrderForProfile(context.Background(), waveID, profileID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder: %v", err)
 	}
@@ -188,6 +164,43 @@ func TestExportSupplierOrder_FillsSupplierSKUFromFactorySKU(t *testing.T) {
 	}
 	if lines[0].SupplierSKU != "RZ-SKU-001" {
 		t.Fatalf("SupplierSKU = %q, want RZ-SKU-001", lines[0].SupplierSKU)
+	}
+}
+
+func TestExportSupplierOrderForProfileFiltersOtherFactoryPlatforms(t *testing.T) {
+	t.Parallel()
+	waveID, profileID := uint(80), uint(12)
+	productA, productB := uint(61), uint(62)
+	fulfillRepo := newMockFulfillRepo()
+	supplierRepo := newMockSupplierRepo()
+	for _, line := range []*domain.FulfillmentLine{
+		{WaveID: waveID, Quantity: 2, ProductID: &productA},
+		{WaveID: waveID, Quantity: 3, ProductID: &productB},
+	} {
+		if err := fulfillRepo.Create(context.Background(), line); err != nil {
+			t.Fatal(err)
+		}
+	}
+	profileRepo := newMockProfileRepoForExport(&domain.IntegrationProfile{
+		ID: profileID, SourceSurface: string(domain.SourceSurfaceFactory),
+		SupportsExportSupplierOrder: true, FactorySupplierPlatform: "factory-a",
+	})
+	bindingRepo := &mockBindingRepo{defaultTemplateByProfile: map[uint]uint{profileID: 53}}
+	productRepo := &mockProductRepoForExport{products: map[uint]*domain.Product{
+		productA: {ID: productA, SupplierPlatform: "factory-a", FactorySKU: "A-1"},
+		productB: {ID: productB, SupplierPlatform: "factory-b", FactorySKU: "B-1"},
+	}}
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, profileRepo, bindingRepo, productRepo)
+	orders, err := exportUC.ExportSupplierOrderForProfile(context.Background(), waveID, profileID)
+	if err != nil {
+		t.Fatalf("ExportSupplierOrderForProfile: %v", err)
+	}
+	lines, err := supplierRepo.ListLinesByOrder(context.Background(), orders[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 1 || lines[0].SupplierSKU != "A-1" || lines[0].SubmittedQuantity != 2 {
+		t.Fatalf("filtered order lines = %+v", lines)
 	}
 }
 
@@ -294,7 +307,10 @@ func TestCSVExportExecutor_UsesTrackingTemplateColumnOrder(t *testing.T) {
 	items := []domain.ChannelSyncItem{{
 		ID: 1, FulfillmentLineID: 9, TrackingNo: "YT999", CarrierCode: "YTO",
 	}}
-	profile := &domain.IntegrationProfile{ID: profileID, ConnectorKey: "eli.csv_export"}
+	profile := &domain.IntegrationProfile{
+		ID: profileID, ConnectorKey: "eli.csv_export",
+		SourceSurface: string(domain.SourceSurfaceRetail), TrackingSyncMode: "document_export",
+	}
 
 	result, err := exec.Execute(context.Background(), job, items, profile)
 	if err != nil {

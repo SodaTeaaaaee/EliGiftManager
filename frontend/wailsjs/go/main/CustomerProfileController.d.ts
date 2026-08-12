@@ -20,8 +20,16 @@ export function GetMergeSuggestions():Promise<Array<dto.MergeSuggestionDTO>>;
 
 export function GetSettings():Promise<dto.SystemSettingsDTO>;
 
+export function ListCustomerNameObservations(arg1:number):Promise<Array<dto.CustomerNameObservationDTO>>;
+
+export function ListCustomerProfileOrigins(arg1:number):Promise<Array<dto.CustomerProfileOriginDTO>>;
+
 export function ListCustomerProfiles(arg1:string,arg2:string,arg3:boolean):Promise<Array<dto.CustomerProfileDTO>>;
 
+export function PinCustomerDisplayName(arg1:dto.PinCustomerDisplayNameInput):Promise<dto.CustomerProfileDTO>;
+
 export function SaveSettings(arg1:dto.SystemSettingsDTO):Promise<void>;
+
+export function UnpinCustomerDisplayName(arg1:dto.UnpinCustomerDisplayNameInput):Promise<dto.CustomerProfileDTO>;
 
 export function UpdateCustomerProfile(arg1:dto.UpdateCustomerProfileInput):Promise<dto.CustomerProfileDTO>;

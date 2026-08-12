@@ -56,6 +56,10 @@ func (uc *ListPaginationUseCase) ListCustomerProfilesPage(ctx context.Context, i
 	if err != nil {
 		return dto.CustomerProfilePageResult{}, err
 	}
+	matchedNames, err := uc.customers.FindMatchedCustomerHistoricalNames(ctx, ids, input.Keyword)
+	if err != nil {
+		return dto.CustomerProfilePageResult{}, err
+	}
 	identitiesByProfile := make(map[uint][]domain.CustomerIdentity, len(ids))
 	for _, identity := range identities {
 		identitiesByProfile[identity.CustomerProfileID] = append(identitiesByProfile[identity.CustomerProfileID], identity)
@@ -67,6 +71,7 @@ func (uc *ListPaginationUseCase) ListCustomerProfilesPage(ctx context.Context, i
 	items := make([]dto.CustomerProfileDTO, len(profiles))
 	for i := range profiles {
 		items[i] = customerProfilePageDTO(profiles[i], identitiesByProfile[profiles[i].ID], addressesByProfile[profiles[i].ID])
+		items[i].MatchedHistoricalName = matchedNames[profiles[i].ID]
 	}
 	return dto.CustomerProfilePageResult{Items: items, TotalCount: int(total)}, nil
 }
@@ -220,7 +225,11 @@ func customerProfilePageDTO(profile domain.CustomerProfile, identities []domain.
 	for i, address := range addresses {
 		addressDTOs[i] = dto.CustomerAddressDTO{ID: address.ID, CustomerProfileID: address.CustomerProfileID, Label: address.Label, RecipientName: address.RecipientName, Phone: address.Phone, Country: address.Country, Province: address.Province, City: address.City, District: address.District, AddressLine1: address.AddressLine1, AddressLine2: address.AddressLine2, PostalCode: address.PostalCode, IsDefault: address.IsDefault, IsTest: address.IsTest, ValidationStatus: address.ValidationStatus, ValidationDetail: address.ValidationDetail, ExtraData: address.ExtraData, CreatedAt: address.CreatedAt, UpdatedAt: address.UpdatedAt}
 	}
-	return dto.CustomerProfileDTO{ID: profile.ID, DisplayName: profile.DisplayName, ProfileType: profile.ProfileType, ExtraData: profile.ExtraData, CreatedAt: profile.CreatedAt, UpdatedAt: profile.UpdatedAt, Identities: identityDTOs, Addresses: addressDTOs, ActiveAddressCount: len(addresses)}
+	return dto.CustomerProfileDTO{ID: profile.ID, DisplayName: profile.DisplayName, ProfileType: profile.ProfileType,
+		Status: profile.Status, MergedIntoProfileID: profile.MergedIntoProfileID, RowVersion: profile.RowVersion,
+		DisplayNameMode: profile.DisplayNameMode, DisplayNameObservationID: profile.DisplayNameObservationID,
+		ExtraData: profile.ExtraData, CreatedAt: profile.CreatedAt, UpdatedAt: profile.UpdatedAt,
+		Identities: identityDTOs, Addresses: addressDTOs, ActiveAddressCount: len(addresses)}
 }
 
 func shipmentPageDTO(shipment domain.Shipment, lines []domain.ShipmentLine) dto.ShipmentDTO {

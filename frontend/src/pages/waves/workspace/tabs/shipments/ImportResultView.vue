@@ -26,6 +26,7 @@ import { useI18n } from 'vue-i18n'
 import { NButton } from 'naive-ui'
 import { SectionCard } from '@/shared/ui/cards'
 import { CalloutBar } from '@/shared/ui/guidance'
+import ImportEvidenceReference from '@/shared/ui/customer-resolution/ImportEvidenceReference.vue'
 
 export interface ImportResultViewRow {
   rowNo: number
@@ -33,6 +34,8 @@ export interface ImportResultViewRow {
 }
 
 export interface ImportResultViewData {
+  importRunId: number
+  evidenceDisabled: boolean
   total: number
   successCount: number
   errorCount: number
@@ -68,6 +71,7 @@ const summaryTone = computed(() => (props.result.errorCount > 0 ? 'warning' : 's
           })
         "
       />
+      <ImportEvidenceReference :import-run-id="result.importRunId" :evidence-disabled="result.evidenceDisabled" />
 
       <div class="import-result-view__errors">
         <h4 class="import-result-view__errors-title">{{ t('waveWorkspace.shipments.import.result.errorsTitle') }}</h4>

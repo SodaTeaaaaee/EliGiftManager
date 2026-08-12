@@ -20,9 +20,9 @@ func NewProfileController() *ProfileController {
 	templateBindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
 	closureDecisionRepo := infra.NewClosureDecisionRepository(gdb)
 	executorProvider := buildExecutorProvider()
-	return &ProfileController{
-		uc: app.NewProfileManagementUseCase(profileRepo, demandRepo, channelSyncRepo, templateBindingRepo, closureDecisionRepo, executorProvider),
-	}
+	uc := app.NewProfileManagementUseCase(profileRepo, demandRepo, channelSyncRepo, templateBindingRepo, closureDecisionRepo, executorProvider)
+	uc = app.WithIntegrationProfileReferenceRepo(uc, infra.NewIntegrationProfileReferenceRepository(gdb))
+	return &ProfileController{uc: uc}
 }
 
 // CreateProfile creates a new integration profile.

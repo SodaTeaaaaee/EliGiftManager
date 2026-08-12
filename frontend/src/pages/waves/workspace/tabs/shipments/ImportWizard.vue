@@ -45,6 +45,7 @@ import {
   destFieldTooltipKey,
 } from '@/pages/integrations/wizard/destFields'
 import type { dto } from '@/../wailsjs/go/models'
+import { canImportSupplierShipment } from '@/pages/integrations/profileAvailability'
 
 const { t, te } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
@@ -75,15 +76,18 @@ const profileOptions = ref<SelectOption[]>([])
 const profilesError = ref('')
 
 const isTemplateDriven = computed(() => !!templateProfileId.value && !!tabularFilePath.value)
+const inputFormat = computed(() => tabularFilePath.value.split('.').pop()?.toUpperCase() ?? '')
 
 async function loadProfiles(): Promise<void> {
   profilesError.value = ''
   try {
     const profiles = await listProfiles()
-    profileOptions.value = profiles.map((p) => ({
-      label: `${p.profileKey} (${p.sourceChannel})`,
-      value: p.id,
-    }))
+    profileOptions.value = profiles
+      .filter(canImportSupplierShipment)
+      .map((p) => ({
+        label: `${p.profileKey} (${p.sourceChannel})`,
+        value: p.id,
+      }))
   } catch (err) {
     profileOptions.value = []
     profilesError.value = err instanceof Error ? err.message : String(err)
@@ -326,6 +330,8 @@ async function handleSubmit(): Promise<void> {
         filePath: tabularFilePath.value,
       })
       importResult.value = {
+        importRunId: result.importRunId,
+        evidenceDisabled: result.evidenceDisabled,
         total: result.totalProcessed ?? result.successCount + result.errorCount,
         successCount: result.successCount,
         errorCount: result.errorCount,
@@ -370,6 +376,8 @@ async function handleSubmit(): Promise<void> {
     ].sort((a, b) => a.rowNo - b.rowNo)
 
     importResult.value = {
+      importRunId: result.importRunId,
+      evidenceDisabled: result.evidenceDisabled,
       total: csvPreview.value.rows.length,
       successCount: result.successCount,
       errorCount: result.errorCount + unresolvedRows.value.length,
@@ -508,6 +516,7 @@ function handleBack(): void {
               :column-order-label="t('intakeWizard.mapping.columnOrderLabel')"
               :column-order-placeholder="t('intakeWizard.mapping.columnOrderPlaceholder')"
               :validate="validateDestFieldValue"
+              :input-format="inputFormat"
             />
           </template>
         </div>

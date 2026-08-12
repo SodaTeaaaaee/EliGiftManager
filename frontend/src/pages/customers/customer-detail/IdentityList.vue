@@ -15,6 +15,8 @@ import { EmptyState } from '@/shared/ui/empty-state'
 import { useFeedback } from '@/shared/ui/feedback'
 import { addCustomerIdentity, deleteCustomerIdentity } from '@/shared/api/bridge'
 import type { CustomerIdentityDTO } from '@/entities/customer'
+import { useCustomerResolutionFeaturePolicy } from '@/shared/composables/useCustomerResolutionFeaturePolicy'
+import { customerResolutionWriteAccess } from '@/shared/lib/customer-resolution'
 
 const props = defineProps<{
   customerProfileId: number
@@ -27,6 +29,9 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
+const featurePolicy = useCustomerResolutionFeaturePolicy()
+const customerWriteAccess = computed(() => customerResolutionWriteAccess(featurePolicy.policy.value))
+void featurePolicy.load()
 
 // Closed set per `internal/domain/enums.go`'s IdentityType constants (see
 // contract `backendContract` (a)) — the only enum source, no bridge lookup.
@@ -55,7 +60,12 @@ watch(showAdd, (visible) => {
   if (visible) resetForm()
 })
 
-const canSubmit = computed(() => !submitting.value && platform.value.trim().length > 0 && value.value.trim().length > 0)
+const canSubmit = computed(() =>
+  customerWriteAccess.value.canManageIdentities
+  && !submitting.value
+  && platform.value.trim().length > 0
+  && value.value.trim().length > 0,
+)
 
 async function handleAdd(): Promise<void> {
   if (!canSubmit.value) return
@@ -83,6 +93,7 @@ const pendingDeleteId = ref<number | null>(null)
 const deleting = ref(false)
 
 function requestDelete(id: number): void {
+  if (!customerWriteAccess.value.canManageIdentities) return
   pendingDeleteId.value = id
 }
 
@@ -91,7 +102,7 @@ function cancelDelete(): void {
 }
 
 async function confirmDelete(): Promise<void> {
-  if (pendingDeleteId.value == null) return
+  if (pendingDeleteId.value == null || !customerWriteAccess.value.canManageIdentities) return
   deleting.value = true
   try {
     await deleteCustomerIdentity(pendingDeleteId.value)
@@ -104,13 +115,22 @@ async function confirmDelete(): Promise<void> {
     deleting.value = false
   }
 }
+
+watch(() => customerWriteAccess.value.canManageIdentities, (enabled) => {
+  if (enabled) return
+  showAdd.value = false
+  pendingDeleteId.value = null
+})
 </script>
 
 <template>
   <div class="identity-list">
     <div class="identity-list__toolbar">
-      <NButton size="small" @click="showAdd = true">{{ t('customerDetail.identities.addAction') }}</NButton>
+      <NButton size="small" :disabled="!customerWriteAccess.canManageIdentities" @click="showAdd = true">{{ t('customerDetail.identities.addAction') }}</NButton>
     </div>
+    <p v-if="!customerWriteAccess.canManageIdentities" class="identity-list__disabled">
+      {{ t('customerDetail.writesDisabledReason') }}
+    </p>
 
     <EmptyState v-if="identities.length === 0" :title="t('customerDetail.identities.empty')" size="sm" />
 
@@ -125,7 +145,7 @@ async function confirmDelete(): Promise<void> {
           <span v-if="identity.isPrimary" class="identity-list__primary-tag">
             {{ t('customerDetail.identities.isPrimaryLabel') }}
           </span>
-          <NButton size="tiny" quaternary @click="requestDelete(identity.id)">
+          <NButton size="tiny" quaternary :disabled="!customerWriteAccess.canManageIdentities" @click="requestDelete(identity.id)">
             {{ t('customerDetail.identities.deleteAction') }}
           </NButton>
         </div>
@@ -143,16 +163,16 @@ async function confirmDelete(): Promise<void> {
     >
       <NForm label-placement="top">
         <NFormItem :label="t('customerDetail.identities.platformLabel')">
-          <NInput v-model:value="platform" :disabled="submitting" @keydown.enter.prevent="handleAdd" />
+          <NInput v-model:value="platform" :disabled="submitting || !customerWriteAccess.canManageIdentities" @keydown.enter.prevent="handleAdd" />
         </NFormItem>
         <NFormItem :label="t('customerDetail.identities.valueLabel')">
-          <NInput v-model:value="value" :disabled="submitting" @keydown.enter.prevent="handleAdd" />
+          <NInput v-model:value="value" :disabled="submitting || !customerWriteAccess.canManageIdentities" @keydown.enter.prevent="handleAdd" />
         </NFormItem>
         <NFormItem :label="t('customerDetail.identities.typeLabel')">
-          <NSelect v-model:value="identityType" :options="identityTypeOptions" :disabled="submitting" />
+          <NSelect v-model:value="identityType" :options="identityTypeOptions" :disabled="submitting || !customerWriteAccess.canManageIdentities" />
         </NFormItem>
         <NFormItem :label="t('customerDetail.identities.isPrimaryLabel')">
-          <NSwitch v-model:value="isPrimary" :disabled="submitting" />
+          <NSwitch v-model:value="isPrimary" :disabled="submitting || !customerWriteAccess.canManageIdentities" />
         </NFormItem>
       </NForm>
       <template #footer>
@@ -191,6 +211,12 @@ async function confirmDelete(): Promise<void> {
 .identity-list__toolbar {
   display: flex;
   justify-content: flex-end;
+}
+
+.identity-list__disabled {
+  margin: 0;
+  color: var(--status-warning-fg);
+  font-size: var(--font-size-xs);
 }
 
 .identity-list__items {

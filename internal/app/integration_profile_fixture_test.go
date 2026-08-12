@@ -129,17 +129,16 @@ func TestMapAndReconcileShipments_RouzaoReturnFixture(t *testing.T) {
 
 	path := fixturePath(t, "rouzao_shipment_return.csv")
 
-	// Wave 1: two unique multi-SKU targets (matched via the derived factory_sku
-	// ref, the real-world tier) + one ambiguous ref pair (matched via the
+	// Wave 1: two unique multi-SKU targets (matched via the normalized factory_sku
+	// ref) + one ambiguous ref pair (matched via the
 	// supplier_product_ref fallback tier) + one fallback-only target whose
 	// FactorySKU deliberately does NOT derive to its shipment-row token, so it
 	// can only resolve through the supplier_product_ref fallback tier.
 	//
-	// Synthetic shape mirrors the real 柔造 mismatch confirmed against
-	// SampleData (see shipment_reconcile.go MapAndReconcileShipments doc):
-	// FactorySKU carries a "<PLATFORM>_<digits>" shape whose digit suffix is
-	// what the shipment token's REF actually matches; SupplierProductRef is a
-	// different, product-id-style value that the token normally does NOT match.
+	// This is a fully self-contained synthetic convention fixture: FactorySKU
+	// carries a "<PLATFORM>_<digits>" shape whose digit suffix is the shipment
+	// token REF. SupplierProductRef is deliberately independent. No catalog
+	// fixture or other sample file is used to derive these relationships.
 	shipmentRepo := newMockShipmentRepo()
 	supplierRepo := newMockSupplierRepoForShipment()
 	fulfillRepo := newMockFulfillRepoForShipment()
@@ -198,8 +197,7 @@ func TestMapAndReconcileShipments_RouzaoReturnFixture(t *testing.T) {
 	}
 	addrID := addr.ID
 
-	// FLs 100/101: unique derived factory_sku ref + phone for multi-SKU expand
-	// (the primary tier — real-world REF shape).
+	// FLs 100/101: unique normalized factory_sku ref + phone for multi-SKU expand.
 	// FLs 102/103: same supplier_product_ref 99999999 + same phone → ambiguity
 	// on row 1 via the fallback tier.
 	// FL 104: only resolvable via the supplier_product_ref fallback tier
@@ -249,7 +247,8 @@ func TestMapAndReconcileShipments_RouzaoReturnFixture(t *testing.T) {
 	profileRepo := newMockIntegrationProfileRepoSimple()
 	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
 		ID: 1, ProfileKey: "factory_rouzao_fixture", SourceSurface: "factory",
-		FactorySupplierPlatform: "rouzao",
+		FactorySupplierPlatform:        "rouzao",
+		SupportsImportSupplierShipment: true,
 	})
 	tmpl := &domain.DocumentTemplate{
 		TemplateKey: "shipment_rouzao_fixture", DocumentType: "import_supplier_shipment", Format: "csv",
@@ -357,7 +356,9 @@ func TestImportCarrierMappings_EmptyCodeAndNoInternalColumn(t *testing.T) {
 
 	repo := newMockCarrierMappingRepoFull()
 	profileRepo := newMockIntegrationProfileRepoSimple()
-	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{ID: 1, ProfileKey: "bili-carrier"})
+	_ = profileRepo.Create(context.Background(), &domain.IntegrationProfile{
+		ID: 1, ProfileKey: "bili-carrier", SourceSurface: string(domain.SourceSurfaceMembership), RequiresCarrierMapping: true,
+	})
 
 	// Pre-seed one external mapping so "shunfeng" can backfill internal via ResolveByExternalOrAlias.
 	// Deliberately wrong external name — import must overwrite from 快递公司名称 column.

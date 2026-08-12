@@ -941,15 +941,14 @@ func TestExportSupplierOrder(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil, nil)
+	exportUC, factoryProfileID := newFactoryExportTestUseCase(t, supplierRepo, fulfillRepo, waveID)
 	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
 	if err != nil {
 		t.Fatalf("ExportSupplierOrder failed: %v", err)
 	}
 
-	// All lines have nil DemandDocumentID → single catch-all group
 	if len(orders) != 1 {
-		t.Fatalf("expected 1 supplier order (catch-all group), got %d", len(orders))
+		t.Fatalf("expected 1 supplier order, got %d", len(orders))
 	}
 	order := orders[0]
 
@@ -961,6 +960,9 @@ func TestExportSupplierOrder(t *testing.T) {
 	}
 	if order.Status != "draft" {
 		t.Errorf("expected status 'draft', got %q", order.Status)
+	}
+	if order.FactoryIntegrationProfileID == nil || *order.FactoryIntegrationProfileID != factoryProfileID {
+		t.Errorf("FactoryIntegrationProfileID = %v, want %d", order.FactoryIntegrationProfileID, factoryProfileID)
 	}
 
 	// Verify order lines
@@ -1043,13 +1045,13 @@ func TestFullVerticalSlice(t *testing.T) {
 	}
 
 	// Step 4: Export Supplier Order
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil, nil)
-	exportedOrders, err := exportUC.ExportSupplierOrder(context.Background(), wave.ID)
+	exportUC, factoryProfileID := newFactoryExportTestUseCase(t, supplierRepo, fulfillRepo, wave.ID)
+	exportedOrders, err := exportUC.ExportSupplierOrderForProfile(context.Background(), wave.ID, factoryProfileID)
 	if err != nil {
 		t.Fatalf("Step 4 ExportSupplierOrder failed: %v", err)
 	}
 	if len(exportedOrders) != 1 {
-		t.Fatalf("Step 4: expected 1 supplier order (catch-all group), got %d", len(exportedOrders))
+		t.Fatalf("Step 4: expected 1 supplier order, got %d", len(exportedOrders))
 	}
 	order := exportedOrders[0]
 	if order.Status != "draft" {
@@ -1189,10 +1191,10 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 		}
 	}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, nil, nil, nil)
+	exportUC, factoryProfileID := newFactoryExportTestUseCase(t, supplierRepo, fulfillRepo, waveID)
 
 	// First export
-	orders1, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
+	orders1, err := exportUC.ExportSupplierOrderForProfile(context.Background(), waveID, factoryProfileID)
 	if err != nil {
 		t.Fatalf("first ExportSupplierOrder failed: %v", err)
 	}
@@ -1207,7 +1209,7 @@ func TestExportSupplierOrderIsIdempotentForDraftSlice(t *testing.T) {
 	}
 
 	// Second export — should be idempotent for draft
-	orders2, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
+	orders2, err := exportUC.ExportSupplierOrderForProfile(context.Background(), waveID, factoryProfileID)
 	if err != nil {
 		t.Fatalf("second ExportSupplierOrder failed: %v", err)
 	}
@@ -1482,7 +1484,11 @@ func (m *mockProfileRepoForExport) FindByProfileKey(ctx context.Context, key str
 	return nil, fmt.Errorf("not found")
 }
 func (m *mockProfileRepoForExport) List(ctx context.Context) ([]domain.IntegrationProfile, error) {
-	return nil, nil
+	out := make([]domain.IntegrationProfile, 0, len(m.profiles))
+	for _, profile := range m.profiles {
+		out = append(out, *profile)
+	}
+	return out, nil
 }
 func (m *mockProfileRepoForExport) Update(ctx context.Context, profile *domain.IntegrationProfile) error {
 	return nil
@@ -1490,7 +1496,9 @@ func (m *mockProfileRepoForExport) Update(ctx context.Context, profile *domain.I
 func (m *mockProfileRepoForExport) Delete(ctx context.Context, id uint) error { return nil }
 
 // mockBindingRepo is a minimal in-memory ProfileTemplateBindingRepository for tests.
-type mockBindingRepo struct{}
+type mockBindingRepo struct {
+	defaultTemplateByProfile map[uint]uint
+}
 
 func (m *mockBindingRepo) Create(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error {
 	return nil
@@ -1505,6 +1513,16 @@ func (m *mockBindingRepo) ListByTemplateID(ctx context.Context, templateID uint)
 	return nil, nil
 }
 func (m *mockBindingRepo) FindDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) (*domain.IntegrationProfileTemplateBinding, error) {
+	if docType == "export_supplier_order" && m.defaultTemplateByProfile != nil {
+		if templateID := m.defaultTemplateByProfile[profileID]; templateID != 0 {
+			return &domain.IntegrationProfileTemplateBinding{
+				IntegrationProfileID: profileID,
+				DocumentType:         docType,
+				TemplateID:           templateID,
+				IsDefault:            true,
+			}, nil
+		}
+	}
 	return nil, nil
 }
 func (m *mockBindingRepo) ClearDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) error {
@@ -1518,94 +1536,80 @@ func (m *mockBindingRepo) CountByProfileID(ctx context.Context, profileID uint) 
 	return 0, nil
 }
 
-// TestExportSupplierOrderGroupsByProfile verifies that fulfillment lines belonging
-// to different IntegrationProfiles are split into separate SupplierOrders, while
-// lines with no DemandDocumentID fall into a single catch-all group.
-func TestExportSupplierOrderGroupsByProfile(t *testing.T) {
+func newFactoryExportTestUseCase(
+	t *testing.T,
+	supplierRepo *mockSupplierRepo,
+	fulfillRepo *mockFulfillRepo,
+	waveID uint,
+) (ExportUseCase, uint) {
+	t.Helper()
+	const profileID = uint(9001)
+	lines, err := fulfillRepo.ListByWave(context.Background(), waveID)
+	if err != nil {
+		t.Fatalf("list fulfillment lines: %v", err)
+	}
+	products := make(map[uint]*domain.Product, len(lines))
+	for i := range lines {
+		productID := uint(100000) + lines[i].ID
+		lines[i].ProductID = &productID
+		if err := fulfillRepo.Update(context.Background(), &lines[i]); err != nil {
+			t.Fatalf("attach product to fulfillment line %d: %v", lines[i].ID, err)
+		}
+		products[productID] = &domain.Product{
+			ID:               productID,
+			WaveID:           waveID,
+			SupplierPlatform: "test_factory",
+			FactorySKU:       fmt.Sprintf("SKU-%d", productID),
+		}
+	}
+	profileRepo := newMockProfileRepoForExport(&domain.IntegrationProfile{
+		ID:                          profileID,
+		ProfileKey:                  "test_factory_export",
+		SourceSurface:               string(domain.SourceSurfaceFactory),
+		SupportsExportSupplierOrder: true,
+		FactorySupplierPlatform:     "test_factory",
+	})
+	bindingRepo := &mockBindingRepo{defaultTemplateByProfile: map[uint]uint{profileID: 7001}}
+	return NewExportUseCase(
+		supplierRepo,
+		fulfillRepo,
+		nil,
+		nil,
+		profileRepo,
+		bindingRepo,
+		&mockProductRepoForExport{products: products},
+	), profileID
+}
+
+// The compatibility entry point must not guess when two factory profiles can
+// execute the same product platform.
+func TestExportSupplierOrderAutoSelectRejectsAmbiguousFactoryProfiles(t *testing.T) {
 	t.Parallel()
 
 	waveID := uint(10)
 	profileA := uint(1)
 	profileB := uint(2)
-
-	demandRepo := newMockDemandRepo()
 	fulfillRepo := newMockFulfillRepo()
 	supplierRepo := newMockSupplierRepo()
-
-	// Create demand documents with different integration profiles
-	docA := &domain.DemandDocument{IntegrationProfileID: &profileA}
-	docB := &domain.DemandDocument{IntegrationProfileID: &profileB}
-	if err := demandRepo.Create(context.Background(), docA); err != nil {
-		t.Fatal(err)
-	}
-	if err := demandRepo.Create(context.Background(), docB); err != nil {
-		t.Fatal(err)
-	}
-
-	// 2 lines for profile A, 1 line for profile B, 1 catch-all (no doc)
-	for i := 0; i < 2; i++ {
-		if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
-			WaveID:           waveID,
-			Quantity:         5,
-			DemandDocumentID: &docA.ID,
-		}); err != nil {
-			t.Fatal(err)
-		}
-	}
+	productID := uint(501)
 	if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
-		WaveID:           waveID,
-		Quantity:         3,
-		DemandDocumentID: &docB.ID,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := fulfillRepo.Create(context.Background(), &domain.FulfillmentLine{
-		WaveID:   waveID,
-		Quantity: 1,
-		// no DemandDocumentID → catch-all group
+		WaveID: waveID, Quantity: 3, ProductID: &productID,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
 	profileRepo := newMockProfileRepoForExport(
-		&domain.IntegrationProfile{ID: profileA, ConnectorKey: "platform_a"},
-		&domain.IntegrationProfile{ID: profileB, ConnectorKey: "platform_b"},
+		&domain.IntegrationProfile{ID: profileA, ProfileKey: "factory_a", SourceSurface: "factory", SupportsExportSupplierOrder: true, FactorySupplierPlatform: "shared"},
+		&domain.IntegrationProfile{ID: profileB, ProfileKey: "factory_b", SourceSurface: "factory", SupportsExportSupplierOrder: true, FactorySupplierPlatform: "shared"},
 	)
-	bindingRepo := &mockBindingRepo{}
+	bindingRepo := &mockBindingRepo{defaultTemplateByProfile: map[uint]uint{profileA: 11, profileB: 12}}
+	productRepo := &mockProductRepoForExport{products: map[uint]*domain.Product{
+		productID: {ID: productID, WaveID: waveID, SupplierPlatform: "shared", FactorySKU: "SKU-1"},
+	}}
 
-	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, demandRepo, profileRepo, bindingRepo, nil)
-	orders, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
-	if err != nil {
-		t.Fatalf("ExportSupplierOrder failed: %v", err)
-	}
-
-	// Expect 3 groups: catch-all (profileID=0), profileA, profileB
-	if len(orders) != 3 {
-		t.Fatalf("expected 3 supplier orders (one per group), got %d", len(orders))
-	}
-
-	// Verify total line count across all orders equals 4
-	totalLines := 0
-	for _, o := range orders {
-		lines, err := supplierRepo.ListLinesByOrder(context.Background(), o.ID)
-		if err != nil {
-			t.Fatalf("ListLinesByOrder(%d) failed: %v", o.ID, err)
-		}
-		totalLines += len(lines)
-		if o.Status != "draft" {
-			t.Errorf("order %d: expected status 'draft', got %q", o.ID, o.Status)
-		}
-	}
-	if totalLines != 4 {
-		t.Errorf("expected 4 total order lines across all groups, got %d", totalLines)
-	}
-
-	// Verify BatchNo values are distinct
-	batchNos := make(map[string]bool)
-	for _, o := range orders {
-		if batchNos[o.BatchNo] {
-			t.Errorf("duplicate BatchNo %q", o.BatchNo)
-		}
-		batchNos[o.BatchNo] = true
+	exportUC := NewExportUseCase(supplierRepo, fulfillRepo, nil, nil, profileRepo, bindingRepo, productRepo)
+	_, err := exportUC.ExportSupplierOrder(context.Background(), waveID)
+	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected explicit ambiguity error, got %v", err)
 	}
 }

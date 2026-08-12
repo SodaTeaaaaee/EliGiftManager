@@ -173,16 +173,21 @@ func (w *supplierOrderFileWriter) tryTemplateExport(
 	}
 	templateID, parseErr := strconv.ParseUint(order.TemplateID, 10, 64)
 	if parseErr != nil || templateID == 0 {
-		return "", false, nil
+		return "", false, fmt.Errorf("supplier order %d file: invalid bound template ID %q", order.ID, order.TemplateID)
 	}
 	tmpl, err := w.opts.TemplateRepo.FindByID(ctx, uint(templateID))
-	if err != nil || tmpl == nil || tmpl.MappingRules == "" {
-		return "", false, nil
+	if err != nil {
+		return "", false, fmt.Errorf("supplier order %d file: bound template %d lookup: %w", order.ID, templateID, err)
+	}
+	if tmpl == nil {
+		return "", false, fmt.Errorf("supplier order %d file: bound template %d not found", order.ID, templateID)
+	}
+	if tmpl.MappingRules == "" {
+		return "", false, fmt.Errorf("supplier order %d file: bound template %d has no mapping rules", order.ID, templateID)
 	}
 	rules, err := ParseMappingRules(tmpl.MappingRules)
 	if err != nil {
-		// Malformed rules: fall back rather than hard-fail the whole download.
-		return "", false, nil
+		return "", false, fmt.Errorf("supplier order %d file: bound template %d mapping rules: %w", order.ID, templateID, err)
 	}
 
 	format := strings.ToLower(strings.TrimSpace(tmpl.Format))
@@ -243,9 +248,10 @@ func (w *supplierOrderFileWriter) tryTemplateExport(
 		}
 		data = xlsxBytes
 		ext = "xlsx"
+	case "xls":
+		return "", false, fmt.Errorf("supplier order %d file: BIFF .xls output is not supported; update template %d to format xlsx", order.ID, tmpl.ID)
 	default:
-		// Unknown format → JSON fallback.
-		return "", false, nil
+		return "", false, fmt.Errorf("supplier order %d file: bound template %d output format %q is unsupported; use xlsx or csv", order.ID, tmpl.ID, tmpl.Format)
 	}
 
 	filename = fmt.Sprintf("supplier_order_%d_%s.%s", order.ID, generatedAt.Format("20060102_150405"), ext)

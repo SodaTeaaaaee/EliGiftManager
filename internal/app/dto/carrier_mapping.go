@@ -35,13 +35,16 @@ type ImportCarrierMappingsInput struct {
 
 // ImportCarrierMappingsResult is the dual-mode outcome of a carrier mapping import.
 type ImportCarrierMappingsResult struct {
-	CreatedCount   int                         `json:"createdCount"`
-	UpdatedCount   int                         `json:"updatedCount"`
-	TotalProcessed int                         `json:"totalProcessed"`
-	SuccessCount   int                         `json:"successCount"`
-	ErrorCount     int                         `json:"errorCount"`
-	Errors         []ImportCarrierMappingError `json:"errors"`
-	Mappings       []CarrierMappingDTO         `json:"mappings"`
+	ImportRunID      uint                        `json:"importRunId"`
+	EvidenceDisabled bool                        `json:"evidenceDisabled"`
+	CreatedCount     int                         `json:"createdCount"`
+	UpdatedCount     int                         `json:"updatedCount"`
+	TotalProcessed   int                         `json:"totalProcessed"`
+	SuccessCount     int                         `json:"successCount"`
+	ErrorCount       int                         `json:"errorCount"`
+	Errors           []ImportCarrierMappingError `json:"errors"`
+	Mappings         []CarrierMappingDTO         `json:"mappings"`
+	ExternalCarriers []ExternalCarrierDTO        `json:"externalCarriers"`
 	// Warnings are non-blocking, row-level mapping warnings (e.g. mapping
 	// dests outside the global legal vocabulary) — values are still kept and
 	// imported, but flagged so the operator can review them.

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -31,6 +32,7 @@ type ChannelSyncController struct {
 	snapshotSvc         *app.WaveSnapshotService
 	carrierMappingUC    app.CarrierMappingUseCase
 	executorRegistry    *app.ExecutorRegistry
+	externalCarrierUC   *app.ExternalCarrierUseCase
 }
 
 func NewChannelSyncController() *ChannelSyncController {
@@ -65,6 +67,8 @@ func NewChannelSyncController() *ChannelSyncController {
 	mapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
 	carrierUC := app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo)
 	carrierUC = app.WithCarrierImportDeps(carrierUC, mapping)
+	carrierUC = app.WithCarrierImportEvidence(carrierUC, app.NewImportEvidenceUseCase(infra.NewImportEvidenceRepository(gdb)))
+	carrierUC = app.WithExternalCarrierRegistry(carrierUC, app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(gdb)))
 	return &ChannelSyncController{
 		channelSyncUC:       channelSyncUC,
 		channelSyncRepo:     channelSyncRepo,
@@ -80,7 +84,28 @@ func NewChannelSyncController() *ChannelSyncController {
 		snapshotSvc:         snapshotSvc,
 		carrierMappingUC:    carrierUC,
 		executorRegistry:    registry,
+		externalCarrierUC:   app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(gdb)),
 	}
+}
+
+func (c *ChannelSyncController) RegisterExternalCarrier(input dto.RegisterExternalCarrierInput) (dto.ExternalCarrierDTO, error) {
+	result, err := c.externalCarrierUC.RegisterExternalCarrier(appContext, input)
+	if err != nil {
+		return dto.ExternalCarrierDTO{}, err
+	}
+	return *result, nil
+}
+
+func (c *ChannelSyncController) BindInternalCarrier(input dto.BindInternalCarrierInput) (dto.ExternalCarrierDTO, error) {
+	result, err := c.externalCarrierUC.BindInternalCarrier(appContext, input)
+	if err != nil {
+		return dto.ExternalCarrierDTO{}, err
+	}
+	return *result, nil
+}
+
+func (c *ChannelSyncController) ListExternalCarriers(profileID uint) ([]dto.ExternalCarrierDTO, error) {
+	return c.externalCarrierUC.ListByProfile(appContext, profileID)
 }
 
 // CreateChannelSyncJob creates a channel sync job with its items.
@@ -255,6 +280,7 @@ func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSy
 	}
 
 	var result *dto.ExecuteSyncResult
+	var executionErr error
 	err = c.gdb.Transaction(func(tx *gorm.DB) error {
 		repos := infra.NewTxRepos(tx)
 		channelSyncRepo := repos.ChannelSync
@@ -277,7 +303,10 @@ func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSy
 
 		executed, execErr := executeSyncUC.ExecuteChannelSyncJob(ctx, jobID)
 		if execErr != nil {
-			return execErr
+			// The use case has persisted a recoverable failed job/item state. Commit
+			// that state, then return the execution error after the transaction.
+			executionErr = execErr
+			return nil
 		}
 		if projErr := projectChannelSyncStatesWithRepo(channelSyncRepo, fulfillRepo, jobID); projErr != nil {
 			return projErr
@@ -300,6 +329,9 @@ func (c *ChannelSyncController) ExecuteChannelSyncJob(jobID uint) (dto.ExecuteSy
 	})
 	if err != nil {
 		return dto.ExecuteSyncResult{}, err
+	}
+	if executionErr != nil {
+		return dto.ExecuteSyncResult{}, executionErr
 	}
 	return *result, nil
 }
@@ -661,8 +693,47 @@ func (c *ChannelSyncController) DeleteCarrierMapping(id uint) error {
 // ImportCarrierMappings upserts carrier mappings from a template-mapped sheet.
 func (c *ChannelSyncController) ImportCarrierMappings(input dto.ImportCarrierMappingsInput) (dto.ImportCarrierMappingsResult, error) {
 	ctx := appContext
-	result, err := c.carrierMappingUC.ImportCarrierMappings(ctx, input)
+	mappingRepo := infra.NewCarrierMappingRepository(c.gdb)
+	profileRepo := infra.NewIntegrationProfileRepository(c.gdb)
+	templateRepo := infra.NewDocumentTemplateRepository(c.gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(c.gdb)
+	mappingSvc := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
+	evidence := app.NewDeferredImportEvidenceUseCase(infra.NewImportEvidenceRepository(c.gdb))
+	registry := app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(c.gdb))
+	preflightUC := app.NewCarrierMappingUseCase(mappingRepo, profileRepo)
+	preflightUC = app.WithCarrierImportDeps(preflightUC, mappingSvc)
+	preflightUC = app.WithCarrierImportEvidence(preflightUC, evidence)
+	preflightUC = app.WithExternalCarrierRegistry(preflightUC, registry)
+	preflightUC = app.WithCarrierConflictAudit(preflightUC, registry)
+	plan, err := preflightUC.PreflightCarrierMappings(ctx, input)
 	if err != nil {
+		return dto.ImportCarrierMappingsResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
+	}
+	if plan.RejectsBusinessWrites() {
+		result, executeErr := preflightUC.ExecuteCarrierImportPlan(ctx, plan)
+		if executeErr != nil {
+			return dto.ImportCarrierMappingsResult{}, errors.Join(executeErr, evidence.FinalizeFailure(ctx, "failed", executeErr))
+		}
+		if finalizeErr := evidence.FinalizePending(ctx); finalizeErr != nil {
+			return dto.ImportCarrierMappingsResult{}, finalizeErr
+		}
+		return *result, nil
+	}
+	var result *dto.ImportCarrierMappingsResult
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		txUC := app.NewCarrierMappingUseCase(infra.NewCarrierMappingRepository(tx), infra.NewIntegrationProfileRepository(tx))
+		txUC = app.WithCarrierImportEvidence(txUC, evidence)
+		txUC = app.WithExternalCarrierRegistry(txUC, app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(tx)))
+		imported, importErr := txUC.ExecuteCarrierImportPlan(ctx, plan)
+		if importErr == nil {
+			result = imported
+		}
+		return importErr
+	})
+	if err != nil {
+		return dto.ImportCarrierMappingsResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
+	}
+	if err := evidence.FinalizePending(ctx); err != nil {
 		return dto.ImportCarrierMappingsResult{}, err
 	}
 	return *result, nil

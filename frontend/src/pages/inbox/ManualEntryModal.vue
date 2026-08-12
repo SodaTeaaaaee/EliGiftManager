@@ -18,6 +18,7 @@ import type { SelectOption } from 'naive-ui'
 import { useFeedback } from '@/shared/ui/feedback'
 import { listProfiles, importDemandDocument } from '@/shared/api/bridge'
 import type { dto } from '@/../wailsjs/go/models'
+import { canCreateRetailDemand } from '@/pages/integrations/profileAvailability'
 
 defineProps<{
   show: boolean
@@ -57,10 +58,12 @@ async function handleOpen(): Promise<void> {
   profilesLoading.value = true
   try {
     profiles.value = await listProfiles()
-    profileOptions.value = profiles.value.map((profile) => ({
-      label: `${profile.profileKey} (${profile.sourceChannel})`,
-      value: profile.id,
-    }))
+    profileOptions.value = profiles.value
+      .filter(canCreateRetailDemand)
+      .map((profile) => ({
+        label: `${profile.profileKey} (${profile.sourceChannel})`,
+        value: profile.id,
+      }))
   } catch (err) {
     profiles.value = []
     profileOptions.value = []

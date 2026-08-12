@@ -8,7 +8,8 @@ import (
 )
 
 type AddressController struct {
-	uc app.AddressManagementUseCase
+	uc      app.AddressManagementUseCase
+	batchUC app.AddressBatchUseCase
 }
 
 func NewAddressController() *AddressController {
@@ -16,7 +17,8 @@ func NewAddressController() *AddressController {
 	addressRepo := infra.NewAddressRepository(gdb)
 	fulfillmentRepo := infra.NewFulfillmentRepository(gdb)
 	return &AddressController{
-		uc: app.NewAddressManagementUseCase(addressRepo, fulfillmentRepo),
+		uc:      app.NewAddressManagementUseCase(addressRepo, fulfillmentRepo),
+		batchUC: app.NewAddressBatchUseCase(addressRepo, fulfillmentRepo),
 	}
 }
 

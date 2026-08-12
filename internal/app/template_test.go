@@ -290,7 +290,12 @@ func newTemplateTestSetup() *templateTestSetup {
 	br := newMockProfileTemplateBindingRepo()
 	pr := newMockIntegrationProfileRepoForTemplate()
 	// Seed a profile so binding tests can validate it.
-	pr.profiles[1] = &domain.IntegrationProfile{ID: 1, ProfileKey: "test-profile"}
+	pr.profiles[1] = &domain.IntegrationProfile{
+		ID:            1,
+		ProfileKey:    "test-profile",
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+	}
 	return &templateTestSetup{
 		templateRepo: tr,
 		bindingRepo:  br,
@@ -359,6 +364,50 @@ func TestCreateDocumentTemplateInvalidFormat(t *testing.T) {
 	}
 }
 
+func TestCreateDocumentTemplateRejectsXLSForOutputButAllowsImport(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	input := validCreateTemplateInput()
+	input.Format = "xls"
+	if _, err := s.uc.CreateDocumentTemplate(context.Background(), input); err != nil {
+		t.Fatalf("xls demand import should remain supported: %v", err)
+	}
+
+	input.TemplateKey = "supplier-xls"
+	input.DocumentType = "export_supplier_order"
+	input.MappingRules = `{"version":2,"mode":"header","columns":{"export.factory_sku":"SKU"}}`
+	_, err := s.uc.CreateDocumentTemplate(context.Background(), input)
+	if err == nil || !strings.Contains(err.Error(), "xlsx") || !strings.Contains(err.Error(), "not BIFF .xls") {
+		t.Fatalf("expected actionable output xls rejection, got %v", err)
+	}
+}
+
+func TestBindTemplateToProfileRejectsLegacyXLSOutputTemplate(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+	s.profileRepo.profiles[2] = &domain.IntegrationProfile{
+		ID: 2, ProfileKey: "factory", SourceSurface: string(domain.SourceSurfaceFactory),
+		SupportsExportSupplierOrder: true, FactorySupplierPlatform: "factory",
+	}
+	tmpl := &domain.DocumentTemplate{
+		TemplateKey: "legacy-xls-output", DocumentType: "export_supplier_order", Format: "xls",
+		MappingRules: `{"version":2,"mode":"header","columns":{"export.factory_sku":"SKU"}}`,
+	}
+	if err := s.templateRepo.Create(context.Background(), tmpl); err != nil {
+		t.Fatalf("seed legacy template: %v", err)
+	}
+	_, err := s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 2,
+		DocumentType:         "export_supplier_order",
+		TemplateID:           tmpl.ID,
+		IsDefault:            true,
+	})
+	if err == nil || !strings.Contains(err.Error(), "xlsx") {
+		t.Fatalf("expected xls binding rejection, got %v", err)
+	}
+}
+
 func TestBindTemplateToProfileSuccess(t *testing.T) {
 	t.Parallel()
 	s := newTemplateTestSetup()
@@ -387,6 +436,70 @@ func TestBindTemplateToProfileSuccess(t *testing.T) {
 	}
 	if !binding.IsDefault {
 		t.Error("expected IsDefault = true")
+	}
+}
+
+func TestBindTemplateToProfileRejectsWrongDemandProfile(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+
+	input := validCreateTemplateInput()
+	input.TemplateKey = "retail-orders"
+	input.DocumentType = "import_sales_order"
+	tmpl, err := s.uc.CreateDocumentTemplate(context.Background(), input)
+	if err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+
+	_, err = s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 1,
+		DocumentType:         "import_sales_order",
+		TemplateID:           tmpl.ID,
+		IsDefault:            true,
+	})
+	if err == nil {
+		t.Fatal("expected retail template to be rejected by membership profile")
+	}
+	if !strings.Contains(err.Error(), "not supported by profile") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBindTemplateToProfileRequiresFactoryCapability(t *testing.T) {
+	t.Parallel()
+	s := newTemplateTestSetup()
+	s.profileRepo.profiles[2] = &domain.IntegrationProfile{
+		ID:            2,
+		ProfileKey:    "factory-without-catalog",
+		SourceSurface: string(domain.SourceSurfaceFactory),
+	}
+
+	tmpl, err := s.uc.CreateDocumentTemplate(context.Background(), dto.CreateDocumentTemplateInput{
+		TemplateKey:  "catalog-template",
+		DocumentType: "import_product_catalog",
+		Format:       "csv",
+		MappingRules: `{"columns":{"product.name":"Name"}}`,
+	})
+	if err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+
+	_, err = s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 2,
+		DocumentType:         "import_product_catalog",
+		TemplateID:           tmpl.ID,
+	})
+	if err == nil {
+		t.Fatal("expected catalog binding to require SupportsImportProductCatalog")
+	}
+
+	s.profileRepo.profiles[2].SupportsImportProductCatalog = true
+	if _, err := s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 2,
+		DocumentType:         "import_product_catalog",
+		TemplateID:           tmpl.ID,
+	}); err != nil {
+		t.Fatalf("binding with capability should succeed: %v", err)
 	}
 }
 

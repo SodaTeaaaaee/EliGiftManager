@@ -16,6 +16,7 @@ import {
   FieldMappingEditor,
   emptyFieldMapping,
   parseMappingRules,
+  serializeMappingRules,
   type FieldMappingDestField,
   type FieldMappingValue,
 } from '@/shared/ui/field-mapping'
@@ -36,6 +37,8 @@ import {
   destFieldTooltipKey,
 } from '@/pages/integrations/wizard/destFields'
 import { documentTypeForDemandKind, type DemandKind } from '@/pages/integrations/wizard/deriveProfileDefaults'
+import { canImportDemand } from '@/pages/integrations/profileAvailability'
+import ImportEvidenceReference from '@/shared/ui/customer-resolution/ImportEvidenceReference.vue'
 
 defineProps<{
   show: boolean
@@ -65,8 +68,16 @@ const profilesError = ref('')
 const profileId = ref<number | null>(null)
 
 const profileOptions = computed<SelectOption[]>(() =>
-  profiles.value.map((profile) => ({ label: `${profile.profileKey} (${profile.sourceChannel})`, value: profile.id })),
+  profiles.value
+    .filter(canImportDemand)
+    .map((profile) => ({ label: `${profile.profileKey} (${profile.sourceChannel})`, value: profile.id })),
 )
+
+const selectedDocumentType = computed(() => {
+  const profile = profiles.value.find((candidate) => candidate.id === profileId.value)
+  const demandKind = (profile?.demandKind as DemandKind | undefined) ?? 'membership_entitlement'
+  return documentTypeForDemandKind(demandKind)
+})
 
 const sourceDocumentNo = ref('')
 const sourceCustomerRef = ref('')
@@ -98,6 +109,7 @@ const destFields = computed<FieldMappingDestField[]>(() =>
 )
 
 const anomalyCount = computed(() => previewRows.value.filter((row) => headers.value.some((header) => !row[header])).length)
+const inputFormat = computed(() => filePath.value.split('.').pop()?.toUpperCase() ?? '')
 
 async function loadTemplatePreview(id: number): Promise<void> {
   templateLoading.value = true
@@ -198,13 +210,14 @@ async function handleImport(): Promise<void> {
   try {
     const result = await importDemandCSV({
       integrationProfileId: profileId.value,
-      documentType: '',
+      documentType: selectedDocumentType.value,
       sourceDocumentNo: sourceDocumentNo.value,
       sourceCustomerRef: sourceCustomerRef.value,
       importMode: importMode.value,
       // Prefer filePath so backend re-reads with hasHeader/positional rules.
       filePath: filePath.value || undefined,
       rows: previewRows.value,
+      mappingRules: serializeMappingRules(mapping.value),
     })
     importResult.value = result
     currentStep.value = 'result'
@@ -313,6 +326,7 @@ const canNext = computed(() => {
               :position-placeholder="t('intakeWizard.mapping.positionPlaceholder')"
               :column-order-label="t('intakeWizard.mapping.columnOrderLabel')"
               :column-order-placeholder="t('intakeWizard.mapping.columnOrderPlaceholder')"
+              :input-format="inputFormat"
             />
           </div>
         </template>
@@ -322,6 +336,7 @@ const canNext = computed(() => {
             <p class="import-file-modal__step-label">{{ t('inbox.importModal.resultTitle') }}</p>
             <p>{{ t('inbox.importModal.successCount', { count: importResult.successCount }) }}</p>
             <p v-if="importResult.errorCount > 0">{{ t('inbox.importModal.errorCount', { count: importResult.errorCount }) }}</p>
+            <ImportEvidenceReference :import-run-id="importResult.importRunId" :evidence-disabled="importResult.evidenceDisabled" />
             <ul v-if="importResult.errors.length > 0" class="import-file-modal__errors">
               <li v-for="err in importResult.errors" :key="err.rowIndex">
                 {{ t('inbox.importModal.rowError', { row: err.rowIndex, reason: err.reason }) }}

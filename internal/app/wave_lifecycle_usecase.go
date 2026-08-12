@@ -194,11 +194,20 @@ func (uc *waveLifecycleUseCase) assignOne(ctx context.Context, waveID, demandDoc
 		return err
 	}
 
-	if doc != nil && doc.IntegrationProfileID != nil && uc.profileRepo != nil {
+	if doc != nil && doc.IntegrationProfileID != nil {
+		if uc.profileRepo == nil {
+			return fmt.Errorf("capture profile snapshot for demand document %d: profile repository is not configured", demandDocumentID)
+		}
 		profile, profErr := uc.profileRepo.FindByID(ctx, *doc.IntegrationProfileID)
-		if profErr == nil && profile != nil {
-			snapshot := CaptureProfileSnapshot(profile)
-			_ = uc.demandRepo.UpdateBoundProfileSnapshot(ctx, demandDocumentID, snapshot)
+		if profErr != nil {
+			return fmt.Errorf("capture profile snapshot for demand document %d: %w", demandDocumentID, profErr)
+		}
+		if profile == nil {
+			return fmt.Errorf("capture profile snapshot for demand document %d: profile %d not found", demandDocumentID, *doc.IntegrationProfileID)
+		}
+		snapshot := CaptureProfileSnapshot(profile)
+		if err := uc.demandRepo.UpdateBoundProfileSnapshot(ctx, demandDocumentID, snapshot); err != nil {
+			return fmt.Errorf("persist profile snapshot for demand document %d: %w", demandDocumentID, err)
 		}
 	}
 	return nil

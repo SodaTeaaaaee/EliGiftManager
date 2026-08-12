@@ -6,21 +6,28 @@ import (
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
+	"gorm.io/gorm"
 )
 
 type CustomerProfileController struct {
 	uc *app.CustomerProfileUseCase
+	db *gorm.DB
 }
 
 func NewCustomerProfileController() *CustomerProfileController {
 	gdb := database.GetDB()
+	return &CustomerProfileController{uc: newCustomerProfileUseCase(gdb), db: gdb}
+}
+
+func newCustomerProfileUseCase(gdb *gorm.DB) *app.CustomerProfileUseCase {
 	profileRepo := infra.NewProfileRepository(gdb)
 	addressRepo := infra.NewAddressRepository(gdb)
 	suggestionRepo := infra.NewMergeSuggestionRepository(gdb)
 	settingsSvc := service.NewSettingsService()
-	return &CustomerProfileController{
-		uc: app.NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, suggestionRepo),
-	}
+	nameService := app.NewCustomerNameObservationService(profileRepo,
+		infra.NewCustomerNameObservationRepository(gdb), infra.NewCustomerNameEventRepository(gdb))
+	uc := app.NewCustomerProfileUseCase(profileRepo, addressRepo, settingsSvc, suggestionRepo, nameService)
+	return app.WithCustomerProfileOrigins(uc, infra.NewCustomerProfileOriginRepository(gdb))
 }
 
 func (c *CustomerProfileController) ListCustomerProfiles(keyword, platform string, missingAddressOnly bool) ([]dto.CustomerProfileDTO, error) {
@@ -39,8 +46,41 @@ func (c *CustomerProfileController) CreateCustomerProfile(input dto.CreateCustom
 }
 
 func (c *CustomerProfileController) UpdateCustomerProfile(input dto.UpdateCustomerProfileInput) (*dto.CustomerProfileDTO, error) {
-	ctx := appContext
-	return c.uc.UpdateCustomerProfile(ctx, input)
+	var result *dto.CustomerProfileDTO
+	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		result, err = newCustomerProfileUseCase(tx).UpdateCustomerProfile(appContext, input)
+		return err
+	})
+	return result, err
+}
+
+func (c *CustomerProfileController) ListCustomerNameObservations(profileID uint) ([]dto.CustomerNameObservationDTO, error) {
+	return c.uc.ListCustomerNameObservations(appContext, profileID)
+}
+
+func (c *CustomerProfileController) ListCustomerProfileOrigins(profileID uint) ([]dto.CustomerProfileOriginDTO, error) {
+	return c.uc.ListCustomerProfileOrigins(appContext, profileID)
+}
+
+func (c *CustomerProfileController) PinCustomerDisplayName(input dto.PinCustomerDisplayNameInput) (*dto.CustomerProfileDTO, error) {
+	var result *dto.CustomerProfileDTO
+	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		result, err = newCustomerProfileUseCase(tx).PinCustomerDisplayName(appContext, input)
+		return err
+	})
+	return result, err
+}
+
+func (c *CustomerProfileController) UnpinCustomerDisplayName(input dto.UnpinCustomerDisplayNameInput) (*dto.CustomerProfileDTO, error) {
+	var result *dto.CustomerProfileDTO
+	err := c.db.Transaction(func(tx *gorm.DB) error {
+		var err error
+		result, err = newCustomerProfileUseCase(tx).UnpinCustomerDisplayName(appContext, input)
+		return err
+	})
+	return result, err
 }
 
 func (c *CustomerProfileController) DeleteCustomerProfile(id uint) error {

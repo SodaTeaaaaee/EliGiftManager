@@ -58,6 +58,9 @@ func setupScenarioDTestDB(t *testing.T) *scenarioDTestState {
 		&persistence.CustomerMergeRecord{},
 		&persistence.CustomerIdentity{},
 		&persistence.CustomerAddress{},
+		&persistence.CustomerNameObservation{},
+		&persistence.CustomerNameEvent{},
+		&persistence.CustomerProfileOrigin{},
 		&persistence.DemandDocument{},
 		&persistence.DemandLine{},
 		&persistence.Wave{},
@@ -87,6 +90,7 @@ func setupScenarioDTestDB(t *testing.T) *scenarioDTestState {
 	); err != nil {
 		t.Fatalf("migrate scenario D database: %v", err)
 	}
+	seedEnabledFeaturePolicyForRootTest(t, gdb)
 
 	previousDB := db.GetDB()
 	db.SetDefaultDB(gdb)
@@ -412,7 +416,27 @@ func TestScenarioD_MixedWaveQueries(t *testing.T) {
 		}
 		s.lineIDs = scenarioDUintIDs(lines)
 
-		orders, err := s.exportController.ExportSupplierOrder(s.wave.ID)
+		factoryProfile := persistence.IntegrationProfile{
+			ProfileKey: "scenario-d-factory", SourceSurface: "factory",
+			SupportsExportSupplierOrder: true, FactorySupplierPlatform: "scenario-d-factory",
+		}
+		if err := s.gdb.Create(&factoryProfile).Error; err != nil {
+			t.Fatalf("create factory profile: %v", err)
+		}
+		orderTemplate := persistence.DocumentTemplate{
+			TemplateKey: "scenario-d-supplier-order", DocumentType: "export_supplier_order", Format: "xlsx",
+			MappingRules: `{"version":2,"mode":"header","columns":{"export.factory_sku":"SKU","export.quantity":"Qty"},"columnOrder":["export.factory_sku","export.quantity"]}`,
+		}
+		if err := s.gdb.Create(&orderTemplate).Error; err != nil {
+			t.Fatalf("create supplier-order template: %v", err)
+		}
+		if err := s.gdb.Create(&persistence.IntegrationProfileTemplateBinding{
+			IntegrationProfileID: factoryProfile.ID, DocumentType: "export_supplier_order", TemplateID: orderTemplate.ID, IsDefault: true,
+		}).Error; err != nil {
+			t.Fatalf("bind supplier-order template: %v", err)
+		}
+
+		orders, err := s.exportController.ExportSupplierOrderForProfile(s.wave.ID, factoryProfile.ID)
 		if err != nil {
 			t.Fatalf("export draft supplier orders: %v", err)
 		}
@@ -430,8 +454,9 @@ func TestScenarioD_MixedWaveQueries(t *testing.T) {
 			t.Fatalf("find X supplier order line: %v", err)
 		}
 		shipmentResult, err := s.shipmentController.ImportShipments(dto.ImportShipmentInput{
-			WaveID:     s.wave.ID,
-			ImportMode: "reject_all",
+			WaveID:               s.wave.ID,
+			IntegrationProfileID: factoryProfile.ID,
+			ImportMode:           "reject_all",
 			Entries: []dto.ImportShipmentEntry{{
 				SupplierOrderLineID: supplierLine.ID,
 				FulfillmentLineID:   s.xLineID,

@@ -76,6 +76,9 @@ func (uc *addressBatchUseCase) bindOne(ctx context.Context, lineID, addressID ui
 }
 
 func (uc *addressBatchUseCase) BatchBindAddressToLines(ctx context.Context, entries []dto.BindAddressEntry) ([]dto.AddressBatchItemResult, error) {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return nil, err
+	}
 	results := make([]dto.AddressBatchItemResult, 0, len(entries))
 	for _, entry := range entries {
 		results = append(results, uc.bindOne(ctx, entry.FulfillmentLineID, entry.CustomerAddressID))
@@ -84,6 +87,9 @@ func (uc *addressBatchUseCase) BatchBindAddressToLines(ctx context.Context, entr
 }
 
 func (uc *addressBatchUseCase) BindDefaultAddressesForWave(ctx context.Context, waveID uint) ([]dto.AddressBatchItemResult, error) {
+	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
+		return nil, err
+	}
 	lines, err := uc.fulfillmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
 		return nil, err

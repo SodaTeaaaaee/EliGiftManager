@@ -27,6 +27,9 @@ func setupProfileMergeTestDB(t *testing.T) *gorm.DB {
 		&persistence.CustomerMergeRecord{},
 		&persistence.CustomerIdentity{},
 		&persistence.CustomerAddress{},
+		&persistence.CustomerNameObservation{},
+		&persistence.CustomerNameEvent{},
+		&persistence.CustomerProfileOrigin{},
 		&persistence.DemandDocument{},
 		&persistence.Wave{},
 		&persistence.WaveDemandAssignment{},
@@ -35,6 +38,7 @@ func setupProfileMergeTestDB(t *testing.T) *gorm.DB {
 	); err != nil {
 		t.Fatalf("migrate database: %v", err)
 	}
+	seedEnabledFeaturePolicyForFocusedDB(t, db)
 	return db
 }
 
@@ -110,7 +114,8 @@ func mergeProfilesInTransaction(t *testing.T, db *gorm.DB, sourceID, targetID ui
 	var result *dto.MergeProfilesResult
 	if err := db.Transaction(func(tx *gorm.DB) error {
 		repos := infra.NewTxRepos(tx)
-		uc := NewProfileMergeUseCase(repos.CustomerProfile, repos.Address, repos.DemandRepo, repos.CustomerMerge)
+		uc := NewProfileMergeUseCase(repos.CustomerProfile, repos.Address, repos.DemandRepo, repos.CustomerMerge,
+			CustomerMergeResolutionRepos{NameObservations: repos.NameObservation, Origins: repos.CustomerOrigin})
 		var err error
 		result, err = uc.MergeProfiles(context.Background(), dto.MergeProfilesInput{SourceProfileID: sourceID, TargetProfileID: targetID})
 		return err
@@ -124,7 +129,8 @@ func undoMergeInTransaction(db *gorm.DB, mergeID uint) (*dto.UndoCustomerMergeRe
 	var result *dto.UndoCustomerMergeResult
 	err := db.Transaction(func(tx *gorm.DB) error {
 		repos := infra.NewTxRepos(tx)
-		uc := NewProfileMergeUndoUseCase(repos.CustomerProfile, repos.Address, repos.DemandRepo, repos.CustomerMerge)
+		uc := NewProfileMergeUndoUseCase(repos.CustomerProfile, repos.Address, repos.DemandRepo, repos.CustomerMerge,
+			CustomerMergeResolutionRepos{NameObservations: repos.NameObservation, Origins: repos.CustomerOrigin})
 		var err error
 		result, err = uc.UndoCustomerMerge(context.Background(), dto.UndoCustomerMergeInput{MergeID: mergeID})
 		return err
@@ -221,6 +227,57 @@ func TestProfileMergeRecordsExactRowsAndUndoRestoresOnlyThoseRows(t *testing.T) 
 	}
 	if _, err := undoMergeInTransaction(db, result.MergeID); err == nil || !strings.Contains(err.Error(), "already been undone") {
 		t.Fatalf("expected already-undone error, got %v", err)
+	}
+}
+
+func TestProfileMergeAndUndoMoveNameObservationsAndOriginsByExactID(t *testing.T) {
+	db := setupProfileMergeTestDB(t)
+	f := createProfileMergeFixture(t, db)
+	now := time.Now().UTC()
+	observation := persistence.CustomerNameObservation{
+		CustomerProfileID: f.source.ID, Name: "Alias", NormalizedName: "alias",
+		SourceEventKey: "merge-name-event", EpisodeKey: "merge-name-episode", ObservationCount: 1,
+		NameKind: domain.CustomerNameKindTrustedNickname, ObservedAt: &now, FirstSeenAt: &now, LastSeenAt: &now, IsActive: true,
+	}
+	if err := db.Create(&observation).Error; err != nil {
+		t.Fatal(err)
+	}
+	integrationProfileID := uint(77)
+	origin := persistence.CustomerProfileOrigin{
+		CustomerProfileID: f.source.ID, OriginKind: domain.CustomerOriginKindRetailOrder,
+		SourceIntegrationProfileID: &integrationProfileID, ExternalRef: "ORDER-MERGE", IsProvisional: true,
+		FirstSeenAt: &now, LastSeenAt: &now,
+	}
+	if err := db.Create(&origin).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	result := mergeProfilesInTransaction(t, db, f.source.ID, f.target.ID)
+	var record persistence.CustomerMergeRecord
+	if err := db.First(&record, result.MergeID).Error; err != nil {
+		t.Fatal(err)
+	}
+	var payload domain.CustomerMergePayload
+	if err := json.Unmarshal([]byte(record.Payload), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.NameObservationIDs) != 1 || payload.NameObservationIDs[0] != observation.ID || len(payload.OriginIDs) != 1 || payload.OriginIDs[0] != origin.ID {
+		t.Fatalf("resolution payload = %+v", payload)
+	}
+	if err := db.First(&observation, observation.ID).Error; err != nil || observation.CustomerProfileID != f.target.ID {
+		t.Fatalf("observation after merge = %+v err=%v", observation, err)
+	}
+	if err := db.First(&origin, origin.ID).Error; err != nil || origin.CustomerProfileID != f.target.ID {
+		t.Fatalf("origin after merge = %+v err=%v", origin, err)
+	}
+	if _, err := undoMergeInTransaction(db, result.MergeID); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.First(&observation, observation.ID).Error; err != nil || observation.CustomerProfileID != f.source.ID {
+		t.Fatalf("observation after undo = %+v err=%v", observation, err)
+	}
+	if err := db.First(&origin, origin.ID).Error; err != nil || origin.CustomerProfileID != f.source.ID {
+		t.Fatalf("origin after undo = %+v err=%v", origin, err)
 	}
 }
 

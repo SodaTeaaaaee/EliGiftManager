@@ -15,6 +15,13 @@ type profileMergeUseCase struct {
 	addressRepo domain.CustomerMergeAddressRepository
 	demandRepo  domain.CustomerMergeDemandRepository
 	mergeRepo   domain.CustomerMergeRecordRepository
+	nameRepo    domain.CustomerNameObservationRepository
+	originRepo  domain.CustomerProfileOriginRepository
+}
+
+type CustomerMergeResolutionRepos struct {
+	NameObservations domain.CustomerNameObservationRepository
+	Origins          domain.CustomerProfileOriginRepository
 }
 
 func NewProfileMergeUseCase(
@@ -22,16 +29,25 @@ func NewProfileMergeUseCase(
 	addressRepo domain.CustomerMergeAddressRepository,
 	demandRepo domain.CustomerMergeDemandRepository,
 	mergeRepo domain.CustomerMergeRecordRepository,
+	resolution ...CustomerMergeResolutionRepos,
 ) ProfileMergeUseCase {
-	return &profileMergeUseCase{
+	uc := &profileMergeUseCase{
 		profileRepo: profileRepo,
 		addressRepo: addressRepo,
 		demandRepo:  demandRepo,
 		mergeRepo:   mergeRepo,
 	}
+	if len(resolution) > 0 {
+		uc.nameRepo = resolution[0].NameObservations
+		uc.originRepo = resolution[0].Origins
+	}
+	return uc
 }
 
 func (uc *profileMergeUseCase) MergeProfiles(ctx context.Context, input dto.MergeProfilesInput) (*dto.MergeProfilesResult, error) {
+	if err := requireCustomerResolutionFeature(ctx, uc.profileRepo, domain.CustomerResolutionFeatureMergeExecution); err != nil {
+		return nil, err
+	}
 	if input.SourceProfileID == 0 || input.TargetProfileID == 0 {
 		return nil, fmt.Errorf("both source and target profile IDs are required")
 	}
@@ -99,6 +115,36 @@ func (uc *profileMergeUseCase) MergeProfiles(ctx context.Context, input dto.Merg
 	}
 	result.UpdatedDemandDocs = len(documentIDs)
 
+	var nameObservationIDs []uint
+	if uc.nameRepo != nil {
+		observations, err := uc.nameRepo.ListByProfile(ctx, src.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list source name observations: %w", err)
+		}
+		nameObservationIDs = make([]uint, len(observations))
+		for i := range observations {
+			nameObservationIDs[i] = observations[i].ID
+		}
+		if err := uc.nameRepo.BulkUpdateProfileIDByIDs(ctx, nameObservationIDs, input.TargetProfileID); err != nil {
+			return nil, fmt.Errorf("migrate name observations: %w", err)
+		}
+	}
+
+	var originIDs []uint
+	if uc.originRepo != nil {
+		origins, err := uc.originRepo.ListByProfile(ctx, src.ID)
+		if err != nil {
+			return nil, fmt.Errorf("list source customer origins: %w", err)
+		}
+		originIDs = make([]uint, len(origins))
+		for i := range origins {
+			originIDs[i] = origins[i].ID
+		}
+		if err := uc.originRepo.BulkUpdateProfileIDByIDs(ctx, originIDs, input.TargetProfileID); err != nil {
+			return nil, fmt.Errorf("migrate customer origins: %w", err)
+		}
+	}
+
 	// Historical participant snapshots and fulfillment lines intentionally stay
 	// attached to the source profile.
 
@@ -108,9 +154,11 @@ func (uc *profileMergeUseCase) MergeProfiles(ctx context.Context, input dto.Merg
 	}
 
 	payload, err := json.Marshal(domain.CustomerMergePayload{
-		IdentityIDs:       identityIDs,
-		AddressIDs:        addressIDs,
-		DemandDocumentIDs: documentIDs,
+		IdentityIDs:        identityIDs,
+		AddressIDs:         addressIDs,
+		DemandDocumentIDs:  documentIDs,
+		NameObservationIDs: nameObservationIDs,
+		OriginIDs:          originIDs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode merge payload: %w", err)

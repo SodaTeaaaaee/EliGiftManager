@@ -740,6 +740,7 @@ func TestExecuteChannelSyncJobWithRegisteredDocumentExportExecutorSucceeds(t *te
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{
 		ID:               1,
+		SourceSurface:    string(domain.SourceSurfaceRetail),
 		TrackingSyncMode: "document_export",
 		ConnectorKey:     "eli.local_export",
 	}
@@ -803,6 +804,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorFailsGracefully(t *testi
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{
 		ID:               1,
+		SourceSurface:    string(domain.SourceSurfaceRetail),
 		TrackingSyncMode: "document_export",
 		ConnectorKey:     "eli.local_export",
 	}
@@ -937,6 +939,7 @@ func TestExecuteChannelSyncJobWithDocumentExportExecutorPersistsRealRequestPaylo
 	pr := newMockProfileRepo()
 	pr.profiles[1] = &domain.IntegrationProfile{
 		ID:               1,
+		SourceSurface:    string(domain.SourceSurfaceRetail),
 		TrackingSyncMode: "document_export",
 		ConnectorKey:     "eli.local_export",
 	}

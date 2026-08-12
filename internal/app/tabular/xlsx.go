@@ -18,10 +18,24 @@ func readXLSX(path string, opts ReadOptions) (*Sheet, error) {
 	if len(sheets) == 0 {
 		return nil, fmt.Errorf("xlsx file %q has no sheets", path)
 	}
-	if opts.SheetIndex < 0 || opts.SheetIndex >= len(sheets) {
-		return nil, fmt.Errorf("xlsx sheet index %d out of range [0,%d)", opts.SheetIndex, len(sheets))
+	name := strings.TrimSpace(opts.SheetName)
+	if name != "" {
+		found := false
+		for _, candidate := range sheets {
+			if candidate == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("xlsx sheet %q not found (available: %s)", name, strings.Join(sheets, ", "))
+		}
+	} else {
+		if opts.SheetIndex < 0 || opts.SheetIndex >= len(sheets) {
+			return nil, fmt.Errorf("xlsx sheet index %d out of range [0,%d)", opts.SheetIndex, len(sheets))
+		}
+		name = sheets[opts.SheetIndex]
 	}
-	name := sheets[opts.SheetIndex]
 
 	rows, err := f.GetRows(name)
 	if err != nil {

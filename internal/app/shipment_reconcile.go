@@ -54,9 +54,9 @@ func WithShipmentReconcileDeps(
 //  1. third_party_order_no / external_key == FulfillmentLine.ID (decimal)
 //  2. factory_sku + phone unique within the wave
 //  3. factory_sku + recipient_name unique within the wave
-//  4. derived factory_sku ref (product.factory_sku with its platform prefix
-//     stripped, e.g. "ROUZAO_206068021" -> "206068021") + phone unique
-//  5. derived factory_sku ref + recipient_name unique
+//  4. normalized factory_sku ref (product.factory_sku with an optional generic
+//     alphabetic namespace stripped, e.g. "VENDOR_1001" -> "1001") + phone
+//  5. normalized factory_sku ref + recipient_name unique
 //  6. supplier_product_ref + phone unique within the wave (fallback tier;
 //     kept for profiles whose token genuinely carries a supplier_product_ref)
 //  7. supplier_product_ref + recipient_name unique within the wave (fallback)
@@ -65,25 +65,11 @@ func WithShipmentReconcileDeps(
 // physical source row into N ImportShipmentEntry candidates. Any token that is
 // ambiguous or unmatched fails the whole physical row (no guessing).
 //
-// SampleData verification (工厂平台——柔造, 2026-07-14, synthetic shape only — no PII stored):
-//
-//	规格&数量 cells use pipe-separated "REF_label * qty" segments.
-//	Cross-checked 从工厂平台导出-商品列表.zip (columns 商品ID, 商家编码) against
-//	从工厂平台导出-快递订单数据.csv 规格&数量 token prefixes:
-//	  - Example product-list row: 商品ID=181881175, 商家编码=ROUZAO_206068021.
-//	    The express CSV's matching token prefix is "206068021_...".
-//	  - REF == the numeric suffix of 商家编码 (= product.factory_sku) once its
-//	    platform prefix (e.g. "ROUZAO_") is stripped — NOT 商品ID
-//	    (= product.supplier_product_ref). Across the whole sample file, zero
-//	    token prefixes equal any 商品ID value; every token prefix equals a
-//	    商家编码 suffix. The original claim here (REF == 商品ID) was backwards
-//	    and is corrected by this comment.
-//	  - REF also does NOT match the shipment-row 商品编码 column (that column
-//	    holds the parent/bundle product id, unrelated to the per-SKU token).
-//	Example shape: "206068021_… * 1|205721969_… * 3". Multi-SKU rows expand
-//	1 physical row → N shipment candidates keyed by REF, matched primarily via
-//	the derived factory_sku ref (match priority 4/5 above); supplier_product_ref
-//	tiers (6/7) remain as a fallback, not deleted.
+// Token interpretation and product matching are independent configuration
+// contracts. This use case never infers a relationship between a shipment file
+// and a catalog file. The normalized factory-SKU tier is a platform-neutral
+// compatibility convention; supplier_product_ref remains an independent
+// fallback. Ambiguous matches always fail instead of guessing.
 func (uc *shipmentImportUseCase) MapAndReconcileShipments(ctx context.Context, input dto.MapAndReconcileShipmentsInput) (*dto.ImportShipmentResult, error) {
 	if uc.reconcile == nil || uc.reconcile.templateMapping == nil {
 		return nil, fmt.Errorf("map and reconcile shipments: reconcile deps not configured")
@@ -114,6 +100,16 @@ func (uc *shipmentImportUseCase) MapAndReconcileShipments(ctx context.Context, i
 	if err != nil {
 		return nil, err
 	}
+	var evidenceRun *domain.ImportRun
+	var evidenceRecords []domain.ImportRawRecord
+	if uc.evidence != nil {
+		evidenceRows, unmapped := importEvidenceRows(orderedRows, headers, headerRows)
+		parserMetadata := fmt.Sprintf(`{"hasHeader":%t,"sheetName":%q}`, rules.HasHeader, rules.SheetName)
+		evidenceRun, evidenceRecords, err = uc.evidence.StartImportEvidence(ctx, "supplier_shipment", input.IntegrationProfileID, mode, input.FilePath, parserMetadata, evidenceRows, unmapped, nil)
+		if err != nil {
+			return nil, fmt.Errorf("start shipment import evidence: %w", err)
+		}
+	}
 
 	index, err := uc.buildReconcileIndex(ctx, input.WaveID)
 	if err != nil {
@@ -121,6 +117,15 @@ func (uc *shipmentImportUseCase) MapAndReconcileShipments(ctx context.Context, i
 	}
 
 	var entries []dto.ImportShipmentEntry
+	var compactSourceRows []int
+	type rowPlan struct {
+		sourceRow           int
+		entries             []dto.ImportShipmentEntry
+		compactEntryIndices []int
+		externalCarrierCode string
+		externalCarrierName string
+	}
+	var rowPlans []rowPlan
 	var mapErrors []dto.ImportShipmentError
 	var rowWarnings rowWarningCollector
 
@@ -135,44 +140,73 @@ func (uc *shipmentImportUseCase) MapAndReconcileShipments(ctx context.Context, i
 		}
 		rowWarnings.add(i, warnings)
 		if mapErr != nil {
+			markImportEvidenceFailure(evidenceRecords, i, "mapping_error", mapErr.Error(), warnings)
 			mapErrors = append(mapErrors, dto.ImportShipmentError{EntryIndex: i, Reason: mapErr.Error()})
-			if mode == "reject_all" {
-				break
-			}
 			continue
 		}
 
 		rowEntries, recErr := reconcileShipmentRow(applied, index, uc.reconcile.carrierUC, ctx, input.IntegrationProfileID)
 		if recErr != nil {
+			markImportEvidenceFailure(evidenceRecords, i, "reconcile_error", recErr.Error(), warnings)
 			mapErrors = append(mapErrors, dto.ImportShipmentError{EntryIndex: i, Reason: recErr.Error()})
-			if mode == "reject_all" {
-				break
-			}
 			continue
 		}
+		plan := rowPlan{
+			sourceRow:           i,
+			entries:             rowEntries,
+			compactEntryIndices: make([]int, len(rowEntries)),
+			externalCarrierCode: shipmentMappedValue(applied, "shipment.carrier_code", "shipment.carrier"),
+			externalCarrierName: shipmentMappedValue(applied, "shipment.carrier_name"),
+		}
+		for entryIndex := range rowEntries {
+			plan.compactEntryIndices[entryIndex] = len(entries) + entryIndex
+		}
+		rowPlans = append(rowPlans, plan)
 		entries = append(entries, rowEntries...)
+		for range rowEntries {
+			compactSourceRows = append(compactSourceRows, i)
+		}
 	}
 
 	if mode == "reject_all" && len(mapErrors) > 0 {
-		return &dto.ImportShipmentResult{
-			TotalProcessed: total,
-			SuccessCount:   0,
-			ErrorCount:     len(mapErrors),
-			Errors:         mapErrors,
-			Warnings:       rowWarnings.warnings(),
-		}, nil
+		for _, plan := range rowPlans {
+			markImportEvidenceFailure(evidenceRecords, plan.sourceRow, "import_rejected", "file rejected because one or more rows failed mapping or reconciliation", nil)
+		}
+		result := &dto.ImportShipmentResult{
+			ImportRunID:      importEvidenceRunID(evidenceRun),
+			EvidenceDisabled: uc.evidence != nil && evidenceRun == nil,
+			TotalProcessed:   total,
+			SuccessCount:     0,
+			ErrorCount:       len(mapErrors),
+			Errors:           mapErrors,
+			Warnings:         rowWarnings.warnings(),
+		}
+		if evidenceRun != nil {
+			if err := uc.evidence.CompleteImportEvidence(ctx, evidenceRun, evidenceRecords, "rejected"); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
 	}
 	if len(entries) == 0 {
-		return &dto.ImportShipmentResult{
-			TotalProcessed: total,
-			SuccessCount:   0,
-			ErrorCount:     len(mapErrors),
-			Errors:         mapErrors,
-			Warnings:       rowWarnings.warnings(),
-		}, nil
+		result := &dto.ImportShipmentResult{
+			ImportRunID:      importEvidenceRunID(evidenceRun),
+			EvidenceDisabled: uc.evidence != nil && evidenceRun == nil,
+			TotalProcessed:   total,
+			SuccessCount:     0,
+			ErrorCount:       len(mapErrors),
+			Errors:           mapErrors,
+			Warnings:         rowWarnings.warnings(),
+		}
+		if evidenceRun != nil {
+			if err := uc.evidence.CompleteImportEvidence(ctx, evidenceRun, evidenceRecords, "failed"); err != nil {
+				return nil, err
+			}
+		}
+		return result, nil
 	}
 
-	result, err := uc.ImportShipments(ctx, dto.ImportShipmentInput{
+	outcome, err := uc.importShipmentsCoreWithOutcome(ctx, dto.ImportShipmentInput{
 		WaveID:               input.WaveID,
 		IntegrationProfileID: input.IntegrationProfileID,
 		ImportMode:           mode,
@@ -181,8 +215,55 @@ func (uc *shipmentImportUseCase) MapAndReconcileShipments(ctx context.Context, i
 	if err != nil {
 		return nil, err
 	}
+	result := outcome.result
+
+	// The scan/reconcile pass above is deliberately write-free. Observe a
+	// carrier only after the whole-file reject_all gate and the shipment core
+	// have accepted the physical row. The controller supplies transaction-bound
+	// repositories, so observation and all shipment business writes roll back
+	// together on this or any later error.
+	for _, plan := range rowPlans {
+		rowSucceeded := len(plan.compactEntryIndices) > 0
+		for _, entryIndex := range plan.compactEntryIndices {
+			if _, ok := outcome.successfulEntryIndices[entryIndex]; !ok {
+				rowSucceeded = false
+				break
+			}
+		}
+		if !rowSucceeded {
+			markShipmentPlanEvidenceFailure(evidenceRecords, plan.sourceRow, plan.compactEntryIndices, result.Errors)
+			continue
+		}
+		if uc.externalRegistry != nil && len(plan.entries) > 0 && (plan.externalCarrierCode != "" || plan.externalCarrierName != "") {
+			observation := ExternalCarrierObservationInput{
+				IntegrationProfileID: input.IntegrationProfileID,
+				ExternalCarrierCode:  plan.externalCarrierCode,
+				ExternalCarrierName:  plan.externalCarrierName,
+			}
+			if evidenceRun != nil && plan.sourceRow >= 0 && plan.sourceRow < len(evidenceRecords) {
+				runID := evidenceRun.ID
+				rawRecordID := evidenceRecords[plan.sourceRow].ID
+				if runID != 0 {
+					observation.SourceImportRunID = &runID
+				}
+				if rawRecordID != 0 {
+					observation.SourceRawRecordID = &rawRecordID
+				}
+			}
+			if _, observeErr := uc.externalRegistry.ObserveExternalCarrierWithProvenance(ctx, observation); observeErr != nil {
+				return nil, fmt.Errorf("register shipment carrier row %d: %w", plan.sourceRow, observeErr)
+			}
+		}
+		markImportEvidenceSuccess(evidenceRecords, plan.sourceRow, "shipment", 0)
+	}
+	result.EvidenceDisabled = uc.evidence != nil && evidenceRun == nil
 	// Merge pre-import mapping errors into the result (row indices refer to source rows;
 	// ImportShipments errors refer to the compacted entries slice — re-base them).
+	for i := range result.Errors {
+		if result.Errors[i].EntryIndex >= 0 && result.Errors[i].EntryIndex < len(compactSourceRows) {
+			result.Errors[i].EntryIndex = compactSourceRows[result.Errors[i].EntryIndex]
+		}
+	}
 	if len(mapErrors) > 0 {
 		result.Errors = append(mapErrors, result.Errors...)
 		result.ErrorCount = len(result.Errors)
@@ -195,7 +276,51 @@ func (uc *shipmentImportUseCase) MapAndReconcileShipments(ctx context.Context, i
 	// case that changes). Always assign a non-nil slice so the JSON field is
 	// `[]` rather than `null` when there is nothing to report.
 	result.Warnings = append(rowWarnings.warnings(), result.Warnings...)
+	if evidenceRun != nil {
+		result.ImportRunID = evidenceRun.ID
+		status := "completed"
+		if result.ErrorCount > 0 {
+			status = "partial_success"
+		}
+		if mode == "reject_all" && result.ErrorCount > 0 {
+			status = "rejected"
+		}
+		if err := uc.evidence.CompleteImportEvidence(ctx, evidenceRun, evidenceRecords, status); err != nil {
+			return nil, err
+		}
+	}
 	return result, nil
+}
+
+func markShipmentPlanEvidenceFailure(records []domain.ImportRawRecord, sourceRow int, compactEntryIndices []int, importErrors []dto.ImportShipmentError) {
+	reason := "shipment row was not persisted"
+	for _, itemErr := range importErrors {
+		for _, compactEntryIndex := range compactEntryIndices {
+			if itemErr.EntryIndex == compactEntryIndex {
+				reason = itemErr.Reason
+				break
+			}
+		}
+		if reason != "shipment row was not persisted" {
+			break
+		}
+	}
+	markImportEvidenceFailure(records, sourceRow, "shipment_import_error", reason, nil)
+}
+
+func shipmentMappedValue(applied map[string]string, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := applied[key]; ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+		if strings.HasPrefix(key, "shipment.") {
+			bare := strings.TrimPrefix(key, "shipment.")
+			if value, ok := applied[bare]; ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+	}
+	return ""
 }
 
 // reconcileIndex is a wave-scoped lookup structure for external-key matching.
@@ -421,12 +546,9 @@ func splitTokenQty(part string) (token, qty string, ok bool) {
 // "<PLATFORM>_<digits>" FactorySKU shape are handled the same way.
 var factorySKUPlatformPrefix = regexp.MustCompile(`^[A-Za-z]+_`)
 
-// deriveFactorySKURef strips a leading "<letters>_" platform prefix from a
-// FactorySKU value (e.g. "ROUZAO_206068021" -> "206068021"). If the value has
-// no such prefix, it is returned unchanged. This is the primary key used to
-// reconcile shipment.sku_quantity tokens: real 柔造 sample data shows the
-// token's digit prefix matches this derived value, not product.supplier_product_ref
-// (see the SampleData verification note on MapAndReconcileShipments above).
+// deriveFactorySKURef applies the platform-neutral compatibility convention of
+// stripping a leading "<letters>_" namespace from FactorySKU. It does not infer
+// or assert any relationship with a separate product-catalog input.
 func deriveFactorySKURef(factorySKU string) string {
 	s := strings.TrimSpace(factorySKU)
 	if s == "" {
@@ -500,12 +622,17 @@ func reconcileShipmentRow(
 		return nil, fmt.Errorf("invalid shipped_at %q: %w", shippedAtRaw, err)
 	}
 
-	// Resolve carrier: factory returns usually carry external codes / aliases.
-	// Prefer external→internal; if the value is already an internal code, keep it.
-	if carrierUC != nil && carrierCode != "" {
-		if internal, extName, rErr := carrierUC.ResolveByExternalOrAlias(ctx, profileID, carrierCode); rErr == nil {
+	// Resolve carrier: factory returns may carry either an external code, an
+	// alias, or only the external display name. Persist the internal code while
+	// retaining the canonical external name when a mapping is found.
+	carrierLookup := carrierCode
+	if carrierLookup == "" {
+		carrierLookup = carrierName
+	}
+	if carrierUC != nil && carrierLookup != "" {
+		if internal, extName, rErr := carrierUC.ResolveByExternalOrAlias(ctx, profileID, carrierLookup); rErr == nil {
 			carrierCode = internal
-			if carrierName == "" {
+			if extName != "" {
 				carrierName = extName
 			}
 		}
@@ -647,9 +774,8 @@ func matchReconcileCandidate(idx *reconcileIndex, externalKey, factorySKU, refTo
 		}
 	}
 
-	// Priority 6: supplier_product_ref + phone unique (fallback tier — kept
-	// for profiles whose REF token genuinely is a supplier_product_ref value;
-	// not exercised by the real 柔造 sample shape, but not removed).
+	// Priority 6: supplier_product_ref + phone unique (independent fallback tier
+	// for profiles whose REF token is a supplier_product_ref value).
 	if refToken != "" && phone != "" {
 		hits := idx.byRefPhone[refPhoneKey(refToken, phone)]
 		switch len(hits) {

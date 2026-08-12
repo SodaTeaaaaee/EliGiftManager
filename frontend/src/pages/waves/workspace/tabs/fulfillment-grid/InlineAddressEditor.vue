@@ -26,8 +26,15 @@ import { useI18n } from 'vue-i18n'
 import { NButton, NForm, NFormItem, NInput, NRadioGroup, NRadio } from 'naive-ui'
 import { useFeedback } from '@/shared/ui/feedback'
 import { bindAddressToLine, createAddress, listAddressesByProfile } from '@/shared/api/bridge'
+import { useCustomerResolutionFeaturePolicy } from '@/shared/composables/useCustomerResolutionFeaturePolicy'
+import { customerResolutionWriteAccess } from '@/shared/lib/customer-resolution'
 import type { dto } from '@/../wailsjs/go/models'
 import type { FulfillmentGridRow } from './useFulfillmentGrid'
+import {
+  canRunInlineAddressWrite,
+  createAndBindInlineAddress,
+  type InlineAddressDraft,
+} from './addressWriteFlow'
 
 const props = defineProps<{
   row: FulfillmentGridRow
@@ -39,6 +46,11 @@ const emit = defineEmits<{
 
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
+const featurePolicy = useCustomerResolutionFeaturePolicy()
+const addressWritesEnabled = computed(
+  () => customerResolutionWriteAccess(featurePolicy.policy.value).canManageAddresses,
+)
+void featurePolicy.load()
 
 type Mode = 'pick' | 'create'
 const mode = ref<Mode>('pick')
@@ -91,10 +103,12 @@ watch(
   { immediate: true },
 )
 
-const canBindExisting = computed(() => !binding.value && selectedAddressId.value != null)
+const canBindExisting = computed(
+  () => addressWritesEnabled.value && !binding.value && selectedAddressId.value != null,
+)
 
 async function handleBindExisting(): Promise<void> {
-  if (!canBindExisting.value || selectedAddressId.value == null) return
+  if (!addressWritesEnabled.value || !canBindExisting.value || selectedAddressId.value == null) return
   binding.value = true
   try {
     await bindAddressToLine({
@@ -112,6 +126,7 @@ async function handleBindExisting(): Promise<void> {
 
 // ── Author new ──
 
+const label = ref('')
 const recipientName = ref('')
 const phone = ref('')
 const region = ref('')
@@ -119,47 +134,40 @@ const detail = ref('')
 const creating = ref(false)
 
 function resetCreateForm(): void {
+  label.value = ''
   recipientName.value = ''
   phone.value = ''
   region.value = ''
   detail.value = ''
 }
 
-const canCreate = computed(
-  () =>
-    !creating.value &&
-    recipientName.value.trim().length > 0 &&
-    phone.value.trim().length > 0 &&
-    detail.value.trim().length > 0,
-)
+const createDraft = computed<InlineAddressDraft>(() => ({
+  label: label.value,
+  recipientName: recipientName.value,
+  phone: phone.value,
+  region: region.value,
+  detail: detail.value,
+}))
+
+const canCreate = computed(() => canRunInlineAddressWrite(
+  addressWritesEnabled.value,
+  creating.value,
+  props.row.customerProfileId,
+  createDraft.value,
+))
 
 async function handleCreateAndBind(): Promise<void> {
   const profileId = props.row.customerProfileId
-  if (!canCreate.value || !profileId) return
+  if (!addressWritesEnabled.value || !canCreate.value || !profileId) return
   creating.value = true
   try {
-    const address = await createAddress({
+    const completed = await createAndBindInlineAddress({
+      writesEnabled: addressWritesEnabled.value,
       customerProfileId: profileId,
-      label: '',
-      recipientName: recipientName.value.trim(),
-      phone: phone.value.trim(),
-      country: '',
-      province: region.value.trim(),
-      city: '',
-      district: '',
-      addressLine1: detail.value.trim(),
-      addressLine2: '',
-      postalCode: '',
-      isDefault: false,
-      isTest: false,
-      validationStatus: 'unvalidated',
-      validationDetail: '',
-      extraData: '',
-    })
-    await bindAddressToLine({
       fulfillmentLineId: props.row.fulfillmentLineId,
-      customerAddressId: address.id,
-    })
+      draft: createDraft.value,
+    }, { createAddress, bindAddressToLine })
+    if (!completed) return
     feedback.success(t('fulfillmentGrid.address.bound'))
     resetCreateForm()
     emit('bound')
@@ -181,6 +189,9 @@ function addressSummary(address: dto.CustomerAddressDTO): string {
   <div class="inline-address-editor">
     <p v-if="!hasCustomerProfile" class="inline-address-editor__hint">{{ t('fulfillmentGrid.address.noAddresses') }}</p>
     <template v-else>
+      <p v-if="!addressWritesEnabled" class="inline-address-editor__disabled">
+        {{ t('fulfillmentGrid.address.writesDisabledReason') }}
+      </p>
       <div class="inline-address-editor__tabs">
         <NButton size="small" :type="mode === 'pick' ? 'primary' : 'default'" @click="mode = 'pick'">
           {{ t('fulfillmentGrid.address.pickExisting') }}
@@ -199,7 +210,7 @@ function addressSummary(address: dto.CustomerAddressDTO): string {
             v-for="address in addresses"
             :key="address.id"
             :value="address.id"
-            :disabled="binding"
+            :disabled="binding || !addressWritesEnabled"
             class="inline-address-editor__option"
           >
             <span class="inline-address-editor__option-text">
@@ -209,23 +220,30 @@ function addressSummary(address: dto.CustomerAddressDTO): string {
             </span>
           </NRadio>
         </NRadioGroup>
-        <NButton type="primary" :loading="binding" :disabled="!canBindExisting" @click="handleBindExisting">
+        <NButton data-testid="bind-existing-address" type="primary" :loading="binding" :disabled="!canBindExisting" @click="handleBindExisting">
           {{ t('fulfillmentGrid.address.bind') }}
         </NButton>
       </div>
 
       <NForm v-else label-placement="top" class="inline-address-editor__create">
+        <NFormItem
+          :label="t('address.fields.label')"
+          :validation-status="label.trim().length === 0 ? 'error' : undefined"
+          :feedback="label.trim().length === 0 ? t('address.validation.labelRequired') : undefined"
+        >
+          <NInput v-model:value="label" :disabled="creating || !addressWritesEnabled" />
+        </NFormItem>
         <NFormItem :label="t('fulfillmentGrid.address.recipient')">
-          <NInput v-model:value="recipientName" :disabled="creating" />
+          <NInput v-model:value="recipientName" :disabled="creating || !addressWritesEnabled" />
         </NFormItem>
         <NFormItem :label="t('fulfillmentGrid.address.phone')">
-          <NInput v-model:value="phone" :disabled="creating" />
+          <NInput v-model:value="phone" :disabled="creating || !addressWritesEnabled" />
         </NFormItem>
         <NFormItem :label="t('fulfillmentGrid.address.region')">
-          <NInput v-model:value="region" :disabled="creating" />
+          <NInput v-model:value="region" :disabled="creating || !addressWritesEnabled" />
         </NFormItem>
         <NFormItem :label="t('fulfillmentGrid.address.detail')">
-          <NInput v-model:value="detail" :disabled="creating" />
+          <NInput v-model:value="detail" :disabled="creating || !addressWritesEnabled" />
         </NFormItem>
         <NButton type="primary" :loading="creating" :disabled="!canCreate" @click="handleCreateAndBind">
           {{ t('fulfillmentGrid.address.save') }}
@@ -247,6 +265,12 @@ function addressSummary(address: dto.CustomerAddressDTO): string {
   font-family: var(--font-body);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+.inline-address-editor__disabled {
+  margin: 0;
+  color: var(--status-warning-fg);
+  font-size: var(--font-size-xs);
 }
 
 .inline-address-editor__tabs {
