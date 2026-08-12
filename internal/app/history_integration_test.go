@@ -758,6 +758,125 @@ func TestIntegration_RecordNodeError_NotSilent(t *testing.T) {
 	t.Logf("got expected error: %v", err)
 }
 
+// ── Test 8: batch unassign → undo → redo restores assignments ────────────────
+
+func TestBatchUnassignUndoRedoRestoresAssignments(t *testing.T) {
+	f := newHistoryIntegrationFixture(t)
+	ctx := context.Background()
+	waveID := mustCreateWave(t, f)
+
+	// Baseline node so the batch node has a parent to undo to.
+	mustRecordNode(t, f, RecordNodeInput{
+		WaveID:         waveID,
+		CommandKind:    "baseline",
+		CommandSummary: "initial state",
+	})
+
+	// A create_rule node BELOW the batch node gives the second undo a concrete
+	// target — undoing twice proves the chain head moved past the batch node
+	// instead of staying stuck on it re-applying the same inverse.
+	rule := &domain.AllocationPolicyRule{
+		WaveID: waveID, ProductID: 501, ContributionQuantity: 2,
+		RuleKind: "direct", Priority: 1, Active: true,
+	}
+	if err := f.ruleRepo.Create(ctx, rule); err != nil {
+		t.Fatalf("create rule: %v", err)
+	}
+	ruleJSON, err := json.Marshal(rule)
+	if err != nil {
+		t.Fatalf("marshal rule: %v", err)
+	}
+	mustRecordNode(t, f, RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         "create_rule",
+		CommandSummary:      "create rule",
+		PatchPayload:        fmt.Sprintf(`{"op":"create_rule","rule_id":%d,"wave_id":%d,"data":%s}`, rule.ID, waveID, ruleJSON),
+		InversePatchPayload: fmt.Sprintf(`{"op":"delete_rule","rule_id":%d}`, rule.ID),
+	})
+
+	// Seed two wave-demand assignments, mirroring the pre-allocation state the
+	// controller's BatchUnassignDemandFromWave operates on.
+	const docA, docB = uint(9001), uint(9002)
+	for _, docID := range []uint{docA, docB} {
+		if err := f.db.Create(&persistence.WaveDemandAssignment{WaveID: waveID, DemandDocumentID: docID}).Error; err != nil {
+			t.Fatalf("seed assignment %d: %v", docID, err)
+		}
+	}
+
+	assertAssigned := func(docID uint, want bool, label string) {
+		t.Helper()
+		exists, err := f.assignRepo.ExistsByDocument(ctx, docID)
+		if err != nil {
+			t.Fatalf("%s: ExistsByDocument(%d): %v", label, docID, err)
+		}
+		if exists != want {
+			t.Fatalf("%s: ExistsByDocument(%d) = %v, want %v", label, docID, exists, want)
+		}
+	}
+	assertAssigned(docA, true, "before batch unassign")
+	assertAssigned(docB, true, "before batch unassign")
+
+	// Mirror the controller's flow: the use case deletes via the repo (soft
+	// delete), then the history node is recorded with the exact payloads
+	// controller_wave_lifecycle.go emits (forward batch_unassign_demand /
+	// inverse batch_assign_demand). The forward payload only runs on redo.
+	if err := f.assignRepo.DeleteByWaveAndDocument(ctx, waveID, docA); err != nil {
+		t.Fatalf("use-case delete docA: %v", err)
+	}
+	if err := f.assignRepo.DeleteByWaveAndDocument(ctx, waveID, docB); err != nil {
+		t.Fatalf("use-case delete docB: %v", err)
+	}
+	forwardPayload := fmt.Sprintf(`{"op":"batch_unassign_demand","wave_id":%d,"demand_document_ids":[%d,%d]}`, waveID, docA, docB)
+	inversePayload := fmt.Sprintf(`{"op":"batch_assign_demand","wave_id":%d,"demand_document_ids":[%d,%d]}`, waveID, docA, docB)
+	mustRecordNode(t, f, RecordNodeInput{
+		WaveID:              waveID,
+		CommandKind:         "batch_unassign_demand",
+		CommandSummary:      "batch unassign 2 demands",
+		PatchPayload:        forwardPayload,
+		InversePatchPayload: inversePayload,
+	})
+	assertAssigned(docA, false, "after batch unassign")
+	assertAssigned(docB, false, "after batch unassign")
+
+	// Undo once → inverse batch_assign_demand restores both assignments.
+	if _, err := f.undoRedo.Undo(ctx, waveID); err != nil {
+		t.Fatalf("undo batch unassign: %v", err)
+	}
+	assertAssigned(docA, true, "after undo")
+	assertAssigned(docB, true, "after undo")
+
+	// Undo a second time: the chain head must have moved past the batch node
+	// onto the create_rule node — the rule gets deleted instead of the batch
+	// undo re-failing with "unknown op".
+	if _, err := f.undoRedo.Undo(ctx, waveID); err != nil {
+		t.Fatalf("second undo (create_rule): %v", err)
+	}
+	rules, err := f.ruleRepo.ListByWave(ctx, waveID)
+	if err != nil {
+		t.Fatalf("list rules after second undo: %v", err)
+	}
+	if len(rules) != 0 {
+		t.Fatalf("expected 0 rules after second undo, got %d", len(rules))
+	}
+
+	// Redo twice → rule restored, then the batch re-applied (assignments gone).
+	if _, err := f.undoRedo.Redo(ctx, waveID); err != nil {
+		t.Fatalf("redo create_rule: %v", err)
+	}
+	rules, err = f.ruleRepo.ListByWave(ctx, waveID)
+	if err != nil {
+		t.Fatalf("list rules after first redo: %v", err)
+	}
+	if len(rules) != 1 {
+		t.Fatalf("expected 1 rule after first redo, got %d", len(rules))
+	}
+	if _, err := f.undoRedo.Redo(ctx, waveID); err != nil {
+		t.Fatalf("redo batch unassign: %v", err)
+	}
+	assertAssigned(docA, false, "after redo")
+	assertAssigned(docB, false, "after redo")
+}
+
 func TestIntegration_FirstRecordedActionHasUndoableBaselineParent(t *testing.T) {
 	f := newHistoryIntegrationFixture(t)
 	waveID := mustCreateWave(t, f)

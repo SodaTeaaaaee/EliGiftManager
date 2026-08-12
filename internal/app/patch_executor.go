@@ -27,12 +27,13 @@ func NewPatchExecutor(db *gorm.DB, snapshotSvc ...*WaveSnapshotService) *PatchEx
 }
 
 type patchOp struct {
-	Op               string          `json:"op"`
-	RuleID           uint            `json:"rule_id,omitempty"`
-	WaveID           uint            `json:"wave_id,omitempty"`
-	AdjustmentID     uint            `json:"adjustment_id,omitempty"`
-	DemandDocumentID uint            `json:"demand_document_id,omitempty"`
-	Data             json.RawMessage `json:"data,omitempty"`
+	Op                string          `json:"op"`
+	RuleID            uint            `json:"rule_id,omitempty"`
+	WaveID            uint            `json:"wave_id,omitempty"`
+	AdjustmentID      uint            `json:"adjustment_id,omitempty"`
+	DemandDocumentID  uint            `json:"demand_document_id,omitempty"`
+	DemandDocumentIDs []uint          `json:"demand_document_ids"`
+	Data              json.RawMessage `json:"data,omitempty"`
 }
 
 func (pe *PatchExecutor) ApplyPatch(ctx context.Context, payload string) error {
@@ -75,6 +76,10 @@ func (pe *PatchExecutor) execute(ctx context.Context, op patchOp) error {
 		return pe.assignDemand(op)
 	case "unassign_demand":
 		return pe.unassignDemand(op)
+	case "batch_assign_demand":
+		return pe.batchAssignDemand(op)
+	case "batch_unassign_demand":
+		return pe.batchUnassignDemand(op)
 	case "restore_checkpoint":
 		return pe.restoreCheckpoint(ctx, op)
 	case "generate_participants", "clear_participants",
@@ -189,19 +194,83 @@ func (pe *PatchExecutor) assignDemand(op patchOp) error {
 	if op.WaveID == 0 || op.DemandDocumentID == 0 {
 		return fmt.Errorf("patch: assign_demand missing wave_id or demand_document_id")
 	}
+	return pe.assignDemandTo(pe.db, op.WaveID, op.DemandDocumentID)
+}
+
+// assignDemandTo creates the single wave-demand linkage row against db — the
+// shared executor DB for single-item ops, or a transaction handle for batch ops.
+func (pe *PatchExecutor) assignDemandTo(db *gorm.DB, waveID, demandDocumentID uint) error {
 	p := &persistence.WaveDemandAssignment{
-		WaveID:           op.WaveID,
-		DemandDocumentID: op.DemandDocumentID,
+		WaveID:           waveID,
+		DemandDocumentID: demandDocumentID,
 	}
-	return pe.db.Create(p).Error
+	return db.Create(p).Error
 }
 
 func (pe *PatchExecutor) unassignDemand(op patchOp) error {
 	if op.WaveID == 0 || op.DemandDocumentID == 0 {
 		return fmt.Errorf("patch: unassign_demand missing wave_id or demand_document_id")
 	}
-	return pe.db.Where("wave_id = ? AND demand_document_id = ?", op.WaveID, op.DemandDocumentID).
+	return pe.unassignDemandFrom(pe.db, op.WaveID, op.DemandDocumentID)
+}
+
+// unassignDemandFrom deletes the single wave-demand linkage row against db —
+// the shared executor DB for single-item ops, or a transaction handle for batch ops.
+func (pe *PatchExecutor) unassignDemandFrom(db *gorm.DB, waveID, demandDocumentID uint) error {
+	return db.Where("wave_id = ? AND demand_document_id = ?", waveID, demandDocumentID).
 		Delete(&persistence.WaveDemandAssignment{}).Error
+}
+
+// batchAssignDemand replays the inverse of a batch unassign: every listed
+// document is re-linked to the wave inside ONE transaction so a mid-batch
+// failure cannot leave the undo half-applied.
+//
+// The use-case side deletes unassigned rows via a soft delete, which still
+// occupies the (wave_id, demand_document_id) unique index slot. Purge that
+// residue with a hard delete first so the re-created row does not collide.
+func (pe *PatchExecutor) batchAssignDemand(op patchOp) error {
+	if op.WaveID == 0 || len(op.DemandDocumentIDs) == 0 {
+		return fmt.Errorf("patch: batch_assign_demand missing wave_id or demand_document_ids")
+	}
+	return pe.db.Transaction(func(tx *gorm.DB) error {
+		for _, docID := range op.DemandDocumentIDs {
+			if docID == 0 {
+				return fmt.Errorf("patch: batch_assign_demand contains demand_document_id 0")
+			}
+			if err := tx.Unscoped().
+				Where("wave_id = ? AND demand_document_id = ?", op.WaveID, docID).
+				Delete(&persistence.WaveDemandAssignment{}).Error; err != nil {
+				return err
+			}
+			if err := pe.assignDemandTo(tx, op.WaveID, docID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// batchUnassignDemand replays the forward of a batch unassign: every listed
+// document is unlinked from the wave inside ONE transaction. Rows are
+// hard-deleted (matching the delete_rule / delete_adjustment pattern) so the
+// unique index slot is free for a later undo's re-insertion.
+func (pe *PatchExecutor) batchUnassignDemand(op patchOp) error {
+	if op.WaveID == 0 || len(op.DemandDocumentIDs) == 0 {
+		return fmt.Errorf("patch: batch_unassign_demand missing wave_id or demand_document_ids")
+	}
+	return pe.db.Transaction(func(tx *gorm.DB) error {
+		for _, docID := range op.DemandDocumentIDs {
+			if docID == 0 {
+				return fmt.Errorf("patch: batch_unassign_demand contains demand_document_id 0")
+			}
+			if err := tx.Unscoped().
+				Where("wave_id = ? AND demand_document_id = ?", op.WaveID, docID).
+				Delete(&persistence.WaveDemandAssignment{}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (pe *PatchExecutor) restoreCheckpoint(ctx context.Context, op patchOp) error {

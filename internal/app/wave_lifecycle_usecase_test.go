@@ -433,11 +433,11 @@ func TestBatchUnassignDemandFromWaveReturnsPerItemResults(t *testing.T) {
 	}
 
 	// Pre-advance the mock's auto-increment counter so the seeded documents land
-	// on the fixed IDs 10/11/12 the call below references.
+	// on the fixed IDs 10/11/12/13 the call below references.
 	demandRepo.mu.Lock()
 	demandRepo.lastID = 9
 	demandRepo.mu.Unlock()
-	for _, seedID := range []uint{10, 11, 12} {
+	for _, seedID := range []uint{10, 11, 12, 13} {
 		doc := &domain.DemandDocument{Kind: "retail_order", SourceChannel: "test", SourceDocumentNo: fmt.Sprintf("DOC-%d", seedID)}
 		if err := demandRepo.Create(ctx, doc); err != nil {
 			t.Fatalf("seed demand document %d: %v", seedID, err)
@@ -447,6 +447,16 @@ func TestBatchUnassignDemandFromWaveReturnsPerItemResults(t *testing.T) {
 		}
 	}
 
+	// Docs 10/11/12 are mounted to the wave (doc 13 deliberately stays in the
+	// unassigned pool — it must fail per-item with "nothing to unassign").
+	assigned, err := uc.BatchAssignDemandToWave(ctx, 1, []uint{10, 11, 12})
+	if err != nil {
+		t.Fatalf("seed assignments: %v", err)
+	}
+	if assigned.SuccessCount != 3 || assigned.FailureCount != 0 {
+		t.Fatalf("seed assignments result = %+v, want 3/0", assigned)
+	}
+
 	// doc 12 already has a fulfillment line — allocation has started for it, so
 	// it must fail while docs 10 and 11 unassign cleanly.
 	doc12 := uint(12)
@@ -454,16 +464,21 @@ func TestBatchUnassignDemandFromWaveReturnsPerItemResults(t *testing.T) {
 		t.Fatalf("seed fulfillment line: %v", err)
 	}
 
-	result, err := uc.BatchUnassignDemandFromWave(ctx, 1, []uint{10, 11, 12})
+	result, err := uc.BatchUnassignDemandFromWave(ctx, 1, []uint{10, 11, 12, 13})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.SuccessCount != 2 || result.FailureCount != 1 {
-		t.Fatalf("want 2/1, got %+v", result)
+	if result.SuccessCount != 2 || result.FailureCount != 2 {
+		t.Fatalf("want 2/2, got %+v", result)
 	}
 	// doc 12's failure reason must contain "allocation has started".
 	if result.Results[2].Success || !strings.Contains(result.Results[2].Error, "allocation has started") {
 		t.Fatalf("doc 12 should fail with allocation-started reason, got %+v", result.Results[2])
+	}
+	// doc 13 is not mounted anywhere — it must fail with "nothing to unassign"
+	// instead of being counted as a phantom success.
+	if result.Results[3].Success || !strings.Contains(result.Results[3].Error, "nothing to unassign") {
+		t.Fatalf("doc 13 should fail with nothing-to-unassign reason, got %+v", result.Results[3])
 	}
 }
 

@@ -195,6 +195,23 @@ func (uc *waveLifecycleUseCase) BatchUnassignDemandFromWave(ctx context.Context,
 	result := dto.BatchUnassignDemandResult{Results: make([]dto.BatchUnassignDemandItemResult, 0, len(docIDs))}
 	for _, docID := range docIDs {
 		item := dto.BatchUnassignDemandItemResult{DemandDocumentID: docID}
+		// A doc that is not currently linked to any wave must NOT count as a
+		// success: DeleteByWaveAndDocument returns nil even when it matches
+		// zero rows, and a phantom success would later make the inverse
+		// batch_assign_demand re-create an assignment that never existed.
+		exists, existErr := uc.assignmentRepo.ExistsByDocument(ctx, docID)
+		if existErr != nil {
+			item.Error = fmt.Sprintf("check assignment for demand document %d: %v", docID, existErr)
+			result.Results = append(result.Results, item)
+			result.FailureCount++
+			continue
+		}
+		if !exists {
+			item.Error = fmt.Sprintf("demand document %d is not assigned to wave %d; nothing to unassign", docID, waveID)
+			result.Results = append(result.Results, item)
+			result.FailureCount++
+			continue
+		}
 		if blockedByLines[docID] {
 			item.Error = fmt.Sprintf("demand document %d already has fulfillment lines in wave %d; allocation has started, unassign is no longer available", docID, waveID)
 			result.Results = append(result.Results, item)
