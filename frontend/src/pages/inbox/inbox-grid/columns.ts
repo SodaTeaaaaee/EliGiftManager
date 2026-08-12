@@ -70,6 +70,14 @@ export function buildInboxColumns(t: InboxGridTranslate): DataGridColumnSpec<Dem
     },
     {
       type: 'number',
+      key: 'pendingIntakeCount',
+      title: t('inbox.columns.pendingTriage'),
+      width: 90,
+      sortable: false,
+      getValue: (row) => row.pendingIntakeCount,
+    },
+    {
+      type: 'number',
       key: 'readyAcceptedCount',
       title: t('inbox.columns.ready'),
       width: 90,

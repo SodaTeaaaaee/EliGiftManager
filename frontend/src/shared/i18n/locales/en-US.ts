@@ -1601,11 +1601,17 @@ export const enUS: AppMessageSchema = {
     filters: {
       assignment: 'Assignment',
       demandKind: 'Demand Kind',
+      businessSurface: 'Business Surface',
     },
     assignment: {
       all: 'All',
       assigned: 'Assigned',
       unassigned: 'Unassigned',
+    },
+    surface: {
+      all: 'All',
+      membership: 'Membership',
+      retail: 'Retail',
     },
     columns: {
       profile: 'Integration',
@@ -1614,6 +1620,7 @@ export const enUS: AppMessageSchema = {
       sourceChannel: 'Source Channel',
       sourceDoc: 'Source Document',
       lineCount: 'Lines',
+      pendingTriage: 'Pending Triage',
       ready: 'Ready',
       waiting: 'Waiting',
       deferred: 'Deferred',

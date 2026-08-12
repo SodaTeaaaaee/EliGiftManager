@@ -3,8 +3,10 @@
  * InboxPage — the global demand-inbox page (plan P4 §3.5). Master-detail:
  * `PageHeader` (import CSV / manual entry actions) + the bespoke 3-way
  * assignment toggle (per foundations decision #5, NOT a FilterBar
- * dimension) + `FilterBar`/`SavedViews` (the single `demandKind` dimension)
- * + `DataGrid` (server-paginated via `useInboxGrid`) + row-click ->
+ * dimension) + the business-surface segmented control (all / membership /
+ * retail — folds into the `demandKind` filter via `businessSurface.ts`) +
+ * `FilterBar`/`SavedViews` (the `demandKind` + `routingDisposition`
+ * dimensions) + `DataGrid` (server-paginated via `useInboxGrid`) + row-click ->
  * `RowDetailPanel` + `#selection-toolbar` -> `BatchActionBar`.
  *
  * Wires together `useInboxGrid` + `inbox-grid/{filter-schema,columns}` with
@@ -20,6 +22,7 @@ import { FilterBar, SavedViews } from '@/shared/ui/filter-bar'
 import { DataGrid, createColumns } from '@/shared/ui/data-grid'
 import { useInboxGrid } from './inbox-grid/useInboxGrid'
 import { buildInboxColumns } from './inbox-grid/columns'
+import { kindsFromSurface, surfaceFromKinds, type BusinessSurface } from './inbox-grid/businessSurface'
 import BatchActionBar from './inbox-grid/BatchActionBar.vue'
 import RowDetailPanel from './inbox-grid/RowDetailPanel.vue'
 import ImportFileModal from './ImportFileModal.vue'
@@ -32,6 +35,12 @@ const { assignment, filters, rows, loading, selectedKeys, selectedRows, page, pa
   useInboxGrid()
 
 const columns = computed(() => createColumns(buildInboxColumns(t)))
+
+const businessSurface = computed<BusinessSurface>(() => surfaceFromKinds(filters.state.demandKind))
+
+function handleSurfaceChange(surface: BusinessSurface): void {
+  filters.setEnumValues('demandKind', kindsFromSurface(surface))
+}
 
 function handleSelectedKeysChange(keys: Array<string | number>): void {
   selectedKeys.value = keys as number[]
@@ -75,6 +84,15 @@ const showManualEntryModal = ref(false)
       </NRadioGroup>
     </div>
 
+    <div class="inbox-page__surface">
+      <span class="inbox-page__assignment-label">{{ t('inbox.filters.businessSurface') }}</span>
+      <NRadioGroup :value="businessSurface" @update:value="handleSurfaceChange">
+        <NRadioButton value="all">{{ t('inbox.surface.all') }}</NRadioButton>
+        <NRadioButton value="membership_entitlement">{{ t('inbox.surface.membership') }}</NRadioButton>
+        <NRadioButton value="retail_order">{{ t('inbox.surface.retail') }}</NRadioButton>
+      </NRadioGroup>
+    </div>
+
     <SavedViews :filters="filters" scope-id="inbox-grid" />
     <FilterBar :filters="filters" />
 
@@ -109,7 +127,8 @@ const showManualEntryModal = ref(false)
   gap: var(--space-4);
 }
 
-.inbox-page__assignment {
+.inbox-page__assignment,
+.inbox-page__surface {
   display: flex;
   align-items: center;
   gap: var(--space-3);

@@ -1626,11 +1626,17 @@ export const zhCN = {
     filters: {
       assignment: '分派状态',
       demandKind: '需求类型',
+      businessSurface: '业务面',
     },
     assignment: {
       all: '全部',
       assigned: '已分派',
       unassigned: '未分派',
+    },
+    surface: {
+      all: '全部',
+      membership: '会员权益',
+      retail: '零售订单',
     },
     columns: {
       profile: '接入配置',
@@ -1639,6 +1645,7 @@ export const zhCN = {
       sourceChannel: '来源渠道',
       sourceDoc: '来源单号',
       lineCount: '行数',
+      pendingTriage: '待分诊',
       ready: '已就绪',
       waiting: '等待填写',
       deferred: '已暂缓',

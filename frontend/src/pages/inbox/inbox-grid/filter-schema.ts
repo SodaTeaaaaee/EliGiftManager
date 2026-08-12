@@ -13,15 +13,18 @@
  * filter param — never through `useGlossary()` / `glossaryTables` /
  * `FilterBar`.
  *
- * `demandKind` DOES reuse the existing `demandKind` glossary dimension (2
- * values: `membership_entitlement` / `retail_order`) through FilterBar's
- * enum-multi field type. The backend's `DemandInboxFilterInput.demandKind`
- * is a single string, not a list — `useInboxGrid.ts`'s
- * `resolveDemandKindParam()` folds the `string[]` selection down to that
- * single param: 0 or 2 selected values both mean "no filter" (all/nothing
- * selected are equivalent when there are only 2 possible values), and
- * exactly 1 selected value is passed straight through.
+ * `demandKind` and `routingDisposition` DO reuse the existing glossary
+ * dimensions through FilterBar's enum-multi field type, and
+ * `useInboxGrid.ts` passes the `string[]` selections straight through to
+ * the bridge's `demandKinds` / `routingDispositions` array params (empty
+ * array means "no filter"). `demandKind` is also the source of truth for
+ * the page's business-surface segmented control
+ * (`businessSurface.ts` folds it into the all/membership/retail 3-way
+ * state).
  */
 import type { FilterSchema } from '@/shared/ui/filter-bar'
 
-export const INBOX_GRID_FILTER_SCHEMA = [{ key: 'demandKind', type: 'enum-multi', dimension: 'demandKind' }] as const satisfies FilterSchema
+export const INBOX_GRID_FILTER_SCHEMA = [
+  { key: 'demandKind', type: 'enum-multi', dimension: 'demandKind' },
+  { key: 'routingDisposition', type: 'enum-multi', dimension: 'routingDisposition' },
+] as const satisfies FilterSchema

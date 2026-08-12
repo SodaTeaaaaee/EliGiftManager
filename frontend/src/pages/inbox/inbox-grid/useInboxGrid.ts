@@ -5,10 +5,12 @@
  * - The bespoke (non-glossary, per P4 foundations decision #5) `assignment`
  *   3-way toggle (`'all' | 'assigned' | 'unassigned'`) — a plain ref, NOT
  *   part of `useUrlFilters` / FilterBar. Ignored (forced to `'assigned'`)
- *   when `options.waveId` is set.
- * - `filters` — `useUrlFilters(INBOX_GRID_FILTER_SCHEMA)`, the single
- *   `demandKind` enum-multi dimension (FilterBar-driven, reuses the existing
- *   glossary dimension).
+ *   when `options.waveId` is set. In unscoped mode its changes are written
+ *   back to `route.query.assignment` ('all' removes the param) — still
+ *   read-only on init, unlike FilterBar fields.
+ * - `filters` — `useUrlFilters(INBOX_GRID_FILTER_SCHEMA)`, the two
+ *   `demandKind` / `routingDisposition` enum-multi dimensions
+ *   (FilterBar-driven, reusing the existing glossary dimensions).
  * - Server-paginated row fetch via `listDemandInboxRowsPage` (bridge.ts).
  * - Selection state (`selectedKeys`, a plain `demandDocumentId[]`), mirroring
  *   `useFulfillmentGrid`'s contract: never auto-cleared on page/filter
@@ -26,7 +28,7 @@
  * `waveId`, then uses the same server pagination and sorting contract.
  */
 import { computed, onBeforeMount, onBeforeUnmount, onMounted, reactive, ref, watch, type ComputedRef, type Ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { listDemandInboxRowsPage } from '@/shared/api/bridge'
 import { useUrlFilters, type UseUrlFiltersApi } from '@/shared/ui/filter-bar'
 import { registerRefreshTarget } from '@/shared/lib/view-hotkeys'
@@ -49,7 +51,7 @@ export interface UseInboxGridOptions {
 }
 
 export interface UseInboxGridApi {
-  /** `'all' | 'assigned' | 'unassigned'` — bind to a plain 3-way segmented control / radio group, NOT FilterBar. Inert (forced to `'assigned'`) in wave-scoped mode. */
+  /** `'all' | 'assigned' | 'unassigned'` — bind to a plain 3-way segmented control / radio group, NOT FilterBar. Inert (forced to `'assigned'`) in wave-scoped mode. In unscoped mode its changes are mirrored into `route.query.assignment` (write-only; init deep-link read stays one-shot). */
   assignment: Ref<InboxAssignmentFilter>
   /** True when this instance was built with `options.waveId` (wave-scoped mode). */
   isWaveScoped: boolean
@@ -85,12 +87,14 @@ export function useInboxGrid(options: UseInboxGridOptions = {}): UseInboxGridApi
 
   const assignment = ref<InboxAssignmentFilter>('all') as Ref<InboxAssignmentFilter>
 
+  const route = useRoute()
+  const router = useRouter()
+
   // Deep-link support (unscoped mode only): `WaveIntakeTab.vue`'s "assign more
   // from inbox" affordance links to `/inbox?assignment=unassigned` — read it
-  // once on init so the bespoke toggle (not URL-synced the way FilterBar
-  // fields are) still honors an incoming deep link.
+  // once on init so the bespoke toggle (read-only init, unlike FilterBar's
+  // two-way URL sync) still honors an incoming deep link.
   if (options.waveId == null) {
-    const route = useRoute()
     const initialAssignment = route.query.assignment
     if (initialAssignment === 'assigned' || initialAssignment === 'unassigned') {
       assignment.value = initialAssignment
@@ -111,20 +115,25 @@ export function useInboxGrid(options: UseInboxGridOptions = {}): UseInboxGridApi
   const sortDir = ref<'asc' | 'desc' | null>(null)
   const selectedRowCache = reactive(new Map<number, DemandInboxRow>())
 
-  /** 0 or 2 selected values -> no filter (both possible values selected == unfiltered); exactly 1 -> pass through. */
-  function resolveDemandKindParam(): string | undefined {
-    const selected = filters.state.demandKind
-    return selected.length === 1 ? selected[0] : undefined
+  /** demandKind 与 routingDisposition 多值直传；空数组即不筛。 */
+  function resolveInboxFilterParams(): { demandKinds: string[] | undefined; routingDispositions: string[] | undefined } {
+    const kinds = filters.state.demandKind
+    const dispositions = filters.state.routingDisposition
+    return {
+      demandKinds: kinds.length > 0 ? kinds : undefined,
+      routingDispositions: dispositions.length > 0 ? dispositions : undefined,
+    }
   }
 
   async function fetchPage(): Promise<void> {
     loading.value = true
     try {
-      const demandKind = resolveDemandKindParam()
+      const { demandKinds, routingDispositions } = resolveInboxFilterParams()
 
       const result = await listDemandInboxRowsPage({
         assignment: scopedWaveId != null ? 'assigned' : assignment.value === 'all' ? undefined : assignment.value,
-        demandKind,
+        demandKinds,
+        routingDispositions,
         waveId: scopedWaveId?.value,
         sortBy: sortBy.value ?? undefined,
         sortDir: sortDir.value ?? undefined,
@@ -188,10 +197,17 @@ export function useInboxGrid(options: UseInboxGridOptions = {}): UseInboxGridApi
     { deep: true },
   )
 
-  // The bespoke assignment toggle also resets to page 1 and re-fetches.
+  // The bespoke assignment toggle also resets to page 1 and re-fetches. In
+  // unscoped mode it mirrors its 3-way state into `route.query.assignment`
+  // ('all' removes the param) so the current view stays deep-linkable —
+  // write-only, the one-shot init read above is the only URL -> state sync.
   watch(assignment, () => {
     if (isWaveScoped) return
     page.value = 1
+    const nextQuery = { ...route.query }
+    if (assignment.value === 'all') delete nextQuery.assignment
+    else nextQuery.assignment = assignment.value
+    void router.replace({ query: nextQuery }).catch(() => { /* duplicated navigation */ })
     void fetchPage()
   })
 
