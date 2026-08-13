@@ -19,7 +19,7 @@ Desktop gift fulfillment management application built with Wails v2.
 internal/domain/        Pure business structs, repository interfaces, enums
 internal/app/           Use cases, DTOs, business orchestration
 internal/infra/         Repository implementations (GORM), one file per aggregate
-controller_*.go         Wails-bound methods (one file per domain, package main)
+internal/controller/    Wails-bound methods (controller_*.go, one file per domain)
 ```
 
 Each controller is self-contained: it constructs its own repos and use cases from the `database.GetDB()` singleton. Adding a new controller requires `wails generate module` to produce JS/TS bindings.

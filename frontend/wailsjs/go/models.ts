@@ -356,70 +356,6 @@ export namespace dto {
 		    return a;
 		}
 	}
-	export class BatchUnassignDemandInput {
-	    waveId: number;
-	    docIds: number[];
-
-	    static createFrom(source: any = {}) {
-	        return new BatchUnassignDemandInput(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.waveId = source["waveId"];
-	        this.docIds = source["docIds"];
-	    }
-	}
-	export class BatchUnassignDemandItemResult {
-	    demandDocumentId: number;
-	    success: boolean;
-	    error?: string;
-
-	    static createFrom(source: any = {}) {
-	        return new BatchUnassignDemandItemResult(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.demandDocumentId = source["demandDocumentId"];
-	        this.success = source["success"];
-	        this.error = source["error"];
-	    }
-	}
-	export class BatchUnassignDemandResult {
-	    results: BatchUnassignDemandItemResult[];
-	    successCount: number;
-	    failureCount: number;
-
-	    static createFrom(source: any = {}) {
-	        return new BatchUnassignDemandResult(source);
-	    }
-
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.results = this.convertValues(source["results"], BatchUnassignDemandItemResult);
-	        this.successCount = source["successCount"];
-	        this.failureCount = source["failureCount"];
-	    }
-
-		convertValues(a: any, classs: any, asMap: boolean = false): any {
-		    if (!a) {
-		        return a;
-		    }
-		    if (a.slice && a.map) {
-		        return (a as any[]).map(elem => this.convertValues(elem, classs));
-		    } else if ("object" === typeof a) {
-		        if (asMap) {
-		            for (const key of Object.keys(a)) {
-		                a[key] = new classs(a[key]);
-		            }
-		            return a;
-		        }
-		        return new classs(a);
-		    }
-		    return a;
-		}
-	}
 	export class RecordAdjustmentInput {
 	    waveId: number;
 	    targetKind: string;
@@ -496,6 +432,70 @@ export namespace dto {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.results = this.convertValues(source["results"], BatchAdjustmentItemResult);
+	        this.successCount = source["successCount"];
+	        this.failureCount = source["failureCount"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class BatchUnassignDemandInput {
+	    waveId: number;
+	    docIds: number[];
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchUnassignDemandInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.waveId = source["waveId"];
+	        this.docIds = source["docIds"];
+	    }
+	}
+	export class BatchUnassignDemandItemResult {
+	    demandDocumentId: number;
+	    success: boolean;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchUnassignDemandItemResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.demandDocumentId = source["demandDocumentId"];
+	        this.success = source["success"];
+	        this.error = source["error"];
+	    }
+	}
+	export class BatchUnassignDemandResult {
+	    results: BatchUnassignDemandItemResult[];
+	    successCount: number;
+	    failureCount: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new BatchUnassignDemandResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.results = this.convertValues(source["results"], BatchUnassignDemandItemResult);
 	        this.successCount = source["successCount"];
 	        this.failureCount = source["failureCount"];
 	    }
@@ -5863,11 +5863,11 @@ export namespace dto {
 	    lifecycleStage: string;
 	    nameKeyword: string;
 	    waveType: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new WaveListFilterInput(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.page = source["page"];

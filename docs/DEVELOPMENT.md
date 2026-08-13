@@ -48,9 +48,10 @@ cd frontend && deno install && cd ..
 internal/domain/       领域实体 + 仓库接口 + 枚举 + 策略
 internal/app/          用例 + DTO + 业务编排 + 投影查询
 internal/infra/        GORM 仓库实现 + 迁移 + 外部 API 客户端
+internal/controller/   Wails 绑定（controller_*.go）
 ```
 
-控制器在根目录 `controller_*.go`，每个控制器构建自己的 repo 和 use case。
+控制器在 `internal/controller/`（package `controller`），每个控制器构建自己的 repo 和 use case。
 
 ### 前端
 
@@ -68,7 +69,7 @@ frontend/src/skins/        静态 skin 包
 frontend/scripts/          guardrails 与枚举生成器
 ```
 
-所有运行时 Wails 调用必须通过 `frontend/src/shared/api/bridge.ts`。其他模块不得直接导入 `wailsjs/go/main/*`；仅用于类型的 `wailsjs/go/models` import 可以保留。
+所有运行时 Wails 调用必须通过 `frontend/src/shared/api/bridge.ts`。其他模块不得直接导入 `wailsjs/go/controller/*` 或 `wailsjs/go/main/*`；仅用于类型的 `wailsjs/go/models` import 可以保留。
 
 `frontend-legacy/` 是 2026-07-13 切换前前端的冻结副本，只保留一个发布周期，期间不再增加功能，随后删除。
 
@@ -102,7 +103,7 @@ frontend/scripts/          guardrails 与枚举生成器
 
 模板与接入契约跨越以下当前模块，改动时应一并核对，不要在无关任务中顺带修改：
 
-- `controller_template.go`
+- `internal/controller/controller_template.go`
 - `internal/app/template_*.go`
 - `frontend/src/pages/integrations/`
 - `frontend/src/shared/api/bridge.ts`

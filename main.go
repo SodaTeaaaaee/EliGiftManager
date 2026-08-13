@@ -8,6 +8,7 @@ import (
 
 	application "github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/controller"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/middleware"
@@ -86,27 +87,27 @@ func main() {
 		OnBeforeClose: app.beforeClose,
 		Bind: []any{
 			app,
-			NewListPaginationController(),
-			NewDemandController(),
-			NewWaveController(),
-			NewExportController(),
-			NewShipmentController(),
-			NewChannelSyncController(),
-			NewAdjustmentController(),
-			NewTemplateController(),
-			NewAllocationPolicyController(),
-			NewProductController(),
-			NewProfileController(),
-			NewAddressController(),
-			NewMergeController(),
-			NewMergeUndoController(),
-			NewSplitController(),
-			NewCustomerProfileController(),
-			NewMergeGovernanceController(),
-			NewActionCenterController(),
-			NewFileSystemController(),
-			NewImportEvidenceController(),
-			NewCustomerResolutionFeaturePolicyController(),
+			controller.NewListPaginationController(),
+			controller.NewDemandController(),
+			controller.NewWaveController(),
+			controller.NewExportController(),
+			controller.NewShipmentController(),
+			controller.NewChannelSyncController(),
+			controller.NewAdjustmentController(),
+			controller.NewTemplateController(),
+			controller.NewAllocationPolicyController(),
+			controller.NewProductController(),
+			controller.NewProfileController(),
+			controller.NewAddressController(),
+			controller.NewMergeController(),
+			controller.NewMergeUndoController(),
+			controller.NewSplitController(),
+			controller.NewCustomerProfileController(),
+			controller.NewMergeGovernanceController(),
+			controller.NewActionCenterController(),
+			controller.NewFileSystemController(),
+			controller.NewImportEvidenceController(),
+			controller.NewCustomerResolutionFeaturePolicyController(),
 		},
 	})
 	if err != nil {

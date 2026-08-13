@@ -15,7 +15,7 @@ import {
   UpdateDemandLineRouting,
   BatchUpdateDemandLineRouting,
   GetWaveRoutingStats,
-} from "../../../wailsjs/go/main/DemandController";
+} from "../../../wailsjs/go/controller/DemandController";
 import {
   CreateWave,
   ListWaves,
@@ -43,9 +43,9 @@ import {
   ValidateStepAccess,
   UpdateWave,
   CloseWave,
-} from "../../../wailsjs/go/main/WaveController";
-import { GetActionCenterSummary } from "../../../wailsjs/go/main/ActionCenterController";
-import { RevealInFolder, GetDataDir } from "../../../wailsjs/go/main/FileSystemController";
+} from "../../../wailsjs/go/controller/WaveController";
+import { GetActionCenterSummary } from "../../../wailsjs/go/controller/ActionCenterController";
+import { RevealInFolder, GetDataDir } from "../../../wailsjs/go/controller/FileSystemController";
 import {
   ExportSupplierOrder,
   ExportSupplierOrderForProfile,
@@ -55,12 +55,12 @@ import {
   ListSupplierOrders,
   MarkSupplierOrderSubmitted,
   RecordSupplierOrderAcceptance,
-} from "../../../wailsjs/go/main/ExportController";
+} from "../../../wailsjs/go/controller/ExportController";
 import {
   ListAdjustmentsByWave,
   RecordAdjustment,
   BatchRecordAdjustments,
-} from "../../../wailsjs/go/main/AdjustmentController";
+} from "../../../wailsjs/go/controller/AdjustmentController";
 import {
   CreateShipment,
   GetSupplierOrderLineShippedSummary,
@@ -69,7 +69,7 @@ import {
   MapAndReconcileShipments,
   UpdateShipment,
   VoidShipment,
-} from "../../../wailsjs/go/main/ShipmentController";
+} from "../../../wailsjs/go/controller/ShipmentController";
 import {
   BindInternalCarrier,
   CreateChannelSyncJob,
@@ -86,7 +86,7 @@ import {
   RecordChannelClosureDecision,
   RetryChannelSyncJob,
   RegisterExternalCarrier,
-} from "../../../wailsjs/go/main/ChannelSyncController";
+} from "../../../wailsjs/go/controller/ChannelSyncController";
 import {
   CreateProfile,
   DeleteProfile,
@@ -94,7 +94,7 @@ import {
   ListProfiles,
   SeedDefaultProfiles,
   UpdateProfile,
-} from "../../../wailsjs/go/main/ProfileController";
+} from "../../../wailsjs/go/controller/ProfileController";
 import {
   CreateProductMaster,
   ImportProductCatalog,
@@ -103,7 +103,7 @@ import {
   SnapshotProductsForWave,
   SnapshotProductsForWaveDetailed,
   UpdateProductMaster,
-} from "../../../wailsjs/go/main/ProductController";
+} from "../../../wailsjs/go/controller/ProductController";
 import {
   CreateAddress,
   DeleteAddress,
@@ -114,7 +114,7 @@ import {
   UnbindAddressFromLine,
   BatchBindAddressToLines,
   BindDefaultAddressesForWave,
-} from "../../../wailsjs/go/main/AddressController";
+} from "../../../wailsjs/go/controller/AddressController";
 import {
   PickCSVFile,
   PickCatalogImportFile,
@@ -135,7 +135,7 @@ import {
   PinCustomerDisplayName,
   UnpinCustomerDisplayName,
   GetCustomerFulfillmentHistory,
-} from "../../../wailsjs/go/main/CustomerProfileController";
+} from "../../../wailsjs/go/controller/CustomerProfileController";
 import {
   DismissMergeCandidate,
   GetMergeCandidate,
@@ -144,11 +144,11 @@ import {
   ListMergeCandidates,
   ScanMergeCandidates,
   UpdateMergePolicy,
-} from "../../../wailsjs/go/main/MergeGovernanceController";
+} from "../../../wailsjs/go/controller/MergeGovernanceController";
 import {
   GetCustomerResolutionFeaturePolicy,
   UpdateCustomerResolutionFeaturePolicy,
-} from '../../../wailsjs/go/main/CustomerResolutionFeaturePolicyController'
+} from '../../../wailsjs/go/controller/CustomerResolutionFeaturePolicyController'
 import {
   GetImportEvidenceRetention,
   GetImportRunDetail,
@@ -156,13 +156,13 @@ import {
   ListImportRunsPage,
   PruneExpiredImportEvidence,
   SetImportEvidenceRetention,
-} from '../../../wailsjs/go/main/ImportEvidenceController'
+} from '../../../wailsjs/go/controller/ImportEvidenceController'
 import {
   ExecuteCustomerSplit,
   GetCustomerSplitHistory,
   ListCustomerSplitHistory,
   PreviewCustomerSplit,
-} from '../../../wailsjs/go/main/SplitController'
+} from '../../../wailsjs/go/controller/SplitController'
 import { dto } from "../../../wailsjs/go/models";
 import {
   ListCustomerIdentityPlatforms,
@@ -170,7 +170,7 @@ import {
   ListDemandInboxRowsPage,
   ListProductMastersPage,
   ListShipmentsByWavePage,
-} from "../../../wailsjs/go/main/ListPaginationController";
+} from "../../../wailsjs/go/controller/ListPaginationController";
 import { markBridgeMissing, markBridgeSeen } from "./health";
 
 // ── Guards ──
@@ -1086,7 +1086,7 @@ import {
   DeleteAllocationPolicyRule,
   ListAllocationPolicyRules,
   ReconcileWave,
-} from "../../../wailsjs/go/main/AllocationPolicyController";
+} from "../../../wailsjs/go/controller/AllocationPolicyController";
 
 import type {
   AllocationPolicyRule,
@@ -1225,7 +1225,7 @@ import {
   SetDefaultBinding,
   ListBindingsByProfile,
   GetDefaultTemplateForProfile,
-} from "../../../wailsjs/go/main/TemplateController";
+} from "../../../wailsjs/go/controller/TemplateController";
 
 export async function createDocumentTemplate(input: {
   templateKey: string
@@ -1543,11 +1543,11 @@ import {
   GetCustomerMergeHistory as _GetCustomerMergeHistory,
   ListCustomerMergeHistory as _ListCustomerMergeHistory,
   PreviewCustomerMerge as _PreviewCustomerMerge,
-} from "../../../wailsjs/go/main/MergeController";
+} from "../../../wailsjs/go/controller/MergeController";
 import {
   DryRunCustomerMergeUndo as _DryRunCustomerMergeUndo,
   ExecuteCustomerMergeUndo as _ExecuteCustomerMergeUndo,
-} from "../../../wailsjs/go/main/MergeUndoController";
+} from "../../../wailsjs/go/controller/MergeUndoController";
 
 export interface CustomerMergePreviewRequest {
   sourceProfileId: number

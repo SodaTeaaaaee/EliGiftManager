@@ -36,7 +36,7 @@ cd frontend && deno task preview      # preview production build
 | -------------------------------------- | ----------------------------------------------------------------------------------- |
 | `main.go`                              | Wails bootstrap, DB singleton init, controller binding                              |
 | `app.go`                               | Lifecycle hooks (startup) + PickCSVFile/PickZIPFile + shared types/functions        |
-| `controller_*.go`                      | Domain-specific Wails bound methods (Demand/Wave/Export/Shipment/ChannelSync/Adjustment/Product/Profile/Template/AllocationPolicy) |
+| `internal/controller/`                 | Wails bound methods in `controller_*.go` (Demand/Wave/Export/Shipment/ChannelSync/Adjustment/Product/Profile/Template/AllocationPolicy) + controller-level tests |
 | `internal/config/`                     | App metadata, window sizing                                                         |
 | `internal/db/`                         | SQLite init (WAL mode), auto-migration, DB singleton                                |
 | `internal/domain/`                     | Pure business structs, repository interfaces, enums                                 |
@@ -46,6 +46,7 @@ cd frontend && deno task preview      # preview production build
 | `internal/infra/persistence/`          | GORM models, enum mapping, domain↔persistence mappers                              |
 | `internal/middleware/`                 | Wails AssetServer middleware for `/local-images/`                                   |
 | `internal/service/`                    | Runtime path resolution and local settings persistence                              |
+| `testdata/`                            | Synthetic fixtures resolved from the module root (never real `SampleData/` PII)     |
 | `frontend/src/main.ts`                 | Vue bootstrap; installs Pinia, router, i18n, theme, and global styles               |
 | `frontend/src/app/`                    | App shell composition and hash-router registration                                 |
 | `frontend/src/pages/`                  | Route-level screens and page-local workflow modules                                |
@@ -65,12 +66,12 @@ cd frontend && deno task preview      # preview production build
 
 ## Key Conventions
 
-1. **Wails bridge boundary**: All runtime Wails calls MUST go through `frontend/src/shared/api/bridge.ts`. Do not import controller functions from `wailsjs` elsewhere. Type-only imports from `frontend/wailsjs/go/models` are allowed for DTO typing.
+1. **Wails bridge boundary**: All runtime Wails calls MUST go through `frontend/src/shared/api/bridge.ts`. Do not import controller functions from `wailsjs` (`go/controller/*`, `go/main/App`) elsewhere. Type-only imports from `frontend/wailsjs/go/models` are allowed for DTO typing.
 2. **Deno-only frontend**: Use `deno task` for all frontend commands. `npm`/`yarn`/`pnpm` are not used in this project.
 3. **V2 architecture**: Backend uses 4 layers: `domain` (pure structs + interfaces) → `app` (use cases + DTOs) → `infra` (GORM repos) → `controller` (Wails bindings). Frontend uses `app` / `pages` / `entities` / `shared` boundaries, with page-local workflow modules kept under their owning page.
 4. **`.cache/`**: Use `.cache/` directories for local build/test caches. Already gitignored.
 5. **Generated vs authored**: `frontend/wailsjs/` and `frontend/src/shared/api/generated/enums.ts` are generated but committed. `frontend/dist/`, `frontend/node_modules/`, and `build/bin/` are generated and ignored.
-6. **Controller pattern**: All Wails bound methods live in `controller_*.go` files (package main). Each controller is self-contained (constructs its own repos/use cases from `database.GetDB()`). New controllers require `wails generate module` to produce JS/TS bindings.
+6. **Controller pattern**: All Wails bound methods live in `internal/controller/controller_*.go` (package `controller`); the repo root holds only `main.go`, `app.go`, `zoom_config.go`, `merge_policy_bootstrap.go`. Each controller is self-contained (constructs its own repos/use cases from `database.GetDB()`). New controllers require `wails generate module` to produce JS/TS bindings under `frontend/wailsjs/go/controller/` (`App` itself stays under `go/main/`).
 7. **DB access**: Controllers use `database.GetDB()` singleton (initialized in `main.go`). Do NOT open/close DB per request.
 8. **Path resolution**: Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths. Three tiers: dev (`<workdir>/data`), portable (`<exe>/data` with a `.portable` marker), system (`UserConfigDir/EliGiftManager/data`).
 9. **DTO convention**: Go DTOs use camelCase `json:"fieldName"` tags and are authoritative. The generated Wails models carry those shapes into TypeScript; `frontend/src/entities/` adds aliases or frontend-only structures.

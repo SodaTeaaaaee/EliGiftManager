@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/controller"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -24,7 +25,7 @@ func NewApp(cfg config.App) *App { return &App{cfg: cfg} }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	setAppContext(ctx)
+	controller.SetAppContext(ctx)
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {

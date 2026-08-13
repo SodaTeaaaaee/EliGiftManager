@@ -7,8 +7,7 @@
 
 ```text
 main.go, app.go              Wails 启动、生命周期与桌面级能力
-controller_*.go              Wails 绑定与传输边界
-internal/                    Go 领域层、应用层与基础设施层
+internal/                    Go 领域层、应用层、基础设施层与 Wails 绑定
 frontend/                    当前 Vue 3 前端
 frontend-legacy/             切换前前端的冻结副本
 docs/                        当前说明与设计历史
@@ -34,11 +33,12 @@ SampleData/, testdata/       示例输入与测试夹具
 
 - `main.go` — 嵌入 `frontend/dist`，初始化数据库单例，配置窗口与本地资源中间件，并注册 Wails 绑定。
 - `app.go` — 应用生命周期、CSV/ZIP 文件选择、缩放持久化和数据库路径解析。
-- `context_provider.go` — 共享 Wails context。
 - `zoom_config.go` — 缩放配置读写。
+- `merge_policy_bootstrap.go` — 启动时的归并策略一次性迁移。
+- `internal/controller/context_provider.go` — 共享 Wails context。
 - `wails.json` — 指向 `frontend/`，安装、构建和开发命令均通过 Deno task 执行。
 
-根目录 `controller_*.go` 是应用层到 Wails 的传输边界。主要绑定按职责分组如下：
+`internal/controller/`（package `controller`）下的 `controller_*.go` 是应用层到 Wails 的传输边界。生成绑定位于 `frontend/wailsjs/go/controller/`（`App` 自身仍在 `frontend/wailsjs/go/main/`）。主要绑定按职责分组如下：
 
 - 任务与查询：`ActionCenterController`、`ListPaginationController`。
 - 需求与波次：`DemandController`、`WaveController`，相关 CSV 导入、收件箱查询和生命周期方法拆分在同名前缀文件中。
@@ -51,13 +51,13 @@ SampleData/, testdata/       示例输入与测试夹具
 
 ## Backend
 
-后端由三层核心架构和根目录的 Wails 传输边界组成：
+后端由三层核心架构和 `internal/controller/` 的 Wails 传输边界组成：
 
 ```text
 internal/domain/       领域实体、枚举和仓库端口
 internal/app/          用例、DTO、业务编排、投影与执行器
 internal/infra/        GORM 仓库、事务适配器和持久化映射
-controller_*.go        Wails 绑定与 DTO 传输边界
+internal/controller/   Wails 绑定与 DTO 传输边界
 ```
 
 ### `internal/domain/`
@@ -152,7 +152,7 @@ frontend/
 
 ### Bridge And Generated Contracts
 
-页面、store 和 composable 的运行时后端调用必须经过 `src/shared/api/bridge.ts`。其他模块不得直接导入 `wailsjs/go/main/*`；仅用于静态类型的 `import type { dto } from '.../wailsjs/go/models'` 可以直接引用生成模型。
+页面、store 和 composable 的运行时后端调用必须经过 `src/shared/api/bridge.ts`。其他模块不得直接导入 `wailsjs/go/controller/*` 或 `wailsjs/go/main/*`；仅用于静态类型的 `import type { dto } from '.../wailsjs/go/models'` 可以直接引用生成模型。
 
 `internal/domain/enums.go` 是枚举 wire value 的唯一真相源：
 
