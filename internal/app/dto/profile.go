@@ -5,12 +5,16 @@ import "time"
 // ---- IntegrationProfile (full) ----
 
 type IntegrationProfileDTO struct {
-	ID                             uint      `json:"id"`
-	ProfileKey                     string    `json:"profileKey"`
-	SourceChannel                  string    `json:"sourceChannel"`
-	SourceSurface                  string    `json:"sourceSurface"`
-	DemandKind                     string    `json:"demandKind"`
-	InitialAllocationStrategy      string    `json:"initialAllocationStrategy"`
+	ID            uint   `json:"id"`
+	ProfileKey    string `json:"profileKey"`
+	SourceChannel string `json:"sourceChannel"`
+	SourceSurface string `json:"sourceSurface"`
+	// DemandKind is a leftover optional hint, not the unique document type.
+	// One source platform may bind both demand import types.
+	DemandKind                string `json:"demandKind"`
+	InitialAllocationStrategy string `json:"initialAllocationStrategy"`
+	// IdentityStrategy is leftover; import-time identity follows
+	// InterpretDemandImportDocumentType.
 	IdentityStrategy               string    `json:"identityStrategy"`
 	EntitlementAuthorityMode       string    `json:"entitlementAuthorityMode"`
 	RecipientInputMode             string    `json:"recipientInputMode"`
@@ -36,11 +40,15 @@ type IntegrationProfileDTO struct {
 }
 
 type CreateProfileInput struct {
-	ProfileKey                     string `json:"profileKey"`
-	SourceChannel                  string `json:"sourceChannel"`
-	SourceSurface                  string `json:"sourceSurface"`
-	DemandKind                     string `json:"demandKind"`
-	InitialAllocationStrategy      string `json:"initialAllocationStrategy"`
+	ProfileKey    string `json:"profileKey"`
+	SourceChannel string `json:"sourceChannel"`
+	SourceSurface string `json:"sourceSurface"`
+	// DemandKind is a leftover optional hint, not the unique document type.
+	// One source platform may bind both demand import types.
+	DemandKind                string `json:"demandKind"`
+	InitialAllocationStrategy string `json:"initialAllocationStrategy"`
+	// IdentityStrategy is leftover; import-time identity follows
+	// InterpretDemandImportDocumentType.
 	IdentityStrategy               string `json:"identityStrategy"`
 	EntitlementAuthorityMode       string `json:"entitlementAuthorityMode"`
 	RecipientInputMode             string `json:"recipientInputMode"`
@@ -64,12 +72,16 @@ type CreateProfileInput struct {
 }
 
 type UpdateProfileInput struct {
-	ID                             uint   `json:"id"`
-	ProfileKey                     string `json:"profileKey"`
-	SourceChannel                  string `json:"sourceChannel"`
-	SourceSurface                  string `json:"sourceSurface"`
-	DemandKind                     string `json:"demandKind"`
-	InitialAllocationStrategy      string `json:"initialAllocationStrategy"`
+	ID            uint   `json:"id"`
+	ProfileKey    string `json:"profileKey"`
+	SourceChannel string `json:"sourceChannel"`
+	SourceSurface string `json:"sourceSurface"`
+	// DemandKind is a leftover optional hint, not the unique document type.
+	// One source platform may bind both demand import types.
+	DemandKind                string `json:"demandKind"`
+	InitialAllocationStrategy string `json:"initialAllocationStrategy"`
+	// IdentityStrategy is leftover; import-time identity follows
+	// InterpretDemandImportDocumentType.
 	IdentityStrategy               string `json:"identityStrategy"`
 	EntitlementAuthorityMode       string `json:"entitlementAuthorityMode"`
 	RecipientInputMode             string `json:"recipientInputMode"`

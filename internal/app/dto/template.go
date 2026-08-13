@@ -30,6 +30,9 @@ type DocumentTemplateDTO struct {
 	UpdatedAt    time.Time `json:"updatedAt" ts_type:"string"`
 }
 
+// BindTemplateToProfileInput binds a template as a profile default for one
+// documentType. Uniqueness is per (profile, documentType); one source platform
+// may have defaults for both demand import types.
 type BindTemplateToProfileInput struct {
 	IntegrationProfileID uint   `json:"integrationProfileId"`
 	DocumentType         string `json:"documentType"`

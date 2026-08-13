@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
@@ -75,15 +76,14 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 	if err := c.requireCustomerResolutionWrites(ctx); err != nil {
 		return dto.DemandDocumentDTO{}, err
 	}
-	// Silent override — backend is the final arbiter for profile-driven fields.
-	// When an integration profile is selected, DemandKind / SourceChannel /
-	// SourceSurface are dictated by the profile configuration; any values the
-	// frontend submitted for these fields are intentionally discarded. This
-	// ensures data consistency regardless of frontend state or user edits.
-	// Frontend validation is purely UX guidance and does NOT constitute authority.
+	// Kind / SourceSurface / IdentityStrategy come from the resolved
+	// documentType. The integration profile is the platform (SourceChannel);
+	// it is not authority for persisted Kind/Surface or customer-resolution
+	// strategy.
 	effectiveKind := input.Kind
 	effectiveSourceChannel := input.SourceChannel
 	effectiveSourceSurface := input.SourceSurface
+	identityStrategy := ""
 
 	var integrationProfile *domain.IntegrationProfile
 	if input.IntegrationProfileID != nil {
@@ -91,16 +91,26 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 		if err != nil {
 			return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d does not exist", *input.IntegrationProfileID)
 		}
-		if profile.DemandKind != "" {
-			effectiveKind = profile.DemandKind
+		requested := requestedDemandDocumentType(input.Kind)
+		docType, err := app.ResolveDemandImportDocumentType(profile, requested)
+		if err != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("resolve demand document type: %w", err)
 		}
+		interp, err := app.InterpretDemandImportDocumentType(docType)
+		if err != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("interpret demand document type: %w", err)
+		}
+		effectiveKind, effectiveSourceSurface, identityStrategy = interp.DemandKind, interp.SourceSurface, interp.IdentityStrategy
 		if profile.SourceChannel != "" {
 			effectiveSourceChannel = profile.SourceChannel
 		}
-		if profile.SourceSurface != "" {
-			effectiveSourceSurface = profile.SourceSurface
-		}
 		integrationProfile = profile
+	} else if dt := strings.TrimSpace(input.Kind); dt == "import_entitlement" || dt == "import_sales_order" {
+		interp, err := app.InterpretDemandImportDocumentType(dt)
+		if err != nil {
+			return dto.DemandDocumentDTO{}, fmt.Errorf("interpret demand document type: %w", err)
+		}
+		effectiveKind, effectiveSourceSurface = interp.DemandKind, interp.SourceSurface
 	}
 	if c.gdb == nil {
 		return dto.DemandDocumentDTO{}, fmt.Errorf("demand import database is not configured")
@@ -138,10 +148,10 @@ func (c *DemandController) ImportDemandDocument(input dto.CreateDemandInput) (dt
 		originID := (*uint)(nil)
 		resolver := app.NewDemandCustomerResolutionService(profileRepo, infra.NewCustomerProfileOriginRepository(tx))
 		if integrationProfile != nil && (input.CustomerProfileID == nil ||
-			integrationProfile.IdentityStrategy == app.IdentityStrategyOrderScopedProvisional) {
+			identityStrategy == app.IdentityStrategyOrderScopedProvisional) {
 			resolved, resolveErr := resolver.Resolve(ctx, app.DemandCustomerResolutionInput{
 				IntegrationProfileID: integrationProfile.ID,
-				IdentityStrategy:     integrationProfile.IdentityStrategy,
+				IdentityStrategy:     identityStrategy,
 				SourceChannel:        effectiveSourceChannel,
 				SourceDocumentNo:     input.SourceDocumentNo,
 				SourceCustomerRef:    input.SourceCustomerRef,
@@ -192,10 +202,15 @@ func (c *DemandController) ImportDemandFromCSV(input dto.ImportDemandTemplateInp
 	if err != nil {
 		return dto.DemandDocumentDTO{}, fmt.Errorf("integration profile %d not found: %w", input.IntegrationProfileID, err)
 	}
-	docType := input.DocumentType
-	if docType == "" {
-		docType = "import_entitlement"
+	docType, err := app.ResolveDemandImportDocumentType(profile, input.DocumentType)
+	if err != nil {
+		return dto.DemandDocumentDTO{}, fmt.Errorf("resolve demand document type: %w", err)
 	}
+	interp, err := app.InterpretDemandImportDocumentType(docType)
+	if err != nil {
+		return dto.DemandDocumentDTO{}, fmt.Errorf("interpret demand document type: %w", err)
+	}
+	kind, sourceSurface, identityStrategy := interp.DemandKind, interp.SourceSurface, interp.IdentityStrategy
 	_, mappedLines, err := c.templateMapping.BuildImportPipeline(ctx, profile.ID, docType, input.Rows)
 	if err != nil {
 		return dto.DemandDocumentDTO{}, fmt.Errorf("template pipeline: %w", err)
@@ -211,7 +226,7 @@ func (c *DemandController) ImportDemandFromCSV(input dto.ImportDemandTemplateInp
 		)
 		resolved, resolveErr := resolver.Resolve(ctx, app.DemandCustomerResolutionInput{
 			IntegrationProfileID: profile.ID,
-			IdentityStrategy:     profile.IdentityStrategy,
+			IdentityStrategy:     identityStrategy,
 			SourceChannel:        profile.SourceChannel,
 			SourceDocumentNo:     input.SourceDocumentNo,
 			SourceCustomerRef:    input.SourceCustomerRef,
@@ -222,10 +237,10 @@ func (c *DemandController) ImportDemandFromCSV(input dto.ImportDemandTemplateInp
 			return fmt.Errorf("customer resolution: %w", resolveErr)
 		}
 		doc := domain.DemandDocument{
-			Kind:                 profile.DemandKind,
+			Kind:                 kind,
 			CaptureMode:          "document_import",
 			SourceChannel:        profile.SourceChannel,
-			SourceSurface:        profile.SourceSurface,
+			SourceSurface:        sourceSurface,
 			SourceDocumentNo:     input.SourceDocumentNo,
 			SourceCustomerRef:    input.SourceCustomerRef,
 			CustomerProfileID:    resolved.CustomerProfileID,
@@ -487,6 +502,21 @@ func domainLineSliceToPtrs(lines []domain.DemandLine) []*domain.DemandLine {
 		ptrs[i] = &lines[i]
 	}
 	return ptrs
+}
+
+// requestedDemandDocumentType maps a manual Kind (or an already-resolved
+// import_* documentType) into the documentType passed to
+// ResolveDemandImportDocumentType. Empty stays empty; Resolve then fails
+// because documentType must be explicit (not inferred from profile.DemandKind).
+func requestedDemandDocumentType(kind string) string {
+	switch strings.TrimSpace(kind) {
+	case "import_entitlement", string(domain.DemandKindMembershipEntitlement):
+		return "import_entitlement"
+	case "import_sales_order", string(domain.DemandKindRetailOrder):
+		return "import_sales_order"
+	default:
+		return strings.TrimSpace(kind)
+	}
 }
 
 // UpdateDemandLineRouting updates routing disposition, recipient input state, and reason code

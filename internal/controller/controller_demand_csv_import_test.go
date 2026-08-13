@@ -290,9 +290,9 @@ func TestImportDemandCSV_MultiUID_PerRowIdentity(t *testing.T) {
 
 	importInput := dto.ImportDemandCSVInput{
 		IntegrationProfileID: profile.ID,
-		// Empty documentType must resolve from membership_entitlement.
-		ImportMode: "reject_all",
-		FilePath:   path,
+		DocumentType:         "import_entitlement",
+		ImportMode:           "reject_all",
+		FilePath:             path,
 	}
 	result, err := c.ImportDemandCSV(importInput)
 	if err != nil {
@@ -315,6 +315,12 @@ func TestImportDemandCSV_MultiUID_PerRowIdentity(t *testing.T) {
 
 	refs := map[string]uint{}
 	for _, doc := range docs {
+		if doc.Kind != string(domain.DemandKindMembershipEntitlement) {
+			t.Errorf("document %d Kind=%q, want membership_entitlement", doc.ID, doc.Kind)
+		}
+		if doc.SourceSurface != string(domain.SourceSurfaceMembership) {
+			t.Errorf("document %d SourceSurface=%q, want membership", doc.ID, doc.SourceSurface)
+		}
 		if doc.SourceCustomerRef == "" {
 			t.Fatalf("document %d missing SourceCustomerRef", doc.ID)
 		}
@@ -357,6 +363,116 @@ func TestImportDemandCSV_MultiUID_PerRowIdentity(t *testing.T) {
 		if cp.DisplayName != wantDisplay[ref] {
 			t.Errorf("profile for %s DisplayName=%q, want %q", ref, cp.DisplayName, wantDisplay[ref])
 		}
+	}
+}
+
+func TestImportDemandCSV_IgnoresProfileIdentityStrategyForEntitlement(t *testing.T) {
+	gdb := setupDemandCSVImportTestDB(t)
+	c := newDemandCSVImportTestController(gdb)
+	ctx := appContext
+
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	profile := &domain.IntegrationProfile{
+		ProfileKey:    "leftover-order-scoped-membership",
+		SourceChannel: "bilibili",
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+		// Leftover retail strategy must not override import_entitlement semantics.
+		IdentityStrategy: app.IdentityStrategyOrderScopedProvisional,
+	}
+	if err := profileRepo.Create(ctx, profile); err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	tmpl := &domain.DocumentTemplate{
+		TemplateKey:  "leftover-entitlement-template",
+		DocumentType: "import_entitlement",
+		Format:       "csv",
+		MappingRules: `{
+			"version":2,
+			"mode":"header",
+			"hasHeader":true,
+			"columns":{
+				"document.source_customer_ref":"UID",
+				"document.display_name":"Name",
+				"line.external_title":"Item"
+			},
+			"defaults":{"line.line_type":"entitlement_rule","line.requested_quantity":"1"},
+			"required":["document.source_customer_ref"]
+		}`,
+	}
+	if err := templateRepo.Create(ctx, tmpl); err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+	if err := infra.NewProfileTemplateBindingRepository(gdb).Create(ctx, &domain.IntegrationProfileTemplateBinding{
+		IntegrationProfileID: profile.ID, DocumentType: "import_entitlement", TemplateID: tmpl.ID, IsDefault: true,
+	}); err != nil {
+		t.Fatalf("create binding: %v", err)
+	}
+
+	result, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
+		IntegrationProfileID: profile.ID,
+		DocumentType:         "import_entitlement",
+		ImportMode:           "reject_all",
+		Rows: []map[string]string{
+			{"UID": "uid-alpha", "Name": "Alpha", "Item": "Gift A"},
+			{"UID": "uid-beta", "Name": "Beta", "Item": "Gift B"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ImportDemandCSV: %v", err)
+	}
+	if result.SuccessCount != 2 || result.ErrorCount != 0 {
+		t.Fatalf("unexpected counts: %+v", result)
+	}
+
+	docs, err := c.demandRepo.List(ctx)
+	if err != nil {
+		t.Fatalf("List docs: %v", err)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("expected 2 documents grouped by UID, got %d (must not collapse empty order numbers)", len(docs))
+	}
+
+	refs := map[string]uint{}
+	for _, doc := range docs {
+		if doc.Kind != string(domain.DemandKindMembershipEntitlement) {
+			t.Errorf("document %d Kind=%q, want membership_entitlement", doc.ID, doc.Kind)
+		}
+		if doc.SourceSurface != string(domain.SourceSurfaceMembership) {
+			t.Errorf("document %d SourceSurface=%q, want membership", doc.ID, doc.SourceSurface)
+		}
+		if doc.SourceCustomerRef == "" {
+			t.Fatalf("document %d missing SourceCustomerRef", doc.ID)
+		}
+		if doc.CustomerProfileID == nil {
+			t.Fatalf("document %d (%s) missing CustomerProfileID", doc.ID, doc.SourceCustomerRef)
+		}
+		if prev, dup := refs[doc.SourceCustomerRef]; dup {
+			t.Fatalf("duplicate SourceCustomerRef %q on docs %d and %d", doc.SourceCustomerRef, prev, doc.ID)
+		}
+		refs[doc.SourceCustomerRef] = *doc.CustomerProfileID
+	}
+	if _, ok := refs["uid-alpha"]; !ok {
+		t.Errorf("missing document for uid-alpha; got refs=%v", refs)
+	}
+	if _, ok := refs["uid-beta"]; !ok {
+		t.Errorf("missing document for uid-beta; got refs=%v", refs)
+	}
+	if refs["uid-alpha"] != 0 && refs["uid-beta"] != 0 && refs["uid-alpha"] == refs["uid-beta"] {
+		t.Fatalf("distinct UIDs folded onto one CustomerProfile: %v", refs)
+	}
+
+	var identityCount, originCount int64
+	if err := gdb.Model(&persistence.CustomerIdentity{}).Count(&identityCount).Error; err != nil {
+		t.Fatalf("count identities: %v", err)
+	}
+	if err := gdb.Model(&persistence.CustomerProfileOrigin{}).Count(&originCount).Error; err != nil {
+		t.Fatalf("count origins: %v", err)
+	}
+	if identityCount != 2 || originCount != 0 {
+		t.Fatalf("entitlement leftover strategy must still create CustomerIdentity, not order-scoped origins: identities=%d origins=%d", identityCount, originCount)
 	}
 }
 
@@ -407,8 +523,8 @@ func TestImportDemandCSV_RetailEmptyDocumentTypeCreatesOrderScopedProvisionalPro
 
 	importInput := dto.ImportDemandCSVInput{
 		IntegrationProfileID: profile.ID,
-		// Empty resolves to import_sales_order, never import_entitlement.
-		ImportMode: "reject_all",
+		DocumentType:         "import_sales_order",
+		ImportMode:           "reject_all",
 		Rows: []map[string]string{
 			{"Order": "ORDER-1", "Buyer": "same-buyer", "Item": "Standee", "Qty": "1"},
 			{"Order": "ORDER-2", "Buyer": "same-buyer", "Item": "Badge", "Qty": "2"},
@@ -433,6 +549,12 @@ func TestImportDemandCSV_RetailEmptyDocumentTypeCreatesOrderScopedProvisionalPro
 	byOrder := make(map[string]domain.DemandDocument, len(docs))
 	for _, doc := range docs {
 		byOrder[doc.SourceDocumentNo] = doc
+		if doc.Kind != string(domain.DemandKindRetailOrder) {
+			t.Errorf("order %q Kind=%q, want retail_order", doc.SourceDocumentNo, doc.Kind)
+		}
+		if doc.SourceSurface != string(domain.SourceSurfaceRetail) {
+			t.Errorf("order %q SourceSurface=%q, want retail", doc.SourceDocumentNo, doc.SourceSurface)
+		}
 		if doc.SourceCustomerRef != "same-buyer" {
 			t.Errorf("order %q lost customer ref: %+v", doc.SourceDocumentNo, doc)
 		}
@@ -482,6 +604,100 @@ func TestImportDemandCSV_RetailEmptyDocumentTypeCreatesOrderScopedProvisionalPro
 	}
 }
 
+func TestImportDemandCSV_IgnoresProfileIdentityStrategyForSalesOrder(t *testing.T) {
+	gdb := setupDemandCSVImportTestDB(t)
+	c := newDemandCSVImportTestController(gdb)
+	ctx := appContext
+
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	profile := &domain.IntegrationProfile{
+		ProfileKey:    "leftover-platform-uid-retail",
+		SourceChannel: "bilibili",
+		SourceSurface: string(domain.SourceSurfaceRetail),
+		DemandKind:    string(domain.DemandKindRetailOrder),
+		// Leftover membership strategy must not override import_sales_order semantics.
+		IdentityStrategy:        "platform_uid",
+		RequiresExternalOrderNo: true,
+	}
+	if err := profileRepo.Create(ctx, profile); err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+
+	const rules = `{
+		"version":2,
+		"mode":"header",
+		"hasHeader":true,
+		"columns":{
+			"document.source_document_no":"Order",
+			"document.source_customer_ref":"Buyer",
+			"line.external_title":"Item",
+			"line.requested_quantity":"Qty"
+		},
+		"defaults":{"line.line_type":"sku_order"},
+		"required":["document.source_document_no"]
+	}`
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	tmpl := &domain.DocumentTemplate{
+		TemplateKey: "leftover-sales-order-template", DocumentType: "import_sales_order", Format: "csv", MappingRules: rules,
+	}
+	if err := templateRepo.Create(ctx, tmpl); err != nil {
+		t.Fatalf("create template: %v", err)
+	}
+	if err := infra.NewProfileTemplateBindingRepository(gdb).Create(ctx, &domain.IntegrationProfileTemplateBinding{
+		IntegrationProfileID: profile.ID, DocumentType: "import_sales_order", TemplateID: tmpl.ID, IsDefault: true,
+	}); err != nil {
+		t.Fatalf("create binding: %v", err)
+	}
+
+	result, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
+		IntegrationProfileID: profile.ID,
+		DocumentType:         "import_sales_order",
+		ImportMode:           "reject_all",
+		Rows: []map[string]string{
+			{"Order": "ORDER-1", "Buyer": "same-buyer", "Item": "Standee", "Qty": "1"},
+			{"Order": "ORDER-2", "Buyer": "same-buyer", "Item": "Badge", "Qty": "2"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ImportDemandCSV: %v", err)
+	}
+	if result.SuccessCount != 2 || result.ErrorCount != 0 {
+		t.Fatalf("unexpected counts: %+v", result)
+	}
+
+	docs, err := c.demandRepo.List(ctx)
+	if err != nil {
+		t.Fatalf("List docs: %v", err)
+	}
+	if len(docs) != 2 {
+		t.Fatalf("same buyer's two orders were merged under leftover platform_uid: docs=%+v", docs)
+	}
+	byOrder := make(map[string]domain.DemandDocument, len(docs))
+	for _, doc := range docs {
+		byOrder[doc.SourceDocumentNo] = doc
+		if doc.Kind != string(domain.DemandKindRetailOrder) {
+			t.Errorf("order %q Kind=%q, want retail_order", doc.SourceDocumentNo, doc.Kind)
+		}
+		if doc.SourceSurface != string(domain.SourceSurfaceRetail) {
+			t.Errorf("order %q SourceSurface=%q, want retail", doc.SourceDocumentNo, doc.SourceSurface)
+		}
+		if doc.CustomerProfileID == nil {
+			t.Fatalf("order %q missing CustomerProfileID", doc.SourceDocumentNo)
+		}
+	}
+	if byOrder["ORDER-1"].CustomerProfileID == nil || byOrder["ORDER-2"].CustomerProfileID == nil ||
+		*byOrder["ORDER-1"].CustomerProfileID == *byOrder["ORDER-2"].CustomerProfileID {
+		t.Fatalf("different orders must use different provisional profiles even when nicknames match: %+v", byOrder)
+	}
+	var identityCount int64
+	if err := gdb.Model(&persistence.CustomerIdentity{}).Where("identity_value = ?", "same-buyer").Count(&identityCount).Error; err != nil {
+		t.Fatalf("count buyer nickname identities: %v", err)
+	}
+	if identityCount != 0 {
+		t.Fatalf("buyer nickname must not become CustomerIdentity, got %d", identityCount)
+	}
+}
+
 func TestImportDemandDocument_RetailStrategyIsOrderScopedAndIdempotent(t *testing.T) {
 	gdb := setupDemandCSVImportTestDB(t)
 	c := newDemandCSVImportTestController(gdb)
@@ -495,12 +711,18 @@ func TestImportDemandDocument_RetailStrategyIsOrderScopedAndIdempotent(t *testin
 	}
 	profileID := profile.ID
 	input := dto.CreateDemandInput{
-		IntegrationProfileID: &profileID, CaptureMode: "manual", SourceDocumentNo: "MANUAL-ORDER-1",
+		Kind: "import_sales_order", IntegrationProfileID: &profileID, CaptureMode: "manual", SourceDocumentNo: "MANUAL-ORDER-1",
 		SourceCustomerRef: "same-nickname", Lines: []dto.CreateDemandLineInput{{LineType: "sku_order", RequestedQuantity: 1}},
 	}
 	first, err := c.ImportDemandDocument(input)
 	if err != nil || first.CustomerProfileID == nil {
 		t.Fatalf("first manual retail import: doc=%+v err=%v", first, err)
+	}
+	if first.Kind != string(domain.DemandKindRetailOrder) {
+		t.Errorf("Kind=%q, want retail_order", first.Kind)
+	}
+	if first.SourceSurface != string(domain.SourceSurfaceRetail) {
+		t.Errorf("SourceSurface=%q, want retail", first.SourceSurface)
 	}
 	second, err := c.ImportDemandDocument(input)
 	if err != nil || second.CustomerProfileID == nil {
@@ -529,19 +751,58 @@ func TestImportDemandDocument_RetailStrategyIsOrderScopedAndIdempotent(t *testin
 	}
 }
 
+func TestImportDemandDocument_KindFromDocumentTypeShapedInput(t *testing.T) {
+	gdb := setupDemandCSVImportTestDB(t)
+	c := newDemandCSVImportTestController(gdb)
+	profile := &domain.IntegrationProfile{
+		ProfileKey: "manual-sales-order-doctype", SourceChannel: "bilibili",
+		SourceSurface: string(domain.SourceSurfaceRetail), DemandKind: string(domain.DemandKindRetailOrder),
+		IdentityStrategy: app.IdentityStrategyOrderScopedProvisional,
+	}
+	if err := infra.NewIntegrationProfileRepository(gdb).Create(appContext, profile); err != nil {
+		t.Fatal(err)
+	}
+	profileID := profile.ID
+	doc, err := c.ImportDemandDocument(dto.CreateDemandInput{
+		Kind: "import_sales_order", IntegrationProfileID: &profileID, CaptureMode: "manual",
+		SourceDocumentNo: "DOCTYPE-ORDER-1", SourceCustomerRef: "nickname-only",
+		Lines: []dto.CreateDemandLineInput{{LineType: "sku_order", RequestedQuantity: 1}},
+	})
+	if err != nil || doc.CustomerProfileID == nil {
+		t.Fatalf("manual import with documentType-shaped Kind: doc=%+v err=%v", doc, err)
+	}
+	if doc.Kind != string(domain.DemandKindRetailOrder) {
+		t.Fatalf("persisted Kind=%q, want retail_order (mapped from import_sales_order)", doc.Kind)
+	}
+	if doc.SourceSurface != string(domain.SourceSurfaceRetail) {
+		t.Fatalf("persisted SourceSurface=%q, want retail", doc.SourceSurface)
+	}
+	var identities, origins int64
+	if err := gdb.Model(&persistence.CustomerIdentity{}).Count(&identities).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := gdb.Model(&persistence.CustomerProfileOrigin{}).Count(&origins).Error; err != nil {
+		t.Fatal(err)
+	}
+	if identities != 0 || origins != 1 {
+		t.Fatalf("nickname leaked into stable identity or origin missing: identities=%d origins=%d", identities, origins)
+	}
+}
+
 func TestImportDemandDocument_RetailStrategyRequiresOrderNumber(t *testing.T) {
 	gdb := setupDemandCSVImportTestDB(t)
 	c := newDemandCSVImportTestController(gdb)
 	profile := &domain.IntegrationProfile{
 		ProfileKey: "manual-retail-missing-order", SourceChannel: "bilibili",
-		DemandKind: string(domain.DemandKindRetailOrder), IdentityStrategy: app.IdentityStrategyOrderScopedProvisional,
+		SourceSurface: string(domain.SourceSurfaceRetail), DemandKind: string(domain.DemandKindRetailOrder),
+		IdentityStrategy: app.IdentityStrategyOrderScopedProvisional,
 	}
 	if err := infra.NewIntegrationProfileRepository(gdb).Create(appContext, profile); err != nil {
 		t.Fatal(err)
 	}
 	profileID := profile.ID
 	_, err := c.ImportDemandDocument(dto.CreateDemandInput{
-		IntegrationProfileID: &profileID, CaptureMode: "manual", SourceCustomerRef: "nickname",
+		Kind: "import_sales_order", IntegrationProfileID: &profileID, CaptureMode: "manual", SourceCustomerRef: "nickname",
 	})
 	if err == nil || !strings.Contains(err.Error(), "requires sourceDocumentNo") {
 		t.Fatalf("missing order number error=%v", err)
@@ -560,7 +821,8 @@ func TestImportDemandFromCSV_RetailUsesOrderScopedResolution(t *testing.T) {
 	c := newDemandCSVImportTestController(gdb)
 	profile := &domain.IntegrationProfile{
 		ProfileKey: "legacy-csv-retail", SourceChannel: "bilibili",
-		DemandKind: string(domain.DemandKindRetailOrder), IdentityStrategy: app.IdentityStrategyOrderScopedProvisional,
+		SourceSurface: string(domain.SourceSurfaceRetail), DemandKind: string(domain.DemandKindRetailOrder),
+		IdentityStrategy: app.IdentityStrategyOrderScopedProvisional,
 	}
 	if err := infra.NewIntegrationProfileRepository(gdb).Create(appContext, profile); err != nil {
 		t.Fatal(err)
@@ -585,6 +847,12 @@ func TestImportDemandFromCSV_RetailUsesOrderScopedResolution(t *testing.T) {
 	if err != nil || first.CustomerProfileID == nil {
 		t.Fatalf("legacy CSV retail import: doc=%+v err=%v", first, err)
 	}
+	if first.Kind != string(domain.DemandKindRetailOrder) {
+		t.Errorf("Kind=%q, want retail_order", first.Kind)
+	}
+	if first.SourceSurface != string(domain.SourceSurfaceRetail) {
+		t.Errorf("SourceSurface=%q, want retail", first.SourceSurface)
+	}
 	second, err := c.ImportDemandFromCSV(input)
 	if err != nil || second.CustomerProfileID == nil || *second.CustomerProfileID != *first.CustomerProfileID {
 		t.Fatalf("legacy CSV same-order retry: first=%+v second=%+v err=%v", first, second, err)
@@ -600,18 +868,26 @@ func TestImportDemandDocument_MembershipStrategyRemainsStableAcrossDocuments(t *
 	c := newDemandCSVImportTestController(gdb)
 	profile := &domain.IntegrationProfile{
 		ProfileKey: "manual-membership", SourceChannel: "bilibili",
-		DemandKind: string(domain.DemandKindMembershipEntitlement), IdentityStrategy: "platform_uid",
+		SourceSurface: string(domain.SourceSurfaceMembership), DemandKind: string(domain.DemandKindMembershipEntitlement),
+		IdentityStrategy: "platform_uid",
 	}
 	if err := infra.NewIntegrationProfileRepository(gdb).Create(appContext, profile); err != nil {
 		t.Fatal(err)
 	}
 	profileID := profile.ID
 	input := dto.CreateDemandInput{
-		IntegrationProfileID: &profileID, CaptureMode: "manual", SourceDocumentNo: "MEMBER-DOC-1", SourceCustomerRef: "uid-stable",
+		Kind: "import_entitlement", IntegrationProfileID: &profileID, CaptureMode: "manual",
+		SourceDocumentNo: "MEMBER-DOC-1", SourceCustomerRef: "uid-stable",
 	}
 	first, err := c.ImportDemandDocument(input)
 	if err != nil || first.CustomerProfileID == nil {
 		t.Fatalf("first membership import: doc=%+v err=%v", first, err)
+	}
+	if first.Kind != string(domain.DemandKindMembershipEntitlement) {
+		t.Errorf("Kind=%q, want membership_entitlement", first.Kind)
+	}
+	if first.SourceSurface != string(domain.SourceSurfaceMembership) {
+		t.Errorf("SourceSurface=%q, want membership", first.SourceSurface)
 	}
 	input.SourceDocumentNo = "MEMBER-DOC-2"
 	second, err := c.ImportDemandDocument(input)
@@ -659,7 +935,7 @@ func TestImportDemandCSV_PersistenceFailureRollsBackProfilesIdentitiesNamesAndDo
 		t.Fatal(err)
 	}
 	_, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
-		IntegrationProfileID: profile.ID, ImportMode: "reject_all",
+		IntegrationProfileID: profile.ID, DocumentType: "import_entitlement", ImportMode: "reject_all",
 		Rows: []map[string]string{
 			{"UID": "uid-1", "Name": "A", "Item": "Gift A"},
 			{"UID": "uid-2", "Name": "B", "Item": "Gift B"},
@@ -707,6 +983,7 @@ func TestImportDemandCSV_RequestMappingOverrideIsValidatedAndNotPersisted(t *tes
 	}`
 	result, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
 		IntegrationProfileID: profileID,
+		DocumentType:         "import_entitlement",
 		ImportMode:           "reject_all",
 		MappingRules:         override,
 		Rows:                 []map[string]string{{"Item": "Override Item", "Count": " 3 "}},
@@ -730,6 +1007,7 @@ func TestImportDemandCSV_RequestMappingOverrideIsValidatedAndNotPersisted(t *tes
 	}
 	requiredResult, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
 		IntegrationProfileID: profileID,
+		DocumentType:         "import_entitlement",
 		ImportMode:           "reject_all",
 		MappingRules:         override,
 		Rows:                 []map[string]string{{"Item": "Missing Count"}},
@@ -743,6 +1021,7 @@ func TestImportDemandCSV_RequestMappingOverrideIsValidatedAndNotPersisted(t *tes
 
 	_, err = c.ImportDemandCSV(dto.ImportDemandCSVInput{
 		IntegrationProfileID: profileID,
+		DocumentType:         "import_entitlement",
 		MappingRules: `{
 			"version":2,
 			"mode":"header",
@@ -756,25 +1035,60 @@ func TestImportDemandCSV_RequestMappingOverrideIsValidatedAndNotPersisted(t *tes
 	}
 }
 
-func TestImportDemandCSV_RejectsDocumentTypeThatDoesNotMatchProfile(t *testing.T) {
+func TestImportDemandCSV_EmptyDocumentTypeIsRejected(t *testing.T) {
+	gdb := setupDemandCSVImportTestDB(t)
+	profileID := seedDemandCSVImportFixture(t, gdb)
+	c := newDemandCSVImportTestController(gdb)
+
+	_, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
+		IntegrationProfileID: profileID,
+		ImportMode:           "reject_all",
+		Rows:                 []map[string]string{{"Name": "Standee", "Qty": "2"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "explicit documentType") {
+		t.Fatalf("empty documentType error=%v", err)
+	}
+}
+
+func TestImportDemandCSV_SourcePlatformAcceptsEntitlementOnRetailLeftover(t *testing.T) {
 	gdb := setupDemandCSVImportTestDB(t)
 	c := newDemandCSVImportTestController(gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	profile := &domain.IntegrationProfile{
-		ProfileKey: "retail-mismatch", SourceSurface: string(domain.SourceSurfaceRetail), DemandKind: string(domain.DemandKindRetailOrder),
+		ProfileKey: "retail-leftover-accepts-entitlement", SourceChannel: "bilibili",
+		SourceSurface: string(domain.SourceSurfaceRetail), DemandKind: string(domain.DemandKindRetailOrder),
+		IdentityStrategy: app.IdentityStrategyOrderScopedProvisional,
 	}
 	if err := profileRepo.Create(appContext, profile); err != nil {
 		t.Fatalf("create profile: %v", err)
 	}
 
-	_, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
+	result, err := c.ImportDemandCSV(dto.ImportDemandCSVInput{
 		IntegrationProfileID: profile.ID,
 		DocumentType:         "import_entitlement",
-		MappingRules:         `{"columns":{"line.external_title":"Name"}}`,
-		Rows:                 []map[string]string{{"Name": "wrong importer"}},
+		ImportMode:           "reject_all",
+		MappingRules: `{
+			"version":2,"mode":"header","hasHeader":true,
+			"columns":{"document.source_customer_ref":"UID","line.external_title":"Name"},
+			"defaults":{"line.line_type":"entitlement_rule","line.requested_quantity":"1"},
+			"required":["document.source_customer_ref"]
+		}`,
+		Rows: []map[string]string{{"UID": "uid-cross", "Name": "Gift"}},
 	})
-	if err == nil {
-		t.Fatal("expected entitlement importer to be rejected for retail profile")
+	if err != nil {
+		t.Fatalf("source platform must accept import_entitlement: %v", err)
+	}
+	if result.Document == nil || result.Document.Kind != string(domain.DemandKindMembershipEntitlement) {
+		t.Fatalf("Kind from documentType, not leftover DemandKind: %+v", result.Document)
+	}
+	if result.Document.SourceSurface != string(domain.SourceSurfaceMembership) {
+		t.Fatalf("SourceSurface from documentType, want membership, got %+v", result.Document)
+	}
+	var identities, origins int64
+	_ = gdb.Model(&persistence.CustomerIdentity{}).Count(&identities).Error
+	_ = gdb.Model(&persistence.CustomerProfileOrigin{}).Count(&origins).Error
+	if identities != 1 || origins != 0 {
+		t.Fatalf("entitlement on retail leftover must use platform_uid: identities=%d origins=%d", identities, origins)
 	}
 }
 

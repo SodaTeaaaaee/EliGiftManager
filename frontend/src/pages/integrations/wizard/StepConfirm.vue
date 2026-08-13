@@ -14,7 +14,7 @@ import { useI18n } from 'vue-i18n'
 import { StatusBadge } from '@/shared/ui/status'
 import { CalloutBar } from '@/shared/ui/guidance'
 import type { UseIntakeWizardStateApi } from './useIntakeWizardState'
-import { INTAKE_V2_DEST_FIELD_ORDER, destFieldLabelKey } from './destFields'
+import { destFieldLabelKey, destKeysForDocumentType } from './destFields'
 
 const props = defineProps<{ state: UseIntakeWizardStateApi }>()
 
@@ -60,7 +60,7 @@ const mappingSummary = computed<MappingSummaryRow[]>(() => {
     ...Object.keys(mapping.positions ?? {}),
     ...Object.keys(mapping.defaults ?? {}),
   ])
-  const ordered = [...INTAKE_V2_DEST_FIELD_ORDER]
+  const ordered = [...destKeysForDocumentType(props.state.sessionDocumentType.value || props.state.documentType.value)]
   for (const key of extraKeys) {
     if (!ordered.includes(key)) ordered.push(key)
   }
@@ -91,8 +91,16 @@ const mappingSummary = computed<MappingSummaryRow[]>(() => {
     .filter((row) => row.resolvedKind !== 'unmapped')
 })
 
+const bothDemandFiles = computed(
+  () => props.state.enableEntitlementImport.value && props.state.enableSalesOrderImport.value,
+)
+
 const showStrategy = computed(
-  () => !props.state.isRemapMode.value && !props.state.isFactorySurface.value,
+  () =>
+    !props.state.isRemapMode.value &&
+    !props.state.isFactorySurface.value &&
+    !props.state.persistedProfile.value &&
+    !bothDemandFiles.value,
 )
 </script>
 
@@ -109,9 +117,25 @@ const showStrategy = computed(
       :message="state.bindWarning.value"
     />
 
+    <CalloutBar
+      tone="info"
+      :message="t('intakeWizard.confirm.thisFileOnly')"
+    />
+    <CalloutBar
+      tone="info"
+      :message="t('intakeWizard.confirm.profileIsPlatform')"
+    />
+    <CalloutBar
+      v-if="state.persistedProfile.value"
+      tone="info"
+      :message="t('intakeWizard.documentType.loopHint')"
+    />
+
     <section class="step-confirm__section">
       <h4 class="step-confirm__section-title">{{ t('intakeWizard.confirm.profileTitle') }}</h4>
-      <p v-if="state.isRemapMode.value" class="step-confirm__remap-notice">{{ t('intakeWizard.confirm.remapNotice') }}</p>
+      <p v-if="state.isRemapMode.value || state.persistedProfile.value" class="step-confirm__remap-notice">
+        {{ t('intakeWizard.confirm.remapNotice') }}
+      </p>
       <dl class="step-confirm__kv">
         <template v-if="!state.isRemapMode.value">
           <dt>{{ t('intakeWizard.profileFields.profileKeyLabel') }}</dt>
@@ -120,22 +144,20 @@ const showStrategy = computed(
           <dd>{{ state.sourceChannel.value }}</dd>
           <dt>{{ t('intakeWizard.profileFields.sourceSurfaceLabel') }}</dt>
           <dd>{{ state.sourceSurface.value }}</dd>
-          <template v-if="!state.isFactorySurface.value">
-            <dt>{{ t('statusKit.dimensionNames.demandKind') }}</dt>
-            <dd><StatusBadge dimension="demandKind" :value="state.demandKind.value" size="sm" /></dd>
+          <template v-if="state.isFactorySurface.value">
+            <dt>{{ t('intakeWizard.platformKind.factory.label') }}</dt>
+            <dd>{{ t('intakeWizard.platformKind.factory.label') }}</dd>
+            <dt>{{ t('intakeWizard.profileFields.factorySupplierPlatformLabel') }}</dt>
+            <dd>{{ state.factorySupplierPlatform.value || '—' }}</dd>
           </template>
-          <template v-else>
-            <dt>{{ t('intakeWizard.businessSurface.factory.label') }}</dt>
-            <dd>{{ t('intakeWizard.businessSurface.factory.label') }}</dd>
-          </template>
-          <dt>{{ t('intakeWizard.profileFields.factorySupplierPlatformLabel') }}</dt>
-          <dd>{{ state.factorySupplierPlatform.value || '—' }}</dd>
           <dt>{{ t('intakeWizard.confirm.documentType') }}</dt>
           <dd><StatusBadge dimension="documentType" :value="state.documentType.value" size="sm" /></dd>
         </template>
         <template v-else>
           <dt>{{ t('intakeWizard.profileFields.profileKeyLabel') }}</dt>
           <dd>{{ state.profileKey.value }}</dd>
+          <dt>{{ t('intakeWizard.confirm.documentType') }}</dt>
+          <dd><StatusBadge dimension="documentType" :value="state.documentType.value" size="sm" /></dd>
         </template>
       </dl>
     </section>
@@ -164,6 +186,10 @@ const showStrategy = computed(
           </template>
         </template>
         <template v-else>
+          <dt>{{ t('intakeWizard.fileKinds.import_entitlement.label') }}</dt>
+          <dd>{{ state.enableEntitlementImport.value ? t('common.yes') : t('common.no') }}</dd>
+          <dt>{{ t('intakeWizard.fileKinds.import_sales_order.label') }}</dt>
+          <dd>{{ state.enableSalesOrderImport.value ? t('common.yes') : t('common.no') }}</dd>
           <template v-for="key in DEMAND_CAPABILITY_KEYS" :key="key">
             <dt>{{ t(`intakeWizard.capabilities.${key}.label`) }}</dt>
             <dd>{{ state.capabilities[key] ? t('common.yes') : t('common.no') }}</dd>

@@ -314,6 +314,9 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list bindings: %v", err)
 	}
+	if len(bindings) != 3 {
+		t.Fatalf("profile binding total = %d, want 3 (catalog + shipment + supplier-order)", len(bindings))
+	}
 	var defaultCatalogBindings, defaultShipBindings, defaultOrderBindings int
 	for i := range bindings {
 		if bindings[i].DocumentType == CatalogDemoDocType && bindings[i].IsDefault {

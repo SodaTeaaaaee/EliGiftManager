@@ -167,3 +167,19 @@ export function destFieldTooltipKey(field: string): string {
   const leaf = field.replace(/\./g, '_')
   return `intakeWizard.destFields.${leaf}.tooltip`
 }
+
+/** Dest catalog for one session document type — never a union of factory caps. */
+export function destKeysForDocumentType(documentType: string): readonly string[] {
+  switch (documentType) {
+    case 'import_product_catalog':
+      return PRODUCT_DEST_FIELDS
+    case 'import_supplier_shipment':
+      return SHIPMENT_DEST_FIELDS
+    case 'export_supplier_order':
+      return EXPORT_DEST_FIELDS
+    case 'import_entitlement':
+    case 'import_sales_order':
+    default:
+      return INTAKE_V2_DEST_FIELD_ORDER
+  }
+}

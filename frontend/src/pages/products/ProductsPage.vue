@@ -13,7 +13,14 @@ import { PageHeader } from '@/shared/ui/shell'
 import { FilterBar } from '@/shared/ui/filter-bar'
 import { DataGrid, createColumns, type DataGridColumnSpec } from '@/shared/ui/data-grid'
 import { ErrorBanner, useFeedback } from '@/shared/ui/feedback'
-import { importProductCatalog, listProfiles, pickCatalogImportFile } from '@/shared/api/bridge'
+import {
+  getDefaultTemplateForProfile,
+  importProductCatalog,
+  listProfiles,
+  pickCatalogImportFile,
+} from '@/shared/api/bridge'
+import { StatusBadge } from '@/shared/ui/status'
+import { CalloutBar } from '@/shared/ui/guidance'
 import { useProductsPage } from './useProductsPage'
 import ProductEditDrawer from './ProductEditDrawer.vue'
 import BatchStockToWaveDialog from './BatchStockToWaveDialog.vue'
@@ -86,6 +93,9 @@ function onSaved(): void {
 }
 
 // ── Catalog import (ImportProductCatalog) ──
+// Document type is implied — this entry is catalog-only; no documentType picker.
+const CATALOG_DOCUMENT_TYPE = 'import_product_catalog'
+
 const showCatalogImport = ref(false)
 const catalogProfileId = ref<number | null>(null)
 const catalogProfiles = ref<SelectOption[]>([])
@@ -93,6 +103,58 @@ const catalogImporting = ref(false)
 const catalogProfilesLoading = ref(false)
 const catalogProfilesError = ref<string | null>(null)
 const catalogImportEvidence = ref<{ importRunId: number; evidenceDisabled: boolean } | null>(null)
+const catalogBindingKey = ref<string | null>(null)
+const catalogBindingPresent = ref(false)
+const catalogBindingLoading = ref(false)
+const catalogBindingError = ref<string | null>(null)
+let catalogBindingSeq = 0
+
+const catalogPickDisabled = computed(
+  () =>
+    catalogProfileId.value == null
+    || catalogProfilesLoading.value
+    || !!catalogProfilesError.value
+    || catalogImportEvidence.value != null
+    || catalogBindingLoading.value
+    || !catalogBindingPresent.value,
+)
+
+function resetCatalogBindingState(): void {
+  catalogBindingSeq += 1
+  catalogBindingKey.value = null
+  catalogBindingPresent.value = false
+  catalogBindingLoading.value = false
+  catalogBindingError.value = null
+}
+
+async function loadCatalogDefaultBinding(profileId: number | null): Promise<void> {
+  const seq = ++catalogBindingSeq
+  catalogBindingKey.value = null
+  catalogBindingPresent.value = false
+  catalogBindingError.value = null
+  if (profileId == null) {
+    catalogBindingLoading.value = false
+    return
+  }
+  catalogBindingLoading.value = true
+  try {
+    const tmpl = await getDefaultTemplateForProfile(profileId, CATALOG_DOCUMENT_TYPE)
+    if (seq !== catalogBindingSeq) return
+    if (tmpl) {
+      catalogBindingKey.value = tmpl.templateKey
+      catalogBindingPresent.value = true
+    }
+  } catch (err) {
+    if (seq !== catalogBindingSeq) return
+    catalogBindingError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (seq === catalogBindingSeq) catalogBindingLoading.value = false
+  }
+}
+
+watch(catalogProfileId, (id) => {
+  void loadCatalogDefaultBinding(id)
+})
 
 async function openCatalogImport(): Promise<void> {
   showCatalogImport.value = true
@@ -100,6 +162,7 @@ async function openCatalogImport(): Promise<void> {
   catalogProfilesLoading.value = true
   catalogProfilesError.value = null
   catalogImportEvidence.value = null
+  resetCatalogBindingState()
   try {
     const profiles = await listProfiles()
     catalogProfiles.value = profiles
@@ -117,7 +180,7 @@ async function openCatalogImport(): Promise<void> {
 }
 
 async function runCatalogImport(): Promise<void> {
-  if (catalogProfileId.value == null) return
+  if (catalogProfileId.value == null || !catalogBindingPresent.value) return
   catalogImporting.value = true
   try {
     const path = await pickCatalogImportFile()
@@ -317,6 +380,14 @@ const columns = computed(() => {
       style="width: 480px"
     >
       <p class="products-page__catalog-hint">{{ t('products.catalogImport.hint') }}</p>
+      <p class="products-page__catalog-doc-type">
+        <span>{{
+          t('products.catalogImport.documentTypeNote', {
+            type: t('glossary.documentType.import_product_catalog.label'),
+          })
+        }}</span>
+        <StatusBadge dimension="documentType" :value="CATALOG_DOCUMENT_TYPE" size="sm" />
+      </p>
       <ImportEvidenceReference
         v-if="catalogImportEvidence"
         :import-run-id="catalogImportEvidence.importRunId"
@@ -336,11 +407,24 @@ const columns = computed(() => {
         filterable
         :placeholder="t('products.catalogImport.profilePlaceholder')"
       />
+      <NSpin v-if="catalogBindingLoading" size="small" class="products-page__catalog-binding" />
+      <CalloutBar
+        v-else-if="catalogProfileId != null && catalogBindingPresent"
+        class="products-page__catalog-binding"
+        tone="info"
+        :message="t('products.catalogImport.defaultBindingLoaded', { key: catalogBindingKey ?? '' })"
+      />
+      <CalloutBar
+        v-else-if="catalogProfileId != null"
+        class="products-page__catalog-binding"
+        :tone="catalogBindingError ? 'error' : 'warning'"
+        :message="catalogBindingError || t('products.catalogImport.defaultBindingMissing')"
+      />
       <div class="products-page__catalog-actions">
         <NButton @click="showCatalogImport = false">{{ catalogImportEvidence ? t('common.close') : t('common.cancel') }}</NButton>
         <NButton
           type="primary"
-          :disabled="catalogProfileId == null || catalogProfilesLoading || !!catalogProfilesError || catalogImportEvidence != null"
+          :disabled="catalogPickDisabled"
           :loading="catalogImporting"
           @click="runCatalogImport"
         >
@@ -357,6 +441,21 @@ const columns = computed(() => {
   font-family: var(--font-body);
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
+}
+
+.products-page__catalog-doc-type {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+.products-page__catalog-binding {
+  margin-top: var(--space-3);
 }
 
 .products-page__catalog-actions {

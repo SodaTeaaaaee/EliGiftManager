@@ -1,11 +1,12 @@
 <script setup lang="ts">
 /**
  * ImportFileModal — demand CSV import wizard-in-a-modal. WizardFrame shell
- * with three steps: select profile + pick file → mapping preview
- * (FieldMappingEditor, seeded from the profile's default template when
- * available) → result report. Actual import remains template-driven via
- * `importDemandCSV` (filePath preferred so backend re-reads with hasHeader /
- * positional rules from MappingRules).
+ * with three steps: select platform + file kind + pick file → optional
+ * this-run mapping override (FieldMappingEditor, seeded from the pair's
+ * default template when available) → result report. Actual import remains
+ * template-driven via `importDemandCSV` (filePath preferred so backend
+ * re-reads with hasHeader / positional rules from MappingRules).
+ * documentType is operator-selected, never inferred from profile.demandKind.
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -38,9 +39,12 @@ import {
   destFieldLabelKey,
   destFieldTooltipKey,
 } from '@/pages/integrations/wizard/destFields'
-import { documentTypeForDemandKind, type DemandKind } from '@/pages/integrations/wizard/deriveProfileDefaults'
 import { canImportDemand } from '@/pages/integrations/profileAvailability'
 import ImportEvidenceReference from '@/shared/ui/customer-resolution/ImportEvidenceReference.vue'
+import {
+  DEMAND_IMPORT_DOCUMENT_TYPES,
+  type DemandImportDocumentType,
+} from './demandImportDocumentTypes'
 
 const props = defineProps<{
   show: boolean
@@ -72,6 +76,7 @@ const profiles = ref<dto.IntegrationProfileDTO[]>([])
 const profilesLoading = ref(false)
 const profilesError = ref('')
 const profileId = ref<number | null>(null)
+const documentType = ref<DemandImportDocumentType | null>(null)
 
 const profileOptions = computed<SelectOption[]>(() =>
   profiles.value
@@ -79,11 +84,12 @@ const profileOptions = computed<SelectOption[]>(() =>
     .map((profile) => ({ label: `${profile.profileKey} (${profile.sourceChannel})`, value: profile.id })),
 )
 
-const selectedDocumentType = computed(() => {
-  const profile = profiles.value.find((candidate) => candidate.id === profileId.value)
-  const demandKind = (profile?.demandKind as DemandKind | undefined) ?? 'membership_entitlement'
-  return documentTypeForDemandKind(demandKind)
-})
+const documentTypeOptions = computed<SelectOption[]>(() =>
+  DEMAND_IMPORT_DOCUMENT_TYPES.map((value) => ({
+    label: t(`glossary.documentType.${value}.label`),
+    value,
+  })),
+)
 
 const sourceDocumentNo = ref('')
 const sourceCustomerRef = ref('')
@@ -116,14 +122,12 @@ const destFields = computed<FieldMappingDestField[]>(() =>
 
 const anomalyCount = computed(() => previewRows.value.filter((row) => headers.value.some((header) => !row[header])).length)
 const inputFormat = computed(() => filePath.value.split('.').pop()?.toUpperCase() ?? '')
+const pairReady = computed(() => profileId.value != null && documentType.value != null)
 
-async function loadTemplatePreview(id: number): Promise<void> {
+async function loadTemplatePreview(id: number, docType: DemandImportDocumentType): Promise<void> {
   templateLoading.value = true
   templateNotice.value = ''
   try {
-    const profile = profiles.value.find((p) => p.id === id)
-    const demandKind = (profile?.demandKind as DemandKind | undefined) ?? 'membership_entitlement'
-    const docType = documentTypeForDemandKind(demandKind)
     const tmpl = await getDefaultTemplateForProfile(id, docType)
     if (tmpl?.mappingRules) {
       mapping.value = parseMappingRules(tmpl.mappingRules)
@@ -140,8 +144,13 @@ async function loadTemplatePreview(id: number): Promise<void> {
   }
 }
 
-watch(profileId, (id) => {
-  if (id != null) void loadTemplatePreview(id)
+watch([profileId, documentType], ([id, docType]) => {
+  if (id != null && docType) {
+    void loadTemplatePreview(id, docType)
+    return
+  }
+  mapping.value = emptyFieldMapping()
+  templateNotice.value = ''
 })
 
 // 打开即重置并加载 profiles——NModal 只在关闭路径回发 update:show(false)，
@@ -156,6 +165,7 @@ watch(
 async function handleOpen(): Promise<void> {
   currentStep.value = 'select'
   profileId.value = null
+  documentType.value = null
   sourceDocumentNo.value = ''
   sourceCustomerRef.value = ''
   filePath.value = ''
@@ -184,7 +194,7 @@ async function handleOpen(): Promise<void> {
 }
 
 async function handlePickFile(): Promise<void> {
-  if (profileId.value == null) return
+  if (!pairReady.value) return
   parsing.value = true
   pickError.value = ''
   try {
@@ -204,7 +214,7 @@ async function handlePickFile(): Promise<void> {
 }
 
 const canNextFromSelect = computed(
-  () => profileId.value != null && (!!filePath.value || previewRows.value.length > 0) && !parsing.value,
+  () => pairReady.value && (!!filePath.value || previewRows.value.length > 0) && !parsing.value,
 )
 
 function handleNext(): void {
@@ -223,12 +233,12 @@ async function handleImport(): Promise<void> {
     handleUpdateShow(false)
     return
   }
-  if (profileId.value == null) return
+  if (profileId.value == null || documentType.value == null) return
   importing.value = true
   try {
     const result = await importDemandCSV({
       integrationProfileId: profileId.value,
-      documentType: selectedDocumentType.value,
+      documentType: documentType.value,
       sourceDocumentNo: sourceDocumentNo.value,
       sourceCustomerRef: sourceCustomerRef.value,
       importMode: importMode.value,
@@ -357,12 +367,18 @@ const canNext = computed(() => {
               filterable
               :placeholder="t('inbox.importModal.step1SelectProfile')"
             />
+            <p class="import-file-modal__step-label">{{ t('inbox.importModal.documentTypeLabel') }}</p>
+            <NSelect
+              v-model:value="documentType"
+              :options="documentTypeOptions"
+              :placeholder="t('inbox.importModal.documentTypePlaceholder')"
+            />
             <NInput v-model:value="sourceDocumentNo" :placeholder="t('inbox.columns.sourceDoc')" />
             <NInput v-model:value="sourceCustomerRef" :placeholder="t('inbox.importModal.sourceCustomerRef')" />
 
             <p class="import-file-modal__step-label">{{ t('inbox.importModal.step2PickFile') }}</p>
             <div class="import-file-modal__pick-row">
-              <NButton type="primary" :disabled="profileId == null" :loading="parsing" @click="handlePickFile">
+              <NButton type="primary" :disabled="!pairReady" :loading="parsing" @click="handlePickFile">
                 {{ t('inbox.importFileButton') }}
               </NButton>
               <span v-if="filePath" class="import-file-modal__status">
@@ -377,7 +393,7 @@ const canNext = computed(() => {
 
         <template v-else-if="currentStep === 'mapping'">
           <div class="import-file-modal__section">
-            <CalloutBar tone="info" :message="t('inbox.importModal.templateDrivenHint')" />
+            <CalloutBar tone="info" :message="t('inbox.importModal.overrideThisRunOnly')" />
             <CalloutBar v-if="templateNotice" :tone="templateLoading ? 'info' : 'neutral'" :message="templateNotice" />
 
             <p class="import-file-modal__meta">

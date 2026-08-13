@@ -56,11 +56,21 @@ vi.mock('@/shared/i18n', () => ({
 
 import ImportFileModal from './ImportFileModal.vue'
 
+type ImportFileModalVm = {
+  handleOpen(): Promise<void>
+  handleImport(): Promise<void>
+  profileId: number | null
+  documentType: string | null
+  filePath: string
+  previewRows: Record<string, string>[]
+}
+
 describe('ImportFileModal targetWaveId 波内导入', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.listProfiles.mockResolvedValue([
-      { id: 1, profileKey: 'demo', sourceChannel: 'bilibili', sourceSurface: 'community', demandKind: 'membership_entitlement' },
+      // leftover demandKind must not drive documentType (retail would infer import_sales_order).
+      { id: 1, profileKey: 'demo', sourceChannel: 'bilibili', sourceSurface: 'community', demandKind: 'retail_order' },
     ])
     mocks.getDefaultTemplateForProfile.mockResolvedValue(null)
   })
@@ -89,13 +99,40 @@ describe('ImportFileModal targetWaveId 波内导入', () => {
     await flushPromises()
 
     // 走组件实际暴露的流程：打开时加载 profiles → 构造预览状态 → 执行导入。
-    const vm = wrapper.vm as unknown as {
-      handleOpen(): Promise<void>
-      handleImport(): Promise<void>
-      profileId: number | null
-      filePath: string
-      previewRows: Record<string, string>[]
-    }
+    const vm = wrapper.vm as unknown as ImportFileModalVm
+    await vm.handleOpen()
+    await flushPromises()
+    vm.profileId = 1
+    vm.documentType = 'import_entitlement'
+    vm.filePath = 'demo.csv'
+    vm.previewRows = [{ sku: 'A1' }]
+    await flushPromises()
+
+    await vm.handleImport()
+    await flushPromises()
+
+    expect(mocks.importDemandCSV).toHaveBeenCalledTimes(1)
+    expect(mocks.importDemandCSV).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integrationProfileId: 1,
+        documentType: 'import_entitlement',
+      }),
+    )
+    expect(mocks.batchAssignDemandToWave).toHaveBeenCalledWith({ waveId: 7, docIds: [42] })
+    expect(wrapper.emitted('assignedToWave')).toBeTruthy()
+    expect(wrapper.emitted('assignedToWave')![0][0]).toEqual([42])
+
+    wrapper.unmount()
+  })
+
+  it('未选择 documentType 时不发起导入', async () => {
+    const wrapper = mount(ImportFileModal, {
+      props: { show: true, targetWaveId: 7 },
+      attachTo: document.body,
+    })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as ImportFileModalVm
     await vm.handleOpen()
     await flushPromises()
     vm.profileId = 1
@@ -106,10 +143,7 @@ describe('ImportFileModal targetWaveId 波内导入', () => {
     await vm.handleImport()
     await flushPromises()
 
-    expect(mocks.importDemandCSV).toHaveBeenCalledTimes(1)
-    expect(mocks.batchAssignDemandToWave).toHaveBeenCalledWith({ waveId: 7, docIds: [42] })
-    expect(wrapper.emitted('assignedToWave')).toBeTruthy()
-    expect(wrapper.emitted('assignedToWave')![0][0]).toEqual([42])
+    expect(mocks.importDemandCSV).not.toHaveBeenCalled()
 
     wrapper.unmount()
   })

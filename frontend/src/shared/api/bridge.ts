@@ -92,6 +92,7 @@ import {
   DeleteProfile,
   GetProfile,
   ListProfiles,
+  SeedBuiltinPlatform,
   SeedDefaultProfiles,
   UpdateProfile,
 } from "../../../wailsjs/go/controller/ProfileController";
@@ -288,7 +289,7 @@ export async function parseCSVFile(path: string): Promise<dto.CSVFilePreviewDTO>
  */
 export async function importDemandCSV(input: {
   integrationProfileId: number;
-  documentType: string;
+  documentType?: string;
   sourceDocumentNo: string;
   sourceCustomerRef: string;
   importMode: string;
@@ -301,6 +302,7 @@ export async function importDemandCSV(input: {
   assertWailsRuntime();
   const request = dto.ImportDemandCSVInput.createFrom({
     ...input,
+    documentType: input.documentType ?? '',
     rows: input.rows ?? [],
     filePath: input.filePath ?? "",
   }) as dto.ImportDemandCSVInput & { mappingRules: string }
@@ -313,6 +315,7 @@ export async function importDemandCSV(input: {
 /** Import a demand document. Accepts a plain object matching CreateDemandInput shape. */
 export async function importDemandDocument(input: {
   kind: string;
+  documentType?: string;
   captureMode: string;
   sourceChannel: string;
   sourceSurface?: string;
@@ -337,7 +340,10 @@ export async function importDemandDocument(input: {
   }>;
 }): Promise<dto.DemandDocumentDTO> {
   assertWailsRuntime();
-  const req = dto.CreateDemandInput.createFrom(input);
+  const req = dto.CreateDemandInput.createFrom({
+    ...input,
+    kind: input.documentType || input.kind,
+  });
   return ImportDemandDocument(req);
 }
 
@@ -963,6 +969,11 @@ export async function deleteProfile(id: number): Promise<void> {
 export async function seedDefaultProfiles(): Promise<dto.IntegrationProfileDTO[]> {
   assertWailsRuntime()
   return SeedDefaultProfiles()
+}
+
+export async function seedBuiltinPlatform(key: string): Promise<dto.IntegrationProfileDTO> {
+  assertWailsRuntime()
+  return SeedBuiltinPlatform(key)
 }
 
 // ── ProductController ──

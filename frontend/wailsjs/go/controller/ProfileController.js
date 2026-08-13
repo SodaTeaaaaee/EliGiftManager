@@ -18,6 +18,10 @@ export function ListProfiles() {
   return window['go']['controller']['ProfileController']['ListProfiles']();
 }
 
+export function SeedBuiltinPlatform(arg1) {
+  return window['go']['controller']['ProfileController']['SeedBuiltinPlatform'](arg1);
+}
+
 export function SeedDefaultProfiles() {
   return window['go']['controller']['ProfileController']['SeedDefaultProfiles']();
 }

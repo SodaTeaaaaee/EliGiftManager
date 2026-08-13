@@ -439,29 +439,72 @@ func TestBindTemplateToProfileSuccess(t *testing.T) {
 	}
 }
 
-func TestBindTemplateToProfileRejectsWrongDemandProfile(t *testing.T) {
+// TestBindTemplateToProfileAllowsBothDemandImportDefaultsOnSourcePlatform
+// replaces TestBindTemplateToProfileRejectsWrongDemandProfile: leftover
+// DemandKind must not reject the other demand import type. A source platform
+// may hold default bindings for both import_entitlement and import_sales_order.
+func TestBindTemplateToProfileAllowsBothDemandImportDefaultsOnSourcePlatform(t *testing.T) {
 	t.Parallel()
 	s := newTemplateTestSetup()
+	ctx := context.Background()
 
-	input := validCreateTemplateInput()
-	input.TemplateKey = "retail-orders"
-	input.DocumentType = "import_sales_order"
-	tmpl, err := s.uc.CreateDocumentTemplate(context.Background(), input)
+	entitlement, err := s.uc.CreateDocumentTemplate(ctx, validCreateTemplateInput())
 	if err != nil {
-		t.Fatalf("create template: %v", err)
+		t.Fatalf("create entitlement template: %v", err)
+	}
+	salesInput := validCreateTemplateInput()
+	salesInput.TemplateKey = "sales-orders"
+	salesInput.DocumentType = "import_sales_order"
+	sales, err := s.uc.CreateDocumentTemplate(ctx, salesInput)
+	if err != nil {
+		t.Fatalf("create sales-order template: %v", err)
 	}
 
-	_, err = s.uc.BindTemplateToProfile(context.Background(), dto.BindTemplateToProfileInput{
+	if _, err := s.uc.BindTemplateToProfile(ctx, dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 1,
+		DocumentType:         "import_entitlement",
+		TemplateID:           entitlement.ID,
+		IsDefault:            true,
+	}); err != nil {
+		t.Fatalf("bind import_entitlement default on membership leftover profile: %v", err)
+	}
+	if _, err := s.uc.BindTemplateToProfile(ctx, dto.BindTemplateToProfileInput{
 		IntegrationProfileID: 1,
 		DocumentType:         "import_sales_order",
-		TemplateID:           tmpl.ID,
+		TemplateID:           sales.ID,
 		IsDefault:            true,
+	}); err != nil {
+		t.Fatalf("bind import_sales_order default on membership leftover profile: %v", err)
+	}
+
+	gotEntitlement, err := s.uc.GetDefaultTemplateForProfile(ctx, 1, "import_entitlement")
+	if err != nil {
+		t.Fatalf("GetDefaultTemplateForProfile import_entitlement: %v", err)
+	}
+	if gotEntitlement == nil || gotEntitlement.ID != entitlement.ID {
+		t.Fatalf("default import_entitlement template = %+v, want id %d", gotEntitlement, entitlement.ID)
+	}
+	gotSales, err := s.uc.GetDefaultTemplateForProfile(ctx, 1, "import_sales_order")
+	if err != nil {
+		t.Fatalf("GetDefaultTemplateForProfile import_sales_order: %v", err)
+	}
+	if gotSales == nil || gotSales.ID != sales.ID {
+		t.Fatalf("default import_sales_order template = %+v, want id %d", gotSales, sales.ID)
+	}
+
+	s.profileRepo.profiles[2] = &domain.IntegrationProfile{
+		ID:                      2,
+		ProfileKey:              "factory-no-demand",
+		SourceSurface:           string(domain.SourceSurfaceFactory),
+		FactorySupplierPlatform: "rouzao",
+	}
+	_, err = s.uc.BindTemplateToProfile(ctx, dto.BindTemplateToProfileInput{
+		IntegrationProfileID: 2,
+		DocumentType:         "import_entitlement",
+		TemplateID:           entitlement.ID,
 	})
 	if err == nil {
-		t.Fatal("expected retail template to be rejected by membership profile")
-	}
-	if !strings.Contains(err.Error(), "not supported by profile") {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal("expected factory profile without demand capability to reject import_entitlement")
 	}
 }
 
@@ -720,5 +763,365 @@ func TestSetDefaultBindingSwitchesDefault(t *testing.T) {
 	}
 	if gotA == nil || gotA.IsDefault {
 		t.Fatalf("expected binding A IsDefault=false, got %+v", gotA)
+	}
+}
+
+func TestValidateProfileDocumentType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		profile *domain.IntegrationProfile
+		docType string
+		wantErr bool
+	}{
+		{
+			name: "membership leftover allows import_entitlement",
+			profile: &domain.IntegrationProfile{
+				ID: 1, SourceSurface: string(domain.SourceSurfaceMembership),
+				DemandKind: string(domain.DemandKindMembershipEntitlement),
+			},
+			docType: "import_entitlement",
+		},
+		{
+			name: "membership leftover allows import_sales_order",
+			profile: &domain.IntegrationProfile{
+				ID: 1, SourceSurface: string(domain.SourceSurfaceMembership),
+				DemandKind: string(domain.DemandKindMembershipEntitlement),
+			},
+			docType: "import_sales_order",
+		},
+		{
+			name: "retail leftover allows import_sales_order",
+			profile: &domain.IntegrationProfile{
+				ID: 2, SourceSurface: string(domain.SourceSurfaceRetail),
+				DemandKind: string(domain.DemandKindRetailOrder),
+			},
+			docType: "import_sales_order",
+		},
+		{
+			name: "retail leftover allows import_entitlement",
+			profile: &domain.IntegrationProfile{
+				ID: 2, SourceSurface: string(domain.SourceSurfaceRetail),
+				DemandKind: string(domain.DemandKindRetailOrder),
+			},
+			docType: "import_entitlement",
+		},
+		{
+			name: "source platform with empty DemandKind allows import_sales_order",
+			profile: &domain.IntegrationProfile{
+				ID: 4, SourceSurface: string(domain.SourceSurfaceMembership),
+			},
+			docType: "import_sales_order",
+		},
+		{
+			name: "factory rejects import_entitlement",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao", SupportsImportProductCatalog: true,
+			},
+			docType: "import_entitlement",
+			wantErr: true,
+		},
+		{
+			name: "factory rejects import_sales_order",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao", SupportsExportSupplierOrder: true,
+			},
+			docType: "import_sales_order",
+			wantErr: true,
+		},
+		{
+			name: "factory import_product_catalog requires capability",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao",
+			},
+			docType: "import_product_catalog",
+			wantErr: true,
+		},
+		{
+			name: "factory import_product_catalog with capability",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao", SupportsImportProductCatalog: true,
+			},
+			docType: "import_product_catalog",
+		},
+		{
+			name: "factory export_supplier_order requires capability",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao",
+			},
+			docType: "export_supplier_order",
+			wantErr: true,
+		},
+		{
+			name: "factory export_supplier_order with capability",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao", SupportsExportSupplierOrder: true,
+			},
+			docType: "export_supplier_order",
+		},
+		{
+			name: "factory import_supplier_shipment requires capability",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao",
+			},
+			docType: "import_supplier_shipment",
+			wantErr: true,
+		},
+		{
+			name: "factory import_supplier_shipment with capability",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao", SupportsImportSupplierShipment: true,
+			},
+			docType: "import_supplier_shipment",
+		},
+		{
+			name: "export_source_tracking_update on membership with document_export",
+			profile: &domain.IntegrationProfile{
+				ID: 1, SourceSurface: string(domain.SourceSurfaceMembership),
+				TrackingSyncMode: "document_export",
+			},
+			docType: "export_source_tracking_update",
+		},
+		{
+			name: "export_source_tracking_update on retail with document_export",
+			profile: &domain.IntegrationProfile{
+				ID: 2, SourceSurface: string(domain.SourceSurfaceRetail),
+				TrackingSyncMode: "document_export",
+			},
+			docType: "export_source_tracking_update",
+		},
+		{
+			name: "export_source_tracking_update rejected without document_export",
+			profile: &domain.IntegrationProfile{
+				ID: 1, SourceSurface: string(domain.SourceSurfaceMembership),
+				TrackingSyncMode: "api_push",
+			},
+			docType: "export_source_tracking_update",
+			wantErr: true,
+		},
+		{
+			name: "export_source_tracking_update rejected on factory",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao", TrackingSyncMode: "document_export",
+				SupportsExportSupplierOrder: true,
+			},
+			docType: "export_source_tracking_update",
+			wantErr: true,
+		},
+		{
+			name: "import_carrier_mapping on membership with flag",
+			profile: &domain.IntegrationProfile{
+				ID: 1, SourceSurface: string(domain.SourceSurfaceMembership),
+				RequiresCarrierMapping: true,
+			},
+			docType: "import_carrier_mapping",
+		},
+		{
+			name: "import_carrier_mapping on retail with flag",
+			profile: &domain.IntegrationProfile{
+				ID: 2, SourceSurface: string(domain.SourceSurfaceRetail),
+				RequiresCarrierMapping: true,
+			},
+			docType: "import_carrier_mapping",
+		},
+		{
+			name: "import_carrier_mapping rejected without flag",
+			profile: &domain.IntegrationProfile{
+				ID: 1, SourceSurface: string(domain.SourceSurfaceMembership),
+			},
+			docType: "import_carrier_mapping",
+			wantErr: true,
+		},
+		{
+			name: "import_carrier_mapping rejected on factory",
+			profile: &domain.IntegrationProfile{
+				ID: 3, SourceSurface: string(domain.SourceSurfaceFactory),
+				FactorySupplierPlatform: "rouzao", RequiresCarrierMapping: true,
+				SupportsImportProductCatalog: true,
+			},
+			docType: "import_carrier_mapping",
+			wantErr: true,
+		},
+		{
+			name:    "nil profile",
+			profile: nil,
+			docType: "import_entitlement",
+			wantErr: true,
+		},
+		{
+			name: "unknown document type",
+			profile: &domain.IntegrationProfile{
+				ID: 1, SourceSurface: string(domain.SourceSurfaceMembership),
+			},
+			docType: "not_a_document_type",
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := ValidateProfileDocumentType(tc.profile, tc.docType)
+			if tc.wantErr && err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !tc.wantErr && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestResolveDemandImportDocumentType(t *testing.T) {
+	t.Parallel()
+
+	membershipLeftover := &domain.IntegrationProfile{
+		ID:            1,
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+	}
+	retailLeftover := &domain.IntegrationProfile{
+		ID:            2,
+		SourceSurface: string(domain.SourceSurfaceRetail),
+		DemandKind:    string(domain.DemandKindRetailOrder),
+	}
+	factory := &domain.IntegrationProfile{
+		ID:                           3,
+		SourceSurface:                string(domain.SourceSurfaceFactory),
+		FactorySupplierPlatform:      "rouzao",
+		SupportsImportProductCatalog: true,
+	}
+
+	tests := []struct {
+		name      string
+		profile   *domain.IntegrationProfile
+		requested string
+		want      string
+		wantErr   bool
+	}{
+		{
+			name:      "empty requested does not infer from leftover DemandKind",
+			profile:   membershipLeftover,
+			requested: "",
+			wantErr:   true,
+		},
+		{
+			name:      "whitespace requested does not infer from leftover DemandKind",
+			profile:   membershipLeftover,
+			requested: "  \t",
+			wantErr:   true,
+		},
+		{
+			name:      "explicit import_sales_order on membership leftover",
+			profile:   membershipLeftover,
+			requested: "import_sales_order",
+			want:      "import_sales_order",
+		},
+		{
+			name:      "explicit import_entitlement on retail leftover",
+			profile:   retailLeftover,
+			requested: "import_entitlement",
+			want:      "import_entitlement",
+		},
+		{
+			name:      "non-demand type import_product_catalog",
+			profile:   membershipLeftover,
+			requested: "import_product_catalog",
+			wantErr:   true,
+		},
+		{
+			name:      "factory profile rejects import_entitlement",
+			profile:   factory,
+			requested: "import_entitlement",
+			wantErr:   true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ResolveDemandImportDocumentType(tc.profile, tc.requested)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if got != "" {
+					t.Fatalf("must not infer documentType from DemandKind, got %q", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestInterpretDemandImportDocumentType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		docType string
+		want    DemandImportInterpretation
+		wantErr bool
+	}{
+		{
+			name:    "import_entitlement",
+			docType: "import_entitlement",
+			want: DemandImportInterpretation{
+				DocumentType:     "import_entitlement",
+				DemandKind:       string(domain.DemandKindMembershipEntitlement),
+				SourceSurface:    string(domain.SourceSurfaceMembership),
+				IdentityStrategy: "platform_uid",
+			},
+		},
+		{
+			name:    "import_sales_order",
+			docType: "import_sales_order",
+			want: DemandImportInterpretation{
+				DocumentType:     "import_sales_order",
+				DemandKind:       string(domain.DemandKindRetailOrder),
+				SourceSurface:    string(domain.SourceSurfaceRetail),
+				IdentityStrategy: IdentityStrategyOrderScopedProvisional,
+			},
+		},
+		{name: "empty", docType: "", wantErr: true},
+		{name: "unknown", docType: "import_product_catalog", wantErr: true},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := InterpretDemandImportDocumentType(tc.docType)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %+v, want %+v", got, tc.want)
+			}
+		})
 	}
 }

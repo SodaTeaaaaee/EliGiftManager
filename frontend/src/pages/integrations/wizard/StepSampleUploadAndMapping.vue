@@ -17,12 +17,9 @@ import {
 import { CalloutBar } from '@/shared/ui/guidance'
 import type { UseIntakeWizardStateApi } from './useIntakeWizardState'
 import {
-  EXPORT_DEST_FIELDS,
-  INTAKE_V2_DEST_FIELD_ORDER,
-  PRODUCT_DEST_FIELDS,
-  SHIPMENT_DEST_FIELDS,
   destFieldLabelKey,
   destFieldTooltipKey,
+  destKeysForDocumentType,
 } from './destFields'
 
 const props = defineProps<{ state: UseIntakeWizardStateApi }>()
@@ -41,24 +38,17 @@ function toDestFields(keys: readonly string[]): FieldMappingDestField[] {
   })
 }
 
-const destFields = computed<FieldMappingDestField[]>(() => {
-  if (!props.state.isFactorySurface.value) {
-    return toDestFields(INTAKE_V2_DEST_FIELD_ORDER)
-  }
-  const keys: string[] = []
-  const caps = props.state.factoryCapabilities
-  if (caps.supportsImportProductCatalog) keys.push(...PRODUCT_DEST_FIELDS)
-  if (caps.supportsImportSupplierShipment) keys.push(...SHIPMENT_DEST_FIELDS)
-  if (caps.supportsExportSupplierOrder) keys.push(...EXPORT_DEST_FIELDS)
-  // Fallback so the editor is never empty when operator has not toggled caps yet.
-  if (keys.length === 0) keys.push(...PRODUCT_DEST_FIELDS)
-  // Dedupe while preserving order.
-  return toDestFields([...new Set(keys)])
-})
+const sessionDocType = computed(
+  () => props.state.sessionDocumentType.value || props.state.documentType.value,
+)
+
+const destFields = computed<FieldMappingDestField[]>(() =>
+  toDestFields(destKeysForDocumentType(sessionDocType.value)),
+)
 
 const inputFormat = computed(() => props.state.csvPath.value.split('.').pop()?.toUpperCase() ?? '')
 const isCatalogZip = computed(() =>
-  props.state.factoryCapabilities.supportsImportProductCatalog &&
+  sessionDocType.value === 'import_product_catalog' &&
   props.state.csvPath.value.toLowerCase().endsWith('.zip'),
 )
 const imageLayout = computed<CatalogImageLayoutValue>(() =>
@@ -86,9 +76,8 @@ function handlePick(): void {
 <template>
   <div class="step-sample-upload">
     <CalloutBar
-      v-if="state.isFactorySurface.value"
       tone="info"
-      :message="t('intakeWizard.sampleUpload.factoryHint')"
+      :message="t('intakeWizard.sampleUpload.singleTypeHint')"
     />
 
     <div class="step-sample-upload__pick-row">
@@ -97,11 +86,7 @@ function handlePick(): void {
       </NButton>
       <span v-if="state.parsing.value" class="step-sample-upload__status">{{ t('intakeWizard.sampleUpload.parsing') }}</span>
       <span v-else-if="!state.csvPath.value && !state.csvHeaders.value.length" class="step-sample-upload__status">
-        {{
-          state.isFactorySurface.value
-            ? t('intakeWizard.sampleUpload.factoryOptional')
-            : t('intakeWizard.sampleUpload.noFile')
-        }}
+        {{ t('intakeWizard.sampleUpload.noFile') }}
       </span>
       <span v-else class="step-sample-upload__status">
         <template v-if="state.csvPath.value">{{ state.csvPath.value.split(/[/\\]/).pop() }} · </template>

@@ -64,8 +64,9 @@ func (c *DemandController) ParseCSVFile(path string) (dto.CSVFilePreviewDTO, err
 // ImportDemandCSV performs a dual-mode (reject_all / skip_invalid) template-driven demand CSV
 // import. Supports v2 dest namespaces (document.* / line.* / recipient.*). When FilePath is
 // set the backend re-reads the tabular file with hasHeader from mapping rules (positional
-// mode requires ordered cells). Profile-driven DemandKind / SourceChannel / SourceSurface
-// are always forced from the integration profile.
+// mode requires ordered cells). Kind / SourceSurface / IdentityStrategy are derived from
+// the resolved documentType; the integration profile supplies platform SourceChannel and
+// template binding.
 func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.ImportDemandCSVResult, error) {
 	ctx := appContext
 	if err := c.requireCustomerResolutionWrites(ctx); err != nil {
@@ -91,6 +92,11 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 	if err != nil {
 		return dto.ImportDemandCSVResult{}, fmt.Errorf("resolve demand document type: %w", err)
 	}
+	interp, err := app.InterpretDemandImportDocumentType(docType)
+	if err != nil {
+		return dto.ImportDemandCSVResult{}, fmt.Errorf("interpret demand document type: %w", err)
+	}
+	kind, sourceSurface, identityStrategy := interp.DemandKind, interp.SourceSurface, interp.IdentityStrategy
 
 	// Optional path-based read: resolve rules first so HasHeader is authoritative.
 	var orderedRows [][]string
@@ -201,7 +207,7 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 		}
 
 		groupKey := ref
-		if profile.IdentityStrategy == app.IdentityStrategyOrderScopedProvisional {
+		if identityStrategy == app.IdentityStrategyOrderScopedProvisional {
 			groupKey = sourceDocumentNo
 			// A custom retail template may omit an order number even when the profile
 			// does not require one. Never merge such unrelated rows by customer ref.
@@ -254,7 +260,7 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 
 			resolved, resolveErr := customerResolver.Resolve(ctx, app.DemandCustomerResolutionInput{
 				IntegrationProfileID: profile.ID,
-				IdentityStrategy:     profile.IdentityStrategy,
+				IdentityStrategy:     identityStrategy,
 				SourceChannel:        profile.SourceChannel,
 				SourceDocumentNo:     group.sourceDocumentNo,
 				SourceCustomerRef:    group.ref,
@@ -271,8 +277,8 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 				lines[i] = group.rows[i].Line
 			}
 			doc := domain.DemandDocument{
-				Kind: profile.DemandKind, CaptureMode: "document_import", SourceChannel: profile.SourceChannel,
-				SourceSurface: profile.SourceSurface, SourceDocumentNo: group.sourceDocumentNo,
+				Kind: kind, CaptureMode: "document_import", SourceChannel: profile.SourceChannel,
+				SourceSurface: sourceSurface, SourceDocumentNo: group.sourceDocumentNo,
 				SourceCustomerRef: group.ref, CustomerProfileID: customerProfileID, IntegrationProfileID: &profile.ID,
 			}
 			if err := intakeUC.ImportDemand(ctx, &doc, lines); err != nil {
@@ -290,7 +296,7 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 
 			if customerProfileID != nil && displayName != "" {
 				nameKind := domain.CustomerNameKindStableIdentityNickname
-				if profile.IdentityStrategy == app.IdentityStrategyOrderScopedProvisional {
+				if identityStrategy == app.IdentityStrategyOrderScopedProvisional {
 					nameKind = domain.CustomerNameKindTrustedNickname
 				}
 				if _, observeErr := nameService.Observe(ctx, app.ObserveCustomerNameInput{

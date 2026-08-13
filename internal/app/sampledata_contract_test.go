@@ -45,7 +45,7 @@ func sampleContractFailure(t *testing.T, stage string) {
 	t.Fatalf("SampleData contract failed during %s (row contents intentionally redacted)", stage)
 }
 
-func seedBilibiliSampleContracts(t *testing.T, gdb *gorm.DB) (*domain.IntegrationProfile, *domain.IntegrationProfile) {
+func seedBilibiliSampleContracts(t *testing.T, gdb *gorm.DB) *domain.IntegrationProfile {
 	t.Helper()
 	ctx := context.Background()
 	profiles := infra.NewIntegrationProfileRepository(gdb)
@@ -56,11 +56,7 @@ func seedBilibiliSampleContracts(t *testing.T, gdb *gorm.DB) (*domain.Integratio
 	if err != nil || membership == nil {
 		sampleContractFailure(t, "membership profile lookup")
 	}
-	retail, err := profiles.FindByProfileKey(ctx, BilibiliRetailDemoProfileKey)
-	if err != nil || retail == nil {
-		sampleContractFailure(t, "retail profile lookup")
-	}
-	return membership, retail
+	return membership
 }
 
 func seedCatalogSampleContracts(t *testing.T, gdb *gorm.DB) *domain.IntegrationProfile {
@@ -137,7 +133,7 @@ func TestSampleDataMembershipDemandReadOnlyContract(t *testing.T) {
 }
 
 func TestSampleDataSalesDemandReadOnlyContract(t *testing.T) {
-	runDemandSampleContract(t, sampleDataPath(t, sampleSales), BilibiliRetailDemoProfileKey, BilibiliImportSalesOrderDocType)
+	runDemandSampleContract(t, sampleDataPath(t, sampleSales), BilibiliDemoProfileKey, BilibiliImportSalesOrderDocType)
 }
 
 func TestSampleDataCatalogReadOnlyContract(t *testing.T) {
@@ -166,7 +162,7 @@ func TestSampleDataCatalogReadOnlyContract(t *testing.T) {
 func TestSampleDataCarrierReadOnlyContract(t *testing.T) {
 	path := sampleDataPath(t, sampleCarrier)
 	gdb := durableEvidenceDB(t)
-	membership, _ := seedBilibiliSampleContracts(t, gdb)
+	membership := seedBilibiliSampleContracts(t, gdb)
 	ctx := context.Background()
 	mappingRepo := infra.NewCarrierMappingRepository(gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
@@ -346,7 +342,7 @@ func TestSampleDataSupplierOrderReadOnlyContract(t *testing.T) {
 func TestSampleDataTrackingReadOnlyContract(t *testing.T) {
 	path := sampleDataPath(t, sampleTracking)
 	gdb := durableEvidenceDB(t)
-	_, retail := seedBilibiliSampleContracts(t, gdb)
+	profile := seedBilibiliSampleContracts(t, gdb)
 	ctx := context.Background()
 	rules, err := ParseMappingRules(BilibiliExportTrackingMappingRules)
 	if err != nil {
@@ -360,7 +356,7 @@ func TestSampleDataTrackingReadOnlyContract(t *testing.T) {
 	if err := infra.NewWaveRepository(gdb).Create(ctx, wave); err != nil {
 		sampleContractFailure(t, "tracking wave seed")
 	}
-	job := &domain.ChannelSyncJob{WaveID: wave.ID, IntegrationProfileID: retail.ID, Direction: "push_tracking", Status: "pending"}
+	job := &domain.ChannelSyncJob{WaveID: wave.ID, IntegrationProfileID: profile.ID, Direction: "push_tracking", Status: "pending"}
 	if err := infra.NewChannelSyncRepository(gdb).CreateJob(ctx, job); err != nil {
 		sampleContractFailure(t, "tracking job persistence")
 	}

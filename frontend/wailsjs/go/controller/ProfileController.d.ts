@@ -10,6 +10,8 @@ export function GetProfile(arg1:number):Promise<dto.IntegrationProfileDTO>;
 
 export function ListProfiles():Promise<Array<dto.IntegrationProfileDTO>>;
 
+export function SeedBuiltinPlatform(arg1:string):Promise<dto.IntegrationProfileDTO>;
+
 export function SeedDefaultProfiles():Promise<Array<dto.IntegrationProfileDTO>>;
 
 export function UpdateProfile(arg1:dto.UpdateProfileInput):Promise<dto.IntegrationProfileDTO>;

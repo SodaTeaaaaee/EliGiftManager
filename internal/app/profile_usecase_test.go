@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -143,12 +144,16 @@ func (s *stubChannelSyncRepo) CountJobsByProfileID(ctx context.Context, profileI
 
 type stubProfileTemplateBindingRepo struct {
 	CountByProfileIDFn func(profileID uint) (int64, error)
+	ListByProfileFn    func(profileID uint) ([]domain.IntegrationProfileTemplateBinding, error)
 }
 
 func (s *stubProfileTemplateBindingRepo) Create(ctx context.Context, _ *domain.IntegrationProfileTemplateBinding) error {
 	return nil
 }
-func (s *stubProfileTemplateBindingRepo) ListByProfile(ctx context.Context, _ uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+func (s *stubProfileTemplateBindingRepo) ListByProfile(ctx context.Context, profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+	if s.ListByProfileFn != nil {
+		return s.ListByProfileFn(profileID)
+	}
 	return nil, nil
 }
 func (s *stubProfileTemplateBindingRepo) ListByTemplateID(ctx context.Context, _ uint) ([]domain.IntegrationProfileTemplateBinding, error) {
@@ -585,19 +590,25 @@ func TestSeedDefaultProfilesUsesExecutableDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SeedDefaultProfiles failed: %v", err)
 	}
-	if len(profiles) != 2 {
-		t.Fatalf("expected 2 seeded profiles, got %d", len(profiles))
+	if len(profiles) != 1 {
+		t.Fatalf("expected 1 seeded profile, got %d", len(profiles))
+	}
+	if _, ok := created["retail_default"]; ok {
+		t.Fatal("retail_default must not be seeded")
 	}
 
-	retail, ok := created["retail_default"]
+	src, ok := created["membership_default"]
 	if !ok {
-		t.Fatal("retail_default was not created")
+		t.Fatal("membership_default was not created")
 	}
-	if retail.ConnectorKey != "eli.local_export" {
-		t.Fatalf("retail_default connector_key = %q, want eli.local_export", retail.ConnectorKey)
+	if src.DemandKind != "" {
+		t.Fatalf("membership_default demand_kind = %q, want empty so both file kinds can bind", src.DemandKind)
 	}
-	if _, err := provider.Resolve(retail); err != nil {
-		t.Fatalf("retail_default should resolve in runtime executor provider, got error: %v", err)
+	if src.ConnectorKey != "eli.local_export" {
+		t.Fatalf("membership_default connector_key = %q, want eli.local_export", src.ConnectorKey)
+	}
+	if _, err := provider.Resolve(src); err != nil {
+		t.Fatalf("membership_default should resolve in runtime executor provider, got error: %v", err)
 	}
 }
 
@@ -661,6 +672,41 @@ func TestValidateProfileEnums_FactorySurface(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "membership leftover DemandKind retail_order is not a unique pairing",
+			input: dto.CreateProfileInput{
+				ProfileKey:    "m",
+				SourceSurface: "membership",
+				DemandKind:    "retail_order",
+			},
+			wantErr: false,
+		},
+		{
+			name: "retail leftover DemandKind membership_entitlement is not a unique pairing",
+			input: dto.CreateProfileInput{
+				ProfileKey:    "r",
+				SourceSurface: "retail",
+				DemandKind:    "membership_entitlement",
+			},
+			wantErr: false,
+		},
+		{
+			name: "membership with empty DemandKind is valid",
+			input: dto.CreateProfileInput{
+				ProfileKey:    "m",
+				SourceSurface: "membership",
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid DemandKind rejected",
+			input: dto.CreateProfileInput{
+				ProfileKey:    "m",
+				SourceSurface: "membership",
+				DemandKind:    "not_a_kind",
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -700,5 +746,53 @@ func TestCreateProfileRejectsDuplicateProfileKey(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected duplicate profile_key error")
+	}
+}
+
+func TestUpdateProfileKeepsDefaultSalesOrderBindingOnMembershipLeftover(t *testing.T) {
+	t.Parallel()
+
+	existing := &domain.IntegrationProfile{
+		ID:            1,
+		ProfileKey:    "membership-leftover",
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+	}
+
+	uc := NewProfileManagementUseCase(
+		&stubIntegrationProfileRepo{
+			FindByIDFn: func(id uint) (*domain.IntegrationProfile, error) {
+				cp := *existing
+				return &cp, nil
+			},
+		},
+		&stubDemandDocumentRepo{},
+		&stubChannelSyncRepo{},
+		&stubProfileTemplateBindingRepo{
+			ListByProfileFn: func(profileID uint) ([]domain.IntegrationProfileTemplateBinding, error) {
+				return []domain.IntegrationProfileTemplateBinding{{
+					ID:                   11,
+					IntegrationProfileID: profileID,
+					DocumentType:         "import_sales_order",
+					TemplateID:           99,
+					IsDefault:            true,
+				}}, nil
+			},
+		},
+		&stubClosureDecisionRepo{},
+		nil,
+	)
+
+	_, err := uc.UpdateProfile(context.Background(), dto.UpdateProfileInput{
+		ID:            1,
+		ProfileKey:    "membership-leftover",
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+	})
+	if err != nil {
+		if strings.Contains(err.Error(), "would invalidate default binding") {
+			t.Fatalf("membership leftover profile must keep a default import_sales_order binding: %v", err)
+		}
+		t.Fatalf("UpdateProfile: %v", err)
 	}
 }

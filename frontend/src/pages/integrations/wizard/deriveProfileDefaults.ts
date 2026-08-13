@@ -13,8 +13,8 @@ import type { IntakeProfileCapabilities } from '@/shared/lib/demand-intake/platf
 
 export type DemandKind = 'membership_entitlement' | 'retail_order' | ''
 
-/** Business-surface choice shown on the wizard's second step. */
-export type BusinessSurfaceChoice = 'membership' | 'retail' | 'factory'
+/** Platform kind shown on the wizard's second step — source vs factory, not demand kind. */
+export type BusinessSurfaceChoice = 'source' | 'factory'
 
 /** Factory capability flags on IntegrationProfile (Create/Update DTO). */
 export interface FactoryProfileCapabilities {
@@ -41,7 +41,7 @@ export function documentTypeForFactoryCaps(caps: FactoryProfileCapabilities): st
   return 'import_product_catalog'
 }
 
-/** All document types implied by enabled factory caps (for multi-template seed). */
+/** Document types implied by enabled factory caps (listing only — never fan-out one sample). */
 export function documentTypesForFactoryCaps(caps: FactoryProfileCapabilities): string[] {
   const types: string[] = []
   if (caps.supportsImportProductCatalog) types.push('import_product_catalog')
@@ -120,5 +120,118 @@ export function deriveProfileStrategyDefaults(
     referenceStrategy: isMembership ? 'member_level' : 'order_level',
     trackingSyncMode,
     closurePolicy,
+  }
+}
+
+/** Fields for `createProfile` after the custom-create first screen. */
+export interface CustomCreateDraft {
+  displayName: string
+  profileKey: string
+  surface: BusinessSurfaceChoice
+  factorySupplierPlatform: string
+}
+
+export type CustomCreateProfileInput = {
+  profileKey: string
+  sourceChannel: string
+  sourceSurface: string
+  demandKind: string
+  initialAllocationStrategy: string
+  identityStrategy: string
+  entitlementAuthorityMode: string
+  recipientInputMode: string
+  referenceStrategy: string
+  trackingSyncMode: string
+  closurePolicy: string
+  supportsPartialShipment: boolean
+  supportsApiImport: boolean
+  supportsApiExport: boolean
+  requiresCarrierMapping: boolean
+  requiresExternalOrderNo: boolean
+  allowsManualClosure: boolean
+  supportsExportSupplierOrder: boolean
+  supportsImportProductCatalog: boolean
+  supportsImportSupplierShipment: boolean
+  connectorKey: string
+  factorySupplierPlatform: string
+  supportedLocales: string
+  defaultLocale: string
+  extraData: string
+}
+
+/** ASCII slug for profileKey; empty when the display name has no latin/digit chars. */
+export function suggestProfileKey(displayName: string): string {
+  return displayName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+/**
+ * Custom create defaults: source gets empty demandKind (both file kinds can
+ * bind) plus an executable local-export pair; factory turns catalog / shipment
+ * / export caps on.
+ */
+export function buildCustomCreateProfileInput(draft: CustomCreateDraft): CustomCreateProfileInput {
+  const profileKey = draft.profileKey.trim()
+  const displayName = draft.displayName.trim()
+  const sourceChannel = displayName || profileKey
+  if (draft.surface === 'factory') {
+    const factoryLabel = draft.factorySupplierPlatform.trim() || sourceChannel
+    return {
+      profileKey,
+      sourceChannel,
+      sourceSurface: 'factory',
+      demandKind: '',
+      initialAllocationStrategy: '',
+      identityStrategy: '',
+      entitlementAuthorityMode: '',
+      recipientInputMode: '',
+      referenceStrategy: '',
+      trackingSyncMode: 'unsupported',
+      closurePolicy: '',
+      supportsPartialShipment: false,
+      supportsApiImport: false,
+      supportsApiExport: false,
+      requiresCarrierMapping: false,
+      requiresExternalOrderNo: false,
+      allowsManualClosure: false,
+      supportsExportSupplierOrder: true,
+      supportsImportProductCatalog: true,
+      supportsImportSupplierShipment: true,
+      connectorKey: '',
+      factorySupplierPlatform: factoryLabel,
+      supportedLocales: '',
+      defaultLocale: '',
+      extraData: '',
+    }
+  }
+  return {
+    profileKey,
+    sourceChannel,
+    sourceSurface: 'membership',
+    demandKind: '',
+    initialAllocationStrategy: '',
+    identityStrategy: '',
+    entitlementAuthorityMode: '',
+    recipientInputMode: '',
+    referenceStrategy: '',
+    trackingSyncMode: 'document_export',
+    closurePolicy: 'close_after_sync',
+    supportsPartialShipment: false,
+    supportsApiImport: false,
+    supportsApiExport: false,
+    requiresCarrierMapping: false,
+    requiresExternalOrderNo: false,
+    allowsManualClosure: false,
+    supportsExportSupplierOrder: false,
+    supportsImportProductCatalog: false,
+    supportsImportSupplierShipment: false,
+    connectorKey: 'eli.local_export',
+    factorySupplierPlatform: '',
+    supportedLocales: '',
+    defaultLocale: '',
+    extraData: '',
   }
 }

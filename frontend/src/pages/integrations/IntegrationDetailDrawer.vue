@@ -31,12 +31,18 @@ import {
   deleteCarrierMapping,
   importCarrierMappings,
   pickTabularFile,
+  getDefaultTemplateForProfile,
   createDocumentTemplate,
   bindTemplateToProfile,
 } from '@/shared/api/bridge'
 import type { IntegrationProfile } from '@/entities/profile'
 import type { dto } from '../../../wailsjs/go/models'
 import IntakeWizard from './wizard/IntakeWizard.vue'
+import {
+  expectedFileKinds,
+  hasDefaultFileKindBinding,
+  isFactoryProfile,
+} from './profileAvailability'
 import { useCustomerResolutionFeaturePolicy } from '@/shared/composables/useCustomerResolutionFeaturePolicy'
 import {
   captureProfileScope,
@@ -110,6 +116,7 @@ const bindingExternalCarrier = ref<dto.ExternalCarrierDTO | null>(null)
 const internalCarrierCodeDraft = ref('')
 const bindingCarrier = ref(false)
 const carrierWritesEnabled = computed(() => featurePolicy.isEnabled('carrierRegistryWritesEnabled'))
+const CARRIER_IMPORT_DOCUMENT_TYPE = 'import_carrier_mapping'
 
 function carrierConflictCopy(carrier: dto.ExternalCarrierDTO): string {
   return carrier.conflictReason
@@ -120,16 +127,44 @@ const boundTemplates = computed(() => {
   return allTemplates.value.filter((tmpl) => templateIds.has(tmpl.id))
 })
 
+type BindingGroup = {
+  documentType: string
+  bindings: dto.ProfileTemplateBindingDTO[]
+}
+
+const groupedBindings = computed<BindingGroup[]>(() => {
+  const groups = new Map<string, dto.ProfileTemplateBindingDTO[]>()
+  const order: string[] = []
+  for (const binding of bindings.value) {
+    const key = binding.documentType
+    let group = groups.get(key)
+    if (!group) {
+      group = []
+      order.push(key)
+      groups.set(key, group)
+    }
+    group.push(binding)
+  }
+  return order.map((documentType) => ({
+    documentType,
+    bindings: groups.get(documentType) ?? [],
+  }))
+})
+
 const documentTypeOptions = computed<SelectOption[]>(() => {
-  const values = profile.value?.sourceSurface === 'factory'
-    ? ['import_product_catalog', 'export_supplier_order', 'import_supplier_shipment']
-    : [
-        profile.value?.demandKind === 'retail_order' ? 'import_sales_order' : 'import_entitlement',
-        'import_carrier_mapping',
-        'export_source_tracking_update',
-      ]
+  const values = profile.value ? expectedFileKinds(profile.value) : []
   return values.map((value) => ({ label: value, value }))
 })
+
+const fileKindRows = computed(() => {
+  if (!profile.value) return []
+  return expectedFileKinds(profile.value).map((documentType) => ({
+    documentType,
+    ready: hasDefaultFileKindBinding(bindings.value, documentType),
+  }))
+})
+
+const showAdvanced = ref(false)
 
 const templateFormatOptions = computed<SelectOption[]>(() => {
   const values = templateDraft.documentType === 'import_product_catalog'
@@ -431,6 +466,18 @@ async function handleImportCarrierMappings(): Promise<void> {
   if (!session) return
   importingCarriers.value = true
   try {
+    const defaultTemplate = await getDefaultTemplateForProfile(
+      session.profileId,
+      CARRIER_IMPORT_DOCUMENT_TYPE,
+    )
+    if (!profileScopeIsCurrent(session)) return
+    if (!defaultTemplate) {
+      feedback.error(
+        t('feedback.error'),
+        t('integrations.carrierMappings.defaultBindingMissing'),
+      )
+      return
+    }
     const path = await pickTabularFile()
     if (!path) return
     if (!profileScopeIsCurrent(session)) return
@@ -591,12 +638,14 @@ async function handleUnbind(binding: dto.ProfileTemplateBindingDTO): Promise<voi
 
 const showRerunWizard = ref(false)
 const rerunWizardSession = ref<ProfileScope | null>(null)
+const rerunDocumentType = ref('')
 
-function openRerunWizard(): void {
+function openConfigureKind(documentType: string): void {
   if (!profile.value) return
   const session = currentProfileScope(profile.value.id)
   if (!session) return
   rerunWizardSession.value = session
+  rerunDocumentType.value = documentType
   showRerunWizard.value = true
 }
 
@@ -605,6 +654,7 @@ function handleRerunDone(): void {
   if (!session || !profileScopeIsCurrent(session)) return
   showRerunWizard.value = false
   rerunWizardSession.value = null
+  rerunDocumentType.value = ''
   void loadDetail()
   emit('changed')
 }
@@ -612,6 +662,7 @@ function handleRerunDone(): void {
 function handleRerunCancel(): void {
   showRerunWizard.value = false
   rerunWizardSession.value = null
+  rerunDocumentType.value = ''
 }
 
 // ── Expert mode ──
@@ -716,6 +767,8 @@ function invalidateProfileScopedState(): void {
 
   showRerunWizard.value = false
   rerunWizardSession.value = null
+  rerunDocumentType.value = ''
+  showAdvanced.value = false
 
   expertModeOpen.value = false
   connectorKeys.value = []
@@ -742,7 +795,7 @@ watch(
 
 <template>
   <DetailDrawer :show="show" :title="t('integrations.detail.title')" size="lg" @update:show="(v) => emit('update:show', v)">
-    <template #title>{{ profile?.profileKey ?? t('integrations.detail.title') }}</template>
+    <template #title>{{ profile?.sourceChannel || profile?.profileKey || t('integrations.detail.title') }}</template>
 
     <NSpin :show="loading">
       <ErrorBanner
@@ -752,10 +805,56 @@ watch(
         @retry="loadDetail"
       />
       <template v-else-if="profile">
-        <SectionCard :title="t('integrations.detail.sections.connector')" flat>
-          <template #actions>
-            <NButton size="small" @click="openRerunWizard">{{ t('integrations.actions.rerunWizard') }}</NButton>
-          </template>
+        <p class="integration-detail__surface">
+          {{ isFactoryProfile(profile) ? t('integrations.card.surfaceFactory') : t('integrations.card.surfaceSource') }}
+          <span v-if="profile.profileKey !== (profile.sourceChannel || profile.profileKey)">
+            · {{ profile.profileKey }}
+          </span>
+        </p>
+
+        <SectionCard :title="t('integrations.fileKinds.title')" flat>
+          <EmptyState v-if="!fileKindRows.length" size="sm" :title="t('integrations.fileKinds.empty')" />
+          <div v-else class="integration-detail__file-kinds">
+            <div
+              v-for="row in fileKindRows"
+              :key="row.documentType"
+              class="integration-detail__file-kind-row"
+            >
+              <div class="integration-detail__file-kind-info">
+                <StatusBadge dimension="documentType" :value="row.documentType" size="sm" />
+                <span
+                  class="integration-detail__file-kind-ready"
+                  :class="{ 'integration-detail__file-kind-ready--ok': row.ready }"
+                >
+                  {{ row.ready ? t('integrations.fileKinds.ready') : t('integrations.fileKinds.missing') }}
+                </span>
+              </div>
+              <NButton size="tiny" @click="openConfigureKind(row.documentType)">
+                {{ row.ready ? t('integrations.fileKinds.reconfigure') : t('integrations.fileKinds.configure') }}
+              </NButton>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard
+          v-if="isFactoryProfile(profile)"
+          :title="t('integrations.detail.fields.factorySupplierPlatform')"
+          flat
+        >
+          <div class="integration-detail__factory-platform">
+            <NInput
+              v-model:value="factoryPlatformDraft"
+              size="small"
+              :placeholder="t('integrations.detail.fields.factorySupplierPlatformPlaceholder')"
+              style="max-width: 220px"
+            />
+            <NButton size="tiny" type="primary" :loading="savingFactoryPlatform" @click="saveFactoryPlatform">
+              {{ t('common.save') }}
+            </NButton>
+          </div>
+        </SectionCard>
+
+        <SectionCard v-if="showAdvanced" :title="t('integrations.detail.sections.connector')" flat>
           <dl class="integration-detail__kv">
             <dt>{{ t('integrations.detail.fields.profileKey') }}</dt>
             <dd>{{ profile.profileKey }}</dd>
@@ -792,7 +891,7 @@ watch(
           </dl>
         </SectionCard>
 
-        <SectionCard :title="t('integrations.detail.sections.capabilities')" flat>
+        <SectionCard v-if="showAdvanced" :title="t('integrations.detail.sections.capabilities')" flat>
           <template #actions>
             <NButton v-if="!editingCapabilities" size="small" @click="startEditCapabilities">
               {{ t('integrations.actions.editCapabilities') }}
@@ -817,7 +916,7 @@ watch(
           </dl>
         </SectionCard>
 
-        <SectionCard :title="t('integrations.detail.sections.templates')" flat>
+        <SectionCard v-if="showAdvanced" :title="t('integrations.detail.sections.templates')" flat>
           <template #actions>
             <NButton size="small" @click="openTemplateCreator">
               {{ t('integrations.templates.createAndBind') }}
@@ -832,12 +931,16 @@ watch(
           </dl>
         </SectionCard>
 
-        <SectionCard :title="t('integrations.detail.sections.carrierMappings')" flat>
+        <SectionCard v-if="!isFactoryProfile(profile)" :title="t('integrations.detail.sections.carrierMappings')" flat>
           <template #actions>
+            <StatusBadge dimension="documentType" :value="CARRIER_IMPORT_DOCUMENT_TYPE" size="sm" />
             <NButton size="small" :loading="importingCarriers" :disabled="!carrierWritesEnabled" @click="handleImportCarrierMappings">
               {{ t('integrations.carrierMappings.import') }}
             </NButton>
           </template>
+          <p class="integration-detail__carrier-policy-note">
+            {{ t('integrations.carrierMappings.importHint') }}
+          </p>
           <p v-if="!carrierWritesEnabled" class="integration-detail__carrier-policy-note">
             {{ t('integrations.carrierRegistry.disabledReason') }}
           </p>
@@ -901,42 +1004,61 @@ watch(
           </div>
         </SectionCard>
 
-        <SectionCard :title="t('integrations.detail.sections.bindings')" flat>
+        <SectionCard v-if="showAdvanced" :title="t('integrations.detail.sections.bindings')" flat>
           <template #actions>
             <NButton size="small" @click="bindingsExpanded = !bindingsExpanded">{{ t('integrations.actions.manageBindings') }}</NButton>
           </template>
           <EmptyState v-if="!bindings.length" size="sm" :title="t('integrations.detail.noBindings')" />
           <div v-else class="integration-detail__bindings">
-            <div v-for="binding in bindings" :key="binding.id" class="integration-detail__binding-row">
-              <div class="integration-detail__binding-info">
-                <StatusBadge dimension="documentType" :value="binding.documentType" size="sm" />
-                <span class="integration-detail__binding-template">{{ templateKeyFor(binding.templateId) }}</span>
-                <span v-if="binding.isDefault" class="integration-detail__default-tag">{{ t('integrations.detail.fields.isDefault') }}</span>
-              </div>
-              <div v-if="bindingsExpanded" class="integration-detail__binding-actions">
-                <NButton
-                  v-if="!binding.isDefault"
-                  size="tiny"
-                  :loading="settingDefaultId === binding.id"
-                  :disabled="unbindingId === binding.id"
-                  @click="handleSetDefault(binding)"
-                >
-                  {{ t('integrations.actions.setDefault') }}
-                </NButton>
-                <NButton
-                  size="tiny"
-                  :loading="unbindingId === binding.id"
-                  :disabled="settingDefaultId === binding.id"
-                  @click="handleUnbind(binding)"
-                >
-                  {{ t('integrations.actions.unbind') }}
-                </NButton>
+            <p class="integration-detail__carrier-policy-note">
+              {{ t('integrations.detail.bindingsGroupedHint') }}
+            </p>
+            <div
+              v-for="group in groupedBindings"
+              :key="group.documentType"
+              class="integration-detail__binding-group"
+            >
+              <h4 class="integration-detail__binding-group-heading">
+                <StatusBadge dimension="documentType" :value="group.documentType" size="sm" />
+              </h4>
+              <div
+                v-for="binding in group.bindings"
+                :key="binding.id"
+                class="integration-detail__binding-row"
+              >
+                <div class="integration-detail__binding-info">
+                  <span class="integration-detail__binding-template">{{ templateKeyFor(binding.templateId) }}</span>
+                  <span v-if="binding.isDefault" class="integration-detail__default-tag">{{ t('integrations.detail.fields.isDefault') }}</span>
+                </div>
+                <div v-if="bindingsExpanded" class="integration-detail__binding-actions">
+                  <NButton
+                    v-if="!binding.isDefault"
+                    size="tiny"
+                    :loading="settingDefaultId === binding.id"
+                    :disabled="unbindingId === binding.id"
+                    @click="handleSetDefault(binding)"
+                  >
+                    {{ t('integrations.actions.setDefault') }}
+                  </NButton>
+                  <NButton
+                    size="tiny"
+                    :loading="unbindingId === binding.id"
+                    :disabled="settingDefaultId === binding.id"
+                    @click="handleUnbind(binding)"
+                  >
+                    {{ t('integrations.actions.unbind') }}
+                  </NButton>
+                </div>
               </div>
             </div>
           </div>
         </SectionCard>
 
-        <SectionCard flat>
+        <NButton v-if="!showAdvanced" size="small" @click="showAdvanced = true">
+          {{ t('integrations.expertMode.title') }}
+        </NButton>
+
+        <SectionCard v-if="showAdvanced" flat>
           <template #title>
             <button type="button" class="integration-detail__expert-toggle" @click="openExpertMode">
               {{ t('integrations.expertMode.title') }}
@@ -987,12 +1109,18 @@ watch(
     <NModal
       :show="showRerunWizard"
       preset="card"
-      :title="t('integrations.actions.rerunWizard')"
+      :title="t('integrations.fileKinds.configure')"
       :style="{ width: 'min(760px, 94vw)' }"
       :mask-closable="false"
       @update:show="(v: boolean) => { if (!v) handleRerunCancel() }"
     >
-      <IntakeWizard v-if="showRerunWizard && profile" :existing-profile="profile" @done="handleRerunDone" @cancel="handleRerunCancel" />
+      <IntakeWizard
+        v-if="showRerunWizard && profile"
+        :existing-profile="profile"
+        :initial-document-type="rerunDocumentType"
+        @done="handleRerunDone"
+        @cancel="handleRerunCancel"
+      />
     </NModal>
 
     <NModal
@@ -1056,6 +1184,44 @@ watch(
   margin: 0;
 }
 
+.integration-detail__surface {
+  margin: 0 0 var(--space-3);
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.integration-detail__file-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.integration-detail__file-kind-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--card-border-color);
+}
+
+.integration-detail__file-kind-info {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.integration-detail__file-kind-ready {
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.integration-detail__file-kind-ready--ok {
+  color: var(--status-success-fg);
+}
+
 .integration-detail__kv dt {
   font-family: var(--font-body);
   font-size: var(--font-size-sm);
@@ -1076,6 +1242,22 @@ watch(
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.integration-detail__binding-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.integration-detail__binding-group-heading {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
 }
 
 .integration-detail__binding-row {

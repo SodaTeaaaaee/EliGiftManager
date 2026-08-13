@@ -120,7 +120,7 @@ export type TrackingSyncModeValue = 'api_push' | 'document_export' | 'manual_con
 export type ClosurePolicyValue = 'close_after_sync' | 'close_after_manual_confirmation' | 'close_after_shipment'
 
 /** `DocumentTemplate.DocumentType` / `validDocumentTypes` (`internal/app/template_usecase.go`)
- * — fixed 6-value whitelist. P4 integrations detail drawer's template/binding lists. */
+ * — whitelist aligned with backend validDocumentTypes. P4 integrations detail drawer's template/binding lists. */
 export type DocumentTypeValue =
   | 'import_entitlement'
   | 'import_sales_order'
@@ -128,6 +128,7 @@ export type DocumentTypeValue =
   | 'export_supplier_order'
   | 'import_supplier_shipment'
   | 'export_source_tracking_update'
+  | 'import_carrier_mapping'
 
 /** `SupplierOrderDTO.status` (`internal/domain/enums.go:131-140`) — the supplier ORDER's own
  * lifecycle status. Distinct from `supplierState` above (the fulfillment-LINE's *projected*
@@ -413,6 +414,7 @@ export const documentTypeGlossary: GlossaryTable<'documentType'> = {
   export_supplier_order: entry('documentType', 'export_supplier_order', 'info'),
   import_supplier_shipment: entry('documentType', 'import_supplier_shipment', 'info'),
   export_source_tracking_update: entry('documentType', 'export_source_tracking_update', 'info'),
+  import_carrier_mapping: entry('documentType', 'import_carrier_mapping', 'neutral'),
 }
 
 export const supplierOrderStatusGlossary: GlossaryTable<'supplierOrderStatus'> = {

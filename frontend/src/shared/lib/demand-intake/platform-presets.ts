@@ -13,9 +13,9 @@
  * Bare line keys are still accepted and normalised by `mappingFromPreset` /
  * `serializeMappingRules`.
  *
- * Bilibili membership ships a **config-level** positional three-column example
- * (no header row) — not a hard-coded parser. Sample shape (SampleData 会员列表):
- * col0=gift level, col1=UID, col2=display name.
+ * Bilibili is one source-platform card. Entitlement (positional three-column,
+ * no header) and retail (header-mapped workshop export) are file-kind mapping
+ * seeds, not a second preset.
  */
 
 import {
@@ -59,8 +59,16 @@ export interface PlatformPreset {
   sourceChannel: string
   /** Seeds `CreateProfileInput.sourceSurface`. */
   sourceSurface: string
-  /** Seeds `CreateProfileInput.demandKind` — MUST be one of the backend's two whitelisted values. */
-  demandKind: 'membership_entitlement' | 'retail_order'
+  /**
+   * Leftover hint for single-kind presets. Empty when the platform can bind
+   * both entitlement and retail files — the operator checks those later.
+   */
+  demandKind?: 'membership_entitlement' | 'retail_order' | ''
+  /**
+   * Which source file kinds to pre-check. When omitted, derived from
+   * `demandKind` (retail → sales order only; else entitlement only).
+   */
+  defaultFileKinds?: { entitlement: boolean; salesOrder: boolean }
   /**
    * Seeds `CreateProfileInput.factorySupplierPlatform` — factory-facing platform
    * label written onto supplier orders / product catalog fallback.
@@ -76,6 +84,13 @@ export interface PlatformPreset {
    * `defaultColumns` for the wizard's initial FieldMappingValue.
    */
   defaultMapping?: Partial<FieldMappingValue>
+  /**
+   * Per-file-kind mapping seeds. Used when one source platform has both
+   * entitlement and retail samples (e.g. Bilibili).
+   */
+  mappingsByDocumentType?: Partial<
+    Record<'import_entitlement' | 'import_sales_order', Partial<FieldMappingValue>>
+  >
   /** Seeds the 6 boolean capability flags on the new integration profile. */
   defaultCapabilities: Partial<IntakeProfileCapabilities>
 }
@@ -86,6 +101,31 @@ function mapRecordKeys<T>(record: Record<string, T> | undefined): Record<string,
     out[ensureNamespacedDestKey(k)] = v
   }
   return out
+}
+
+/** File-kind toggles implied by a preset (explicit flags, else leftover demandKind). */
+export function fileFlagsFromPreset(preset: PlatformPreset): { entitlement: boolean; salesOrder: boolean } {
+  if (preset.defaultFileKinds) return { ...preset.defaultFileKinds }
+  if (preset.demandKind === 'retail_order') return { entitlement: false, salesOrder: true }
+  return { entitlement: true, salesOrder: false }
+}
+
+/** Mapping seed for one document type; falls back to the preset-wide mapping. */
+export function mappingFromPresetForDocumentType(
+  preset: PlatformPreset,
+  docType: string,
+): FieldMappingValue | null {
+  const byType = preset.mappingsByDocumentType?.[docType as 'import_entitlement' | 'import_sales_order']
+  if (byType) {
+    return mappingFromPreset({ ...preset, defaultMapping: byType, defaultColumns: undefined })
+  }
+  if (preset.demandKind === 'retail_order' && docType === 'import_sales_order') {
+    return mappingFromPreset(preset)
+  }
+  if (preset.demandKind !== 'retail_order' && docType === 'import_entitlement') {
+    return mappingFromPreset(preset)
+  }
+  return null
 }
 
 /** Build a v2 FieldMappingValue from a preset (columns or full defaultMapping). */
@@ -150,32 +190,65 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
     descKey: 'intakeWizard.presets.bilibili.description',
     sourceChannel: 'bilibili',
     sourceSurface: 'membership',
-    demandKind: 'membership_entitlement',
+    demandKind: '',
+    defaultFileKinds: { entitlement: true, salesOrder: true },
     factorySupplierPlatform: 'bilibili',
-    // Config-level positional three-column example (SampleData 会员列表, no header):
-    // col0 = gift level, col1 = platform UID, col2 = display name.
-    defaultMapping: {
-      version: 2,
-      mode: 'positional',
-      hasHeader: false,
-      columns: {},
-      positions: {
-        'line.gift_level_snapshot': 0,
-        'document.source_customer_ref': 1,
-        'document.display_name': 2,
+    mappingsByDocumentType: {
+      // Config-level positional three-column example (SampleData 会员列表, no header):
+      // col0 = gift level, col1 = platform UID, col2 = display name.
+      import_entitlement: {
+        version: 2,
+        mode: 'positional',
+        hasHeader: false,
+        columns: {},
+        positions: {
+          'line.gift_level_snapshot': 0,
+          'document.source_customer_ref': 1,
+          'document.display_name': 2,
+        },
+        defaults: {
+          'line.line_type': 'entitlement_rule',
+          'line.requested_quantity': '1',
+          'line.obligation_trigger_kind': 'periodic_membership',
+          'line.entitlement_authority': 'upstream_platform',
+          'line.routing_disposition': 'accepted',
+        },
+        columnOrder: [
+          'line.gift_level_snapshot',
+          'document.source_customer_ref',
+          'document.display_name',
+        ],
       },
-      defaults: {
-        'line.line_type': 'entitlement_rule',
-        'line.requested_quantity': '1',
-        'line.obligation_trigger_kind': 'periodic_membership',
-        'line.entitlement_authority': 'upstream_platform',
-        'line.routing_disposition': 'accepted',
+      // SampleData 单个订单数据 — Chinese header columns locked to export headers.
+      import_sales_order: {
+        version: 2,
+        mode: 'header',
+        hasHeader: true,
+        columns: {
+          'line.external_title': '商品名称',
+          'line.requested_quantity': '数量',
+          'recipient.name': '收货人姓名',
+          'recipient.phone': '联系电话',
+          'recipient.address_line1': '收货地址',
+          'document.source_document_no': '订单号',
+          'document.display_name': '买家昵称',
+        },
+        positions: {},
+        defaults: {
+          'line.line_type': 'sku_order',
+          'line.entitlement_authority': 'upstream_platform',
+          'line.routing_disposition': 'accepted',
+        },
+        columnOrder: [
+          'line.external_title',
+          'line.requested_quantity',
+          'recipient.name',
+          'recipient.phone',
+          'recipient.address_line1',
+          'document.source_document_no',
+          'document.display_name',
+        ],
       },
-      columnOrder: [
-        'line.gift_level_snapshot',
-        'document.source_customer_ref',
-        'document.display_name',
-      ],
     },
     defaultCapabilities: {
       supportsPartialShipment: true,
@@ -184,55 +257,6 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
       requiresCarrierMapping: true,
       requiresExternalOrderNo: false,
       allowsManualClosure: true,
-    },
-  },
-  {
-    key: 'bilibili_retail',
-    labelKey: 'intakeWizard.presets.bilibili_retail.label',
-    descKey: 'intakeWizard.presets.bilibili_retail.description',
-    sourceChannel: 'bilibili',
-    sourceSurface: 'retail',
-    demandKind: 'retail_order',
-    factorySupplierPlatform: 'bilibili',
-    // SampleData 单个订单数据 — Chinese header columns locked to export headers.
-    // Remaining sample columns (规格/订单价格（含运费）/订单状态/付款时间/最晚发货时间/买家留言)
-    // are intentionally unmapped until a dest field is needed.
-    defaultMapping: {
-      version: 2,
-      mode: 'header',
-      hasHeader: true,
-      columns: {
-        'line.external_title': '商品名称',
-        'line.requested_quantity': '数量',
-        'recipient.name': '收货人姓名',
-        'recipient.phone': '联系电话',
-        'recipient.address_line1': '收货地址',
-        'document.source_document_no': '订单号',
-        'document.display_name': '买家昵称',
-      },
-      positions: {},
-      defaults: {
-        'line.line_type': 'sku_order',
-        'line.entitlement_authority': 'upstream_platform',
-        'line.routing_disposition': 'accepted',
-      },
-      columnOrder: [
-        'line.external_title',
-        'line.requested_quantity',
-        'recipient.name',
-        'recipient.phone',
-        'recipient.address_line1',
-        'document.source_document_no',
-        'document.display_name',
-      ],
-    },
-    defaultCapabilities: {
-      supportsPartialShipment: false,
-      supportsApiImport: false,
-      supportsApiExport: false,
-      requiresCarrierMapping: true,
-      requiresExternalOrderNo: true,
-      allowsManualClosure: false,
     },
   },
   {

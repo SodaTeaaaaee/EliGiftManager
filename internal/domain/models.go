@@ -413,12 +413,20 @@ type ChannelSyncItem struct {
 // ---- IntegrationProfile ----
 
 type IntegrationProfile struct {
-	ID                        uint
-	ProfileKey                string
-	SourceChannel             string
+	ID            uint
+	ProfileKey    string
+	SourceChannel string
+	// SourceSurface distinguishes factory vs source platform. Leftover
+	// membership/retail values must not force a second profile row; one
+	// source platform may bind both demand import types.
 	SourceSurface             string
+	// DemandKind is a leftover optional hint. It is not the unique document
+	// type for this profile; one platform may bind both import_entitlement
+	// and import_sales_order.
 	DemandKind                string
 	InitialAllocationStrategy string
+	// IdentityStrategy is leftover. Import-time identity follows
+	// InterpretDemandImportDocumentType; identity is not stored per-platform.
 	IdentityStrategy          string
 	EntitlementAuthorityMode  string
 	RecipientInputMode        string

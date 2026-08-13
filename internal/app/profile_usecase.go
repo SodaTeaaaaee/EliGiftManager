@@ -58,6 +58,11 @@ var validSourceSurfaces = map[string]bool{
 
 // validateProfileEnums checks SourceSurface and surface-specific constraints.
 //
+// SourceSurface is required and must be membership, retail, or factory.
+// DemandKind is optional: empty is valid; a non-empty value must be a valid
+// enum but is NOT paired 1:1 with SourceSurface (membership + retail_order is
+// valid).
+//
 // membership/retail: existing 8 demand-strategy enum checks (non-empty → must be valid).
 // factory: exempts the 8 demand-strategy checks; requires FactorySupplierPlatform and
 // at least one factory capability flag.
@@ -82,7 +87,8 @@ func validateProfileEnums(input dto.CreateProfileInput) error {
 		return nil
 	}
 
-	// membership / retail — existing 8 demand-strategy enum validations.
+	// membership / retail — demand-strategy enum validations (non-empty → must be valid).
+	// DemandKind is not paired 1:1 with SourceSurface.
 	validDemandKind := map[string]bool{
 		"membership_entitlement": true,
 		"retail_order":           true,
@@ -125,6 +131,7 @@ func validateProfileEnums(input dto.CreateProfileInput) error {
 		"manual_grant_only": true,
 	}
 
+	// Empty DemandKind is valid; a leftover membership profile may still carry retail_order.
 	if input.DemandKind != "" && !validDemandKind[input.DemandKind] {
 		return fmt.Errorf("invalid demand_kind: %q", input.DemandKind)
 	}
@@ -377,35 +384,19 @@ func (uc *profileManagementUseCase) ListProfiles(ctx context.Context) ([]dto.Int
 }
 
 func (uc *profileManagementUseCase) SeedDefaultProfiles(ctx context.Context) ([]dto.IntegrationProfileDTO, error) {
+	// One source-platform default. Empty DemandKind so both entitlement and
+	// retail files can bind. Keep membership_default as the stable key;
+	// retail_default is no longer seeded.
 	defaults := []dto.CreateProfileInput{
 		{
-			ProfileKey:                "membership_default",
-			SourceChannel:             "default_membership_channel",
-			SourceSurface:             "membership",
-			DemandKind:                "membership_entitlement",
-			InitialAllocationStrategy: "policy_driven",
-			IdentityStrategy:          "platform_uid",
-			EntitlementAuthorityMode:  "local_policy",
-			RecipientInputMode:        "none",
-			ReferenceStrategy:         "member_level",
-			TrackingSyncMode:          "manual_confirmation",
-			ClosurePolicy:             "close_after_manual_confirmation",
-			AllowsManualClosure:       true,
-		},
-		{
-			ProfileKey:                "retail_default",
-			SourceChannel:             "default_retail_channel",
-			SourceSurface:             "retail",
-			DemandKind:                "retail_order",
-			InitialAllocationStrategy: "demand_driven",
-			IdentityStrategy:          "email",
-			EntitlementAuthorityMode:  "local_policy",
-			RecipientInputMode:        "none",
-			ReferenceStrategy:         "order_line_level",
-			TrackingSyncMode:          "document_export",
-			ClosurePolicy:             "close_after_sync",
-			AllowsManualClosure:       false,
-			ConnectorKey:              "eli.local_export",
+			ProfileKey:          "membership_default",
+			SourceChannel:       "default",
+			SourceSurface:       "membership",
+			DemandKind:          "",
+			TrackingSyncMode:    "document_export",
+			ClosurePolicy:       "close_after_sync",
+			AllowsManualClosure: false,
+			ConnectorKey:        "eli.local_export",
 		},
 	}
 

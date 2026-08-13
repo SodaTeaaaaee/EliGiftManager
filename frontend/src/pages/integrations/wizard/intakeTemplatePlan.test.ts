@@ -3,7 +3,6 @@ import { parseMappingRules, type FieldMappingValue } from '@/shared/ui/field-map
 import {
   buildIntakeTemplatePlan,
   canProceedFromSample,
-  mappingForDocumentType,
 } from './intakeTemplatePlan'
 
 const catalogHeaderMapping: FieldMappingValue = {
@@ -23,7 +22,8 @@ describe('intake sample and template planning', () => {
       mapping: catalogHeaderMapping,
     })).toBe(true)
 
-    const [plan] = buildIntakeTemplatePlan(catalogHeaderMapping, ['import_product_catalog'], 'catalog.zip')
+    const [plan] = buildIntakeTemplatePlan(catalogHeaderMapping, 'import_product_catalog', 'catalog.zip')
+    expect(plan.documentType).toBe('import_product_catalog')
     expect(parseMappingRules(plan.mappingRules).columns).toEqual(catalogHeaderMapping.columns)
   })
 
@@ -34,28 +34,38 @@ describe('intake sample and template planning', () => {
       hasHeader: true,
       columns: {},
       defaults: {},
-    }, ['import_product_catalog'], 'catalog.zip')).toEqual([])
+    }, 'import_product_catalog', 'catalog.zip')).toEqual([])
   })
 
-  test('does not copy a catalog ZIP format or product mapping to supplier-order templates', () => {
-    const plan = buildIntakeTemplatePlan(
+  test('does not plan a shipment template from a catalog ZIP format', () => {
+    expect(buildIntakeTemplatePlan(
       catalogHeaderMapping,
-      ['import_product_catalog', 'import_supplier_shipment', 'export_supplier_order'],
+      'import_supplier_shipment',
       'catalog.zip',
-    )
-    expect(plan.map((item) => [item.documentType, item.format])).toEqual([
-      ['import_product_catalog', 'zip'],
-    ])
+    )).toEqual([])
   })
 
-  test('projects each document namespace independently', () => {
-    expect(mappingForDocumentType({
+  test('plans exactly one document type without dest-prefix fan-out', () => {
+    const mixed: FieldMappingValue = {
       ...catalogHeaderMapping,
       columns: {
         'product.name': '商品名',
         'shipment.tracking_no': '物流单号',
         'export.factory_sku': '货号',
       },
-    }, 'import_supplier_shipment')?.columns).toEqual({ 'shipment.tracking_no': '物流单号' })
+    }
+    const plan = buildIntakeTemplatePlan(mixed, 'import_product_catalog', 'catalog.csv')
+    expect(plan).toHaveLength(1)
+    expect(plan[0].documentType).toBe('import_product_catalog')
+    expect(parseMappingRules(plan[0].mappingRules).columns).toEqual(mixed.columns)
+  })
+
+  test('factory without a file cannot proceed', () => {
+    expect(canProceedFromSample({
+      isFactorySurface: true,
+      filePath: '',
+      detectedHeaders: [],
+      mapping: catalogHeaderMapping,
+    })).toBe(false)
   })
 })

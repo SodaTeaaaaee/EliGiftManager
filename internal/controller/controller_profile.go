@@ -56,7 +56,7 @@ func (c *ProfileController) ListProfiles() ([]dto.IntegrationProfileDTO, error) 
 }
 
 // SeedDefaultProfiles creates default profiles if they don't already exist,
-// then ensures the catalog demo profile/template/binding (idempotent).
+// then ensures the catalog and bilibili demo seeds (idempotent).
 func (c *ProfileController) SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error) {
 	ctx := appContext
 	profiles, err := c.uc.SeedDefaultProfiles(ctx)
@@ -65,7 +65,7 @@ func (c *ProfileController) SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, 
 	}
 
 	// Catalog demo seed (factory_rouzao_demo + catalog_rouzao_zip_demo binding).
-	// Independent of membership/retail defaults so it can also be called alone later.
+	// Independent of the single source default so it can also be called alone later.
 	gdb := database.GetDB()
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	templateRepo := infra.NewDocumentTemplateRepository(gdb)
@@ -73,10 +73,23 @@ func (c *ProfileController) SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, 
 	if _, err := app.SeedCatalogDemo(ctx, profileRepo, templateRepo, bindingRepo); err != nil {
 		return nil, err
 	}
-	// Bilibili demo seed: export_source_tracking_update + import_carrier_mapping
-	// templates bound to bilibili_membership_demo (SampleData header-locked).
+	// Bilibili demo seed: one bilibili platform profile (bilibili_membership_demo)
+	// with default bindings for entitlement, sales_order, carrier mapping, and
+	// tracking export (SampleData header-locked).
 	if _, err := app.SeedBilibiliDemo(ctx, profileRepo, templateRepo, bindingRepo); err != nil {
 		return nil, err
 	}
 	return profiles, nil
+}
+
+// SeedBuiltinPlatform installs one named builtin platform (keys: "bilibili",
+// "rouzao"). Idempotent if that platform is already installed. Does not seed
+// membership_default or any other platform.
+func (c *ProfileController) SeedBuiltinPlatform(key string) (*dto.IntegrationProfileDTO, error) {
+	ctx := appContext
+	gdb := database.GetDB()
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	return app.SeedBuiltinPlatform(ctx, key, profileRepo, templateRepo, bindingRepo)
 }

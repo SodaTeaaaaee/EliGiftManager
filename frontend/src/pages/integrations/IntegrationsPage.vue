@@ -1,26 +1,26 @@
 <script setup lang="ts">
 /**
- * IntegrationsPage — the接入管理 top-level page (plan P4). Lists every
- * `IntegrationProfile` (bridge `listProfiles()`) grouped by surface /
- * demandKind, each profile rendered as an `IntegrationCard`. "New Integration"
- * opens `IntakeWizard` (create mode) in a modal; clicking a card opens
- * `IntegrationDetailDrawer`.
- *
- * Loading and load-error states are user-visible (no silent failure).
+ * IntegrationsPage — added platforms (source / factory) plus an add-time
+ * strip of uninstalled builtins. Custom「新建」and builtin「添加」only differ
+ * at install; afterwards both open the same detail drawer.
  */
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NModal, NSpin } from 'naive-ui'
+import { NButton, NSpin } from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard } from '@/shared/ui/cards'
-import { EmptyState } from '@/shared/ui/empty-state'
 import { ErrorBanner, useFeedback } from '@/shared/ui/feedback'
-import { listProfiles, seedDefaultProfiles } from '@/shared/api/bridge'
+import { listProfiles, seedBuiltinPlatform } from '@/shared/api/bridge'
 import { useWindowFocusRefresh } from '@/shared/lib/useWindowFocusRefresh'
 import type { IntegrationProfile } from '@/entities/profile'
+import {
+  installableBuiltins,
+  partitionProfilesForList,
+  type BuiltinPlatformDef,
+} from './profileAvailability'
 import IntegrationCard from './IntegrationCard.vue'
 import IntegrationDetailDrawer from './IntegrationDetailDrawer.vue'
-import IntakeWizard from './wizard/IntakeWizard.vue'
+import CustomCreateModal from './CustomCreateModal.vue'
 
 const { t } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
@@ -47,55 +47,18 @@ async function loadProfiles(): Promise<void> {
 onMounted(loadProfiles)
 useWindowFocusRefresh(loadProfiles)
 
-const membershipProfiles = computed(() =>
-  profiles.value.filter(
-    (p) => p.sourceSurface !== 'factory' && p.demandKind === 'membership_entitlement',
-  ),
-)
-const retailProfiles = computed(() =>
-  profiles.value.filter(
-    (p) => p.sourceSurface !== 'factory' && p.demandKind === 'retail_order',
-  ),
-)
-const factoryProfiles = computed(() =>
-  profiles.value.filter((p) => p.sourceSurface === 'factory'),
-)
-const showEmpty = computed(
-  () => hasLoadedOnce.value && !loading.value && !loadError.value && profiles.value.length === 0,
-)
+const groupedProfiles = computed(() => partitionProfilesForList(profiles.value))
+const sourceProfiles = computed(() => groupedProfiles.value.source)
+const factoryProfiles = computed(() => groupedProfiles.value.factory)
+const hasAdded = computed(() => profiles.value.length > 0)
+const availableBuiltins = computed(() => installableBuiltins(profiles.value))
 
-// ── Create wizard ──
+const installingKey = ref<string | null>(null)
+const showCreate = ref(false)
 
-const showWizard = ref(false)
-const seedingDefaults = ref(false)
-
-async function installDefaultProfiles(): Promise<void> {
-  seedingDefaults.value = true
-  try {
-    await seedDefaultProfiles()
-    await loadProfiles()
-    feedback.success(t('integrations.defaultsInstalled'))
-  } catch (err) {
-    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
-  } finally {
-    seedingDefaults.value = false
-  }
+function openCreate(): void {
+  showCreate.value = true
 }
-
-function openWizard(): void {
-  showWizard.value = true
-}
-
-function handleWizardDone(): void {
-  showWizard.value = false
-  void loadProfiles()
-}
-
-function handleWizardCancel(): void {
-  showWizard.value = false
-}
-
-// ── Detail drawer ──
 
 const detailProfileId = ref<number | null>(null)
 const showDetail = ref(false)
@@ -112,16 +75,31 @@ function handleDetailVisibility(visible: boolean): void {
 function handleDetailChanged(): void {
   void loadProfiles()
 }
+
+function handleCreated(profile: IntegrationProfile): void {
+  void loadProfiles().then(() => openDetail(profile))
+}
+
+async function installBuiltin(item: BuiltinPlatformDef): Promise<void> {
+  installingKey.value = item.installKey
+  try {
+    const profile = await seedBuiltinPlatform(item.installKey)
+    await loadProfiles()
+    feedback.success(t('integrations.builtins.installed'))
+    openDetail(profile)
+  } catch (err) {
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+  } finally {
+    installingKey.value = null
+  }
+}
 </script>
 
 <template>
   <div class="integrations-page">
     <PageHeader :title="t('integrations.title')" :description="t('integrations.subtitle')">
       <template #actions>
-        <NButton :loading="seedingDefaults" @click="installDefaultProfiles">
-          {{ t('integrations.installDefaults') }}
-        </NButton>
-        <NButton type="primary" @click="openWizard">{{ t('integrations.newIntegration') }}</NButton>
+        <NButton type="primary" @click="openCreate">{{ t('integrations.newIntegration') }}</NButton>
       </template>
     </PageHeader>
 
@@ -137,57 +115,60 @@ function handleDetailChanged(): void {
       <span class="integrations-page__loading-label">{{ t('integrations.loading') }}</span>
     </div>
 
-    <EmptyState v-else-if="showEmpty" :title="t('integrations.empty.title')" :description="t('integrations.empty.description')">
-      <NButton type="primary" @click="openWizard">{{ t('integrations.empty.action') }}</NButton>
-    </EmptyState>
-
     <NSpin v-else :show="loading">
       <div class="integrations-page__groups">
-        <SectionCard v-if="membershipProfiles.length" :title="t('integrations.groups.membership')">
-          <div class="integrations-page__grid">
-            <IntegrationCard
-              v-for="profile in membershipProfiles"
-              :key="profile.id"
-              :profile="profile"
-              @click="openDetail(profile)"
-            />
+        <SectionCard v-if="hasAdded" :title="t('integrations.added.title')">
+          <div v-if="sourceProfiles.length" class="integrations-page__subgroup">
+            <h3 class="integrations-page__subgroup-title">{{ t('integrations.groups.source') }}</h3>
+            <div class="integrations-page__grid">
+              <IntegrationCard
+                v-for="profile in sourceProfiles"
+                :key="profile.id"
+                :profile="profile"
+                @click="openDetail(profile)"
+              />
+            </div>
+          </div>
+          <div v-if="factoryProfiles.length" class="integrations-page__subgroup">
+            <h3 class="integrations-page__subgroup-title">{{ t('integrations.groups.factory') }}</h3>
+            <div class="integrations-page__grid">
+              <IntegrationCard
+                v-for="profile in factoryProfiles"
+                :key="profile.id"
+                :profile="profile"
+                @click="openDetail(profile)"
+              />
+            </div>
           </div>
         </SectionCard>
 
-        <SectionCard v-if="retailProfiles.length" :title="t('integrations.groups.retail')">
+        <SectionCard v-if="availableBuiltins.length" :title="t('integrations.builtins.title')" :description="t('integrations.builtins.description')">
           <div class="integrations-page__grid">
-            <IntegrationCard
-              v-for="profile in retailProfiles"
-              :key="profile.id"
-              :profile="profile"
-              @click="openDetail(profile)"
-            />
+            <div v-for="item in availableBuiltins" :key="item.installKey" class="integrations-page__builtin">
+              <div class="integrations-page__builtin-copy">
+                <h3 class="integrations-page__builtin-title">{{ t(`integrations.builtins.${item.i18nKey}.name`) }}</h3>
+                <p class="integrations-page__builtin-desc">{{ t(`integrations.builtins.${item.i18nKey}.description`) }}</p>
+              </div>
+              <NButton
+                type="primary"
+                size="small"
+                :loading="installingKey === item.installKey"
+                :disabled="installingKey != null && installingKey !== item.installKey"
+                @click="installBuiltin(item)"
+              >
+                {{ t('integrations.builtins.install') }}
+              </NButton>
+            </div>
           </div>
         </SectionCard>
 
-        <SectionCard v-if="factoryProfiles.length" :title="t('integrations.groups.factory')">
-          <div class="integrations-page__grid">
-            <IntegrationCard
-              v-for="profile in factoryProfiles"
-              :key="profile.id"
-              :profile="profile"
-              @click="openDetail(profile)"
-            />
-          </div>
+        <SectionCard v-if="!hasAdded && !availableBuiltins.length" :title="t('integrations.empty.title')" :description="t('integrations.empty.description')">
+          <NButton type="primary" @click="openCreate">{{ t('integrations.newIntegration') }}</NButton>
         </SectionCard>
       </div>
     </NSpin>
 
-    <NModal
-      :show="showWizard"
-      preset="card"
-      :title="t('intakeWizard.title')"
-      :style="{ width: 'min(760px, 94vw)' }"
-      :mask-closable="false"
-      @update:show="(value: boolean) => (showWizard = value)"
-    >
-      <IntakeWizard v-if="showWizard" @done="handleWizardDone" @cancel="handleWizardCancel" />
-    </NModal>
+    <CustomCreateModal :show="showCreate" @update:show="(value) => (showCreate = value)" @created="handleCreated" />
 
     <IntegrationDetailDrawer
       :profile-id="detailProfileId"
@@ -211,10 +192,60 @@ function handleDetailChanged(): void {
   gap: var(--space-4);
 }
 
+.integrations-page__subgroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.integrations-page__subgroup + .integrations-page__subgroup {
+  margin-top: var(--space-4);
+}
+
+.integrations-page__subgroup-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
 .integrations-page__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--space-3);
+}
+
+.integrations-page__builtin {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--card-padding);
+  border: 1px dashed var(--card-border-color);
+  border-radius: var(--card-radius);
+  background: var(--card-bg);
+}
+
+.integrations-page__builtin-copy {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.integrations-page__builtin-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.integrations-page__builtin-desc {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }
 
 .integrations-page__loading {

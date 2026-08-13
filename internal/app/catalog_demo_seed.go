@@ -121,11 +121,10 @@ const ShipmentDemoMappingRules = `{
   }
 }`
 
-// SeedCatalogDemo ensures a factory-side demo profile, an import_product_catalog
-// DocumentTemplate (zip-friendly MappingRules with imageLayout), an
-// import_supplier_shipment DocumentTemplate (rouzao 13-column express return),
-// an export_supplier_order DocumentTemplate (exact six-column xlsx contract),
-// and default IntegrationProfileTemplateBindings for all three document types.
+// SeedCatalogDemo ensures one factory platform profile (factory_rouzao_demo)
+// with three default file bindings: import_product_catalog (zip + imageLayout),
+// import_supplier_shipment (rouzao 13-column express return), and
+// export_supplier_order (exact six-column xlsx contract).
 //
 // Idempotent:
 //   - profile: skip create when ProfileKey already exists

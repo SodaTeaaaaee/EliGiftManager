@@ -28,10 +28,12 @@ node_modules/
 *.tsbuildinfo
 coverage/
 frontend/.vite/
+frontend/.cache/
 frontend/dist/*
 !frontend/dist/.gitkeep
 frontend/package.json.md5
 frontend-legacy/.vite/
+frontend-legacy/.cache/
 frontend-legacy/dist/*
 
 # npm/yarn/pnpm lockfiles — this project is Deno-only (deno.lock is committed)

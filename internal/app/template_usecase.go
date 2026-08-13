@@ -38,10 +38,60 @@ func validateDocumentFormat(docType, format string) error {
 	return nil
 }
 
-// ResolveDemandImportDocumentType resolves the demand-import template type from
-// the profile when callers omit documentType, then verifies that an explicit or
-// inferred type belongs to that profile. DemandKind is authoritative: retail
-// profiles must never silently fall back to the entitlement importer.
+// IsFactoryProfile reports whether the profile is a factory (supplier) surface.
+func IsFactoryProfile(profile *domain.IntegrationProfile) bool {
+	return profile != nil && profile.SourceSurface == string(domain.SourceSurfaceFactory)
+}
+
+// IsSourcePlatformProfile reports whether the profile is a source platform.
+// membership and retail leftovers both count; they must not force a second row.
+func IsSourcePlatformProfile(profile *domain.IntegrationProfile) bool {
+	if profile == nil {
+		return false
+	}
+	return profile.SourceSurface == string(domain.SourceSurfaceMembership) ||
+		profile.SourceSurface == string(domain.SourceSurfaceRetail)
+}
+
+// DemandImportInterpretation is the document-type-owned reading of a demand
+// import. Importers (controller / CSV, sibling lane) MUST use these values for
+// DemandDocument.Kind, DemandDocument.SourceSurface, and customer identity.
+// They must NOT treat IntegrationProfile.DemandKind or IdentityStrategy as the
+// unique source of truth. Identity is not stored per-platform.
+type DemandImportInterpretation struct {
+	DocumentType     string
+	DemandKind       string // DemandDocument.Kind
+	SourceSurface    string // DemandDocument.SourceSurface
+	IdentityStrategy string
+}
+
+// InterpretDemandImportDocumentType maps a demand-import document type onto
+// DemandDocument kind/surface and the import-time identity strategy. It does
+// not execute identity resolution.
+func InterpretDemandImportDocumentType(docType string) (DemandImportInterpretation, error) {
+	switch strings.TrimSpace(docType) {
+	case "import_entitlement":
+		return DemandImportInterpretation{
+			DocumentType:     "import_entitlement",
+			DemandKind:       string(domain.DemandKindMembershipEntitlement),
+			SourceSurface:    string(domain.SourceSurfaceMembership),
+			IdentityStrategy: "platform_uid",
+		}, nil
+	case "import_sales_order":
+		return DemandImportInterpretation{
+			DocumentType:     "import_sales_order",
+			DemandKind:       string(domain.DemandKindRetailOrder),
+			SourceSurface:    string(domain.SourceSurfaceRetail),
+			IdentityStrategy: IdentityStrategyOrderScopedProvisional,
+		}, nil
+	default:
+		return DemandImportInterpretation{}, fmt.Errorf("documentType %q is not a demand import type", strings.TrimSpace(docType))
+	}
+}
+
+// ResolveDemandImportDocumentType verifies an explicit demand-import
+// documentType against the profile. Callers must pass documentType; it is not
+// inferred from IntegrationProfile.DemandKind.
 func ResolveDemandImportDocumentType(profile *domain.IntegrationProfile, requested string) (string, error) {
 	if profile == nil {
 		return "", fmt.Errorf("integration profile is required")
@@ -49,14 +99,7 @@ func ResolveDemandImportDocumentType(profile *domain.IntegrationProfile, request
 
 	docType := strings.TrimSpace(requested)
 	if docType == "" {
-		switch profile.DemandKind {
-		case string(domain.DemandKindMembershipEntitlement):
-			docType = "import_entitlement"
-		case string(domain.DemandKindRetailOrder):
-			docType = "import_sales_order"
-		default:
-			return "", fmt.Errorf("profile %d has unsupported demandKind %q for demand import", profile.ID, profile.DemandKind)
-		}
+		return "", fmt.Errorf("explicit documentType is required")
 	}
 	if docType != "import_entitlement" && docType != "import_sales_order" {
 		return "", fmt.Errorf("documentType %q is not a demand import type", docType)
@@ -67,48 +110,47 @@ func ResolveDemandImportDocumentType(profile *domain.IntegrationProfile, request
 	return docType, nil
 }
 
-// ValidateProfileDocumentType enforces the legal ownership of document
-// templates. Demand imports are tied to the profile's surface and DemandKind;
-// factory document types require the corresponding explicit capability; and
-// operational demand-platform documents require their execution settings.
+// ValidateProfileDocumentType enforces legal document-template ownership.
+// Demand imports are allowed on any source platform (not factory) regardless
+// of leftover DemandKind. Factory document types require the matching
+// capability; operational source-platform documents require their settings.
 func ValidateProfileDocumentType(profile *domain.IntegrationProfile, docType string) error {
 	if profile == nil {
 		return fmt.Errorf("integration profile is required")
 	}
 
 	docType = strings.TrimSpace(docType)
+	capability := ""
 	allowed := false
 	switch docType {
-	case "import_entitlement":
-		allowed = profile.SourceSurface == string(domain.SourceSurfaceMembership) &&
-			profile.DemandKind == string(domain.DemandKindMembershipEntitlement)
-	case "import_sales_order":
-		allowed = profile.SourceSurface == string(domain.SourceSurfaceRetail) &&
-			profile.DemandKind == string(domain.DemandKindRetailOrder)
+	case "import_entitlement", "import_sales_order":
+		allowed = IsSourcePlatformProfile(profile)
+		capability = "source_platform"
 	case "import_product_catalog":
-		allowed = profile.SourceSurface == string(domain.SourceSurfaceFactory) && profile.SupportsImportProductCatalog
+		allowed = IsFactoryProfile(profile) && profile.SupportsImportProductCatalog
+		capability = "supportsImportProductCatalog"
 	case "export_supplier_order":
-		allowed = profile.SourceSurface == string(domain.SourceSurfaceFactory) && profile.SupportsExportSupplierOrder
+		allowed = IsFactoryProfile(profile) && profile.SupportsExportSupplierOrder
+		capability = "supportsExportSupplierOrder"
 	case "import_supplier_shipment":
-		allowed = profile.SourceSurface == string(domain.SourceSurfaceFactory) && profile.SupportsImportSupplierShipment
+		allowed = IsFactoryProfile(profile) && profile.SupportsImportSupplierShipment
+		capability = "supportsImportSupplierShipment"
 	case "export_source_tracking_update":
-		allowed = profile.SourceSurface != string(domain.SourceSurfaceFactory) &&
-			(profile.SourceSurface == string(domain.SourceSurfaceMembership) || profile.SourceSurface == string(domain.SourceSurfaceRetail)) &&
-			profile.TrackingSyncMode == "document_export"
+		allowed = IsSourcePlatformProfile(profile) && profile.TrackingSyncMode == "document_export"
+		capability = "trackingSyncMode=document_export"
 	case "import_carrier_mapping":
-		allowed = profile.SourceSurface != string(domain.SourceSurfaceFactory) &&
-			(profile.SourceSurface == string(domain.SourceSurfaceMembership) || profile.SourceSurface == string(domain.SourceSurfaceRetail)) &&
-			profile.RequiresCarrierMapping
+		allowed = IsSourcePlatformProfile(profile) && profile.RequiresCarrierMapping
+		capability = "requiresCarrierMapping"
 	default:
 		return fmt.Errorf("invalid documentType: %q", docType)
 	}
 	if !allowed {
 		return fmt.Errorf(
-			"documentType %q is not supported by profile %d (surface=%q demandKind=%q)",
+			"documentType %q is not supported by profile %d (surface=%q capability=%q)",
 			docType,
 			profile.ID,
 			profile.SourceSurface,
-			profile.DemandKind,
+			capability,
 		)
 	}
 	return nil

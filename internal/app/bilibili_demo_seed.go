@@ -12,7 +12,9 @@ import (
 // Mapping header literals are locked to SampleData/需求平台——哔哩哔哩
 // (no real PII is copied into the seed).
 const (
-	BilibiliDemoProfileKey       = "bilibili_membership_demo"
+	BilibiliDemoProfileKey = "bilibili_membership_demo"
+	// BilibiliRetailDemoProfileKey is no longer seeded as a standalone profile.
+	// Kept only so existing callers of the old symbol still compile.
 	BilibiliRetailDemoProfileKey = "bilibili_retail_demo"
 
 	BilibiliImportEntitlementTemplateKey = "bilibili_import_entitlement"
@@ -120,12 +122,14 @@ const BilibiliImportCarrierMappingRules = `{
   }
 }`
 
-// SeedBilibiliDemo ensures independent Bilibili membership and retail profiles,
-// their demand-import templates, and the operational carrier/tracking templates.
+// SeedBilibiliDemo ensures one Bilibili demand profile (bilibili_membership_demo)
+// plus four document templates and four default bindings on that same profile:
+// import_entitlement, import_sales_order, export_source_tracking_update, and
+// import_carrier_mapping.
 //
-// Idempotent and convergent by ProfileKey / TemplateKey / default binding:
-// existing seed-owned records are updated to the current production contract,
-// while repeated calls do not create duplicates.
+// Idempotent and convergent by ProfileKey / TemplateKey / (profileID, document_type)
+// default binding: existing seed-owned records are updated to the current
+// production contract, while repeated calls do not create duplicates.
 //
 // templateRepo / bindingRepo may be nil only when the caller does not need
 // template+binding seeding (no-op for those parts). profileRepo is required.
@@ -139,17 +143,13 @@ func SeedBilibiliDemo(
 		return nil, fmt.Errorf("seed bilibili demo: profile repository is required")
 	}
 
-	membershipProfile, err := ensureBilibiliDemoProfile(ctx, profileRepo)
-	if err != nil {
-		return nil, err
-	}
-	retailProfile, err := ensureBilibiliRetailDemoProfile(ctx, profileRepo)
+	profile, err := ensureBilibiliDemoProfile(ctx, profileRepo)
 	if err != nil {
 		return nil, err
 	}
 
 	if templateRepo == nil || bindingRepo == nil {
-		return membershipProfile, nil
+		return profile, nil
 	}
 
 	entitlementTmpl, err := ensureBilibiliTemplate(
@@ -163,7 +163,7 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureBilibiliBinding(ctx, bindingRepo, membershipProfile.ID, entitlementTmpl.ID, BilibiliImportEntitlementDocType); err != nil {
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, entitlementTmpl.ID, BilibiliImportEntitlementDocType); err != nil {
 		return nil, err
 	}
 
@@ -178,7 +178,7 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureBilibiliBinding(ctx, bindingRepo, retailProfile.ID, salesOrderTmpl.ID, BilibiliImportSalesOrderDocType); err != nil {
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, salesOrderTmpl.ID, BilibiliImportSalesOrderDocType); err != nil {
 		return nil, err
 	}
 
@@ -193,10 +193,8 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	for _, profileID := range []uint{membershipProfile.ID, retailProfile.ID} {
-		if err := ensureBilibiliBinding(ctx, bindingRepo, profileID, exportTmpl.ID, BilibiliExportTrackingDocType); err != nil {
-			return nil, err
-		}
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, exportTmpl.ID, BilibiliExportTrackingDocType); err != nil {
+		return nil, err
 	}
 
 	carrierTmpl, err := ensureBilibiliTemplate(
@@ -210,13 +208,11 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	for _, profileID := range []uint{membershipProfile.ID, retailProfile.ID} {
-		if err := ensureBilibiliBinding(ctx, bindingRepo, profileID, carrierTmpl.ID, BilibiliImportCarrierDocType); err != nil {
-			return nil, err
-		}
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, carrierTmpl.ID, BilibiliImportCarrierDocType); err != nil {
+		return nil, err
 	}
 
-	return membershipProfile, nil
+	return profile, nil
 }
 
 func ensureBilibiliDemoProfile(
@@ -239,29 +235,6 @@ func ensureBilibiliDemoProfile(
 		RequiresCarrierMapping:    true,
 		RequiresExternalOrderNo:   false,
 		AllowsManualClosure:       false,
-		ConnectorKey:              "eli.local_export",
-		FactorySupplierPlatform:   "bilibili",
-	})
-}
-
-func ensureBilibiliRetailDemoProfile(
-	ctx context.Context,
-	profileRepo domain.IntegrationProfileRepository,
-) (*domain.IntegrationProfile, error) {
-	return ensureBilibiliProfile(ctx, profileRepo, dto.CreateProfileInput{
-		ProfileKey:                BilibiliRetailDemoProfileKey,
-		SourceChannel:             "bilibili",
-		SourceSurface:             string(domain.SourceSurfaceRetail),
-		DemandKind:                string(domain.DemandKindRetailOrder),
-		InitialAllocationStrategy: "demand_driven",
-		IdentityStrategy:          IdentityStrategyOrderScopedProvisional,
-		EntitlementAuthorityMode:  "upstream_platform",
-		RecipientInputMode:        "none",
-		ReferenceStrategy:         "order_line_level",
-		TrackingSyncMode:          "document_export",
-		ClosurePolicy:             "close_after_sync",
-		RequiresCarrierMapping:    true,
-		RequiresExternalOrderNo:   true,
 		ConnectorKey:              "eli.local_export",
 		FactorySupplierPlatform:   "bilibili",
 	})

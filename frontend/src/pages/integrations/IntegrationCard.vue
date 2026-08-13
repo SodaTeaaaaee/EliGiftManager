@@ -1,14 +1,12 @@
 <script setup lang="ts">
 /**
- * IntegrationCard — one integration profile summarized as a clickable card
- * (plan P4 integrations page's per-group card grid). Purely presentational:
- * no bridge calls, no state of its own — `IntegrationsPage.vue` owns the
- * `listProfiles()` fetch and passes each `IntegrationProfile` down.
+ * IntegrationCard — one added platform. Builtin shortcut and custom create
+ * render through this same card; readiness lives on the shared detail drawer.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { StatusBadge } from '@/shared/ui/status'
 import type { IntegrationProfile } from '@/entities/profile'
+import { isFactoryProfile } from './profileAvailability'
 
 const props = defineProps<{ profile: IntegrationProfile }>()
 
@@ -16,51 +14,27 @@ defineEmits<{ click: [] }>()
 
 const { t } = useI18n({ useScope: 'global' })
 
-const CAPABILITY_KEYS = [
-  'supportsPartialShipment',
-  'supportsApiImport',
-  'supportsApiExport',
-  'requiresCarrierMapping',
-  'requiresExternalOrderNo',
-  'allowsManualClosure',
-] as const
-
-const FACTORY_CAPABILITY_KEYS = [
-  'supportsExportSupplierOrder',
-  'supportsImportProductCatalog',
-  'supportsImportSupplierShipment',
-] as const
-
-const visibleCapabilityKeys = computed(() =>
-  props.profile.sourceSurface === 'factory' ? FACTORY_CAPABILITY_KEYS : CAPABILITY_KEYS,
+const title = computed(() => props.profile.sourceChannel || props.profile.profileKey)
+const showKey = computed(() =>
+  Boolean(props.profile.sourceChannel) && props.profile.sourceChannel !== props.profile.profileKey,
 )
-const enabledCapabilityCount = computed(() => visibleCapabilityKeys.value.filter((key) => props.profile[key]).length)
+const surfaceLabel = computed(() =>
+  isFactoryProfile(props.profile)
+    ? t('integrations.card.surfaceFactory')
+    : t('integrations.card.surfaceSource'),
+)
 </script>
 
 <template>
   <button type="button" class="integration-card" @click="$emit('click')">
     <header class="integration-card__header">
-      <h3 class="integration-card__title">{{ profile.profileKey }}</h3>
-      <span v-if="profile.sourceSurface === 'factory'" class="integration-card__surface-label">
-        {{ profile.factorySupplierPlatform || profile.sourceSurface }}
-      </span>
-      <StatusBadge v-else dimension="demandKind" :value="profile.demandKind" size="sm" />
+      <h3 class="integration-card__title">{{ title }}</h3>
+      <span class="integration-card__surface-label">{{ surfaceLabel }}</span>
     </header>
-    <p class="integration-card__channel">{{ profile.sourceChannel || '—' }} · {{ profile.sourceSurface || '—' }}</p>
-    <dl class="integration-card__zones">
-      <div class="integration-card__zone">
-        <dt>{{ t('integrations.card.connector') }}</dt>
-        <dd>{{ profile.connectorKey || '—' }}</dd>
-      </div>
-      <div class="integration-card__zone">
-        <dt>{{ t('integrations.card.capabilities') }}</dt>
-        <dd>{{ enabledCapabilityCount }}/{{ visibleCapabilityKeys.length }}</dd>
-      </div>
-      <div class="integration-card__zone">
-        <dt>{{ t('integrations.card.templates') }}</dt>
-        <dd>{{ t('integrations.actions.manageBindings') }}</dd>
-      </div>
-    </dl>
+    <p v-if="showKey" class="integration-card__channel">{{ profile.profileKey }}</p>
+    <p v-else-if="profile.sourceSurface === 'factory' && profile.factorySupplierPlatform" class="integration-card__channel">
+      {{ profile.factorySupplierPlatform }}
+    </p>
   </button>
 </template>
 
@@ -116,38 +90,8 @@ const enabledCapabilityCount = computed(() => visibleCapabilityKeys.value.filter
 }
 
 .integration-card__surface-label {
+  flex-shrink: 0;
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-}
-
-.integration-card__zones {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-2);
-  margin: var(--space-2) 0 0;
-}
-
-.integration-card__zone {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.integration-card__zone dt {
-  font-family: var(--font-body);
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.integration-card__zone dd {
-  margin: 0;
-  font-family: var(--font-body);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 </style>
