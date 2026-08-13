@@ -1,33 +1,18 @@
-.wails-scaffold/
-.vue-scaffold/
-.cache/
-.deepseek/
+# ── Build output & runtime data ────────────────────────────────────────────
 build/bin/
 data/
 SampleData/
-.env
-.env.local
-.env.*.local
-frontend/.vite/
-frontend/node_modules/.tmp/
-frontend/dist/*
-!frontend/dist/.gitkeep
-frontend/node_modules/
-frontend/coverage/
-frontend/*.tsbuildinfo
-frontend/package.json.md5
-frontend/package-lock.json
-frontend/pnpm-lock.yaml
-frontend/yarn.lock
-.eslintcache
-.stylelintcache
-*.log
-.vscode/
-.idea/
-# Local helper scripts (transient — do not commit)
-_*.bat
+*.exe
+*.syso
 
-# Go
+# SQLite runtime artifacts (also produced by ad-hoc tests outside data/)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ── Go ─────────────────────────────────────────────────────────────────────
 *.test
 coverage.out
 GOCACHE/
@@ -36,45 +21,83 @@ go-cache/
 go.work
 go.work.sum
 .gocache/
+/vendor/
 
-# Claude Code
+# ── Frontend (Deno + Vite) ─────────────────────────────────────────────────
+node_modules/
+*.tsbuildinfo
+coverage/
+frontend/.vite/
+frontend/dist/*
+!frontend/dist/.gitkeep
+frontend/package.json.md5
+frontend-legacy/.vite/
+frontend-legacy/dist/*
+
+# npm/yarn/pnpm lockfiles — this project is Deno-only (deno.lock is committed)
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Linter caches
+.eslintcache
+.stylelintcache
+
+# ── Wails ──────────────────────────────────────────────────────────────────
+wailsdev.log
+.wails-scaffold/
+.vue-scaffold/
+
+# ── Local caches & environment ─────────────────────────────────────────────
+.cache/
+.deepseek/
+.env
+.env.local
+.env.*.local
+*.log
+*.tmp
+.tmp/
+tmp/
+
+# ── Agent / tooling scratch ────────────────────────────────────────────────
 .claude/
 .agent/
 .agents/
 .agent-team/
+.superpowers/
 mcps/
 AGENTS.md
-# CLAUDE.md
+# CLAUDE.md is tracked on purpose — do not ignore it.
 
-# Wails
-wailsdev.log
-
-# Editors and OS
-.DS_Store
-Thumbs.db
-*.syso
-
-# Local accidental artifacts
-$null
--Force/
-env/
-/go/
-
-# agent/tooling output residue (typecheck/build console dumps, agent scratch)
+# Console dumps left behind by typecheck/build runs
 frontend/*_out.txt
 frontend/*_fresh.txt
 frontend-legacy/*_out.txt
 frontend-legacy/*_fresh.txt
 
-# Legacy frontend generated/local artifacts (mirrors frontend rules)
-frontend-legacy/.vite/
-frontend-legacy/node_modules/
-frontend-legacy/dist/*
-frontend-legacy/coverage/
-frontend-legacy/*.tsbuildinfo
+# Local helper scripts (transient — do not commit)
+_*.bat
 
 # Handoff documents
 docs/handoff/
 
-# Claude Code SDD scratch (task briefs, reports, review packages, progress ledger)
-.superpowers/
+# ── Editors & OS ───────────────────────────────────────────────────────────
+.vscode/
+.idea/
+.vs/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ── Merge / patch residue ──────────────────────────────────────────────────
+*.orig
+*.rej
+
+# ── Local accidental artifacts (shell redirection & flag typos on Windows) ──
+$null
+-Force/
+env/
+/go/
