@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -14,9 +15,10 @@ import (
 
 // ProductController exposes product Wails bindings.
 type ProductController struct {
-	uc         app.ProductUseCase
-	gdb        *gorm.DB
-	assetStore *service.AssetStore
+	uc            app.ProductUseCase
+	gdb           *gorm.DB
+	assetStore    *service.AssetStore
+	assetStoreErr error
 }
 
 func NewProductController() *ProductController {
@@ -28,12 +30,12 @@ func NewProductController() *ProductController {
 	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	mapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
-	// AssetStore is optional for non-image catalog imports; zip imageLayout needs it.
-	assetStore, _ := service.NewAssetStore()
+	// AssetStore is optional for non-image catalog imports; ImageLayout needs it.
+	assetStore, assetErr := service.NewAssetStore()
 	uc := app.NewProductUseCase(masterRepo, productRepo, waveRepo)
 	uc = app.WithCatalogImportDeps(uc, mapping, profileRepo, assetStore)
 	uc = app.WithCatalogImportEvidence(uc, app.NewImportEvidenceUseCase(infra.NewImportEvidenceRepository(gdb)))
-	return &ProductController{uc: uc, gdb: gdb, assetStore: assetStore}
+	return &ProductController{uc: uc, gdb: gdb, assetStore: assetStore, assetStoreErr: assetErr}
 }
 
 // CreateProductMaster creates a new product master record.
@@ -55,9 +57,33 @@ func (c *ProductController) UpdateProductMaster(input dto.UpdateProductMasterInp
 }
 
 // SnapshotProductsForWave creates wave-scoped product snapshots from master IDs.
+// All Creates run in one DB transaction so a later failure cannot leave a partial snapshot set.
 func (c *ProductController) SnapshotProductsForWave(input dto.SnapshotProductsInput) ([]dto.ProductDTO, error) {
 	ctx := appContext
-	return c.uc.SnapshotProductsForWave(ctx, input)
+	if c.gdb == nil {
+		if c.uc == nil {
+			return nil, fmt.Errorf("product database is not configured")
+		}
+		return c.uc.SnapshotProductsForWave(ctx, input)
+	}
+	var results []dto.ProductDTO
+	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		uc := app.NewProductUseCase(
+			infra.NewProductMasterRepository(tx),
+			infra.NewProductRepository(tx),
+			infra.NewWaveRepository(tx),
+		)
+		products, snapErr := uc.SnapshotProductsForWave(ctx, input)
+		if snapErr != nil {
+			return snapErr
+		}
+		results = products
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }
 
 // ListProductsByWave returns all products snapshotted into a wave.
@@ -69,6 +95,9 @@ func (c *ProductController) ListProductsByWave(waveID uint) ([]dto.ProductDTO, e
 // ImportProductCatalog upserts ProductMaster rows from a template-mapped catalog sheet.
 func (c *ProductController) ImportProductCatalog(input dto.ImportProductCatalogInput) (dto.ImportProductCatalogResult, error) {
 	ctx := appContext
+	if c.gdb == nil {
+		return dto.ImportProductCatalogResult{}, fmt.Errorf("product catalog import database is not configured")
+	}
 	templateRepo := infra.NewDocumentTemplateRepository(c.gdb)
 	bindingRepo := infra.NewProfileTemplateBindingRepository(c.gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(c.gdb)
@@ -81,49 +110,78 @@ func (c *ProductController) ImportProductCatalog(input dto.ImportProductCatalogI
 	}); err != nil {
 		return dto.ImportProductCatalogResult{}, fmt.Errorf("prepare catalog import evidence: %w", err)
 	}
-	if input.ImportMode == "reject_all" {
-		stage, err := c.assetStore.BeginStage()
-		if err != nil {
-			return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
-		}
-		var result *dto.ImportProductCatalogResult
-		err = c.gdb.Transaction(func(tx *gorm.DB) error {
-			masterRepo := infra.NewProductMasterRepository(tx)
-			productRepo := infra.NewProductRepository(tx)
-			waveRepo := infra.NewWaveRepository(tx)
-			templateRepo := infra.NewDocumentTemplateRepository(tx)
-			bindingRepo := infra.NewProfileTemplateBindingRepository(tx)
-			profileRepo := infra.NewIntegrationProfileRepository(tx)
-			txMapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
-			uc := app.NewProductUseCase(masterRepo, productRepo, waveRepo)
-			uc = app.WithCatalogImportDeps(uc, txMapping, profileRepo, stage.Store())
-			uc = app.WithCatalogImportEvidence(uc, evidence)
-			imported, importErr := uc.ImportProductCatalog(ctx, input)
-			if importErr != nil {
-				return importErr
+	if _, rules, resolveErr := mapping.ResolveTemplateAndRules(ctx, input.IntegrationProfileID, "import_product_catalog"); resolveErr == nil {
+		if catalogImageLayoutEnabled(rules) {
+			if err := c.requireAssetStore(); err != nil {
+				return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
 			}
-			result = imported
-			return stage.Commit()
-		})
-		if err != nil {
-			_ = stage.Rollback()
-			return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
 		}
-		if err := stage.Finalize(); err != nil {
-			return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizePending(ctx))
-		}
-		if err := evidence.FinalizePending(ctx); err != nil {
-			return dto.ImportProductCatalogResult{}, err
-		}
-		return *result, nil
 	}
-	masterRepo := infra.NewProductMasterRepository(c.gdb)
-	productRepo := infra.NewProductRepository(c.gdb)
-	waveRepo := infra.NewWaveRepository(c.gdb)
-	uc := app.NewProductUseCase(masterRepo, productRepo, waveRepo)
-	uc = app.WithCatalogImportDeps(uc, mapping, profileRepo, c.assetStore)
-	uc = app.WithCatalogImportEvidence(uc, evidence)
-	result, err := uc.ImportProductCatalog(ctx, input)
+
+	mode := input.ImportMode
+	if mode == "" {
+		mode = "skip_invalid"
+	}
+	// reject_all with a working store stages images so a rolled-back transaction
+	// cannot leave published assets. skip_invalid and non-image (non-ZIP) imports
+	// still run inside a DB transaction, matching that ZIP/reject_all wrapping.
+	if mode == "reject_all" && c.assetStore != nil {
+		return c.importProductCatalogStaged(ctx, input, evidence)
+	}
+	return c.importProductCatalogInTransaction(ctx, input, evidence, c.assetStore)
+}
+
+func catalogImageLayoutEnabled(rules *app.TemplateMappingRules) bool {
+	return rules != nil && rules.ImageLayout != nil && rules.ImageLayout.Enabled
+}
+
+func (c *ProductController) requireAssetStore() error {
+	if c.assetStore != nil {
+		return nil
+	}
+	if c.assetStoreErr != nil {
+		return fmt.Errorf("asset store: %w", c.assetStoreErr)
+	}
+	return fmt.Errorf("asset store is not configured")
+}
+
+func (c *ProductController) importProductCatalogStaged(ctx context.Context, input dto.ImportProductCatalogInput, evidence *app.ImportEvidenceUseCase) (dto.ImportProductCatalogResult, error) {
+	stage, err := c.assetStore.BeginStage()
+	if err != nil {
+		return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
+	}
+	var result *dto.ImportProductCatalogResult
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
+		imported, importErr := c.runProductCatalogImport(ctx, tx, input, evidence, stage.Store())
+		if importErr != nil {
+			return importErr
+		}
+		result = imported
+		return stage.Commit()
+	})
+	if err != nil {
+		_ = stage.Rollback()
+		return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
+	}
+	if err := stage.Finalize(); err != nil {
+		return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizePending(ctx))
+	}
+	if err := evidence.FinalizePending(ctx); err != nil {
+		return dto.ImportProductCatalogResult{}, err
+	}
+	return *result, nil
+}
+
+func (c *ProductController) importProductCatalogInTransaction(ctx context.Context, input dto.ImportProductCatalogInput, evidence *app.ImportEvidenceUseCase, store *service.AssetStore) (dto.ImportProductCatalogResult, error) {
+	var result *dto.ImportProductCatalogResult
+	err := c.gdb.Transaction(func(tx *gorm.DB) error {
+		imported, importErr := c.runProductCatalogImport(ctx, tx, input, evidence, store)
+		if importErr != nil {
+			return importErr
+		}
+		result = imported
+		return nil
+	})
 	if err != nil {
 		return dto.ImportProductCatalogResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
 	}
@@ -131,4 +189,18 @@ func (c *ProductController) ImportProductCatalog(input dto.ImportProductCatalogI
 		return dto.ImportProductCatalogResult{}, err
 	}
 	return *result, nil
+}
+
+func (c *ProductController) runProductCatalogImport(ctx context.Context, tx *gorm.DB, input dto.ImportProductCatalogInput, evidence *app.ImportEvidenceUseCase, store *service.AssetStore) (*dto.ImportProductCatalogResult, error) {
+	masterRepo := infra.NewProductMasterRepository(tx)
+	productRepo := infra.NewProductRepository(tx)
+	waveRepo := infra.NewWaveRepository(tx)
+	templateRepo := infra.NewDocumentTemplateRepository(tx)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(tx)
+	profileRepo := infra.NewIntegrationProfileRepository(tx)
+	txMapping := app.NewTemplateMappingService(templateRepo, bindingRepo, profileRepo)
+	uc := app.NewProductUseCase(masterRepo, productRepo, waveRepo)
+	uc = app.WithCatalogImportDeps(uc, txMapping, profileRepo, store)
+	uc = app.WithCatalogImportEvidence(uc, evidence)
+	return uc.ImportProductCatalog(ctx, input)
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -13,9 +14,23 @@ import (
 )
 
 func readCSV(path string, opts ReadOptions) (*Sheet, error) {
+	return readCSVWithLimits(path, opts, MaxFileBytes, MaxRows)
+}
+
+func readCSVWithLimits(path string, opts ReadOptions, maxBytes int64, maxRows int) (*Sheet, error) {
+	if err := checkFileByteLimit(path, maxBytes); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("open csv file %q: %w", path, err)
+		}
+		return nil, fmt.Errorf("csv file %q: %w", path, err)
+	}
+
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("open csv file %q: %w", path, err)
+	}
+	if int64(len(raw)) > maxBytes {
+		return nil, errByteLimit(path, int64(len(raw)), maxBytes)
 	}
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("csv file %q is empty", path)
@@ -30,9 +45,19 @@ func readCSV(path string, opts ReadOptions) (*Sheet, error) {
 	// Ragged rows must not hard-fail — guard width manually at the Sheet layer.
 	reader.FieldsPerRecord = -1
 
-	records, err := reader.ReadAll()
-	if err != nil {
-		return nil, fmt.Errorf("read csv file %q: %w", path, err)
+	records := make([][]string, 0, 64)
+	for {
+		rec, err := reader.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("read csv file %q: %w", path, err)
+		}
+		if maxRows > 0 && len(records) >= maxRows {
+			return nil, errRowLimit(path, len(records)+1, maxRows)
+		}
+		records = append(records, rec)
 	}
 	sheet, err := splitHeaderRows(records, opts.HasHeader)
 	if err != nil {

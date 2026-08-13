@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -29,14 +30,14 @@ func (noopHistoryHeadUC) GetCurrentHeadNodeIDAndHash(ctx context.Context, _ uint
 // ── test setup ──
 
 type projTestSetup struct {
-	syncRepo    *mockChannelSyncRepo
-	closureRepo *mockClosureDecisionRepo
+	syncRepo    *overviewProjSyncRepo
+	closureRepo *overviewProjClosureRepo
 	uc          WaveOverviewProjectionUseCase
 }
 
 func newProjTestSetup() *projTestSetup {
-	sr := newMockChannelSyncRepo()
-	cr := newMockClosureDecisionRepo()
+	sr := newOverviewProjSyncRepo()
+	cr := newOverviewProjClosureRepo()
 	return &projTestSetup{
 		syncRepo:    sr,
 		closureRepo: cr,
@@ -247,6 +248,54 @@ func TestProjectWaveOverviewManualClosureCandidatesWithoutJobsAwaitingManualClos
 	}
 }
 
+func TestDeriveStageHonorsPersistedClosed(t *testing.T) {
+	t.Parallel()
+
+	base := dto.WaveOverviewDTO{
+		Wave: dto.WaveDTO{
+			ID:             9,
+			LifecycleStage: string(domain.LifecycleStageClosed),
+		},
+		DemandCount:        0, // would otherwise be intake
+		FulfillmentCount:   8,
+		SupplierOrderCount: 3,
+		ShipmentCount:      2,
+	}
+	if got := deriveStage(base); got != string(domain.LifecycleStageClosed) {
+		t.Errorf("deriveStage = %q, want %q", got, domain.LifecycleStageClosed)
+	}
+}
+
+func TestProjectWaveOverviewHonorsPersistedClosed(t *testing.T) {
+	t.Parallel()
+	p := newProjTestSetup()
+
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, string(domain.LifecycleStageClosed)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.ProjectedLifecycleStage != string(domain.LifecycleStageClosed) {
+		t.Errorf("ProjectedLifecycleStage = %q, want %q", result.ProjectedLifecycleStage, domain.LifecycleStageClosed)
+	}
+}
+
+func TestProjectWaveOverviewPersistedClosedNotOverriddenByPendingJobs(t *testing.T) {
+	t.Parallel()
+	p := newProjTestSetup()
+	p.addJob(1, "pending")
+
+	result, err := p.uc.ProjectWaveOverview(context.Background(), baseOverview(1, string(domain.LifecycleStageClosed)))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.ChannelSyncPendingCount != 1 {
+		t.Errorf("ChannelSyncPendingCount = %d, want 1", result.ChannelSyncPendingCount)
+	}
+	if result.ProjectedLifecycleStage != string(domain.LifecycleStageClosed) {
+		t.Errorf("ProjectedLifecycleStage = %q, want %q", result.ProjectedLifecycleStage, domain.LifecycleStageClosed)
+	}
+}
+
 func TestProjectWaveOverviewManualClosureCandidatesCoveredWithoutJobsSetsClosed(t *testing.T) {
 	t.Parallel()
 	p := newProjTestSetup()
@@ -264,4 +313,123 @@ func TestProjectWaveOverviewManualClosureCandidatesCoveredWithoutJobsSetsClosed(
 	if result.ProjectedLifecycleStage != "closed" {
 		t.Errorf("ProjectedLifecycleStage = %q, want closed", result.ProjectedLifecycleStage)
 	}
+}
+
+// overviewProjSyncRepo is a projection-local ChannelSyncRepository so these
+// tests do not depend on channel_sync_test.go mocks.
+type overviewProjSyncRepo struct {
+	mu       sync.Mutex
+	jobs     map[uint]*domain.ChannelSyncJob
+	jobItems map[uint][]*domain.ChannelSyncItem
+	lastID   uint
+}
+
+func newOverviewProjSyncRepo() *overviewProjSyncRepo {
+	return &overviewProjSyncRepo{
+		jobs:     make(map[uint]*domain.ChannelSyncJob),
+		jobItems: make(map[uint][]*domain.ChannelSyncItem),
+	}
+}
+
+func (m *overviewProjSyncRepo) next() uint { m.lastID++; return m.lastID }
+
+func (m *overviewProjSyncRepo) CreateJob(_ context.Context, job *domain.ChannelSyncJob) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	job.ID = m.next()
+	cp := *job
+	m.jobs[job.ID] = &cp
+	return nil
+}
+
+func (m *overviewProjSyncRepo) FindJobByID(_ context.Context, id uint) (*domain.ChannelSyncJob, error) {
+	return nil, nil
+}
+
+func (m *overviewProjSyncRepo) ListJobsByWave(_ context.Context, waveID uint) ([]domain.ChannelSyncJob, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.ChannelSyncJob
+	for _, j := range m.jobs {
+		if j.WaveID == waveID {
+			out = append(out, *j)
+		}
+	}
+	return out, nil
+}
+
+func (m *overviewProjSyncRepo) SaveJob(context.Context, *domain.ChannelSyncJob) error { return nil }
+
+func (m *overviewProjSyncRepo) CreateItem(_ context.Context, item *domain.ChannelSyncItem) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	item.ID = m.next()
+	cp := *item
+	m.jobItems[item.ChannelSyncJobID] = append(m.jobItems[item.ChannelSyncJobID], &cp)
+	return nil
+}
+
+func (m *overviewProjSyncRepo) SaveItem(context.Context, *domain.ChannelSyncItem) error { return nil }
+
+func (m *overviewProjSyncRepo) ListItemsByJob(_ context.Context, jobID uint) ([]domain.ChannelSyncItem, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ll := m.jobItems[jobID]
+	out := make([]domain.ChannelSyncItem, len(ll))
+	for i, it := range ll {
+		out[i] = *it
+	}
+	return out, nil
+}
+
+func (m *overviewProjSyncRepo) AtomicCreateChannelSync(context.Context, *domain.ChannelSyncJob, []*domain.ChannelSyncItem, *domain.BasisPinParam) error {
+	return nil
+}
+
+func (m *overviewProjSyncRepo) CountJobsByProfileID(context.Context, uint) (int64, error) {
+	return 0, nil
+}
+
+type overviewProjClosureRepo struct {
+	mu      sync.Mutex
+	records map[uint]*domain.ChannelClosureDecisionRecord
+	lastID  uint
+}
+
+func newOverviewProjClosureRepo() *overviewProjClosureRepo {
+	return &overviewProjClosureRepo{records: make(map[uint]*domain.ChannelClosureDecisionRecord)}
+}
+
+func (m *overviewProjClosureRepo) Create(_ context.Context, record *domain.ChannelClosureDecisionRecord) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lastID++
+	record.ID = m.lastID
+	cp := *record
+	m.records[record.ID] = &cp
+	return nil
+}
+
+func (m *overviewProjClosureRepo) AtomicCreate(context.Context, []*domain.ChannelClosureDecisionRecord) error {
+	return nil
+}
+
+func (m *overviewProjClosureRepo) ListByFulfillmentLine(context.Context, uint) ([]domain.ChannelClosureDecisionRecord, error) {
+	return nil, nil
+}
+
+func (m *overviewProjClosureRepo) ListByWave(_ context.Context, waveID uint) ([]domain.ChannelClosureDecisionRecord, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []domain.ChannelClosureDecisionRecord
+	for _, r := range m.records {
+		if r.WaveID == waveID {
+			out = append(out, *r)
+		}
+	}
+	return out, nil
+}
+
+func (m *overviewProjClosureRepo) CountByProfileID(context.Context, uint) (int64, error) {
+	return 0, nil
 }

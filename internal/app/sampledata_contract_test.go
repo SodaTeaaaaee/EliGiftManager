@@ -2,12 +2,14 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/tabular"
@@ -31,11 +33,15 @@ func sampleDataPath(t *testing.T, relative string) string {
 	t.Helper()
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
-		t.Skip("SampleData contract skipped: repository root unavailable")
+		t.Fatal("SampleData contract: repository root unavailable")
 	}
 	path := filepath.Join(filepath.Dir(source), "..", "..", "SampleData", filepath.FromSlash(relative))
 	if _, err := os.Stat(path); err != nil {
-		t.Skipf("SampleData fixture missing: %s", relative)
+		// SampleData/ is gitignored and optional. File-backed contracts skip
+		// only when this fixture is absent. Kind/documentType alignment is
+		// asserted by TestSampleDataSeedMappingKindDocumentTypeAlignment,
+		// which never skips and does not read SampleData files.
+		t.Skipf("SampleData fixture optional and missing (gitignored SampleData/): %s", relative)
 	}
 	return path
 }
@@ -77,8 +83,16 @@ func runDemandSampleContract(t *testing.T, path, profileKey, documentType string
 	if err != nil || profile == nil {
 		sampleContractFailure(t, "demand profile lookup")
 	}
+	docType, err := ResolveDemandImportDocumentType(profile, documentType)
+	if err != nil {
+		sampleContractFailure(t, "demand documentType resolution")
+	}
+	interp, err := InterpretDemandImportDocumentType(docType)
+	if err != nil {
+		sampleContractFailure(t, "demand documentType interpretation")
+	}
 	mapping := NewTemplateMappingService(infra.NewDocumentTemplateRepository(gdb), infra.NewProfileTemplateBindingRepository(gdb), infra.NewIntegrationProfileRepository(gdb))
-	_, rules, err := mapping.ResolveDemandImportTemplateAndRules(ctx, profile.ID, documentType, "")
+	_, rules, err := mapping.ResolveDemandImportTemplateAndRules(ctx, profile.ID, docType, "")
 	if err != nil {
 		sampleContractFailure(t, "demand template resolution")
 	}
@@ -86,7 +100,7 @@ func runDemandSampleContract(t *testing.T, path, profileKey, documentType string
 	if err != nil || len(sheet.Rows) == 0 {
 		sampleContractFailure(t, "demand source parse")
 	}
-	_, mapped, rowErrors, _, err := mapping.BuildDemandImportPipelineWithMode(ctx, profile.ID, documentType, nil, sheet.Rows, sheet.Headers, "skip_invalid")
+	_, mapped, rowErrors, _, err := mapping.BuildDemandImportPipelineWithMode(ctx, profile.ID, docType, nil, sheet.Rows, sheet.Headers, "skip_invalid")
 	if err != nil {
 		sampleContractFailure(t, "demand row mapping")
 	}
@@ -99,17 +113,12 @@ func runDemandSampleContract(t *testing.T, path, profileKey, documentType string
 	for _, rowErr := range rowErrors {
 		MarkImportEvidenceFailure(records, rowErr.RowIndex, "mapping_error", rowErr.Reason, nil)
 	}
-	intake := NewDemandIntakeUseCase(infra.NewDemandRepository(gdb))
-	for i := range mapped {
-		doc := &domain.DemandDocument{Kind: profile.DemandKind, CaptureMode: "sample_contract", SourceChannel: profile.SourceChannel, SourceSurface: profile.SourceSurface, IntegrationProfileID: &profile.ID, SourceDocumentNo: mapped[i].Document.SourceDocumentNo, SourceCustomerRef: mapped[i].Document.SourceCustomerRef}
-		line := *mapped[i].Line
-		if err := intake.ImportDemand(ctx, doc, []*domain.DemandLine{&line}); err != nil {
-			sampleContractFailure(t, "demand persistence")
-		}
-		MarkImportEvidenceSuccess(records, line.SourceLineNo-1, "demand_document", doc.ID)
+	persistedLines, persistErr := persistSampleDemandImport(ctx, gdb, profile, interp, mapped, records)
+	if persistErr != nil || persistedLines == 0 {
+		sampleContractFailure(t, "demand persistence")
 	}
 	status := "completed"
-	if len(rowErrors) > 0 {
+	if len(rowErrors) > 0 || persistedLines < len(mapped) {
 		status = "partial_success"
 	}
 	if err := evidence.CompleteImportEvidence(ctx, run, records, status); err != nil {
@@ -119,12 +128,246 @@ func runDemandSampleContract(t *testing.T, path, profileKey, documentType string
 		sampleContractFailure(t, "demand evidence finalize")
 	}
 	var persisted int64
-	if err := gdb.Table("demand_lines").Count(&persisted).Error; err != nil || int(persisted) != len(mapped) {
+	if err := gdb.Table("demand_lines").Count(&persisted).Error; err != nil || int(persisted) != persistedLines {
 		sampleContractFailure(t, "demand persisted-row count")
+	}
+	docs, err := infra.NewDemandRepository(gdb).List(ctx)
+	if err != nil || len(docs) == 0 {
+		sampleContractFailure(t, "demand persisted Kind/Surface")
+	}
+	for _, d := range docs {
+		if d.Kind != interp.DemandKind || d.SourceSurface != interp.SourceSurface {
+			sampleContractFailure(t, "demand Kind/Surface from documentType")
+		}
+		if profile.DemandKind != "" && profile.DemandKind != interp.DemandKind && d.Kind == profile.DemandKind {
+			sampleContractFailure(t, "demand leftover DemandKind must not persist")
+		}
+		if interp.IdentityStrategy != IdentityStrategyOrderScopedProvisional {
+			if strings.TrimSpace(d.SourceCustomerRef) != "" && d.CustomerProfileID == nil {
+				sampleContractFailure(t, "membership document missing customer for UID")
+			}
+			if d.CustomerProfileID == nil {
+				sampleContractFailure(t, "membership document persisted without customer")
+			}
+		}
 	}
 	detail, err := NewImportEvidenceUseCase(infra.NewImportEvidenceRepository(gdb)).GetRunDetail(ctx, run.ID)
 	if err != nil || detail.Run.RecordCount != len(sheet.Rows) || detail.Run.SuccessCount+detail.Run.FailureCount+detail.Run.QuarantinedCount != detail.Run.RecordCount {
 		sampleContractFailure(t, "demand RAW arithmetic")
+	}
+}
+
+// persistSampleDemandImport mirrors ImportDemandCSV grouping + identity + address
+// persist so sample contracts do not hand-build DemandDocument then ImportDemand
+// as the sole persist path. Empty membership refs stay split per row and are
+// skipped (skip_invalid) instead of saving CustomerProfileID=nil documents.
+func persistSampleDemandImport(
+	ctx context.Context,
+	gdb *gorm.DB,
+	profile *domain.IntegrationProfile,
+	interp DemandImportInterpretation,
+	mapped []DemandImportMappedRow,
+	records []domain.ImportRawRecord,
+) (int, error) {
+	type importGroup struct {
+		ref              string
+		sourceDocumentNo string
+		rows             []DemandImportMappedRow
+	}
+	groupIndex := map[string]int{}
+	groups := make([]importGroup, 0, len(mapped))
+	for rowIndex, row := range mapped {
+		ref := strings.TrimSpace(row.Document.SourceCustomerRef)
+		sourceDocumentNo := strings.TrimSpace(row.Document.SourceDocumentNo)
+		groupKey := ref
+		if interp.IdentityStrategy == IdentityStrategyOrderScopedProvisional {
+			groupKey = sourceDocumentNo
+		}
+		if groupKey == "" {
+			groupKey = fmt.Sprintf("\x00row-%d", rowIndex)
+		}
+		if idx, ok := groupIndex[groupKey]; ok {
+			if groups[idx].ref == "" {
+				groups[idx].ref = ref
+			}
+			if groups[idx].sourceDocumentNo == "" {
+				groups[idx].sourceDocumentNo = sourceDocumentNo
+			}
+			groups[idx].rows = append(groups[idx].rows, row)
+			continue
+		}
+		groupIndex[groupKey] = len(groups)
+		groups = append(groups, importGroup{
+			ref:              ref,
+			sourceDocumentNo: sourceDocumentNo,
+			rows:             []DemandImportMappedRow{row},
+		})
+	}
+
+	importedAt := time.Now().UTC()
+	persistedLines := 0
+	err := gdb.Transaction(func(tx *gorm.DB) error {
+		for _, group := range groups {
+			groupErr := tx.Transaction(func(groupTx *gorm.DB) error {
+				demandRepo := infra.NewDemandRepository(groupTx)
+				profileRepo := infra.NewProfileRepository(groupTx)
+				originRepo := infra.NewCustomerProfileOriginRepository(groupTx)
+				observationRepo := infra.NewCustomerNameObservationRepository(groupTx)
+				eventRepo := infra.NewCustomerNameEventRepository(groupTx)
+				customerResolver := NewDemandCustomerResolutionService(profileRepo, originRepo)
+				nameService := NewCustomerNameObservationService(profileRepo, observationRepo, eventRepo)
+				intakeUC := NewDemandIntakeUseCase(demandRepo)
+
+				displayName := ""
+				for _, row := range group.rows {
+					if candidate := strings.TrimSpace(row.Document.DisplayName); candidate != "" {
+						displayName = candidate
+						break
+					}
+				}
+				if displayName == "" {
+					displayName = group.ref
+				}
+
+				var customerProfileID, identityID, originID *uint
+				needsIdentity := interp.IdentityStrategy != IdentityStrategyOrderScopedProvisional ||
+					strings.TrimSpace(group.sourceDocumentNo) != ""
+				if needsIdentity {
+					resolved, resolveErr := customerResolver.Resolve(ctx, DemandCustomerResolutionInput{
+						IntegrationProfileID: profile.ID,
+						IdentityStrategy:     interp.IdentityStrategy,
+						SourceChannel:        profile.SourceChannel,
+						SourceDocumentNo:     group.sourceDocumentNo,
+						SourceCustomerRef:    group.ref,
+						DisplayName:          displayName,
+						ObservedAt:           importedAt,
+					})
+					if resolveErr != nil {
+						return fmt.Errorf("customer resolution: %w", resolveErr)
+					}
+					customerProfileID, identityID, originID = resolved.CustomerProfileID, resolved.IdentityID, resolved.OriginID
+					if customerProfileID == nil {
+						return fmt.Errorf("customer resolution produced no customer profile")
+					}
+				}
+
+				lines := make([]*domain.DemandLine, len(group.rows))
+				for i := range group.rows {
+					lines[i] = group.rows[i].Line
+				}
+				doc := domain.DemandDocument{
+					Kind: interp.DemandKind, CaptureMode: "document_import", SourceChannel: profile.SourceChannel,
+					SourceSurface: interp.SourceSurface, SourceDocumentNo: group.sourceDocumentNo,
+					SourceCustomerRef: group.ref, CustomerProfileID: customerProfileID, IntegrationProfileID: &profile.ID,
+				}
+				if err := intakeUC.ImportDemand(ctx, &doc, lines); err != nil {
+					return fmt.Errorf("persist demand group: %w", err)
+				}
+				if originID != nil {
+					if err := customerResolver.AttachOriginDocument(ctx, *originID, doc.ID); err != nil {
+						return err
+					}
+				}
+				if customerProfileID != nil && displayName != "" {
+					nameKind := domain.CustomerNameKindStableIdentityNickname
+					if interp.IdentityStrategy == IdentityStrategyOrderScopedProvisional {
+						nameKind = domain.CustomerNameKindTrustedNickname
+					}
+					if _, observeErr := nameService.Observe(ctx, ObserveCustomerNameInput{
+						CustomerProfileID: *customerProfileID, Name: displayName, NameKind: nameKind,
+						Authority: profile.SourceChannel, SourceEventKey: fmt.Sprintf("demand-document:%d:name", doc.ID),
+						SourceIntegrationProfileID: &profile.ID, SourceDocumentID: &doc.ID,
+						SourceIdentityID: identityID, ObservedAt: importedAt,
+					}); observeErr != nil {
+						return fmt.Errorf("observe customer name: %w", observeErr)
+					}
+				}
+				if customerProfileID != nil {
+					addressUC := NewAddressManagementUseCase(infra.NewAddressRepository(groupTx), infra.NewFulfillmentRepository(groupTx))
+					for _, row := range group.rows {
+						if row.Recipient == nil || strings.TrimSpace(row.Recipient.RecipientName) == "" {
+							continue
+						}
+						if _, err := addressUC.UpsertAddressFromImport(ctx, *customerProfileID, *row.Recipient); err != nil {
+							return fmt.Errorf("address upsert: %w", err)
+						}
+					}
+				}
+				for _, row := range group.rows {
+					rowIdx := -1
+					if row.Line != nil && row.Line.SourceLineNo > 0 {
+						rowIdx = row.Line.SourceLineNo - 1
+					}
+					MarkImportEvidenceSuccess(records, rowIdx, "demand_document", doc.ID)
+				}
+				return nil
+			})
+			if groupErr != nil {
+				for _, row := range group.rows {
+					rowIdx := -1
+					if row.Line != nil && row.Line.SourceLineNo > 0 {
+						rowIdx = row.Line.SourceLineNo - 1
+					}
+					MarkImportEvidenceFailure(records, rowIdx, "persist_error", groupErr.Error(), nil)
+				}
+				continue
+			}
+			persistedLines += len(group.rows)
+		}
+		return nil
+	})
+	return persistedLines, err
+}
+
+func TestSampleDataSeedMappingKindDocumentTypeAlignment(t *testing.T) {
+	t.Parallel()
+	// File-backed SampleData contracts may skip when gitignored fixtures are
+	// absent. This assertion never skips: seed documentType constants must
+	// interpret to Kind/Surface the same way production ImportDemandCSV does,
+	// so leftover IntegrationProfile.DemandKind cannot be the unique pairing.
+	cases := []struct {
+		docType string
+		kind    string
+		surface string
+	}{
+		{BilibiliImportEntitlementDocType, string(domain.DemandKindMembershipEntitlement), string(domain.SourceSurfaceMembership)},
+		{BilibiliImportSalesOrderDocType, string(domain.DemandKindRetailOrder), string(domain.SourceSurfaceRetail)},
+	}
+	for _, tc := range cases {
+		interp, err := InterpretDemandImportDocumentType(tc.docType)
+		if err != nil {
+			t.Fatalf("%s: InterpretDemandImportDocumentType: %v", tc.docType, err)
+		}
+		if interp.DocumentType != tc.docType || interp.DemandKind != tc.kind || interp.SourceSurface != tc.surface {
+			t.Fatalf("%s: got %+v, want kind=%s surface=%s", tc.docType, interp, tc.kind, tc.surface)
+		}
+	}
+	sales, err := InterpretDemandImportDocumentType(BilibiliImportSalesOrderDocType)
+	if err != nil {
+		t.Fatalf("import_sales_order: %v", err)
+	}
+	if sales.DemandKind == string(domain.DemandKindMembershipEntitlement) {
+		t.Fatal("import_sales_order must not inherit leftover membership_entitlement DemandKind")
+	}
+	leftover := &domain.IntegrationProfile{
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+	}
+	resolvedSales, err := ResolveDemandImportDocumentType(leftover, BilibiliImportSalesOrderDocType)
+	if err != nil {
+		t.Fatalf("ResolveDemandImportDocumentType(import_sales_order) with leftover membership_entitlement: %v", err)
+	}
+	salesInterp, err := InterpretDemandImportDocumentType(resolvedSales)
+	if err != nil {
+		t.Fatalf("InterpretDemandImportDocumentType after leftover resolve: %v", err)
+	}
+	if salesInterp.DemandKind != string(domain.DemandKindRetailOrder) || salesInterp.SourceSurface != string(domain.SourceSurfaceRetail) {
+		t.Fatalf("leftover DemandKind membership_entitlement must not persist retail as entitlement: %+v", salesInterp)
+	}
+	for _, factoryType := range []string{CatalogDemoDocType, ShipmentDemoDocType, SupplierOrderDemoDocType} {
+		if _, err := InterpretDemandImportDocumentType(factoryType); err == nil {
+			t.Fatalf("factory documentType %q must not interpret as a demand import Kind", factoryType)
+		}
 	}
 }
 
@@ -227,7 +470,7 @@ func TestSampleDataShipmentReadOnlyContract(t *testing.T) {
 	if err != nil || len(tokens) == 0 {
 		sampleContractFailure(t, "shipment multi-SKU parse")
 	}
-	wave := &domain.Wave{WaveNo: "sample-contract", Name: "sample-contract", WaveType: "manual", LifecycleStage: "draft"}
+	wave := &domain.Wave{WaveNo: "sample-contract", Name: "sample-contract", WaveType: string(domain.WaveTypeMixed), LifecycleStage: string(domain.LifecycleStageExecution)}
 	if err := infra.NewWaveRepository(gdb).Create(ctx, wave); err != nil {
 		sampleContractFailure(t, "shipment wave seed")
 	}
@@ -240,7 +483,7 @@ func TestSampleDataShipmentReadOnlyContract(t *testing.T) {
 		sampleContractFailure(t, "shipment customer seed")
 	}
 	addressRepo := infra.NewAddressRepository(gdb)
-	address := &domain.CustomerAddress{CustomerProfileID: customer.ID, RecipientName: applied["shipment.recipient_name"], Phone: applied["shipment.phone"], AddressLine1: "sample-contract", ValidationStatus: "unverified"}
+	address := &domain.CustomerAddress{CustomerProfileID: customer.ID, RecipientName: applied["shipment.recipient_name"], Phone: applied["shipment.phone"], AddressLine1: "sample-contract", ValidationStatus: string(domain.AddressValidationStatusUnvalidated)}
 	if err := addressRepo.Create(ctx, address); err != nil {
 		sampleContractFailure(t, "shipment address seed")
 	}
@@ -257,7 +500,7 @@ func TestSampleDataShipmentReadOnlyContract(t *testing.T) {
 		if err := productRepo.Create(ctx, product); err != nil {
 			sampleContractFailure(t, "shipment product seed")
 		}
-		line := &domain.FulfillmentLine{WaveID: wave.ID, CustomerProfileID: &customer.ID, ProductID: &product.ID, CustomerAddressID: &address.ID, Quantity: token.Quantity, AllocationState: "allocated", SupplierState: "submitted", ChannelSyncState: "pending"}
+		line := &domain.FulfillmentLine{WaveID: wave.ID, CustomerProfileID: &customer.ID, ProductID: &product.ID, CustomerAddressID: &address.ID, Quantity: token.Quantity, AllocationState: string(domain.AllocationStateReady), SupplierState: "submitted", ChannelSyncState: "pending"}
 		if err := fulfillRepo.Create(ctx, line); err != nil {
 			sampleContractFailure(t, "shipment fulfillment seed")
 		}
@@ -299,7 +542,7 @@ func TestSampleDataSupplierOrderReadOnlyContract(t *testing.T) {
 	if err != nil || len(sampleSheet.Headers) != len(rules.ColumnOrder) {
 		sampleContractFailure(t, "supplier-order sample parse")
 	}
-	wave := &domain.Wave{WaveNo: "sample-order", Name: "sample-order", WaveType: "manual", LifecycleStage: "draft"}
+	wave := &domain.Wave{WaveNo: "sample-order", Name: "sample-order", WaveType: string(domain.WaveTypeMixed), LifecycleStage: string(domain.LifecycleStageExecution)}
 	if err := infra.NewWaveRepository(gdb).Create(ctx, wave); err != nil {
 		sampleContractFailure(t, "supplier-order wave seed")
 	}
@@ -311,7 +554,7 @@ func TestSampleDataSupplierOrderReadOnlyContract(t *testing.T) {
 	if err := infra.NewProductRepository(gdb).Create(ctx, product); err != nil {
 		sampleContractFailure(t, "supplier-order product seed")
 	}
-	fulfill := &domain.FulfillmentLine{WaveID: wave.ID, ProductID: &product.ID, Quantity: 1, AllocationState: "allocated", SupplierState: "draft", ChannelSyncState: "pending"}
+	fulfill := &domain.FulfillmentLine{WaveID: wave.ID, ProductID: &product.ID, Quantity: 1, AllocationState: string(domain.AllocationStateReady), SupplierState: string(domain.SupplierStateNotSubmitted), ChannelSyncState: "pending"}
 	if err := infra.NewFulfillmentRepository(gdb).Create(ctx, fulfill); err != nil {
 		sampleContractFailure(t, "supplier-order fulfillment seed")
 	}
@@ -352,7 +595,7 @@ func TestSampleDataTrackingReadOnlyContract(t *testing.T) {
 	if err != nil || len(sampleSheet.Headers) != len(rules.ColumnOrder) {
 		sampleContractFailure(t, "tracking sample parse")
 	}
-	wave := &domain.Wave{WaveNo: "sample-tracking", Name: "sample-tracking", WaveType: "manual", LifecycleStage: "draft"}
+	wave := &domain.Wave{WaveNo: "sample-tracking", Name: "sample-tracking", WaveType: string(domain.WaveTypeMixed), LifecycleStage: string(domain.LifecycleStageSyncingBack)}
 	if err := infra.NewWaveRepository(gdb).Create(ctx, wave); err != nil {
 		sampleContractFailure(t, "tracking wave seed")
 	}

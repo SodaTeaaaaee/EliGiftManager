@@ -95,7 +95,9 @@ async function loadWaves(): Promise<void> {
 }
 
 const waveOptions = computed<SelectOption[]>(() =>
-  waves.value.map((wave) => ({ label: `${wave.waveNo} · ${wave.name}`, value: wave.id })),
+  waves.value
+    .filter((wave) => wave.lifecycleStage !== 'closed')
+    .map((wave) => ({ label: `${wave.waveNo} · ${wave.name}`, value: wave.id })),
 )
 
 // ── Existing-snapshot / dedup ──
@@ -125,8 +127,8 @@ watch(selectedWaveId, async (waveId) => {
 
 const effectiveMasters = computed<ProductMaster[]>(() => {
   if (props.selectedMasters && props.selectedMasters.length > 0) return props.selectedMasters
-  const checked = new Set(checkedMasterKeys.value)
-  return allMasters.value.filter((master) => checked.has(master.id))
+  const checked = new Set(checkedMasterKeys.value.map((key) => Number(key)))
+  return allMasters.value.filter((master) => checked.has(Number(master.id)))
 })
 
 const existingKeys = computed(() => new Set(existingProducts.value.map((p) => productKey(p.supplierPlatform, p.factorySku))))

@@ -228,6 +228,27 @@ func TestGenerateSupplierOrderFile_EmbedsLineIDsForReconciliation(t *testing.T) 
 	}
 }
 
+func TestRecordSupplierOrderAcceptance_RejectsAcceptedQuantityAboveSubmitted(t *testing.T) {
+	ctx := context.Background()
+	db := newSupplierOrderLifecycleTestDB(t)
+	supplierRepo := infra.NewSupplierOrderRepository(db)
+	lineWriter := infra.NewSupplierOrderLineWriter(db)
+	uc := NewSupplierOrderLifecycleUseCase(supplierRepo, lineWriter)
+
+	order := mustCreateSupplierOrder(t, ctx, supplierRepo, string(domain.SupplierOrderStatusSubmitted))
+	line := mustCreateSupplierOrderLine(t, ctx, supplierRepo, order.ID, 1, 10)
+
+	_, err := uc.RecordSupplierOrderAcceptance(ctx, dto.RecordSupplierOrderAcceptanceInput{
+		OrderID: order.ID,
+		Lines: []dto.SupplierOrderLineAcceptanceEntry{
+			{LineID: line.ID, AcceptedQuantity: 11},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "exceeds submitted_quantity") {
+		t.Fatalf("expected accepted>submitted error, got %v", err)
+	}
+}
+
 func TestGenerateSupplierOrderFileRejectsXLSWithoutFallback(t *testing.T) {
 	t.Parallel()
 	db := newSupplierOrderLifecycleTestDB(t)

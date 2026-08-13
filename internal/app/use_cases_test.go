@@ -225,6 +225,8 @@ func (m *mockWaveRepo) AddParticipant(ctx context.Context, snap *domain.WavePart
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	snap.ID = m.next()
+	cp := *snap
+	m.participants = append(m.participants, cp)
 	return nil
 }
 
@@ -1625,4 +1627,294 @@ func TestExportSupplierOrderAutoSelectRejectsAmbiguousFactoryProfiles(t *testing
 	if err == nil || !strings.Contains(err.Error(), "ambiguous") {
 		t.Fatalf("expected explicit ambiguity error, got %v", err)
 	}
+}
+
+// errListByProfileAddressRepo is a small CustomerAddressRepository whose
+// ListByProfile always fails. Named distinctly from mockAddressRepo in
+// address_usecase_test.go.
+type errListByProfileAddressRepo struct {
+	listErr error
+}
+
+func (m *errListByProfileAddressRepo) Create(context.Context, *domain.CustomerAddress) error {
+	return nil
+}
+func (m *errListByProfileAddressRepo) FindByID(context.Context, uint) (*domain.CustomerAddress, error) {
+	return nil, nil
+}
+func (m *errListByProfileAddressRepo) ListByProfile(context.Context, uint) ([]domain.CustomerAddress, error) {
+	return nil, m.listErr
+}
+func (m *errListByProfileAddressRepo) Update(context.Context, *domain.CustomerAddress) error {
+	return nil
+}
+func (m *errListByProfileAddressRepo) SoftDelete(context.Context, uint) error { return nil }
+func (m *errListByProfileAddressRepo) ClearDefaultByProfile(context.Context, uint) error {
+	return nil
+}
+func (m *errListByProfileAddressRepo) BulkUpdateProfileID(context.Context, uint, uint) error {
+	return nil
+}
+
+func TestMapDemandToFulfillmentFailsOnAddressListError(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	fulfillRepo := newMockFulfillRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	waveRepo := newMockWaveRepo()
+
+	profileID := uint(100)
+	waveRepo.SetParticipants([]domain.WaveParticipantSnapshot{
+		{ID: 1, WaveID: 1, CustomerProfileID: profileID, SnapshotType: "buyer"},
+	})
+
+	demandUC := NewDemandIntakeUseCase(demandRepo)
+	doc := &domain.DemandDocument{
+		Kind:              "retail_order",
+		CaptureMode:       "manual_entry",
+		SourceChannel:     "test",
+		SourceDocumentNo:  "ADDR-ERR",
+		CustomerProfileID: &profileID,
+	}
+	if err := demandUC.ImportDemand(context.Background(), doc, []*domain.DemandLine{
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
+	}); err != nil {
+		t.Fatalf("setup ImportDemand failed: %v", err)
+	}
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
+		WaveID: 1, DemandDocumentID: doc.ID,
+	}); err != nil {
+		t.Fatalf("setup assignment failed: %v", err)
+	}
+
+	addrRepo := &errListByProfileAddressRepo{listErr: fmt.Errorf("address store unavailable")}
+	dmUC := NewDemandMappingUseCase(demandRepo, fulfillRepo, assignmentRepo, waveRepo, nil, addrRepo)
+	_, err := dmUC.MapDemandToFulfillment(context.Background(), 1)
+	if err == nil {
+		t.Fatal("expected MapDemandToFulfillment to fail when ListByProfile returns error")
+	}
+	if !strings.Contains(err.Error(), "address store unavailable") {
+		t.Errorf("expected address list error to propagate, got: %v", err)
+	}
+
+	allLines, _ := fulfillRepo.ListByWave(context.Background(), 1)
+	if len(allLines) != 0 {
+		t.Errorf("expected 0 fulfillment lines after address list failure, got %d", len(allLines))
+	}
+}
+
+func TestImportDemandRejectsDuplicateSourceDocumentNo(t *testing.T) {
+	t.Parallel()
+
+	repo := newMockDemandRepo()
+	uc := NewDemandIntakeUseCase(repo)
+	profileID := uint(42)
+
+	first := &domain.DemandDocument{
+		Kind:                 "retail_order",
+		CaptureMode:          "manual_entry",
+		SourceChannel:        "test",
+		SourceDocumentNo:     "DUP-SRC-001",
+		IntegrationProfileID: &profileID,
+	}
+	if err := uc.ImportDemand(context.Background(), first, nil); err != nil {
+		t.Fatalf("first ImportDemand failed: %v", err)
+	}
+
+	second := &domain.DemandDocument{
+		Kind:                 "retail_order",
+		CaptureMode:          "manual_entry",
+		SourceChannel:        "test",
+		SourceDocumentNo:     "DUP-SRC-001",
+		IntegrationProfileID: &profileID,
+	}
+	if err := uc.ImportDemand(context.Background(), second, nil); err == nil {
+		t.Fatal("expected second import with same profile+source_document_no to fail")
+	}
+
+	docs, err := repo.List(context.Background())
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(docs) != 1 {
+		t.Errorf("expected 1 persisted document after duplicate rejection, got %d", len(docs))
+	}
+}
+
+func TestGenerateParticipantsPrefersMembershipOverRetail(t *testing.T) {
+	t.Parallel()
+
+	demandRepo := newMockDemandRepo()
+	waveRepo := newMockWaveRepo()
+	assignmentRepo := newMockAssignmentRepo(demandRepo)
+	profileID := uint(500)
+
+	demandUC := NewDemandIntakeUseCase(demandRepo)
+	retail := &domain.DemandDocument{
+		Kind:              "retail_order",
+		CaptureMode:       "manual_entry",
+		SourceChannel:     "shop",
+		SourceCustomerRef: "buyer-ref",
+		SourceDocumentNo:  "RET-1",
+		CustomerProfileID: &profileID,
+	}
+	if err := demandUC.ImportDemand(context.Background(), retail, []*domain.DemandLine{
+		{RoutingDisposition: "accepted", RecipientInputState: "ready", RequestedQuantity: 1, LineType: "sku_order"},
+	}); err != nil {
+		t.Fatalf("import retail: %v", err)
+	}
+
+	membership := &domain.DemandDocument{
+		Kind:              "membership_entitlement",
+		CaptureMode:       "manual_entry",
+		SourceChannel:     "bilibili",
+		SourceCustomerRef: "member-ref",
+		SourceDocumentNo:  "MEM-1",
+		CustomerProfileID: &profileID,
+	}
+	if err := demandUC.ImportDemand(context.Background(), membership, []*domain.DemandLine{
+		{RoutingDisposition: "accepted", RecipientInputState: "not_required", RequestedQuantity: 1, LineType: "entitlement_rule", GiftLevelSnapshot: "gold"},
+	}); err != nil {
+		t.Fatalf("import membership: %v", err)
+	}
+
+	waveUC := NewWaveUseCase(waveRepo, demandRepo, assignmentRepo)
+	wave := &domain.Wave{Name: "participant-type"}
+	if err := waveUC.CreateWave(context.Background(), wave); err != nil {
+		t.Fatalf("CreateWave: %v", err)
+	}
+
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
+		WaveID: wave.ID, DemandDocumentID: retail.ID,
+	}); err != nil {
+		t.Fatalf("assign retail: %v", err)
+	}
+	if err := assignmentRepo.Create(context.Background(), &domain.WaveDemandAssignment{
+		WaveID: wave.ID, DemandDocumentID: membership.ID,
+	}); err != nil {
+		t.Fatalf("assign membership: %v", err)
+	}
+
+	count, err := waveUC.GenerateParticipants(context.Background(), wave.ID)
+	if err != nil {
+		t.Fatalf("GenerateParticipants: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 participant, got %d", count)
+	}
+
+	snaps, err := waveRepo.ListParticipantsByWave(context.Background(), wave.ID)
+	if err != nil {
+		t.Fatalf("ListParticipantsByWave: %v", err)
+	}
+	if len(snaps) != 1 {
+		t.Fatalf("expected 1 snapshot, got %d", len(snaps))
+	}
+	if snaps[0].SnapshotType != "member" {
+		t.Errorf("SnapshotType = %q, want member", snaps[0].SnapshotType)
+	}
+
+	lo, hi := retail.ID, membership.ID
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	wantRefs := fmt.Sprintf("%d,%d", lo, hi)
+	if snaps[0].SourceDocumentRefs != wantRefs {
+		t.Errorf("SourceDocumentRefs = %q, want %q", snaps[0].SourceDocumentRefs, wantRefs)
+	}
+	if !strings.Contains(snaps[0].SourceDocumentRefs, fmt.Sprintf("%d", retail.ID)) ||
+		!strings.Contains(snaps[0].SourceDocumentRefs, fmt.Sprintf("%d", membership.ID)) {
+		t.Errorf("SourceDocumentRefs %q must include both document IDs %d and %d", snaps[0].SourceDocumentRefs, retail.ID, membership.ID)
+	}
+}
+
+type stubResolveProductRepo struct {
+	findFn func(id uint) (*domain.Product, error)
+}
+
+func (s *stubResolveProductRepo) Create(context.Context, *domain.Product) error { return nil }
+func (s *stubResolveProductRepo) FindByID(_ context.Context, id uint) (*domain.Product, error) {
+	if s.findFn == nil {
+		return nil, fmt.Errorf("product %d not found", id)
+	}
+	return s.findFn(id)
+}
+func (s *stubResolveProductRepo) FindByWaveAndID(ctx context.Context, _ uint, id uint) (*domain.Product, error) {
+	return s.FindByID(ctx, id)
+}
+func (s *stubResolveProductRepo) ListByWave(context.Context, uint) ([]domain.Product, error) {
+	return nil, nil
+}
+func (s *stubResolveProductRepo) FindByWaveAndSKU(context.Context, uint, string, string) (*domain.Product, error) {
+	return nil, nil
+}
+func (s *stubResolveProductRepo) DeleteByWave(context.Context, uint) error { return nil }
+
+func TestResolveSupplierSKUErrorCases(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	pid := uint(7)
+	fl := &domain.FulfillmentLine{ID: 1, ProductID: &pid}
+
+	t.Run("nilFulfillmentLine", func(t *testing.T) {
+		t.Parallel()
+		_, err := resolveSupplierSKU(ctx, nil, &stubResolveProductRepo{}, map[uint]*domain.Product{})
+		if err == nil {
+			t.Fatal("expected error for nil fulfillment line")
+		}
+	})
+	t.Run("nilProductID", func(t *testing.T) {
+		t.Parallel()
+		_, err := resolveSupplierSKU(ctx, &domain.FulfillmentLine{ID: 1}, &stubResolveProductRepo{}, map[uint]*domain.Product{})
+		if err == nil {
+			t.Fatal("expected error for nil ProductID")
+		}
+	})
+	t.Run("nilProductRepo", func(t *testing.T) {
+		t.Parallel()
+		_, err := resolveSupplierSKU(ctx, fl, nil, map[uint]*domain.Product{})
+		if err == nil {
+			t.Fatal("expected error for nil product repo")
+		}
+	})
+	t.Run("findByIDError", func(t *testing.T) {
+		t.Parallel()
+		cache := make(map[uint]*domain.Product)
+		repo := &stubResolveProductRepo{findFn: func(id uint) (*domain.Product, error) {
+			return nil, fmt.Errorf("lookup failed")
+		}}
+		_, err := resolveSupplierSKU(ctx, fl, repo, cache)
+		if err == nil {
+			t.Fatal("expected error when FindByID fails")
+		}
+		if _, ok := cache[pid]; ok {
+			t.Error("must not cache a nil product on FindByID error")
+		}
+	})
+	t.Run("nilProduct", func(t *testing.T) {
+		t.Parallel()
+		cache := make(map[uint]*domain.Product)
+		repo := &stubResolveProductRepo{findFn: func(id uint) (*domain.Product, error) {
+			return nil, nil
+		}}
+		_, err := resolveSupplierSKU(ctx, fl, repo, cache)
+		if err == nil {
+			t.Fatal("expected error when product is nil")
+		}
+		if _, ok := cache[pid]; ok {
+			t.Error("must not cache a nil product")
+		}
+	})
+	t.Run("emptyFactorySKU", func(t *testing.T) {
+		t.Parallel()
+		repo := &stubResolveProductRepo{findFn: func(id uint) (*domain.Product, error) {
+			return &domain.Product{ID: id, FactorySKU: "   "}, nil
+		}}
+		_, err := resolveSupplierSKU(ctx, fl, repo, map[uint]*domain.Product{})
+		if err == nil {
+			t.Fatal("expected error for empty factory SKU")
+		}
+	})
 }

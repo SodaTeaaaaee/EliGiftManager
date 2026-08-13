@@ -28,6 +28,7 @@ export interface ProductMasterFormInput {
 export interface UseProductsPageApi {
   masters: Ref<ProductMaster[]>
   loading: Ref<boolean>
+  error: Ref<string | null>
   filters: ReturnType<typeof useUrlFilters<typeof schema>>
   /** Archive view toggle — archive/active has no glossary dimension (boolean, not a domain enum). */
   archivedOnly: Ref<boolean>
@@ -46,6 +47,7 @@ export interface UseProductsPageApi {
 export function useProductsPage(): UseProductsPageApi {
   const masters = ref<ProductMaster[]>([]) as Ref<ProductMaster[]>
   const loading = ref(true)
+  const error = ref<string | null>(null)
   const archivedOnly = ref(false)
   const filters = useUrlFilters(schema)
   const page = ref(1)
@@ -72,7 +74,10 @@ export function useProductsPage(): UseProductsPageApi {
         await load()
         return
       }
+      error.value = null
       masters.value = result.items
+    } catch (err) {
+      error.value = err instanceof Error ? err.message : String(err)
     } finally {
       loading.value = false
     }
@@ -141,6 +146,7 @@ export function useProductsPage(): UseProductsPageApi {
   return {
     masters,
     loading,
+    error,
     filters,
     archivedOnly,
     page,

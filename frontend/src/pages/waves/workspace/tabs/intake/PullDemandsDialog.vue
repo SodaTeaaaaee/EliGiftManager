@@ -23,28 +23,29 @@ const feedback = useFeedback()
 // 未分派池：unscoped 实例，assignment 固定为 'unassigned'。syncFiltersToUrl
 // 关掉 URL 同步——弹窗与波内 intake 网格同路由同 schema，双向同步会把弹窗的
 // 筛选/assignment 写进 wave 路由 query（反之亦然），互相串扰。
-const grid = useInboxGrid({ syncFiltersToUrl: false })
-grid.assignment.value = 'unassigned'
+const { assignment, filters, rows, loading, selectedKeys, page, pageSize, totalCount, onPageChange, onSort, fetchPage } =
+  useInboxGrid({ syncFiltersToUrl: false })
+assignment.value = 'unassigned'
 
 // 弹窗常驻挂载（NModal 只隐藏不销毁），拉走后池内容会变旧——每次打开时
 // 重取一页，保证刚被拉走的需求立即消失。
 watch(
   () => props.show,
   (show) => {
-    if (show) void grid.fetchPage()
+    if (show) void fetchPage()
   },
 )
 
 const columns = computed(() => createColumns(buildInboxColumns(t)))
 
-const surface = computed<BusinessSurface>(() => surfaceFromKinds(grid.filters.state.demandKind))
+const surface = computed<BusinessSurface>(() => surfaceFromKinds(filters.state.demandKind))
 
 function handleSurfaceChange(next: BusinessSurface): void {
-  grid.filters.setEnumValues('demandKind', kindsFromSurface(next))
+  filters.setEnumValues('demandKind', kindsFromSurface(next))
 }
 
 function handleSelectedKeysChange(keys: Array<string | number>): void {
-  grid.selectedKeys.value = keys as number[]
+  selectedKeys.value = keys as number[]
 }
 
 function handleUpdateShow(value: boolean): void {
@@ -54,15 +55,15 @@ function handleUpdateShow(value: boolean): void {
 const pulling = ref(false)
 
 async function handlePull(): Promise<void> {
-  if (grid.selectedKeys.value.length === 0) return
+  if (selectedKeys.value.length === 0) return
   pulling.value = true
   try {
-    const result = await batchAssignDemandToWave({ waveId: props.waveId, docIds: grid.selectedKeys.value })
+    const result = await batchAssignDemandToWave({ waveId: props.waveId, docIds: selectedKeys.value })
     if (result.failureCount > 0) feedback.error(t('waveWorkspace.intake.pullSomeFailed', { count: result.failureCount }))
     else feedback.success(t('feedback.success'))
-    grid.selectedKeys.value = []
+    selectedKeys.value = []
     // 拉取成功（含部分成功）后立刻刷新未分派池，避免刚拉走的需求残留显示。
-    void grid.fetchPage()
+    void fetchPage()
     emit('pulled', result.successCount)
     emit('update:show', false)
   } catch (err) {
@@ -91,22 +92,22 @@ async function handlePull(): Promise<void> {
         </NRadioGroup>
       </div>
 
-      <FilterBar :filters="grid.filters" />
+      <FilterBar :filters="filters" />
 
       <DataGrid
         :columns="columns"
-        :rows="grid.rows.value"
+        :rows="rows"
         row-key="demandDocumentId"
         selectable
-        :selected-keys="grid.selectedKeys"
-        :loading="grid.loading.value"
+        :selected-keys="selectedKeys"
+        :loading="loading"
         :pagination="{
           server: {
-            total: grid.totalCount.value,
-            page: grid.page.value,
-            pageSize: grid.pageSize.value,
-            onChange: grid.onPageChange,
-            onSort: grid.onSort,
+            total: totalCount,
+            page: page,
+            pageSize: pageSize,
+            onChange: onPageChange,
+            onSort: onSort,
           },
         }"
         :empty="{ title: t('inbox.empty.noneUnassigned') }"
@@ -117,14 +118,14 @@ async function handlePull(): Promise<void> {
     <template #footer>
       <div class="pull-demands-dialog__footer">
         <span class="pull-demands-dialog__selected">
-          {{ t('inbox.batch.selected', { n: grid.selectedKeys.value.length }) }}
+          {{ t('inbox.batch.selected', { n: selectedKeys.length }) }}
         </span>
         <div class="pull-demands-dialog__footer-actions">
           <NButton @click="handleUpdateShow(false)">{{ t('common.cancel') }}</NButton>
           <NButton
             type="primary"
             :loading="pulling"
-            :disabled="grid.selectedKeys.value.length === 0"
+            :disabled="selectedKeys.length === 0"
             @click="handlePull"
           >
             {{ t('waveWorkspace.intake.pullDemands') }}

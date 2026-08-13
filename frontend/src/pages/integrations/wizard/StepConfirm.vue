@@ -11,6 +11,7 @@
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { NButton } from 'naive-ui'
 import { StatusBadge } from '@/shared/ui/status'
 import { CalloutBar } from '@/shared/ui/guidance'
 import type { UseIntakeWizardStateApi } from './useIntakeWizardState'
@@ -102,6 +103,16 @@ const showStrategy = computed(
     !props.state.persistedProfile.value &&
     !bothDemandFiles.value,
 )
+
+const canConfigureAnother = computed(() =>
+  props.state.enabledDocumentTypes.value.some(
+    (type) => type !== props.state.sessionDocumentType.value && !props.state.configuredDocumentTypes.value.includes(type),
+  ),
+)
+
+function handleConfigureAnother(): void {
+  props.state.beginAnotherFileSession()
+}
 </script>
 
 <template>
@@ -125,11 +136,15 @@ const showStrategy = computed(
       tone="info"
       :message="t('intakeWizard.confirm.profileIsPlatform')"
     />
-    <CalloutBar
-      v-if="state.persistedProfile.value"
-      tone="info"
-      :message="t('intakeWizard.documentType.loopHint')"
-    />
+    <div v-if="canConfigureAnother" class="step-confirm__another">
+      <CalloutBar
+        tone="info"
+        :message="t('intakeWizard.documentType.loopHint')"
+      />
+      <NButton :disabled="state.persisting.value" @click="handleConfigureAnother">
+        {{ t('intakeWizard.confirm.configureAnother') }}
+      </NButton>
+    </div>
 
     <section class="step-confirm__section">
       <h4 class="step-confirm__section-title">{{ t('intakeWizard.confirm.profileTitle') }}</h4>
@@ -234,6 +249,13 @@ const showStrategy = computed(
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
+}
+
+.step-confirm__another {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
 }
 
 .step-confirm__section-title {

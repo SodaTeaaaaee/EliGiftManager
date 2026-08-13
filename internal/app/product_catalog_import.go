@@ -5,16 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/pathconfine"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/tabular"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
@@ -29,6 +30,10 @@ type catalogImportDeps struct {
 	evidence        *ImportEvidenceUseCase
 	// extractRoot overrides data/tmp/catalog-import parent (tests only).
 	extractRoot string
+	// zipLimits overrides catalog zip-bomb caps (tests only).
+	zipLimits *catalogZipLimits
+	// extractWarnings records skipped zip members (e.g. Windows-illegal names).
+	extractWarnings []string
 }
 
 func WithCatalogImportEvidence(uc ProductUseCase, evidence *ImportEvidenceUseCase) ProductUseCase {
@@ -117,7 +122,7 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 		evidenceRows, unmapped := importEvidenceRows(orderedRows, headers, headerRows)
 		assets := make([][]map[string]string, len(evidenceRows))
 		if strings.EqualFold(filepath.Ext(input.FilePath), ".zip") && len(assets) > 0 {
-			metadata, metadataErr := zipAssetMetadata(input.FilePath)
+			metadata, metadataErr := zipCatalogAssetMetadata(input.FilePath, uc.catalog.catalogZipLimits())
 			if metadataErr != nil {
 				return nil, metadataErr
 			}
@@ -176,7 +181,7 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 		TotalProcessed:   total,
 		ErrorCount:       len(rowErrors),
 		Errors:           rowErrors,
-		Warnings:         rowWarnings.warnings(),
+		Warnings:         append(append([]string{}, uc.catalog.extractWarnings...), rowWarnings.warnings()...),
 	}
 	if mode == "reject_all" && len(rowErrors) > 0 {
 		result.SuccessCount = 0
@@ -201,6 +206,9 @@ func (uc *productUseCase) ImportProductCatalog(ctx context.Context, input dto.Im
 					RowIndex: p.idx, Reason: fmt.Sprintf("images: %v", attachErr),
 				})
 				result.ErrorCount++
+				markImportEvidenceFailure(evidenceRecords, p.idx, "image_error", attachErr.Error(), nil)
+				// skip_invalid: do not persist or count SuccessCount for this row.
+				continue
 			}
 		}
 		existing, findErr := uc.masterRepo.FindByPlatformAndSKU(ctx, p.master.SupplierPlatform, p.master.FactorySKU)
@@ -400,6 +408,9 @@ func resolveCatalogContentRoot(extractDir string, layout *CatalogImageLayout) st
 	if marker == "." || marker == "" {
 		marker = ""
 	}
+	if marker != "" && (pathconfine.LooksAbsolute(marker) || pathconfine.HasDotDot(marker)) {
+		marker = ""
+	}
 
 	if marker != "" {
 		// 1. Direct hit at extract root.
@@ -531,42 +542,129 @@ func extractCatalogZip(zipPath string, deps *catalogImportDeps) (string, error) 
 		return "", fmt.Errorf("catalog zip extract: abs extract: %w", err)
 	}
 
+	limits := deps.catalogZipLimits()
+	fail := func(err error) (string, error) {
+		_ = os.RemoveAll(extractDir)
+		return "", err
+	}
+
+	if len(archive.File) > limits.MaxEntries {
+		return fail(fmt.Errorf("catalog zip extract: %d entries exceeds limit of %d", len(archive.File), limits.MaxEntries))
+	}
+
+	var claimed uint64
+	for _, f := range archive.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		if f.UncompressedSize64 > uint64(limits.MaxFileBytes) {
+			return fail(fmt.Errorf("catalog zip extract: member %q exceeds per-file limit", f.Name))
+		}
+		if claimed > uint64(limits.MaxTotalBytes)-f.UncompressedSize64 {
+			return fail(fmt.Errorf("catalog zip extract: claimed uncompressed size exceeds total limit"))
+		}
+		claimed += f.UncompressedSize64
+	}
+
+	var total int64
+	var skipped []string
 	for _, f := range archive.File {
 		// Normalize zip entry names (forward slashes) to local paths.
 		name := filepath.FromSlash(f.Name)
 		destPath := filepath.Join(extractDir, name)
 		cleanDest, absErr := filepath.Abs(destPath)
 		if absErr != nil {
+			return fail(fmt.Errorf("catalog zip extract: abs dest %q: %w", f.Name, absErr))
+		}
+		// Zip-slip guard: separator-aware prefix (kept) plus volume-aware confinement.
+		if cleanDest != cleanExtract && !strings.HasPrefix(cleanDest, cleanExtract+string(os.PathSeparator)) {
+			return fail(fmt.Errorf("catalog zip extract: zip-slip rejected: %s", f.Name))
+		}
+		if _, insideErr := pathconfine.Confine(cleanExtract, cleanDest); insideErr != nil {
+			return fail(fmt.Errorf("catalog zip extract: zip-slip rejected: %s", f.Name))
+		}
+		if runtime.GOOS == "windows" && destHasWindowsIllegalName(name) {
+			if isTabularZipMember(f.Name) {
+				return fail(fmt.Errorf("catalog zip extract: member %q has Windows-illegal path characters", f.Name))
+			}
+			skipped = append(skipped, fmt.Sprintf("skipped %q: Windows-illegal path characters", f.Name))
 			continue
 		}
-		// Zip-slip guard.
-		if cleanDest != cleanExtract && !strings.HasPrefix(cleanDest, cleanExtract+string(os.PathSeparator)) {
-			continue
+		skipOrFail := func(op string, opErr error) (string, error) {
+			if isTabularZipMember(f.Name) {
+				return fail(fmt.Errorf("catalog zip extract: %s %q: %w", op, f.Name, opErr))
+			}
+			skipped = append(skipped, fmt.Sprintf("%s %q: %v", op, f.Name, opErr))
+			return "", nil
 		}
 		if f.FileInfo().IsDir() {
-			_ = os.MkdirAll(destPath, 0o755)
+			if mkdirErr := os.MkdirAll(osLongPath(destPath), 0o755); mkdirErr != nil {
+				if _, ferr := skipOrFail("mkdir", mkdirErr); ferr != nil {
+					return "", ferr
+				}
+			}
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		if mkdirErr := os.MkdirAll(osLongPath(filepath.Dir(destPath)), 0o755); mkdirErr != nil {
+			if _, ferr := skipOrFail("mkdir parent", mkdirErr); ferr != nil {
+				return "", ferr
+			}
 			continue
 		}
 		rc, openErr := f.Open()
 		if openErr != nil {
+			if _, ferr := skipOrFail("open member", openErr); ferr != nil {
+				return "", ferr
+			}
 			continue
 		}
-		out, createErr := os.Create(destPath)
+		out, createErr := os.Create(osLongPath(destPath))
 		if createErr != nil {
 			rc.Close()
+			if _, ferr := skipOrFail("create", createErr); ferr != nil {
+				return "", ferr
+			}
 			continue
 		}
-		_, copyErr := io.Copy(out, rc)
+		n, copyErr := copyLimited(out, rc, limits.MaxFileBytes)
 		rc.Close()
-		out.Close()
+		closeErr := out.Close()
 		if copyErr != nil {
-			_ = os.Remove(destPath)
+			_ = os.Remove(osLongPath(destPath))
+			if _, ferr := skipOrFail("copy", copyErr); ferr != nil {
+				return "", ferr
+			}
+			continue
 		}
+		if closeErr != nil {
+			_ = os.Remove(osLongPath(destPath))
+			if _, ferr := skipOrFail("close", closeErr); ferr != nil {
+				return "", ferr
+			}
+			continue
+		}
+		if total > limits.MaxTotalBytes-n {
+			_ = os.Remove(osLongPath(destPath))
+			return fail(fmt.Errorf("catalog zip extract: total uncompressed size exceeds limit"))
+		}
+		total += n
+	}
+	if deps != nil && len(skipped) > 0 {
+		deps.extractWarnings = append(deps.extractWarnings, skipped...)
 	}
 	return extractDir, nil
+}
+
+func destHasWindowsIllegalName(rel string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(rel), "/") {
+		if part == "" || part == "." || part == ".." {
+			continue
+		}
+		if strings.ContainsAny(part, `<>:"|?*`) {
+			return true
+		}
+	}
+	return false
 }
 
 // findTabularInDir selects a tabular file under root matching glob.
@@ -576,6 +674,9 @@ func findTabularInDir(root, glob string) (string, error) {
 	glob = strings.TrimSpace(glob)
 	if glob == "" {
 		glob = "*.csv"
+	}
+	if pathconfine.LooksAbsolute(glob) || pathconfine.HasDotDot(glob) {
+		return "", fmt.Errorf("tabular glob must be relative and must not contain ..")
 	}
 
 	var matches []string
@@ -596,6 +697,11 @@ func findTabularInDir(root, glob string) (string, error) {
 	}
 	if len(matches) == 0 {
 		return "", fmt.Errorf("no tabular file matching %q found in archive", glob)
+	}
+	for _, m := range matches {
+		if _, err := pathconfine.Confine(root, m); err != nil {
+			return "", fmt.Errorf("tabular glob matched path outside root: %s", m)
+		}
 	}
 	sort.Strings(matches)
 	return matches[0], nil
@@ -628,10 +734,7 @@ func attachCatalogImages(
 	if namePattern == "" {
 		namePattern = "{match}#{nn}"
 	}
-	exts := layout.ImageExts
-	if len(exts) == 0 {
-		exts = []string{".jpg", ".jpeg", ".png", ".webp", ".gif"}
-	}
+	exts := sanitizeCatalogImageExts(layout.ImageExts)
 
 	coverPick := strings.ToLower(strings.TrimSpace(layout.CoverPick))
 	if coverPick == "" {
@@ -643,12 +746,18 @@ func attachCatalogImages(
 
 	var coverRel string
 	if strings.TrimSpace(layout.CoverDir) != "" {
-		coverDir := filepath.Join(imageRoot, filepath.FromSlash(layout.CoverDir))
+		coverDir, joinErr := pathconfine.JoinUnder(imageRoot, layout.CoverDir)
+		if joinErr != nil {
+			return fmt.Errorf("coverDir: %w", joinErr)
+		}
 		candidates, err := listPatternImages(coverDir, matchValue, namePattern, exts)
 		if err != nil {
 			return err
 		}
 		if len(candidates) > 0 {
+			if _, insideErr := pathconfine.Confine(imageRoot, candidates[0].path); insideErr != nil {
+				return fmt.Errorf("cover image: %w", insideErr)
+			}
 			// lowest_nn — candidates already sorted ascending by nn.
 			rel, storeErr := store.StoreFile(candidates[0].path)
 			if storeErr != nil {
@@ -660,7 +769,10 @@ func attachCatalogImages(
 
 	var detailRels []string
 	if strings.TrimSpace(layout.DetailDir) != "" {
-		detailDir := filepath.Join(imageRoot, filepath.FromSlash(layout.DetailDir))
+		detailDir, joinErr := pathconfine.JoinUnder(imageRoot, layout.DetailDir)
+		if joinErr != nil {
+			return fmt.Errorf("detailDir: %w", joinErr)
+		}
 		candidates, err := listPatternImages(detailDir, matchValue, namePattern, exts)
 		if err != nil {
 			return err
@@ -672,6 +784,9 @@ func attachCatalogImages(
 		for i, c := range candidates {
 			if sharedDir && i == 0 {
 				continue
+			}
+			if _, insideErr := pathconfine.Confine(imageRoot, c.path); insideErr != nil {
+				return fmt.Errorf("detail image: %w", insideErr)
 			}
 			rel, storeErr := store.StoreFile(c.path)
 			if storeErr != nil {
@@ -697,6 +812,43 @@ func attachCatalogImages(
 type imageCandidate struct {
 	path string
 	nn   int
+}
+
+var allowedCatalogImageExts = map[string]struct{}{
+	".png": {}, ".jpg": {}, ".jpeg": {}, ".webp": {}, ".gif": {},
+}
+
+func isAllowedCatalogImageExt(ext string) bool {
+	_, ok := allowedCatalogImageExts[strings.ToLower(ext)]
+	return ok
+}
+
+// sanitizeCatalogImageExts allowlists real raster image extensions only.
+// .svg / .html / .json and other executable-or-markup types are dropped.
+func sanitizeCatalogImageExts(exts []string) []string {
+	if len(exts) == 0 {
+		return []string{".jpg", ".jpeg", ".png", ".webp", ".gif"}
+	}
+	out := make([]string, 0, len(exts))
+	seen := make(map[string]struct{}, len(exts))
+	for _, e := range exts {
+		e = strings.ToLower(strings.TrimSpace(e))
+		if e == "" {
+			continue
+		}
+		if !strings.HasPrefix(e, ".") {
+			e = "." + e
+		}
+		if !isAllowedCatalogImageExt(e) {
+			continue
+		}
+		if _, ok := seen[e]; ok {
+			continue
+		}
+		seen[e] = struct{}{}
+		out = append(out, e)
+	}
+	return out
 }
 
 // listPatternImages lists image files in dir whose stem matches namePattern with
@@ -734,6 +886,9 @@ func listPatternImages(dir, matchValue, namePattern string, exts []string) ([]im
 		}
 		name := e.Name()
 		ext := strings.ToLower(filepath.Ext(name))
+		if !isAllowedCatalogImageExt(ext) {
+			continue
+		}
 		if _, ok := extSet[ext]; !ok {
 			continue
 		}

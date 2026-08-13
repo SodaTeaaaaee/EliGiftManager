@@ -292,7 +292,13 @@ func (uc *allocationPolicyUseCase) ReconcileWave(ctx context.Context, waveID uin
 }
 
 func (uc *allocationPolicyUseCase) CreateRule(ctx context.Context, input dto.CreateAllocationPolicyRuleInput) (*dto.AllocationPolicyRuleDTO, error) {
-	if input.ProductID != 0 && uc.productRepo != nil {
+	if input.ProductID == 0 {
+		return nil, fmt.Errorf("product_id is required")
+	}
+	if input.ContributionQuantity <= 0 {
+		return nil, fmt.Errorf("contribution_quantity must be greater than 0")
+	}
+	if uc.productRepo != nil {
 		if _, err := uc.productRepo.FindByWaveAndID(ctx, input.WaveID, input.ProductID); err != nil {
 			return nil, fmt.Errorf("product %d does not exist in wave %d", input.ProductID, input.WaveID)
 		}
@@ -330,7 +336,14 @@ func (uc *allocationPolicyUseCase) UpdateRule(ctx context.Context, input dto.Upd
 		return nil, err
 	}
 
-	if input.ProductID != nil && *input.ProductID != 0 && uc.productRepo != nil {
+	if input.ProductID != nil && *input.ProductID == 0 {
+		return nil, fmt.Errorf("product_id is required")
+	}
+	if input.ContributionQuantity != nil && *input.ContributionQuantity <= 0 {
+		return nil, fmt.Errorf("contribution_quantity must be greater than 0")
+	}
+
+	if input.ProductID != nil && uc.productRepo != nil {
 		if _, err := uc.productRepo.FindByWaveAndID(ctx, rule.WaveID, *input.ProductID); err != nil {
 			return nil, fmt.Errorf("product %d does not exist in wave %d", *input.ProductID, rule.WaveID)
 		}

@@ -44,9 +44,21 @@ func NewEntitlementRoutingUseCase(
 	}
 }
 
+func isExcludedRoutingDisposition(disposition string) bool {
+	switch disposition {
+	case string(domain.RoutingDispositionExcludedManual),
+		string(domain.RoutingDispositionExcludedDuplicate),
+		string(domain.RoutingDispositionExcludedRevoked):
+		return true
+	default:
+		return false
+	}
+}
+
 // UpdateDemandLineRouting validates and applies routing field updates to a single demand line.
 func (uc *entitlementRoutingUseCase) UpdateDemandLineRouting(ctx context.Context, input dto.UpdateDemandLineRoutingInput) error {
-	if _, err := uc.demandRepo.FindLineByID(ctx, input.DemandLineID); err != nil {
+	line, err := uc.demandRepo.FindLineByID(ctx, input.DemandLineID)
+	if err != nil {
 		return fmt.Errorf("demand line %d not found: %w", input.DemandLineID, err)
 	}
 	if !validRoutingDispositions[input.RoutingDisposition] {
@@ -54,6 +66,16 @@ func (uc *entitlementRoutingUseCase) UpdateDemandLineRouting(ctx context.Context
 	}
 	if !validRecipientInputStates[input.RecipientInputState] {
 		return fmt.Errorf("invalid recipient_input_state %q: must be one of not_required, waiting_for_input, partially_collected, ready, waived, expired", input.RecipientInputState)
+	}
+	if isExcludedRoutingDisposition(input.RoutingDisposition) &&
+		line.RoutingDisposition == string(domain.RoutingDispositionAccepted) {
+		assigned, err := uc.assignmentRepo.ExistsByDocument(ctx, line.DemandDocumentID)
+		if err != nil {
+			return fmt.Errorf("check demand document assignment: %w", err)
+		}
+		if assigned {
+			return fmt.Errorf("cannot exclude an accepted line already assigned to a wave")
+		}
 	}
 	return uc.demandRepo.UpdateLineRoutingFields(ctx,
 		input.DemandLineID,
@@ -100,15 +122,12 @@ func (uc *entitlementRoutingUseCase) GetWaveRoutingStats(ctx context.Context, wa
 			stats.TotalLines++
 			switch line.RoutingDisposition {
 			case "accepted":
-				switch line.RecipientInputState {
-				case "ready", "not_required", "waived":
+				if isEligibleForFulfillment(&line) {
 					stats.AcceptedReadyCount++
-				case "waiting_for_input":
+				} else if line.RecipientInputState == "waiting_for_input" {
 					stats.AcceptedWaitingCount++
-				case "partially_collected":
+				} else if line.RecipientInputState == "partially_collected" {
 					stats.AcceptedPartialCount++
-				default:
-					stats.AcceptedReadyCount++
 				}
 			case "deferred":
 				stats.DeferredCount++

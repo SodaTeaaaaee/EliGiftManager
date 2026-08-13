@@ -796,3 +796,57 @@ func TestUpdateProfileKeepsDefaultSalesOrderBindingOnMembershipLeftover(t *testi
 		t.Fatalf("UpdateProfile: %v", err)
 	}
 }
+
+func TestUpdateProfileRejectsEmptyProfileKey(t *testing.T) {
+	t.Parallel()
+
+	for _, emptyKey := range []string{"", "   ", "\t"} {
+		emptyKey := emptyKey
+		t.Run(fmt.Sprintf("key=%q", emptyKey), func(t *testing.T) {
+			t.Parallel()
+
+			existing := &domain.IntegrationProfile{
+				ID:            1,
+				ProfileKey:    "keep-me",
+				SourceSurface: string(domain.SourceSurfaceMembership),
+			}
+			updateCalled := false
+			uc := NewProfileManagementUseCase(
+				&stubIntegrationProfileRepo{
+					FindByIDFn: func(id uint) (*domain.IntegrationProfile, error) {
+						cp := *existing
+						return &cp, nil
+					},
+					UpdateFn: func(profile *domain.IntegrationProfile) error {
+						updateCalled = true
+						existing.ProfileKey = profile.ProfileKey
+						return nil
+					},
+				},
+				&stubDemandDocumentRepo{},
+				&stubChannelSyncRepo{},
+				&stubProfileTemplateBindingRepo{},
+				&stubClosureDecisionRepo{},
+				nil,
+			)
+
+			_, err := uc.UpdateProfile(context.Background(), dto.UpdateProfileInput{
+				ID:            1,
+				ProfileKey:    emptyKey,
+				SourceSurface: string(domain.SourceSurfaceMembership),
+			})
+			if err == nil {
+				t.Fatal("expected error for empty profile_key")
+			}
+			if !strings.Contains(err.Error(), "profile_key must not be empty") {
+				t.Fatalf("error = %q, want profile_key must not be empty", err)
+			}
+			if updateCalled {
+				t.Fatal("Update must not be called when profile_key is empty")
+			}
+			if existing.ProfileKey != "keep-me" {
+				t.Fatalf("existing ProfileKey = %q, want keep-me", existing.ProfileKey)
+			}
+		})
+	}
+}

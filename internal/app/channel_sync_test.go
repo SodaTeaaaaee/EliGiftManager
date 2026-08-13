@@ -430,6 +430,59 @@ func TestCreateChannelSyncJobPersistsJobAndItems(t *testing.T) {
 	}
 }
 
+func TestCreateChannelSyncJobReusesExistingPendingJob(t *testing.T) {
+	t.Parallel()
+	s := newSyncTestSetup()
+
+	first, firstItems, err := s.uc.CreateChannelSyncJob(context.Background(), s.validInput())
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+
+	secondInput := s.validInput()
+	secondInput.Items[0].TrackingNo = "TRACK-DIFFERENT"
+	second, secondItems, err := s.uc.CreateChannelSyncJob(context.Background(), secondInput)
+	if err != nil {
+		t.Fatalf("second create: %v", err)
+	}
+	if second.ID != first.ID {
+		t.Errorf("job ID = %d, want reused %d", second.ID, first.ID)
+	}
+	if len(s.channelSync.jobs) != 1 {
+		t.Errorf("expected 1 pending job, got %d", len(s.channelSync.jobs))
+	}
+	if len(secondItems) != len(firstItems) {
+		t.Fatalf("reused item count = %d, want %d", len(secondItems), len(firstItems))
+	}
+	if len(secondItems) > 0 && secondItems[0].TrackingNo != firstItems[0].TrackingNo {
+		t.Errorf("reused tracking = %q, want original %q", secondItems[0].TrackingNo, firstItems[0].TrackingNo)
+	}
+}
+
+func TestCreateChannelSyncJobCreatesNewJobAfterPreviousLeftPending(t *testing.T) {
+	t.Parallel()
+	s := newSyncTestSetup()
+
+	first, _, err := s.uc.CreateChannelSyncJob(context.Background(), s.validInput())
+	if err != nil {
+		t.Fatalf("first create: %v", err)
+	}
+	s.channelSync.mu.Lock()
+	s.channelSync.jobs[first.ID].Status = "success"
+	s.channelSync.mu.Unlock()
+
+	second, _, err := s.uc.CreateChannelSyncJob(context.Background(), s.validInput())
+	if err != nil {
+		t.Fatalf("second create: %v", err)
+	}
+	if second.ID == first.ID {
+		t.Errorf("reused job %d despite status success", first.ID)
+	}
+	if len(s.channelSync.jobs) != 2 {
+		t.Errorf("expected 2 jobs, got %d", len(s.channelSync.jobs))
+	}
+}
+
 func TestCreateChannelSyncJobRejectsEmptyItems(t *testing.T) {
 	t.Parallel()
 	s := newSyncTestSetup()

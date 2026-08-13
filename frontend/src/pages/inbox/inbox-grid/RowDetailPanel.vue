@@ -151,12 +151,15 @@ async function applyBulkRouting(): Promise<void> {
   applyingBulk.value = true
   try {
     const result = await batchUpdateDemandLineRouting({
-      updates: selectedLineIds.value.map((demandLineId) => ({
-        demandLineId,
-        routingDisposition: bulkRoutingDisposition.value as string,
-        recipientInputState: bulkRecipientInputState.value as string,
-        routingReasonCode: '',
-      })),
+      updates: selectedLineIds.value.map((demandLineId) => {
+        const line = lines.value.find((candidate) => candidate.id === demandLineId)
+        return {
+          demandLineId,
+          routingDisposition: bulkRoutingDisposition.value as string,
+          recipientInputState: bulkRecipientInputState.value as string,
+          routingReasonCode: line?.routingReasonCode ?? '',
+        }
+      }),
     })
     if (result.errors.length > 0) {
       feedback.error(t('fulfillmentGrid.batch.someFailed', { count: result.errors.length }))

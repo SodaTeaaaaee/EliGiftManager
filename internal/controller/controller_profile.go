@@ -1,6 +1,9 @@
 package controller
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
@@ -10,6 +13,9 @@ import (
 // ProfileController exposes IntegrationProfile management Wails bindings.
 type ProfileController struct {
 	uc app.ProfileManagementUseCase
+	// seedCatalogDemo / seedBilibiliDemo override production demo seeds in tests.
+	seedCatalogDemo  func(ctx context.Context) error
+	seedBilibiliDemo func(ctx context.Context) error
 }
 
 func NewProfileController() *ProfileController {
@@ -57,6 +63,8 @@ func (c *ProfileController) ListProfiles() ([]dto.IntegrationProfileDTO, error) 
 
 // SeedDefaultProfiles creates default profiles if they don't already exist,
 // then ensures the catalog and bilibili demo seeds (idempotent).
+// A later demo-seed failure is returned; callers never see a successful
+// result when catalog or bilibili seeding failed.
 func (c *ProfileController) SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, error) {
 	ctx := appContext
 	profiles, err := c.uc.SeedDefaultProfiles(ctx)
@@ -64,22 +72,44 @@ func (c *ProfileController) SeedDefaultProfiles() ([]dto.IntegrationProfileDTO, 
 		return nil, err
 	}
 
-	// Catalog demo seed (factory_rouzao_demo + catalog_rouzao_zip_demo binding).
-	// Independent of the single source default so it can also be called alone later.
-	gdb := database.GetDB()
-	profileRepo := infra.NewIntegrationProfileRepository(gdb)
-	templateRepo := infra.NewDocumentTemplateRepository(gdb)
-	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
-	if _, err := app.SeedCatalogDemo(ctx, profileRepo, templateRepo, bindingRepo); err != nil {
+	seedCatalog, seedBilibili, err := c.catalogAndBilibiliSeeders()
+	if err != nil {
 		return nil, err
 	}
-	// Bilibili demo seed: one bilibili platform profile (bilibili_membership_demo)
-	// with default bindings for entitlement, sales_order, carrier mapping, and
-	// tracking export (SampleData header-locked).
-	if _, err := app.SeedBilibiliDemo(ctx, profileRepo, templateRepo, bindingRepo); err != nil {
+	if err := seedCatalog(ctx); err != nil {
+		return nil, err
+	}
+	if err := seedBilibili(ctx); err != nil {
 		return nil, err
 	}
 	return profiles, nil
+}
+
+func (c *ProfileController) catalogAndBilibiliSeeders() (catalog, bilibili func(context.Context) error, err error) {
+	catalog, bilibili = c.seedCatalogDemo, c.seedBilibiliDemo
+	if catalog != nil && bilibili != nil {
+		return catalog, bilibili, nil
+	}
+	gdb := database.GetDB()
+	if gdb == nil {
+		return nil, nil, fmt.Errorf("seed default profiles: database is not initialized")
+	}
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	if catalog == nil {
+		catalog = func(ctx context.Context) error {
+			_, seedErr := app.SeedCatalogDemo(ctx, profileRepo, templateRepo, bindingRepo)
+			return seedErr
+		}
+	}
+	if bilibili == nil {
+		bilibili = func(ctx context.Context) error {
+			_, seedErr := app.SeedBilibiliDemo(ctx, profileRepo, templateRepo, bindingRepo)
+			return seedErr
+		}
+	}
+	return catalog, bilibili, nil
 }
 
 // SeedBuiltinPlatform installs one named builtin platform (keys: "bilibili",

@@ -1,11 +1,10 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
+	"sync"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -148,7 +147,9 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 		}
 		job = createdJob
 		items = createdItems
-		projectChannelSyncPendingWithRepo(fulfillRepo, items)
+		if projErr := projectChannelSyncPendingWithRepo(fulfillRepo, items); projErr != nil {
+			return projErr
+		}
 
 		projHash, hashErr := projHashSvc.ComputeHash(ctx, input.WaveID)
 		if hashErr != nil {
@@ -176,11 +177,11 @@ func (c *ChannelSyncController) CreateChannelSyncJob(input dto.CreateChannelSync
 	return result, nil
 }
 
-func (c *ChannelSyncController) projectChannelSyncPending(items []domain.ChannelSyncItem) {
-	projectChannelSyncPendingWithRepo(c.fulfillRepo, items)
+func (c *ChannelSyncController) projectChannelSyncPending(items []domain.ChannelSyncItem) error {
+	return projectChannelSyncPendingWithRepo(c.fulfillRepo, items)
 }
 
-func projectChannelSyncPendingWithRepo(repo domain.FulfillmentLineRepository, items []domain.ChannelSyncItem) {
+func projectChannelSyncPendingWithRepo(repo domain.FulfillmentLineRepository, items []domain.ChannelSyncItem) error {
 	ctx := appContext
 	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(items))
 	for _, it := range items {
@@ -189,9 +190,13 @@ func projectChannelSyncPendingWithRepo(repo domain.FulfillmentLineRepository, it
 			ChannelSyncState: "pending",
 		})
 	}
-	if len(updates) > 0 {
-		_ = repo.BulkUpdateStates(ctx, updates)
+	if len(updates) == 0 {
+		return nil
 	}
+	if err := repo.BulkUpdateStates(ctx, updates); err != nil {
+		return fmt.Errorf("project channel sync pending state: %w", err)
+	}
+	return nil
 }
 
 // PlanChannelClosure is the high-level orchestration entry point.
@@ -231,6 +236,11 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, decisionRepo)
 
+		existingJobs, listErr := channelSyncRepo.ListJobsByWave(ctx, input.WaveID)
+		if listErr != nil {
+			return listErr
+		}
+
 		planned, planErr := closureUC.PlanChannelClosure(ctx, input)
 		if planErr != nil {
 			return planErr
@@ -243,7 +253,14 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 					FulfillmentLineID: result.Items[i].FulfillmentLineID,
 				}
 			}
-			projectChannelSyncPendingWithRepo(fulfillRepo, items)
+			if projErr := projectChannelSyncPendingWithRepo(fulfillRepo, items); projErr != nil {
+				return projErr
+			}
+			if channelSyncJobAlreadyExists(existingJobs, result.Job.ID) {
+				// Reused an existing pending job: keep line state consistent, but do
+				// not record another create_channel_sync_job history node.
+				return nil
+			}
 			projHash, hashErr := projHashSvc.ComputeHash(ctx, input.WaveID)
 			if hashErr != nil {
 				return hashErr
@@ -265,6 +282,15 @@ func (c *ChannelSyncController) PlanChannelClosure(input dto.PlanChannelClosureI
 		return dto.PlanChannelClosureResult{}, err
 	}
 	return *result, nil
+}
+
+func channelSyncJobAlreadyExists(jobs []domain.ChannelSyncJob, jobID uint) bool {
+	for _, j := range jobs {
+		if j.ID == jobID {
+			return true
+		}
+	}
+	return false
 }
 
 // ExecuteChannelSyncJob executes a pending ChannelSyncJob.
@@ -593,33 +619,86 @@ func domainToChannelSyncJobDTO(j *domain.ChannelSyncJob) dto.ChannelSyncJobDTO {
 	}
 }
 
+// resolveChannelSyncExportsDirFn is the production path to data/exports. Tests
+// may replace it; callers must not fall back to os.TempDir, which diverges
+// from the app data directory.
+var (
+	resolveChannelSyncExportsDirMu sync.Mutex
+	resolveChannelSyncExportsDirFn = service.ResolveExportsDir
+)
+
+func resolveChannelSyncExportsDir() (string, error) {
+	resolveChannelSyncExportsDirMu.Lock()
+	fn := resolveChannelSyncExportsDirFn
+	resolveChannelSyncExportsDirMu.Unlock()
+	return fn()
+}
+
+// resolvingExportsExecutor resolves data/exports at Execute time so a
+// construction-time ResolveExportsDir failure cannot silently write tracking
+// files under os.TempDir.
+type resolvingExportsExecutor struct {
+	prototype app.CapableExecutor
+	build     func(exportsDir string) app.CapableExecutor
+}
+
+func (e *resolvingExportsExecutor) ConnectorKey() string {
+	return e.prototype.ConnectorKey()
+}
+
+func (e *resolvingExportsExecutor) Capabilities() app.ConnectorCapabilities {
+	return e.prototype.Capabilities()
+}
+
+func (e *resolvingExportsExecutor) Execute(
+	ctx context.Context,
+	job *domain.ChannelSyncJob,
+	items []domain.ChannelSyncItem,
+	profile *domain.IntegrationProfile,
+) (*app.ChannelSyncExecutionResult, error) {
+	exportsDir, err := resolveChannelSyncExportsDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve exports dir: %w", err)
+	}
+	return e.build(exportsDir).Execute(ctx, job, items, profile)
+}
+
+func newResolvingDocumentExportExecutor(templates *app.TrackingTemplateSource) app.CapableExecutor {
+	return &resolvingExportsExecutor{
+		prototype: app.NewDocumentExportExecutor("", templates),
+		build: func(exportsDir string) app.CapableExecutor {
+			return app.NewDocumentExportExecutor(exportsDir, templates)
+		},
+	}
+}
+
+func newResolvingCSVExportExecutor(templates *app.TrackingTemplateSource) app.CapableExecutor {
+	return &resolvingExportsExecutor{
+		prototype: app.NewCSVExportExecutor("", templates),
+		build: func(exportsDir string) app.CapableExecutor {
+			return app.NewCSVExportExecutor(exportsDir, templates)
+		},
+	}
+}
+
 // buildExecutorRegistry constructs an ExecutorRegistry pre-populated with all
 // known CapableExecutor implementations.  It is kept in sync with
 // buildExecutorProvider so the two registrations never diverge.
 func buildExecutorRegistry() *app.ExecutorRegistry {
-	exportsDir, err := service.ResolveExportsDir()
-	if err != nil {
-		log.Printf("[channel_sync] resolve exports dir for registry: %v — falling back to os.TempDir", err)
-		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
-	}
 	templates := buildTrackingTemplateSource()
 	registry := app.NewExecutorRegistry()
-	registry.Register(app.NewDocumentExportExecutor(exportsDir, templates))
-	registry.Register(app.NewCSVExportExecutor(exportsDir, templates))
+	registry.Register(newResolvingDocumentExportExecutor(templates))
+	registry.Register(newResolvingCSVExportExecutor(templates))
 	return registry
 }
 
-// buildExecutorProvider resolves the exports directory and wires the
-// document_export executor for the "eli.local_export" connector key.
+// buildExecutorProvider wires the document_export executor for the
+// "eli.local_export" connector key. The exports directory is resolved at
+// Execute time against data/exports — never os.TempDir.
 func buildExecutorProvider() app.ExecutorProvider {
-	exportsDir, err := service.ResolveExportsDir()
-	if err != nil {
-		log.Printf("[channel_sync] resolve exports dir: %v — falling back to os.TempDir", err)
-		exportsDir = filepath.Join(os.TempDir(), "EliGiftManager", "exports")
-	}
 	templates := buildTrackingTemplateSource()
-	docExportExec := app.NewDocumentExportExecutor(exportsDir, templates)
-	csvExportExec := app.NewCSVExportExecutor(exportsDir, templates)
+	docExportExec := newResolvingDocumentExportExecutor(templates)
+	csvExportExec := newResolvingCSVExportExecutor(templates)
 	registry := map[string]map[string]app.ChannelSyncExecutor{
 		"document_export": {
 			"eli.local_export": docExportExec,

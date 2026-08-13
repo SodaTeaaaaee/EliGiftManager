@@ -145,7 +145,8 @@ func TestReplayAdjustments_AmbiguousTarget(t *testing.T) {
 	}
 }
 
-func TestReplayAdjustments_QuantityClampToZero(t *testing.T) {
+func TestReplayAdjustments_ReduceBelowZeroProducesFailure(t *testing.T) {
+	t.Parallel()
 	baselines := []domain.FulfillmentLine{
 		{ID: 1, Quantity: 2},
 	}
@@ -160,11 +161,14 @@ func TestReplayAdjustments_QuantityClampToZero(t *testing.T) {
 	}
 
 	result, failures := ReplayAdjustments(baselines, adjustments)
-	if len(failures) != 0 {
-		t.Fatalf("expected no failures, got %v", failures)
+	if len(failures) != 1 {
+		t.Fatalf("expected 1 failure, got %v", failures)
 	}
-	if result[0].Quantity != 0 {
-		t.Fatalf("expected quantity clamped to 0, got %d", result[0].Quantity)
+	if failures[0].Reason != "negative_quantity" {
+		t.Fatalf("expected reason negative_quantity, got %s", failures[0].Reason)
+	}
+	if result[0].Quantity != 2 {
+		t.Fatalf("expected quantity unchanged at 2, got %d", result[0].Quantity)
 	}
 }
 

@@ -5,6 +5,8 @@
  * detected header/row counts, then composes `FieldMappingEditor` for the
  * dest catalog appropriate to the surface (demand line/document/recipient, or
  * factory product/shipment/export namespaces).
+ * Export supplier-order and source-tracking samples accept CSV / XLSX only —
+ * `.xls` is rejected in `pickAndParseFile` before confirm.
  */
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -158,7 +160,7 @@ function handlePick(): void {
       :column-order-label="t('intakeWizard.mapping.columnOrderLabel')"
       :column-order-placeholder="t('intakeWizard.mapping.columnOrderPlaceholder')"
       :input-format="inputFormat"
-      @update:model-value="(value) => (state.mapping.value = value)"
+      @update:model-value="(value) => { void state.applyMappingUpdate(value) }"
     />
   </div>
 </template>

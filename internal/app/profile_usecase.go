@@ -223,6 +223,10 @@ func (uc *profileManagementUseCase) UpdateProfile(ctx context.Context, input dto
 		return nil, err
 	}
 
+	if strings.TrimSpace(input.ProfileKey) == "" {
+		return nil, fmt.Errorf("profile_key must not be empty")
+	}
+
 	// When renaming, uniqueness must exclude the profile itself.
 	if input.ProfileKey != "" && input.ProfileKey != profile.ProfileKey {
 		if existing, findErr := uc.repo.FindByProfileKey(ctx, input.ProfileKey); findErr == nil && existing != nil && existing.ID != profile.ID {

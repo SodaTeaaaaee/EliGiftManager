@@ -2,7 +2,10 @@ package app
 
 import (
 	"context"
+	"strings"
 	"testing"
+
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
 func TestBilibiliExportTrackingMappingRules_ParseableAndLegal(t *testing.T) {
@@ -58,12 +61,26 @@ func TestBilibiliDemandImportMappingRules_ParseableAndLegal(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name    string
-		docType string
-		raw     string
+		name      string
+		docType   string
+		raw       string
+		mode      string
+		hasHeader bool
 	}{
-		{name: "membership", docType: BilibiliImportEntitlementDocType, raw: BilibiliImportEntitlementMappingRules},
-		{name: "retail", docType: BilibiliImportSalesOrderDocType, raw: BilibiliImportSalesOrderMappingRules},
+		{
+			name:      "membership",
+			docType:   BilibiliImportEntitlementDocType,
+			raw:       BilibiliImportEntitlementMappingRules,
+			mode:      "positional",
+			hasHeader: false,
+		},
+		{
+			name:      "retail",
+			docType:   BilibiliImportSalesOrderDocType,
+			raw:       BilibiliImportSalesOrderMappingRules,
+			mode:      "header",
+			hasHeader: true,
+		},
 	}
 	for _, tc := range tests {
 		tc := tc
@@ -72,6 +89,10 @@ func TestBilibiliDemandImportMappingRules_ParseableAndLegal(t *testing.T) {
 			rules, err := ParseMappingRules(tc.raw)
 			if err != nil {
 				t.Fatalf("ParseMappingRules: %v", err)
+			}
+			if rules.Mode != tc.mode || rules.HasHeader != tc.hasHeader {
+				t.Fatalf("unexpected rules meta: mode=%q hasHeader=%v, want mode=%q hasHeader=%v",
+					rules.Mode, rules.HasHeader, tc.mode, tc.hasHeader)
 			}
 			if err := ValidateMappingRulesConfig(tc.docType, rules); err != nil {
 				t.Fatalf("ValidateMappingRulesConfig: %v", err)
@@ -100,6 +121,19 @@ func TestSeedBilibiliDemo_Idempotent(t *testing.T) {
 	}
 	if p1.SourceChannel != "bilibili" {
 		t.Errorf("SourceChannel = %q, want bilibili", p1.SourceChannel)
+	}
+	if p1.DemandKind != "" {
+		t.Errorf("DemandKind = %q, want empty leftover so both demand import types can bind", p1.DemandKind)
+	}
+	for _, docType := range []string{
+		BilibiliImportEntitlementDocType,
+		BilibiliImportSalesOrderDocType,
+		BilibiliExportTrackingDocType,
+		BilibiliImportCarrierDocType,
+	} {
+		if err := ValidateProfileDocumentType(p1, docType); err != nil {
+			t.Errorf("ValidateProfileDocumentType(%s): %v", docType, err)
+		}
 	}
 	retail, err := profileRepo.FindByProfileKey(ctx, BilibiliRetailDemoProfileKey)
 	if retail != nil {
@@ -181,7 +215,7 @@ func TestSeedBilibiliDemo_Idempotent(t *testing.T) {
 	}
 }
 
-func TestSeedBilibiliDemo_ConvergesTemplateAndDefaultBinding(t *testing.T) {
+func TestSeedBilibiliDemo_DoesNotOverwriteExistingProfileOrMappings(t *testing.T) {
 	t.Parallel()
 
 	profileRepo := newMockIntegrationProfileRepoSimple()
@@ -189,37 +223,83 @@ func TestSeedBilibiliDemo_ConvergesTemplateAndDefaultBinding(t *testing.T) {
 	bindingRepo := newMockProfileTemplateBindingRepo()
 	ctx := context.Background()
 
-	membership, err := SeedBilibiliDemo(ctx, profileRepo, templateRepo, bindingRepo)
+	operatorProfile := &domain.IntegrationProfile{
+		ProfileKey:             BilibiliDemoProfileKey,
+		SourceChannel:          "bilibili",
+		SourceSurface:          string(domain.SourceSurfaceMembership),
+		DemandKind:             "retail_order",
+		TrackingSyncMode:       "manual_confirmation",
+		RequiresCarrierMapping: false,
+		ConnectorKey:           "operator.custom",
+	}
+	if err := profileRepo.Create(ctx, operatorProfile); err != nil {
+		t.Fatalf("create operator profile: %v", err)
+	}
+
+	operatorRules := `{"version":2,"mode":"header","hasHeader":true,"columns":{"line.gift_level_snapshot":"等级"}}`
+	operatorTmpl := &domain.DocumentTemplate{
+		TemplateKey:  BilibiliImportEntitlementTemplateKey,
+		DocumentType: BilibiliImportEntitlementDocType,
+		Format:       "json",
+		MappingRules: operatorRules,
+	}
+	if err := templateRepo.Create(ctx, operatorTmpl); err != nil {
+		t.Fatalf("create operator template: %v", err)
+	}
+	if err := bindingRepo.Create(ctx, &domain.IntegrationProfileTemplateBinding{
+		IntegrationProfileID: operatorProfile.ID,
+		DocumentType:         BilibiliImportEntitlementDocType,
+		TemplateID:           operatorTmpl.ID,
+		IsDefault:            true,
+	}); err != nil {
+		t.Fatalf("create operator binding: %v", err)
+	}
+
+	seeded, err := SeedBilibiliDemo(ctx, profileRepo, templateRepo, bindingRepo)
 	if err != nil {
-		t.Fatalf("first seed: %v", err)
+		t.Fatalf("SeedBilibiliDemo: %v", err)
 	}
-	entitlement, _ := templateRepo.FindByKey(ctx, BilibiliImportEntitlementTemplateKey)
-	carrier, _ := templateRepo.FindByKey(ctx, BilibiliImportCarrierTemplateKey)
-	if entitlement == nil || carrier == nil {
-		t.Fatal("seed did not create templates")
+	if seeded.ID != operatorProfile.ID {
+		t.Fatalf("seed replaced profile ID %d with %d", operatorProfile.ID, seeded.ID)
 	}
-
-	entitlement.Format = "json"
-	entitlement.MappingRules = `{"columns":{"line.external_title":"wrong"}}`
-	if err := templateRepo.Update(ctx, entitlement); err != nil {
-		t.Fatalf("drift template: %v", err)
+	if seeded.RequiresCarrierMapping || seeded.TrackingSyncMode != "manual_confirmation" || seeded.ConnectorKey != "operator.custom" {
+		t.Fatalf("seed overwrote operator capabilities: %+v", seeded)
 	}
-	binding, _ := bindingRepo.FindDefaultByProfileAndType(ctx, membership.ID, BilibiliImportEntitlementDocType)
-	binding.TemplateID = carrier.ID
-	if err := bindingRepo.Update(ctx, binding); err != nil {
-		t.Fatalf("drift binding: %v", err)
+	if seeded.DemandKind != "" {
+		t.Fatalf("leftover DemandKind = %q, want empty (documentType is explicit)", seeded.DemandKind)
 	}
 
-	if _, err := SeedBilibiliDemo(ctx, profileRepo, templateRepo, bindingRepo); err != nil {
-		t.Fatalf("converging seed: %v", err)
-	}
 	gotTemplate, _ := templateRepo.FindByKey(ctx, BilibiliImportEntitlementTemplateKey)
-	if gotTemplate.Format != "csv" || gotTemplate.MappingRules != BilibiliImportEntitlementMappingRules {
-		t.Fatalf("template did not converge: %+v", gotTemplate)
+	if gotTemplate == nil || gotTemplate.Format != "json" || gotTemplate.MappingRules != operatorRules {
+		t.Fatalf("seed clobbered MappingRules: %+v", gotTemplate)
 	}
-	gotBinding, _ := bindingRepo.FindDefaultByProfileAndType(ctx, membership.ID, BilibiliImportEntitlementDocType)
-	if gotBinding == nil || gotBinding.TemplateID != gotTemplate.ID {
-		t.Fatalf("binding did not converge: %+v", gotBinding)
+	gotBinding, _ := bindingRepo.FindDefaultByProfileAndType(ctx, operatorProfile.ID, BilibiliImportEntitlementDocType)
+	if gotBinding == nil || gotBinding.TemplateID != operatorTmpl.ID {
+		t.Fatalf("seed retargeted default binding: %+v", gotBinding)
+	}
+
+	for _, key := range []string{
+		BilibiliImportSalesOrderTemplateKey,
+		BilibiliExportTrackingTemplateKey,
+		BilibiliImportCarrierTemplateKey,
+	} {
+		tmpl, findErr := templateRepo.FindByKey(ctx, key)
+		if findErr != nil || tmpl == nil {
+			t.Errorf("missing template %q was not created: tmpl=%v err=%v", key, tmpl, findErr)
+		}
+	}
+
+	salesBinding, _ := bindingRepo.FindDefaultByProfileAndType(ctx, operatorProfile.ID, BilibiliImportSalesOrderDocType)
+	if salesBinding == nil {
+		t.Fatal("missing import_sales_order default binding was not created")
+	}
+	// Operator profile lacks document_export / RequiresCarrierMapping; seed must
+	// not write those bindings or flip capabilities to make them legal.
+	if b, _ := bindingRepo.FindDefaultByProfileAndType(ctx, operatorProfile.ID, BilibiliExportTrackingDocType); b != nil {
+		t.Fatalf("seed wrote export_source_tracking_update binding on an ineligible profile: %+v", b)
+	}
+	if b, _ := bindingRepo.FindDefaultByProfileAndType(ctx, operatorProfile.ID, BilibiliImportCarrierDocType); b != nil {
+		t.Fatalf("seed wrote import_carrier_mapping binding on an ineligible profile: %+v", b)
 	}
 }
 
@@ -227,5 +307,20 @@ func TestSeedBilibiliDemo_RequiresProfileRepo(t *testing.T) {
 	t.Parallel()
 	if _, err := SeedBilibiliDemo(context.Background(), nil, nil, nil); err == nil {
 		t.Fatal("expected error when profileRepo is nil")
+	}
+}
+
+func TestSeedBilibiliDemo_PropagatesBindingLookupError(t *testing.T) {
+	t.Parallel()
+
+	profileRepo := newMockIntegrationProfileRepoSimple()
+	templateRepo := newMockDocumentTemplateRepo()
+	bindingRepo := &failLookupBindingRepo{mockProfileTemplateBindingRepo: newMockProfileTemplateBindingRepo()}
+	_, err := SeedBilibiliDemo(context.Background(), profileRepo, templateRepo, bindingRepo)
+	if err == nil {
+		t.Fatal("expected binding lookup error, got nil")
+	}
+	if !strings.Contains(err.Error(), "db unavailable") {
+		t.Fatalf("error = %v, want binding lookup failure", err)
 	}
 }

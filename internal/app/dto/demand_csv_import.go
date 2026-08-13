@@ -28,7 +28,8 @@ type ImportDemandCSVInput struct {
 type ImportDemandCSVResult struct {
 	ImportRunID      uint                   `json:"importRunId"`
 	EvidenceDisabled bool                   `json:"evidenceDisabled"`
-	Document         *DemandDocumentDTO     `json:"document"` // nil when nothing was persisted
+	Document         *DemandDocumentDTO     `json:"document"` // first created document; nil when nothing was persisted
+	Documents        []DemandDocumentDTO    `json:"documents"`
 	Errors           []DemandCSVImportError `json:"errors"`
 	TotalProcessed   int                    `json:"totalProcessed"`
 	SuccessCount     int                    `json:"successCount"`

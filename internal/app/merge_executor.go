@@ -58,7 +58,13 @@ func (e *customerMergeExecutor) ExecuteMerge(ctx context.Context, input dto.Exec
 		if existing.CommandHash != commandHash {
 			return nil, fmt.Errorf("merge idempotency conflict: operation key %q was used for a different command", input.OperationKey)
 		}
-		return e.executionResult(ctx, existing, true)
+		if existing.Status == domain.MergeRecordStatusCompleted || existing.Status == domain.MergeRecordStatusUndone {
+			return e.executionResult(ctx, existing, true)
+		}
+		if existing.Status == domain.MergeRecordStatusExecuting {
+			return e.resumeExecutingMerge(ctx, existing, input)
+		}
+		return nil, fmt.Errorf("merge record %d has unexpected status %q", existing.ID, existing.Status)
 	} else if !errors.Is(findErr, gorm.ErrRecordNotFound) {
 		return nil, fmt.Errorf("check merge operation key: %w", findErr)
 	}
@@ -173,6 +179,113 @@ func (e *customerMergeExecutor) ExecuteMerge(ctx context.Context, input dto.Exec
 	return &dto.ExecuteCustomerMergeResult{MergeID: record.ID, OperationKey: record.OperationKey,
 		Status: domain.MergeRecordStatusCompleted, Counts: plan.Counts, SourceRowVersion: record.SourceRowVersionAfter,
 		TargetRowVersion: record.TargetRowVersionAfter, CandidateStatus: candidateStatus(plan.Candidate), UndoDryRunRequired: true}, nil
+}
+
+func (e *customerMergeExecutor) resumeExecutingMerge(ctx context.Context, record *domain.CustomerMergeRecord, input dto.ExecuteCustomerMergeInput) (*dto.ExecuteCustomerMergeResult, error) {
+	moved, err := e.store.ListMovedEntities(ctx, record.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load moved entities for resume: %w", err)
+	}
+	now := e.now()
+	for _, item := range moved {
+		current, err := e.store.CurrentEntityState(ctx, item)
+		if err != nil {
+			return nil, fmt.Errorf("validate merge entity %s/%d: %w", item.EntityType, item.EntityID, err)
+		}
+		if mergeStateMatches(item.AfterSnapshot, current) {
+			continue
+		}
+		var after domain.MergeEntityState
+		if err := json.Unmarshal([]byte(item.AfterSnapshot), &after); err != nil {
+			return nil, fmt.Errorf("decode after snapshot: %w", err)
+		}
+		if err := e.store.ApplyEntityState(ctx, item, after); err != nil {
+			return nil, fmt.Errorf("apply merge entity %s/%d: %w", item.EntityType, item.EntityID, err)
+		}
+	}
+	if record.MergeCandidateID != nil {
+		revisionID := uint(0)
+		if input.ExpectedPolicyRevisionID != nil {
+			revisionID = *input.ExpectedPolicyRevisionID
+		} else if record.MergePolicyRevisionID != nil {
+			revisionID = *record.MergePolicyRevisionID
+		}
+		updated, err := e.store.MarkCandidateExecuted(ctx, *record.MergeCandidateID, input.ExpectedCandidateRowVersion,
+			input.ExpectedEvidenceHash, input.ExpectedPolicyVersion, revisionID, record.ID, now)
+		if err != nil {
+			return nil, fmt.Errorf("mark merge candidate executed: %w", err)
+		}
+		if !updated {
+			candidate, _, _, findErr := e.store.FindCandidateExecutionContext(ctx, *record.MergeCandidateID)
+			if findErr != nil {
+				return nil, fmt.Errorf("mark merge candidate executed: %w", findErr)
+			}
+			if candidate == nil || candidate.Status != domain.MergeCandidateStatusExecuted {
+				return nil, errors.New("stale merge preview: candidate changed during execution")
+			}
+		}
+	}
+	executedCandidateID := uint(0)
+	if record.MergeCandidateID != nil {
+		executedCandidateID = *record.MergeCandidateID
+	}
+	if err := e.store.InvalidateCandidatesAfterMerge(ctx, record.SourceProfileID, record.TargetProfileID, executedCandidateID); err != nil {
+		return nil, fmt.Errorf("invalidate affected merge candidates: %w", err)
+	}
+	record.SourceRowVersionAfter = record.SourceRowVersion + 1
+	record.TargetRowVersionAfter = record.TargetRowVersion + 1
+	record.CompletedAt = &now
+	completed, err := e.store.CompleteMergeRecord(ctx, record)
+	if err != nil {
+		return nil, fmt.Errorf("complete merge audit record: %w", err)
+	}
+	if !completed {
+		loaded, loadErr := e.store.FindMergeRecord(ctx, record.ID)
+		if loadErr != nil {
+			return nil, fmt.Errorf("reload merge record: %w", loadErr)
+		}
+		if loaded.Status == domain.MergeRecordStatusCompleted || loaded.Status == domain.MergeRecordStatusUndone {
+			return e.executionResult(ctx, loaded, true)
+		}
+		return nil, errors.New("merge audit record changed concurrently")
+	}
+	record.Status = domain.MergeRecordStatusCompleted
+	counts := countsFromMoved(moved)
+	events, err := e.store.ListMergeOperationEvents(ctx, record.ID)
+	if err != nil {
+		return nil, fmt.Errorf("load merge operation events: %w", err)
+	}
+	if !mergeCompletedEventExists(events, input.OperationKey) {
+		eventPayload, _ := json.Marshal(counts)
+		recordID := record.ID
+		if err := e.store.CreateMergeOperationEvent(ctx, &domain.CustomerMergeOperationEvent{MergeRecordID: &recordID,
+			EventKey: "merge:" + input.OperationKey + ":completed", OperationKey: input.OperationKey,
+			EventType: "merge_completed", Status: domain.MergeRecordStatusCompleted, ActorRef: input.ActorRef,
+			ReasonCode: input.DecisionReason, Payload: string(eventPayload), CreatedAt: now}); err != nil {
+			return nil, fmt.Errorf("record merge completion event: %w", err)
+		}
+	}
+	return &dto.ExecuteCustomerMergeResult{MergeID: record.ID, OperationKey: record.OperationKey,
+		Status: domain.MergeRecordStatusCompleted, Counts: counts, SourceRowVersion: record.SourceRowVersionAfter,
+		TargetRowVersion: record.TargetRowVersionAfter, CandidateStatus: resumeCandidateStatus(record),
+		UndoDryRunRequired: true}, nil
+}
+
+func resumeCandidateStatus(record *domain.CustomerMergeRecord) string {
+	if record != nil && record.MergeCandidateID != nil {
+		return domain.MergeCandidateStatusExecuted
+	}
+	return ""
+}
+
+func mergeCompletedEventExists(events []domain.CustomerMergeOperationEvent, operationKey string) bool {
+	want := "merge:" + operationKey + ":completed"
+	for i := range events {
+		if events[i].EventKey == want || events[i].EventType == "merge_completed" {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *customerMergeExecutor) executionResult(ctx context.Context, record *domain.CustomerMergeRecord, replay bool) (*dto.ExecuteCustomerMergeResult, error) {

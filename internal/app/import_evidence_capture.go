@@ -1,13 +1,9 @@
 package app
 
 import (
-	"archive/zip"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"path/filepath"
 	"strings"
 
@@ -153,36 +149,8 @@ func markImportEvidenceSuccess(records []domain.ImportRawRecord, index int, resu
 }
 
 // zipAssetMetadata records member path/hash/size without retaining binary
-// payloads. Tabular members are excluded because their logical rows are stored.
+// payloads. Hashing is capped via zipCatalogAssetMetadata so a zip bomb
+// cannot force an unbounded read.
 func zipAssetMetadata(path string) ([]map[string]string, error) {
-	reader, err := zip.OpenReader(path)
-	if err != nil {
-		return nil, fmt.Errorf("open zip for evidence metadata: %w", err)
-	}
-	defer reader.Close()
-	out := make([]map[string]string, 0)
-	for _, member := range reader.File {
-		if member.FileInfo().IsDir() {
-			continue
-		}
-		ext := strings.ToLower(filepath.Ext(member.Name))
-		if ext == ".csv" || ext == ".xlsx" || ext == ".xls" {
-			continue
-		}
-		r, err := member.Open()
-		if err != nil {
-			return nil, err
-		}
-		sum := sha256.New()
-		_, copyErr := io.Copy(sum, r)
-		closeErr := r.Close()
-		if copyErr != nil {
-			return nil, copyErr
-		}
-		if closeErr != nil {
-			return nil, closeErr
-		}
-		out = append(out, map[string]string{"member": member.Name, "path": filepath.ToSlash(member.Name), "sha256": hex.EncodeToString(sum.Sum(nil)), "size": fmt.Sprint(member.UncompressedSize64)})
-	}
-	return out, nil
+	return zipCatalogAssetMetadata(path, defaultCatalogZipLimits())
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -167,5 +168,65 @@ func TestVoidShipment_TransitionsStatusAndRecordsNote(t *testing.T) {
 	}
 	if again.Status != string(domain.ShipmentStatusVoided) {
 		t.Errorf("re-void status = %q, want %q", again.Status, domain.ShipmentStatusVoided)
+	}
+}
+
+type mockShipmentWriteRepo struct {
+	inner *mockShipmentRepo
+}
+
+func (m *mockShipmentWriteRepo) Update(ctx context.Context, shipment *domain.Shipment) error {
+	m.inner.mu.Lock()
+	defer m.inner.mu.Unlock()
+	cp := *shipment
+	m.inner.shipments[shipment.ID] = &cp
+	return nil
+}
+
+func TestVoidShipment_RestoresSupplierStateAndFreesOccupancy(t *testing.T) {
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	createUC := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+	uc := NewShipmentLifecycleUseCase(shipmentRepo, &mockShipmentWriteRepo{inner: shipmentRepo}, fulfillRepo, supplierRepo)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: string(domain.SupplierOrderStatusSubmitted), SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1, SupplierState: string(domain.SupplierStateSubmitted)}
+
+	created, _, err := createUC.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-VOID-OCCUPANCY",
+		Status:          string(domain.ShipmentStatusShipped),
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10}},
+	})
+	if err != nil {
+		t.Fatalf("CreateShipment: %v", err)
+	}
+	if fulfillRepo.lines[1].SupplierState != string(domain.SupplierStateShipped) {
+		t.Fatalf("pre-void supplier state = %q, want shipped", fulfillRepo.lines[1].SupplierState)
+	}
+
+	voided, err := uc.VoidShipment(context.Background(), dto.VoidShipmentInput{ID: created.ID, Note: "wrong address", OperatorID: "op-1"})
+	if err != nil {
+		t.Fatalf("VoidShipment: %v", err)
+	}
+	if voided.Status != string(domain.ShipmentStatusVoided) {
+		t.Fatalf("status = %q, want voided", voided.Status)
+	}
+	if fulfillRepo.lines[1].SupplierState != string(domain.SupplierStateSubmitted) {
+		t.Fatalf("post-void supplier state = %q, want submitted", fulfillRepo.lines[1].SupplierState)
+	}
+
+	active, err := sumActiveShippedQuantityBySOL(context.Background(), shipmentRepo, 1, 1)
+	if err != nil {
+		t.Fatalf("sumActiveShippedQuantityBySOL: %v", err)
+	}
+	if active != 0 {
+		t.Fatalf("active shipped qty after void = %d, want 0", active)
+	}
+	if supplierRepo.orders[1].Status == string(domain.SupplierOrderStatusShipped) {
+		t.Fatal("supplier order stayed shipped after the only shipment was voided")
 	}
 }

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -143,7 +144,10 @@ func (m *mockShipmentRepo) SumShippedQuantityBySOL(ctx context.Context, supplier
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	total := 0
-	for _, lines := range m.shipmentLines {
+	for shipmentID, lines := range m.shipmentLines {
+		if s, ok := m.shipments[shipmentID]; ok && s.Status == string(domain.ShipmentStatusVoided) {
+			continue
+		}
 		for _, l := range lines {
 			if l.SupplierOrderLineID == supplierOrderLineID {
 				total += l.Quantity
@@ -493,8 +497,10 @@ func (m *mockSupplierRepoForShipment) AtomicCreateSupplierOrder(ctx context.Cont
 // ── mock fulfill repo for shipment validation tests ──
 
 type mockFulfillRepoForShipment struct {
-	mu    sync.Mutex
-	lines map[uint]*domain.FulfillmentLine
+	mu             sync.Mutex
+	lines          map[uint]*domain.FulfillmentLine
+	failBulkUpdate error
+	failUpdate     error
 }
 
 func newMockFulfillRepoForShipment() *mockFulfillRepoForShipment {
@@ -542,6 +548,23 @@ func (m *mockFulfillRepoForShipment) DeleteByWave(ctx context.Context, waveID ui
 }
 
 func (m *mockFulfillRepoForShipment) BulkUpdateStates(ctx context.Context, updates []domain.FulfillmentLineStateUpdate) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.failBulkUpdate != nil {
+		return m.failBulkUpdate
+	}
+	for _, u := range updates {
+		l, ok := m.lines[u.ID]
+		if !ok {
+			continue
+		}
+		if u.SupplierState != "" {
+			l.SupplierState = u.SupplierState
+		}
+		if u.ChannelSyncState != "" {
+			l.ChannelSyncState = u.ChannelSyncState
+		}
+	}
 	return nil
 }
 
@@ -552,6 +575,9 @@ func (m *mockFulfillRepoForShipment) BulkUpdateCustomerProfileID(ctx context.Con
 func (m *mockFulfillRepoForShipment) Update(ctx context.Context, line *domain.FulfillmentLine) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failUpdate != nil {
+		return m.failUpdate
+	}
 	if existing, ok := m.lines[line.ID]; ok {
 		*existing = *line
 	}
@@ -924,7 +950,12 @@ func TestImportShipmentsRejectsOverShipment(t *testing.T) {
 	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
 	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
 
-	// Seed an existing shipment line directly so SumShippedQuantityBySOL returns 10.
+	// Seed an existing live shipment so occupancy already fills the SOL cap.
+	shipmentRepo.shipments[999] = &domain.Shipment{
+		ID:              999,
+		SupplierOrderID: 1,
+		Status:          string(domain.ShipmentStatusShipped),
+	}
 	shipmentRepo.shipmentLines[999] = []*domain.ShipmentLine{
 		{ID: 1, ShipmentID: 999, SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10},
 	}
@@ -1003,5 +1034,280 @@ func TestShipmentStatusProjectionPartiallyShipped(t *testing.T) {
 	}
 	if sum2 != 0 {
 		t.Errorf("expected sum=0 for SOL 2, got %d", sum2)
+	}
+}
+
+func TestCreateShipmentRejectsNonPositiveQuantity(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	_, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-ZERO",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 0}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "quantity must be positive") {
+		t.Fatalf("expected positive-quantity error, got %v", err)
+	}
+}
+
+func TestCreateShipmentRejectsOverAcceptedQuantity(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "accepted", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10, AcceptedQuantity: 5}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	_, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-OVER-ACCEPTED",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 6}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "over-shipment") {
+		t.Fatalf("expected over-shipment against accepted quantity, got %v", err)
+	}
+}
+
+func TestCreateShipmentAllowsUpToAcceptedQuantity(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "accepted", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10, AcceptedQuantity: 5}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1, SupplierState: string(domain.SupplierStateAccepted)}
+
+	if _, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-ACCEPTED-CAP",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 5}},
+	}); err != nil {
+		t.Fatalf("shipping accepted quantity should succeed: %v", err)
+	}
+	if fulfillRepo.lines[1].SupplierState != string(domain.SupplierStateShipped) {
+		t.Fatalf("supplier state = %q, want shipped", fulfillRepo.lines[1].SupplierState)
+	}
+}
+
+func TestCreateShipmentReturnsErrorWhenStateProjectionFails(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	fulfillRepo.failBulkUpdate = fmt.Errorf("bulk update failed")
+	fulfillRepo.failUpdate = fmt.Errorf("line update failed")
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1, SupplierState: string(domain.SupplierStateSubmitted)}
+
+	_, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-STATE-FAIL",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 2}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "failed to mark fulfillment lines shipped") {
+		t.Fatalf("expected state projection error, got %v", err)
+	}
+}
+
+func TestCreateShipmentCompensatesFulfillmentStateWhenBulkUpdateFails(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	fulfillRepo.failBulkUpdate = fmt.Errorf("bulk update failed")
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1, SupplierState: string(domain.SupplierStateSubmitted)}
+
+	if _, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-COMPENSATE",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 2}},
+	}); err != nil {
+		t.Fatalf("compensating line update should succeed: %v", err)
+	}
+	if fulfillRepo.lines[1].SupplierState != string(domain.SupplierStateShipped) {
+		t.Fatalf("supplier state = %q, want shipped after compensating update", fulfillRepo.lines[1].SupplierState)
+	}
+}
+
+func TestCreateShipmentRejectsIntraInputOverShipment(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	_, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-SPLIT",
+		Status:          "shipped",
+		Lines: []dto.CreateShipmentLineInput{
+			{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 6},
+			{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 6},
+		},
+	})
+	if err == nil || !strings.Contains(err.Error(), "over-shipment") {
+		t.Fatalf("expected intra-input over-shipment error, got %v", err)
+	}
+}
+
+func TestImportShipmentsRejectsIntraFileOverShipment(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "draft", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	result, err := uc.ImportShipments(context.Background(), dto.ImportShipmentInput{
+		WaveID:     1,
+		ImportMode: "skip_invalid",
+		Entries: []dto.ImportShipmentEntry{
+			{ExternalShipmentNo: "EXT-A", SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 6},
+			{ExternalShipmentNo: "EXT-B", SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 6},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ImportShipments: %v", err)
+	}
+	if result.SuccessCount != 1 {
+		t.Errorf("SuccessCount = %d, want 1 (first parcel within cap)", result.SuccessCount)
+	}
+	if result.ErrorCount == 0 {
+		t.Fatal("expected second parcel to be rejected as intra-file over-shipment")
+	}
+}
+
+func TestImportShipmentsRejectsClosedWave(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo, supplierRepo, fulfillRepo := buildImportFixture()
+	waveRepo := newMockWaveRepo()
+	waveRepo.waves[1] = &domain.Wave{ID: 1, LifecycleStage: string(domain.LifecycleStageClosed)}
+	uc := WithShipmentImportWaveRepo(NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil), waveRepo)
+
+	_, err := uc.ImportShipments(context.Background(), dto.ImportShipmentInput{
+		WaveID:  1,
+		Entries: threeGroupEntries()[:1],
+	})
+	if err == nil || !strings.Contains(err.Error(), "closed and cannot import shipments") {
+		t.Fatalf("expected closed-wave error, got %v", err)
+	}
+	if len(shipmentRepo.shipments) != 0 {
+		t.Fatalf("closed wave must persist no shipments, got %d", len(shipmentRepo.shipments))
+	}
+}
+
+func TestCreateShipmentRejectsClosedWave(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	waveRepo := newMockWaveRepo()
+	waveRepo.waves[1] = &domain.Wave{ID: 1, LifecycleStage: string(domain.LifecycleStageClosed)}
+	uc := WithShipmentWaveRepo(NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil), waveRepo)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "submitted", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1}
+
+	_, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-CLOSED",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 1}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "closed and cannot create shipments") {
+		t.Fatalf("expected closed-wave error, got %v", err)
+	}
+	if len(shipmentRepo.shipments) != 0 {
+		t.Fatalf("closed wave must persist no shipments, got %d", len(shipmentRepo.shipments))
+	}
+}
+
+func TestCreateShipmentAllowsReshipAfterVoid(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo := newMockShipmentRepo()
+	supplierRepo := newMockSupplierRepoForShipment()
+	fulfillRepo := newMockFulfillRepoForShipment()
+	uc := NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, nil)
+	lifecycle := NewShipmentLifecycleUseCase(shipmentRepo, &mockShipmentWriteRepo{inner: shipmentRepo}, fulfillRepo, supplierRepo)
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	supplierRepo.orders[1] = &domain.SupplierOrder{ID: 1, WaveID: 1, Status: "submitted", SupplierPlatform: "test", CreatedAt: now, UpdatedAt: now}
+	supplierRepo.orderLines[1] = &domain.SupplierOrderLine{ID: 1, SupplierOrderID: 1, FulfillmentLineID: 1, SubmittedQuantity: 10}
+	fulfillRepo.lines[1] = &domain.FulfillmentLine{ID: 1, WaveID: 1, SupplierState: string(domain.SupplierStateSubmitted)}
+
+	created, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-THEN-VOID",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10}},
+	})
+	if err != nil {
+		t.Fatalf("CreateShipment: %v", err)
+	}
+	if _, err := lifecycle.VoidShipment(context.Background(), dto.VoidShipmentInput{ID: created.ID, Note: "wrong box"}); err != nil {
+		t.Fatalf("VoidShipment: %v", err)
+	}
+	if fulfillRepo.lines[1].SupplierState == string(domain.SupplierStateShipped) {
+		t.Fatal("fulfillment line stayed shipped after void")
+	}
+
+	if _, _, err := uc.CreateShipment(context.Background(), dto.CreateShipmentInput{
+		SupplierOrderID: 1,
+		ShipmentNo:      "SHIP-RESHIP",
+		Status:          "shipped",
+		Lines:           []dto.CreateShipmentLineInput{{SupplierOrderLineID: 1, FulfillmentLineID: 1, Quantity: 10}},
+	}); err != nil {
+		t.Fatalf("reship after void should succeed: %v", err)
 	}
 }

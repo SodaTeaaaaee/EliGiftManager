@@ -64,9 +64,18 @@ async function handleFinish(): Promise<void> {
     } else {
       feedback.success(t('feedback.success'))
     }
+    const remaining = state.enabledDocumentTypes.value.filter(
+      (type) => !state.configuredDocumentTypes.value.includes(type),
+    )
+    if (remaining.length > 0) {
+      state.beginAnotherFileSession()
+      return
+    }
     emit('done', profile)
   } catch (err) {
-    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
+    const raw = err instanceof Error ? err.message : String(err)
+    const message = state.persistError.value || t('intakeWizard.confirm.bindFailed')
+    feedback.error(message, raw !== message ? raw : undefined)
   }
 }
 </script>

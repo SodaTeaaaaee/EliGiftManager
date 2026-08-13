@@ -127,9 +127,15 @@ const BilibiliImportCarrierMappingRules = `{
 // import_entitlement, import_sales_order, export_source_tracking_update, and
 // import_carrier_mapping.
 //
-// Idempotent and convergent by ProfileKey / TemplateKey / (profileID, document_type)
-// default binding: existing seed-owned records are updated to the current
-// production contract, while repeated calls do not create duplicates.
+// Idempotent (same pattern as SeedCatalogDemo):
+//   - profile: skip create when ProfileKey already exists; leftover DemandKind
+//     is cleared to empty (documentType is explicit). Do not overwrite
+//     operator mappings or capabilities
+//   - template: skip create when TemplateKey already exists; do not clobber
+//     MappingRules. Creating missing templates is OK
+//   - binding: skip create when a default binding already exists for
+//     (profileID, document_type). Missing defaults are created only when
+//     ValidateProfileDocumentType allows the document type on the profile
 //
 // templateRepo / bindingRepo may be nil only when the caller does not need
 // template+binding seeding (no-op for those parts). profileRepo is required.
@@ -163,7 +169,7 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, entitlementTmpl.ID, BilibiliImportEntitlementDocType); err != nil {
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile, entitlementTmpl.ID, BilibiliImportEntitlementDocType); err != nil {
 		return nil, err
 	}
 
@@ -178,7 +184,7 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, salesOrderTmpl.ID, BilibiliImportSalesOrderDocType); err != nil {
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile, salesOrderTmpl.ID, BilibiliImportSalesOrderDocType); err != nil {
 		return nil, err
 	}
 
@@ -193,7 +199,7 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, exportTmpl.ID, BilibiliExportTrackingDocType); err != nil {
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile, exportTmpl.ID, BilibiliExportTrackingDocType); err != nil {
 		return nil, err
 	}
 
@@ -208,7 +214,7 @@ func SeedBilibiliDemo(
 	if err != nil {
 		return nil, err
 	}
-	if err := ensureBilibiliBinding(ctx, bindingRepo, profile.ID, carrierTmpl.ID, BilibiliImportCarrierDocType); err != nil {
+	if err := ensureBilibiliBinding(ctx, bindingRepo, profile, carrierTmpl.ID, BilibiliImportCarrierDocType); err != nil {
 		return nil, err
 	}
 
@@ -220,10 +226,13 @@ func ensureBilibiliDemoProfile(
 	profileRepo domain.IntegrationProfileRepository,
 ) (*domain.IntegrationProfile, error) {
 	return ensureBilibiliProfile(ctx, profileRepo, dto.CreateProfileInput{
-		ProfileKey:                BilibiliDemoProfileKey,
-		SourceChannel:             "bilibili",
-		SourceSurface:             string(domain.SourceSurfaceMembership),
-		DemandKind:                "membership_entitlement",
+		ProfileKey:    BilibiliDemoProfileKey,
+		SourceChannel: "bilibili",
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		// DemandKind is leftover and is not the unique document type. Empty so
+		// both import_entitlement and import_sales_order can bind; importers
+		// must not infer documentType from this field.
+		DemandKind:                "",
 		InitialAllocationStrategy: "policy_driven",
 		IdentityStrategy:          "platform_uid",
 		EntitlementAuthorityMode:  "upstream_platform",
@@ -236,7 +245,6 @@ func ensureBilibiliDemoProfile(
 		RequiresExternalOrderNo:   false,
 		AllowsManualClosure:       false,
 		ConnectorKey:              "eli.local_export",
-		FactorySupplierPlatform:   "bilibili",
 	})
 }
 
@@ -245,6 +253,20 @@ func ensureBilibiliProfile(
 	profileRepo domain.IntegrationProfileRepository,
 	input dto.CreateProfileInput,
 ) (*domain.IntegrationProfile, error) {
+	existing, findErr := profileRepo.FindByProfileKey(ctx, input.ProfileKey)
+	if findErr == nil && existing != nil {
+		// DemandKind is leftover and is not the unique document type. Empty so
+		// both import_entitlement and import_sales_order can bind. Do not touch
+		// operator capabilities or template MappingRules.
+		if existing.DemandKind != "" {
+			existing.DemandKind = ""
+			if err := profileRepo.Update(ctx, existing); err != nil {
+				return nil, fmt.Errorf("seed bilibili demo profile %q leftover DemandKind: %w", input.ProfileKey, err)
+			}
+		}
+		return existing, nil
+	}
+
 	// Route through the same validation path as CreateProfile — no repo.Create
 	// backdoor that could seed an invalid demand profile.
 	if err := validateProfileEnums(input); err != nil {
@@ -257,19 +279,6 @@ func ensureBilibiliProfile(
 	}
 
 	desired := profileFromCreateInput(input)
-	existing, findErr := profileRepo.FindByProfileKey(ctx, input.ProfileKey)
-	if findErr == nil && existing != nil {
-		desired.ID = existing.ID
-		desired.CreatedAt = existing.CreatedAt
-		desired.UpdatedAt = existing.UpdatedAt
-		if *existing != *desired {
-			if err := profileRepo.Update(ctx, desired); err != nil {
-				return nil, fmt.Errorf("converge bilibili demo profile %q: %w", input.ProfileKey, err)
-			}
-		}
-		return desired, nil
-	}
-
 	if err := profileRepo.Create(ctx, desired); err != nil {
 		return nil, fmt.Errorf("seed bilibili demo profile %q: %w", input.ProfileKey, err)
 	}
@@ -294,16 +303,6 @@ func ensureBilibiliTemplate(
 		return nil, fmt.Errorf("seed bilibili demo template lookup %q: %w", templateKey, err)
 	}
 	if existing != nil {
-		if existing.DocumentType != docType {
-			return nil, fmt.Errorf("seed bilibili demo template %q has documentType %q, want %q", templateKey, existing.DocumentType, docType)
-		}
-		if existing.Format != format || existing.MappingRules != mappingRules {
-			existing.Format = format
-			existing.MappingRules = mappingRules
-			if err := templateRepo.Update(ctx, existing); err != nil {
-				return nil, fmt.Errorf("converge bilibili demo template %q: %w", templateKey, err)
-			}
-		}
 		return existing, nil
 	}
 
@@ -322,49 +321,9 @@ func ensureBilibiliTemplate(
 func ensureBilibiliBinding(
 	ctx context.Context,
 	bindingRepo domain.ProfileTemplateBindingRepository,
-	profileID, templateID uint,
+	profile *domain.IntegrationProfile,
+	templateID uint,
 	docType string,
 ) error {
-	existing, err := bindingRepo.FindDefaultByProfileAndType(ctx, profileID, docType)
-	if err != nil {
-		return fmt.Errorf("seed bilibili demo binding lookup profile=%d type=%s: %w", profileID, docType, err)
-	}
-	if existing != nil {
-		if existing.TemplateID != templateID {
-			existing.TemplateID = templateID
-			if err := bindingRepo.Update(ctx, existing); err != nil {
-				return fmt.Errorf("converge bilibili demo binding profile=%d type=%s: %w", profileID, docType, err)
-			}
-		}
-		return nil
-	}
-
-	bindings, err := bindingRepo.ListByProfile(ctx, profileID)
-	if err != nil {
-		return fmt.Errorf("seed bilibili demo bindings profile=%d: %w", profileID, err)
-	}
-	for i := range bindings {
-		if bindings[i].DocumentType != docType || bindings[i].TemplateID != templateID {
-			continue
-		}
-		if err := bindingRepo.ClearDefaultByProfileAndType(ctx, profileID, docType); err != nil {
-			return fmt.Errorf("clear bilibili demo default profile=%d type=%s: %w", profileID, docType, err)
-		}
-		bindings[i].IsDefault = true
-		if err := bindingRepo.Update(ctx, &bindings[i]); err != nil {
-			return fmt.Errorf("promote bilibili demo binding profile=%d type=%s: %w", profileID, docType, err)
-		}
-		return nil
-	}
-
-	b := &domain.IntegrationProfileTemplateBinding{
-		IntegrationProfileID: profileID,
-		DocumentType:         docType,
-		TemplateID:           templateID,
-		IsDefault:            true,
-	}
-	if err := bindingRepo.Create(ctx, b); err != nil {
-		return fmt.Errorf("seed bilibili demo binding profile=%d template=%d type=%s: %w", profileID, templateID, docType, err)
-	}
-	return nil
+	return ensureDemoBinding(ctx, bindingRepo, profile, templateID, docType, "bilibili")
 }

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/csvformula"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/xuri/excelize/v2"
 )
@@ -128,7 +129,7 @@ func (r *TemplatePayloadRenderer) RenderSupplierExportCSVWithContext(
 	for i, col := range columns {
 		headers[i] = col.output
 	}
-	if err := w.Write(headers); err != nil {
+	if err := w.Write(csvformula.SanitizeRow(headers)); err != nil {
 		return "", err
 	}
 
@@ -141,7 +142,7 @@ func (r *TemplatePayloadRenderer) RenderSupplierExportCSVWithContext(
 		if err != nil {
 			return "", fmt.Errorf("supplier export line %d: %w", line.SupplierLineNo, err)
 		}
-		if err := w.Write(row); err != nil {
+		if err := w.Write(csvformula.SanitizeRow(row)); err != nil {
 			return "", err
 		}
 	}
@@ -275,7 +276,7 @@ func (r *TemplatePayloadRenderer) RenderTrackingExportCSV(
 	for i, col := range columns {
 		headers[i] = col.output
 	}
-	if err := w.Write(headers); err != nil {
+	if err := w.Write(csvformula.SanitizeRow(headers)); err != nil {
 		return "", err
 	}
 
@@ -287,7 +288,7 @@ func (r *TemplatePayloadRenderer) RenderTrackingExportCSV(
 		if err != nil {
 			return "", fmt.Errorf("tracking export item %d: %w", items[i].ID, err)
 		}
-		if err := w.Write(row); err != nil {
+		if err := w.Write(csvformula.SanitizeRow(row)); err != nil {
 			return "", err
 		}
 	}

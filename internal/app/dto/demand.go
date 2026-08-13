@@ -47,6 +47,7 @@ type DemandLineDTO struct {
 
 type CreateDemandInput struct {
 	Kind                 string                  `json:"kind"`
+	DocumentType         string                  `json:"documentType"`
 	CaptureMode          string                  `json:"captureMode"`
 	SourceChannel        string                  `json:"sourceChannel"`
 	SourceSurface        string                  `json:"sourceSurface"`

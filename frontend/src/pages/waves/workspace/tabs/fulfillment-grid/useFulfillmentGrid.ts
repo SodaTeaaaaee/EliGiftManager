@@ -86,9 +86,71 @@ export interface UseFulfillmentGridApi {
 
 const DEFAULT_PAGE_SIZE = 50
 
-interface ShipmentJoinEntry {
+export interface ShipmentJoinEntry {
   trackingNo?: string
   shipmentTrackingStatus?: string
+}
+
+/** Minimal shipment fields used to rank competing joins for one fulfillment line. */
+export interface ShipmentJoinSource {
+  id: number
+  status: string
+  trackingNo?: string
+  createdAt?: string
+  lines?: Array<{ fulfillmentLineId: number }> | null
+}
+
+function hasTrackingNo(trackingNo: string | undefined): boolean {
+  return (trackingNo ?? '').trim() !== ''
+}
+
+/**
+ * Lexicographic join preference: non-voided, then non-empty trackingNo,
+ * then later createdAt (ISO string), then higher id. Array order is ignored.
+ */
+export function pickPreferredShipmentJoin(
+  current: ShipmentJoinSource,
+  candidate: ShipmentJoinSource,
+): ShipmentJoinSource {
+  const currentActive = current.status !== 'voided' ? 1 : 0
+  const candidateActive = candidate.status !== 'voided' ? 1 : 0
+  if (candidateActive !== currentActive) {
+    return candidateActive > currentActive ? candidate : current
+  }
+  const currentTracked = hasTrackingNo(current.trackingNo) ? 1 : 0
+  const candidateTracked = hasTrackingNo(candidate.trackingNo) ? 1 : 0
+  if (candidateTracked !== currentTracked) {
+    return candidateTracked > currentTracked ? candidate : current
+  }
+  const currentCreated = current.createdAt ?? ''
+  const candidateCreated = candidate.createdAt ?? ''
+  if (candidateCreated !== currentCreated) {
+    return candidateCreated > currentCreated ? candidate : current
+  }
+  return candidate.id > current.id ? candidate : current
+}
+
+export function buildShipmentTrackingMap(
+  shipments: readonly ShipmentJoinSource[],
+): Map<number, ShipmentJoinEntry> {
+  const preferred = new Map<number, ShipmentJoinSource>()
+  for (const shipment of shipments) {
+    for (const line of shipment.lines ?? []) {
+      const existing = preferred.get(line.fulfillmentLineId)
+      preferred.set(
+        line.fulfillmentLineId,
+        existing == null ? shipment : pickPreferredShipmentJoin(existing, shipment),
+      )
+    }
+  }
+  const next = new Map<number, ShipmentJoinEntry>()
+  for (const [fulfillmentLineId, shipment] of preferred) {
+    next.set(fulfillmentLineId, {
+      trackingNo: shipment.trackingNo,
+      shipmentTrackingStatus: shipment.status,
+    })
+  }
+  return next
 }
 
 export function useFulfillmentGrid(options: UseFulfillmentGridOptions = {}): UseFulfillmentGridApi {
@@ -120,12 +182,7 @@ export function useFulfillmentGrid(options: UseFulfillmentGridOptions = {}): Use
   async function loadShipmentMap(waveId: number): Promise<Map<number, ShipmentJoinEntry>> {
     if (shipmentCacheWaveId === waveId) return shipmentCache
     const shipments = await listShipmentsByWave(waveId) // soft-fail bridge call -> [] on no runtime
-    const next = new Map<number, ShipmentJoinEntry>()
-    for (const shipment of shipments) {
-      for (const line of shipment.lines ?? []) {
-        next.set(line.fulfillmentLineId, { trackingNo: shipment.trackingNo, shipmentTrackingStatus: shipment.status })
-      }
-    }
+    const next = buildShipmentTrackingMap(shipments)
     shipmentCacheWaveId = waveId
     shipmentCache = next
     return next

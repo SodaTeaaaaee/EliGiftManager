@@ -4,6 +4,8 @@ export interface ProfileAvailabilityShape {
   supportsImportProductCatalog?: boolean
   supportsImportSupplierShipment?: boolean
   supportsExportSupplierOrder?: boolean
+  requiresCarrierMapping?: boolean
+  trackingSyncMode?: string
 }
 
 /** Seeded Bilibili source platform. Not an installable catalog of fake presets. */
@@ -73,13 +75,15 @@ export function isFactoryProfile(profile: ProfileAvailabilityShape): boolean {
 }
 
 /**
- * Source-platform profiles (档案=平台). Leftover or empty `demandKind` is not a
- * grouping key — dual-kind, empty, and membership leftover all stay here.
+ * Source-platform profiles (档案=平台). Only membership and retail count —
+ * leftover or empty `demandKind` is not a grouping key. Community is not
+ * a legal source surface.
  */
 export function isSourcePlatformProfile(profile: ProfileAvailabilityShape): boolean {
-  return !isFactoryProfile(profile)
+  return profile.sourceSurface === 'membership' || profile.sourceSurface === 'retail'
 }
 
+/** Source = membership/retail only. Factory stays factory. Other surfaces are omitted. */
 export function partitionProfilesForList<T extends ProfileAvailabilityShape>(
   profiles: T[],
 ): { source: T[]; factory: T[] } {
@@ -87,7 +91,7 @@ export function partitionProfilesForList<T extends ProfileAvailabilityShape>(
   const factory: T[] = []
   for (const profile of profiles) {
     if (isFactoryProfile(profile)) factory.push(profile)
-    else source.push(profile)
+    else if (isSourcePlatformProfile(profile)) source.push(profile)
   }
   return { source, factory }
 }
@@ -116,12 +120,18 @@ export function canImportSupplierShipment(profile: ProfileAvailabilityShape): bo
 export function expectedFileKinds(profile: ProfileAvailabilityShape): string[] {
   if (isFactoryProfile(profile)) {
     const types: string[] = []
-    if (profile.supportsImportProductCatalog) types.push('import_product_catalog')
-    if (profile.supportsImportSupplierShipment) types.push('import_supplier_shipment')
-    if (profile.supportsExportSupplierOrder) types.push('export_supplier_order')
-    return types.length > 0 ? types : [...FACTORY_FILE_KINDS]
+    if (profile.supportsImportProductCatalog === true) types.push('import_product_catalog')
+    if (profile.supportsImportSupplierShipment === true) types.push('import_supplier_shipment')
+    if (profile.supportsExportSupplierOrder === true) types.push('export_supplier_order')
+    return types
   }
-  return [...SOURCE_FILE_KINDS]
+  if (isSourcePlatformProfile(profile)) {
+    const types: string[] = ['import_entitlement', 'import_sales_order']
+    if (profile.requiresCarrierMapping === true) types.push('import_carrier_mapping')
+    if (profile.trackingSyncMode === 'document_export') types.push('export_source_tracking_update')
+    return types
+  }
+  return []
 }
 
 export function hasDefaultFileKindBinding(

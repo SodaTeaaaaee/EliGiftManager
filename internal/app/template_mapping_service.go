@@ -177,8 +177,9 @@ func normalizeCatalogImageLayout(layout *CatalogImageLayout) {
 //   - mode=positional: positions[dest] is a zero-based cell index into row
 //
 // Transforms run on source values (and on defaults when a transform list is declared
-// for that dest). Defaults always apply after source mapping (matching v1 overwrite
-// behaviour). Required dests that are missing or blank after that step yield an error.
+// for that dest). Defaults apply after source mapping and only fill empty or missing
+// dests; a non-blank mapped value is never overwritten. Required dests that are
+// missing or blank after that step yield an error.
 //
 // Dest keys outside the global legal vocabulary produce row-level warnings but are
 // still kept in values (never silently dropped). Config-time rejection of illegal
@@ -204,13 +205,14 @@ func ApplyRow(row []string, headers []string, rules *TemplateMappingRules) (map[
 	default: // header
 		indexByHeader := make(map[string]int, len(headers))
 		for i, h := range headers {
+			h = strings.TrimSpace(h)
 			// First occurrence wins — matches typical CSV "duplicate header" behaviour.
 			if _, exists := indexByHeader[h]; !exists {
 				indexByHeader[h] = i
 			}
 		}
 		for dest, srcCol := range rules.Columns {
-			idx, ok := indexByHeader[srcCol]
+			idx, ok := indexByHeader[strings.TrimSpace(srcCol)]
 			if !ok || idx < 0 || idx >= len(row) {
 				continue
 			}
@@ -222,8 +224,11 @@ func ApplyRow(row []string, headers []string, rules *TemplateMappingRules) (map[
 		}
 	}
 
-	// Defaults always apply last (v1 behaviour: defaults overwrite mapped values).
+	// Defaults only fill empty dests; a non-blank mapped value wins.
 	for dest, val := range rules.Defaults {
+		if existing, ok := out[dest]; ok && strings.TrimSpace(existing) != "" {
+			continue
+		}
 		if ts := rules.Transforms[dest]; len(ts) > 0 {
 			transformed, err := applyTransforms(val, ts)
 			if err != nil {
@@ -377,8 +382,12 @@ func setDemandLineField(line *domain.DemandLine, field, value string) error {
 	case "external_title":
 		line.ExternalTitle = value
 	case "requested_quantity":
+		value = strings.TrimSpace(value)
 		qty, err := strconv.Atoi(value)
 		if err != nil {
+			return fmt.Errorf("invalid quantity %q", value)
+		}
+		if qty <= 0 {
 			return fmt.Errorf("invalid quantity %q", value)
 		}
 		line.RequestedQuantity = qty

@@ -11,6 +11,7 @@ import {
   createDocumentTemplate,
   bindTemplateToProfile,
   setDefaultBinding,
+  getDefaultTemplateForProfile,
 } from '@/shared/api/bridge'
 import {
   PLATFORM_PRESETS,
@@ -20,6 +21,8 @@ import {
 } from '@/shared/lib/demand-intake/platform-presets'
 import {
   emptyFieldMapping,
+  parseMappingRules,
+  type FieldMappingValue,
 } from '@/shared/ui/field-mapping'
 import type { IntegrationProfile } from '@/entities/profile'
 import { i18n } from '@/shared/i18n'
@@ -34,22 +37,50 @@ import { expectedFileKinds } from '../profileAvailability'
 import {
   buildIntakeTemplatePlan,
   canProceedFromSample,
+  formatSupportsDocumentType,
+  intakeFormatFromPath,
 } from './intakeTemplatePlan'
 
 export type { BusinessSurfaceChoice } from './deriveProfileDefaults'
+
+const EXPORT_SAMPLE_EXTENSIONS = ['.csv', '.xlsx']
+
+function samplePickerExtensions(documentType: string): string[] | undefined {
+  if (
+    documentType === 'export_supplier_order' ||
+    documentType === 'export_source_tracking_update'
+  ) {
+    return [...EXPORT_SAMPLE_EXTENSIONS]
+  }
+  return undefined
+}
+
+function sampleFormatIsAllowed(filePath: string, documentType: string): boolean {
+  if (!filePath.trim()) return true
+  return formatSupportsDocumentType(intakeFormatFromPath(filePath), documentType)
+}
 
 async function bindAsDefaultOrDegrade(input: {
   integrationProfileId: number
   documentType: string
   templateId: number
-}): Promise<'ok'> {
+}): Promise<'ok' | 'conflict'> {
   try {
     await bindTemplateToProfile({ ...input, isDefault: true })
     return 'ok'
-  } catch {
-    const binding = await bindTemplateToProfile({ ...input, isDefault: false })
-    await setDefaultBinding(binding.id)
-    return 'ok'
+  } catch (firstErr) {
+    let binding: Awaited<ReturnType<typeof bindTemplateToProfile>>
+    try {
+      binding = await bindTemplateToProfile({ ...input, isDefault: false })
+    } catch {
+      throw firstErr
+    }
+    try {
+      await setDefaultBinding(binding.id)
+      return 'ok'
+    } catch {
+      return 'conflict'
+    }
   }
 }
 
@@ -165,11 +196,26 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
     return emptyFieldMapping()
   }
 
-  function setSessionDocumentType(docType: string): void {
+  async function hydrateMappingForDocumentType(docType: string): Promise<void> {
+    try {
+      const tmpl = await getDefaultTemplateForProfile(existingProfile.id, docType)
+      if (sessionDocumentType.value !== docType) return
+      if (tmpl?.mappingRules) {
+        mapping.value = parseMappingRules(tmpl.mappingRules)
+        return
+      }
+    } catch {
+      if (sessionDocumentType.value !== docType) return
+    }
+    mapping.value = mappingSeedForDocumentType(docType)
+  }
+
+  async function setSessionDocumentType(docType: string): Promise<void> {
     if (!enabledDocumentTypes.value.includes(docType)) return
     sessionDocumentType.value = docType
     clearSampleState()
     mapping.value = mappingSeedForDocumentType(docType)
+    await hydrateMappingForDocumentType(docType)
   }
 
   function beginAnotherFileSession(): void {
@@ -184,16 +230,24 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
 
   async function pickAndParseFile(): Promise<void> {
     pickError.value = ''
+    const docType = sessionDocumentType.value
     let path: string
     try {
-      path = sessionDocumentType.value === 'import_product_catalog'
+      path = docType === 'import_product_catalog'
         ? await pickCatalogImportFile()
-        : await pickTabularFile()
+        : await pickTabularFile(samplePickerExtensions(docType))
     } catch (err) {
       pickError.value = err instanceof Error ? err.message : String(err)
       return
     }
     if (!path) return
+    if (!sampleFormatIsAllowed(path, docType)) {
+      pickError.value = i18n.global.t('intakeWizard.confirm.mappingRequired')
+      csvPath.value = ''
+      csvHeaders.value = []
+      csvRows.value = []
+      return
+    }
     csvPath.value = path
     if (path.toLowerCase().endsWith('.zip')) {
       csvHeaders.value = []
@@ -210,9 +264,14 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
       }
       return
     }
+    await parseCurrentFile(path, mapping.value.hasHeader !== false)
+  }
+
+  async function parseCurrentFile(path: string, hasHeader: boolean): Promise<void> {
+    if (path.toLowerCase().endsWith('.zip')) return
     parsing.value = true
     try {
-      const preview = await parseTabularFile(path, mapping.value.hasHeader !== false)
+      const preview = await parseTabularFile(path, hasHeader)
       csvHeaders.value = preview.headers
       csvRows.value = preview.rows
     } catch (err) {
@@ -222,6 +281,16 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
     } finally {
       parsing.value = false
     }
+  }
+
+  async function applyMappingUpdate(next: FieldMappingValue): Promise<void> {
+    const prevHasHeader = mapping.value.hasHeader !== false
+    const nextHasHeader = next.hasHeader !== false
+    mapping.value = next
+    const path = csvPath.value
+    if (!path || path.toLowerCase().endsWith('.zip') || prevHasHeader === nextHasHeader) return
+    pickError.value = ''
+    await parseCurrentFile(path, nextHasHeader)
   }
 
   const currentIndex = computed(() => steps.value.indexOf(current.value))
@@ -242,7 +311,7 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
       case 'documentType':
         return enabledDocumentTypes.value.includes(sessionDocumentType.value)
       case 'sampleUpload':
-        return canProceedFromSample({
+        return sampleFormatIsAllowed(csvPath.value, sessionDocumentType.value) && canProceedFromSample({
           isFactorySurface: isFactorySurface.value,
           filePath: csvPath.value,
           detectedHeaders: csvHeaders.value,
@@ -281,21 +350,25 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
 
       const templateKey = `${profileKey.value.trim()}-${docType}-${Date.now()}`
 
+      const template = await createDocumentTemplate({
+        templateKey,
+        documentType: docType,
+        format: planned.format,
+        mappingRules: planned.mappingRules,
+        extraData: '',
+      })
       try {
-        const template = await createDocumentTemplate({
-          templateKey,
-          documentType: docType,
-          format: planned.format,
-          mappingRules: planned.mappingRules,
-          extraData: '',
-        })
-        await bindAsDefaultOrDegrade({
+        const bindOutcome = await bindAsDefaultOrDegrade({
           integrationProfileId: profile.id,
           documentType: docType,
           templateId: template.id,
         })
-      } catch {
-        bindWarning.value = i18n.global.t('intakeWizard.confirm.templateAllFailed')
+        if (bindOutcome === 'conflict') {
+          bindWarning.value = i18n.global.t('intakeWizard.confirm.bindConflict')
+        }
+      } catch (bindErr) {
+        persistError.value = i18n.global.t('intakeWizard.confirm.bindFailed')
+        throw bindErr
       }
 
       if (!configuredDocumentTypes.value.includes(docType)) {
@@ -303,7 +376,9 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
       }
       return profile
     } catch (err) {
-      persistError.value = err instanceof Error ? err.message : String(err)
+      if (!persistError.value) {
+        persistError.value = err instanceof Error ? err.message : String(err)
+      }
       throw err
     } finally {
       persisting.value = false
@@ -312,7 +387,7 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
 
   const initialDocumentType = options.initialDocumentType ?? ''
   if (initialDocumentType && enabledDocumentTypes.value.includes(initialDocumentType)) {
-    setSessionDocumentType(initialDocumentType)
+    void setSessionDocumentType(initialDocumentType)
     current.value = 'sampleUpload'
   }
 
@@ -351,6 +426,7 @@ export function useIntakeWizardState(options: UseIntakeWizardStateOptions) {
     parsing,
     pickError,
     pickAndParseFile,
+    applyMappingUpdate,
     goNext,
     goBack,
     canProceedFromCurrentStep,

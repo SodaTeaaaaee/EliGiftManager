@@ -49,11 +49,13 @@ function openBatchStock(): void {
 }
 
 function handleSelectedKeysChange(keys: Array<string | number>): void {
+  const selected = new Set(keys.map((key) => Number(key)))
   for (const master of page.masters.value) {
-    if (keys.includes(master.id)) selectedMasterCache.set(master.id, master)
+    if (selected.has(Number(master.id))) selectedMasterCache.set(Number(master.id), master)
   }
   for (const key of selectedKeys.value) {
-    if (!keys.includes(key)) selectedMasterCache.delete(Number(key))
+    const id = Number(key)
+    if (!selected.has(id)) selectedMasterCache.delete(id)
   }
   selectedKeys.value = keys
 }
@@ -61,8 +63,9 @@ function handleSelectedKeysChange(keys: Array<string | number>): void {
 watch(
   () => page.masters.value,
   (masters) => {
+    const selected = new Set(selectedKeys.value.map((key) => Number(key)))
     for (const master of masters) {
-      if (selectedKeys.value.includes(master.id)) selectedMasterCache.set(master.id, master)
+      if (selected.has(Number(master.id))) selectedMasterCache.set(Number(master.id), master)
     }
   },
 )
@@ -335,6 +338,13 @@ const columns = computed(() => {
       </label>
     </div>
 
+    <ErrorBanner
+      v-if="page.error.value"
+      :message="t('feedback.error')"
+      :detail="page.error.value"
+      @retry="page.load"
+    />
+
     <DataGrid
       :columns="columns"
       :rows="page.masters.value"
@@ -351,7 +361,9 @@ const columns = computed(() => {
           onSort: page.onSort,
         },
       }"
-      :empty="{ title: t('products.empty.title'), description: t('products.empty.description') }"
+      :empty="page.error.value
+        ? { title: t('feedback.error') }
+        : { title: t('products.empty.title'), description: t('products.empty.description') }"
       @update:selected-keys="handleSelectedKeysChange"
       @row-click="openEdit"
     >

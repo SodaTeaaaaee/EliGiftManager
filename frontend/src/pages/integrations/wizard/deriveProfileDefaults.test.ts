@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest'
 import {
   buildCustomCreateProfileInput,
+  documentTypeForDemandKind,
   suggestProfileKey,
 } from './deriveProfileDefaults'
 
@@ -39,5 +40,13 @@ describe('custom create defaults', () => {
   test('suggestProfileKey slugs ascii and leaves non-latin empty', () => {
     expect(suggestProfileKey('My Shop 2026')).toBe('my_shop_2026')
     expect(suggestProfileKey('柔造')).toBe('')
+  })
+})
+
+describe('documentTypeForDemandKind', () => {
+  test('maps explicit demand kinds and does not infer from empty leftover', () => {
+    expect(documentTypeForDemandKind('retail_order')).toBe('import_sales_order')
+    expect(documentTypeForDemandKind('membership_entitlement')).toBe('import_entitlement')
+    expect(documentTypeForDemandKind('')).toBe('')
   })
 })

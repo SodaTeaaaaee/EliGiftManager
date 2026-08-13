@@ -15,6 +15,13 @@ SampleData/
 # ── Go ─────────────────────────────────────────────────────────────────────
 *.test
 coverage.out
+cover.out
+coverage.html
+*.coverprofile
+cpu.out
+mem.out
+*.prof
+__debug_bin*
 GOCACHE/
 go-build/
 go-cache/
@@ -28,13 +35,19 @@ node_modules/
 *.tsbuildinfo
 coverage/
 frontend/.vite/
+frontend/.vite-inspect/
 frontend/.cache/
 frontend/dist/*
 !frontend/dist/.gitkeep
 frontend/package.json.md5
+frontend/test-results/
+frontend/blob-report/
+frontend/playwright-report/
 frontend-legacy/.vite/
 frontend-legacy/.cache/
 frontend-legacy/dist/*
+frontend-legacy/test-results/
+frontend-legacy/blob-report/
 
 # npm/yarn/pnpm lockfiles — this project is Deno-only (deno.lock is committed)
 package-lock.json
@@ -47,8 +60,11 @@ yarn.lock
 
 # ── Wails ──────────────────────────────────────────────────────────────────
 wailsdev.log
+.wails/
 .wails-scaffold/
 .vue-scaffold/
+*.pdb
+*.msi
 
 # ── Local caches & environment ─────────────────────────────────────────────
 .cache/
@@ -93,6 +109,8 @@ docs/handoff/
 Thumbs.db
 ehthumbs.db
 desktop.ini
+*.dmp
+*.lnk
 
 # ── Merge / patch residue ──────────────────────────────────────────────────
 *.orig

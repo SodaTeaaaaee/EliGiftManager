@@ -1,16 +1,17 @@
 <script setup lang="ts">
 /**
  * ImportFileModal — demand CSV import wizard-in-a-modal. WizardFrame shell
- * with three steps: select platform + file kind + pick file → optional
+ * with two steps: select platform + file kind + pick file → optional
  * this-run mapping override (FieldMappingEditor, seeded from the pair's
- * default template when available) → result report. Actual import remains
+ * default template when available). Import result is shown outside the
+ * wizard (Finish on mapping actually imports). Actual import remains
  * template-driven via `importDemandCSV` (filePath preferred so backend
  * re-reads with hasHeader / positional rules from MappingRules).
  * documentType is operator-selected, never inferred from profile.demandKind.
  */
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NInput, NModal, NRadioButton, NRadioGroup, NSelect } from 'naive-ui'
+import { NAlert, NButton, NInput, NModal, NRadioButton, NRadioGroup, NSelect } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { WizardFrame, type WizardStep } from '@/shared/ui/wizard'
 import {
@@ -39,6 +40,7 @@ import {
   destFieldLabelKey,
   destFieldTooltipKey,
 } from '@/pages/integrations/wizard/destFields'
+import { mappingIsConfigured } from '@/pages/integrations/wizard/intakeTemplatePlan'
 import { canImportDemand } from '@/pages/integrations/profileAvailability'
 import ImportEvidenceReference from '@/shared/ui/customer-resolution/ImportEvidenceReference.vue'
 import {
@@ -63,13 +65,12 @@ const emit = defineEmits<{
 const { t, te } = useI18n({ useScope: 'global' })
 const feedback = useFeedback()
 
-type StepKey = 'select' | 'mapping' | 'result'
+type StepKey = 'select' | 'mapping'
 const currentStep = ref<StepKey>('select')
 
 const wizardSteps = computed<WizardStep[]>(() => [
   { key: 'select', title: t('inbox.importModal.steps.select') },
   { key: 'mapping', title: t('inbox.importModal.steps.mapping') },
-  { key: 'result', title: t('inbox.importModal.steps.result') },
 ])
 
 const profiles = ref<dto.IntegrationProfileDTO[]>([])
@@ -103,6 +104,7 @@ const pickError = ref('')
 const mapping = ref<FieldMappingValue>(emptyFieldMapping())
 const templateLoading = ref(false)
 const templateNotice = ref('')
+let templatePreviewSeq = 0
 
 const importMode = ref<'reject_all' | 'skip_invalid'>('skip_invalid')
 const importing = ref(false)
@@ -124,11 +126,39 @@ const anomalyCount = computed(() => previewRows.value.filter((row) => headers.va
 const inputFormat = computed(() => filePath.value.split('.').pop()?.toUpperCase() ?? '')
 const pairReady = computed(() => profileId.value != null && documentType.value != null)
 
+function documentsFromImportResult(result: ImportDemandCSVResult): Array<{ id: number }> {
+  const extended = result as ImportDemandCSVResult & {
+    documents?: Array<{ id: number } | null | undefined> | null
+    documentIds?: number[] | null
+  }
+  const fromArray = (extended.documents ?? []).filter(
+    (doc): doc is { id: number } => doc != null && typeof doc.id === 'number',
+  )
+  if (fromArray.length > 0) return fromArray
+  const docs: Array<{ id: number }> = []
+  if (result.document != null && typeof result.document.id === 'number') {
+    docs.push(result.document)
+  }
+  for (const id of extended.documentIds ?? []) {
+    if (typeof id === 'number' && !docs.some((doc) => doc.id === id)) {
+      docs.push({ id })
+    }
+  }
+  return docs
+}
+
+const importedDocuments = computed(() =>
+  importResult.value ? documentsFromImportResult(importResult.value) : [],
+)
+
 async function loadTemplatePreview(id: number, docType: DemandImportDocumentType): Promise<void> {
+  templatePreviewSeq += 1
+  const seq = templatePreviewSeq
   templateLoading.value = true
   templateNotice.value = ''
   try {
     const tmpl = await getDefaultTemplateForProfile(id, docType)
+    if (seq !== templatePreviewSeq) return
     if (tmpl?.mappingRules) {
       mapping.value = parseMappingRules(tmpl.mappingRules)
       templateNotice.value = t('inbox.importModal.templateLoaded', { key: tmpl.templateKey })
@@ -137,10 +167,13 @@ async function loadTemplatePreview(id: number, docType: DemandImportDocumentType
       templateNotice.value = t('inbox.importModal.templateMissing')
     }
   } catch (err) {
+    if (seq !== templatePreviewSeq) return
     mapping.value = emptyFieldMapping()
     templateNotice.value = err instanceof Error ? err.message : String(err)
   } finally {
-    templateLoading.value = false
+    if (seq === templatePreviewSeq) {
+      templateLoading.value = false
+    }
   }
 }
 
@@ -149,6 +182,8 @@ watch([profileId, documentType], ([id, docType]) => {
     void loadTemplatePreview(id, docType)
     return
   }
+  templatePreviewSeq += 1
+  templateLoading.value = false
   mapping.value = emptyFieldMapping()
   templateNotice.value = ''
 })
@@ -163,6 +198,7 @@ watch(
 )
 
 async function handleOpen(): Promise<void> {
+  templatePreviewSeq += 1
   currentStep.value = 'select'
   profileId.value = null
   documentType.value = null
@@ -177,9 +213,11 @@ async function handleOpen(): Promise<void> {
   pickError.value = ''
   profilesError.value = ''
   templateNotice.value = ''
+  templateLoading.value = false
   showSendPicker.value = false
   targetPickerWaveId.value = null
   sentToWave.value = false
+  waveListTruncated.value = false
 
   profilesLoading.value = true
   try {
@@ -206,6 +244,9 @@ async function handlePickFile(): Promise<void> {
     headers.value = preview.headers
     previewRows.value = preview.rows
   } catch (err) {
+    filePath.value = ''
+    headers.value = []
+    previewRows.value = []
     pickError.value = err instanceof Error ? err.message : String(err)
     feedback.error(t('feedback.error'), pickError.value)
   } finally {
@@ -225,14 +266,9 @@ function handleNext(): void {
 
 function handleBack(): void {
   if (currentStep.value === 'mapping') currentStep.value = 'select'
-  else if (currentStep.value === 'result') currentStep.value = 'mapping'
 }
 
 async function handleImport(): Promise<void> {
-  if (currentStep.value === 'result') {
-    handleUpdateShow(false)
-    return
-  }
   if (profileId.value == null || documentType.value == null) return
   importing.value = true
   try {
@@ -248,21 +284,22 @@ async function handleImport(): Promise<void> {
       mappingRules: serializeMappingRules(mapping.value),
     })
     importResult.value = result
-    currentStep.value = 'result'
-    if (result.document) {
+    const documents = documentsFromImportResult(result)
+    if (documents.length > 0) {
       emit('imported')
       // 波内导入：导入成功即自动把新单据分派进目标波次。
       if (props.targetWaveId != null) {
         try {
+          const docIds = documents.map((doc) => doc.id)
           const assignResult = await batchAssignDemandToWave({
             waveId: props.targetWaveId,
-            docIds: [result.document.id],
+            docIds,
           })
           if (assignResult.failureCount > 0) {
             feedback.error(t('inbox.import.assignToWaveFailed'))
           } else {
             sentToWave.value = true
-            emit('assignedToWave', [result.document.id])
+            emit('assignedToWave', docIds)
           }
         } catch (err) {
           feedback.error(t('inbox.import.assignToWaveFailed'), err instanceof Error ? err.message : String(err))
@@ -276,7 +313,7 @@ async function handleImport(): Promise<void> {
   }
 }
 
-// ── 结果步「发送到波次」picker（无 targetWaveId 的收件箱用法）──
+// ── 结果视图「发送到波次」picker（无 targetWaveId 的收件箱用法）──
 
 const showSendPicker = ref(false)
 const waveOptions = ref<SelectOption[]>([])
@@ -284,6 +321,7 @@ const wavesLoading = ref(false)
 const targetPickerWaveId = ref<number | null>(null)
 const sendingToWave = ref(false)
 const sentToWave = ref(false)
+const waveListTruncated = ref(false)
 
 async function openSendToWavePicker(): Promise<void> {
   showSendPicker.value = true
@@ -291,9 +329,13 @@ async function openSendToWavePicker(): Promise<void> {
   wavesLoading.value = true
   try {
     const page = await listWavesFiltered({ page: 1, pageSize: 200, sortBy: 'updatedAt', sortDesc: true })
-    waveOptions.value = page.items.map((wave) => ({ label: `${wave.name} (${wave.waveNo})`, value: wave.id }))
+    waveOptions.value = page.items
+      .filter((wave) => wave.lifecycleStage !== 'closed')
+      .map((wave) => ({ label: `${wave.name} (${wave.waveNo})`, value: wave.id }))
+    waveListTruncated.value = (page.pagination.totalCount ?? 0) > 200
   } catch (err) {
     waveOptions.value = []
+    waveListTruncated.value = false
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
     wavesLoading.value = false
@@ -303,20 +345,21 @@ async function openSendToWavePicker(): Promise<void> {
 const canConfirmSend = computed(() => targetPickerWaveId.value != null && !sendingToWave.value)
 
 async function handleConfirmSendToWave(): Promise<void> {
-  const doc = importResult.value?.document
-  if (targetPickerWaveId.value == null || doc == null) return
+  const documents = importedDocuments.value
+  if (targetPickerWaveId.value == null || documents.length === 0) return
+  const docIds = documents.map((doc) => doc.id)
   sendingToWave.value = true
   try {
     const assignResult = await batchAssignDemandToWave({
       waveId: targetPickerWaveId.value,
-      docIds: [doc.id],
+      docIds,
     })
     if (assignResult.failureCount > 0) {
       feedback.error(t('inbox.import.assignToWaveFailed'))
     } else {
       sentToWave.value = true
       feedback.success(t('feedback.success'))
-      emit('assignedToWave', [doc.id])
+      emit('assignedToWave', docIds)
       showSendPicker.value = false
     }
   } catch (err) {
@@ -333,24 +376,79 @@ function handleUpdateShow(value: boolean): void {
 
 const canNext = computed(() => {
   if (currentStep.value === 'select') return canNextFromSelect.value
-  if (currentStep.value === 'mapping') return !importing.value
-  // result step: Finish becomes Close
-  return true
+  return !importing.value && !templateLoading.value && mappingIsConfigured(mapping.value)
+})
+
+defineExpose({
+  handleOpen,
+  handleImport,
+  handlePickFile,
+  handleNext,
+  openSendToWavePicker,
+  handleConfirmSendToWave,
+  profileId,
+  documentType,
+  filePath,
+  previewRows,
+  headers,
+  mapping,
+  currentStep,
+  importResult,
+  canNext,
+  canNextFromSelect,
+  pickError,
+  templateLoading,
+  showSendPicker,
+  waveOptions,
+  waveListTruncated,
+  sentToWave,
+  targetPickerWaveId,
 })
 </script>
 
 <template>
   <NModal :show="show" preset="card" :title="t('inbox.importModal.title')" style="width: min(720px, 94vw)" @update:show="handleUpdateShow">
     <div class="import-file-modal">
+      <div v-if="importResult" class="import-file-modal__section">
+        <p class="import-file-modal__step-label">{{ t('inbox.importModal.resultTitle') }}</p>
+        <p>{{ t('inbox.importModal.successCount', { count: importResult.successCount }) }}</p>
+        <p v-if="importResult.errorCount > 0">{{ t('inbox.importModal.errorCount', { count: importResult.errorCount }) }}</p>
+        <ImportEvidenceReference :import-run-id="importResult.importRunId" :evidence-disabled="importResult.evidenceDisabled" />
+        <ul v-if="importResult.errors.length > 0" class="import-file-modal__errors">
+          <li v-for="err in importResult.errors" :key="err.rowIndex">
+            {{ t('inbox.importModal.rowError', { row: err.rowIndex, reason: err.reason }) }}
+          </li>
+        </ul>
+        <CalloutBar
+          v-if="importResult.warnings && importResult.warnings.length > 0"
+          tone="warning"
+          :message="t('inbox.importModal.warningCount', { count: importResult.warnings.length })"
+        />
+        <ul v-if="importResult.warnings && importResult.warnings.length > 0" class="import-file-modal__warnings">
+          <li v-for="(warning, idx) in importResult.warnings" :key="idx">{{ warning }}</li>
+        </ul>
+        <div class="import-file-modal__actions">
+          <NButton
+            v-if="targetWaveId == null && importedDocuments.length > 0 && !sentToWave"
+            secondary
+            @click="openSendToWavePicker"
+          >
+            {{ t('inbox.import.sendToWave') }}
+          </NButton>
+          <NButton type="primary" @click="handleUpdateShow(false)">{{ t('common.close') }}</NButton>
+        </div>
+      </div>
+
       <WizardFrame
+        v-else
         :steps="wizardSteps"
         :current="currentStep"
         :can-next="canNext"
-        :can-back="!importing && currentStep !== 'result'"
+        :can-back="!importing"
         :next-label="t('intakeWizard.nav.next')"
         :back-label="t('intakeWizard.nav.back')"
-        :finish-label="currentStep === 'result' ? t('common.close') : t('inbox.importModal.import')"
-        :cancel-label="currentStep === 'result' ? undefined : t('common.close')"
+        :finish-label="t('inbox.importModal.import')"
+        :cancel-label="t('common.close')"
         @next="handleNext"
         @back="handleBack"
         @finish="handleImport"
@@ -431,50 +529,23 @@ const canNext = computed(() => {
             />
           </div>
         </template>
-
-        <template v-else-if="currentStep === 'result' && importResult">
-          <div class="import-file-modal__section">
-            <p class="import-file-modal__step-label">{{ t('inbox.importModal.resultTitle') }}</p>
-            <p>{{ t('inbox.importModal.successCount', { count: importResult.successCount }) }}</p>
-            <p v-if="importResult.errorCount > 0">{{ t('inbox.importModal.errorCount', { count: importResult.errorCount }) }}</p>
-            <ImportEvidenceReference :import-run-id="importResult.importRunId" :evidence-disabled="importResult.evidenceDisabled" />
-            <ul v-if="importResult.errors.length > 0" class="import-file-modal__errors">
-              <li v-for="err in importResult.errors" :key="err.rowIndex">
-                {{ t('inbox.importModal.rowError', { row: err.rowIndex, reason: err.reason }) }}
-              </li>
-            </ul>
-            <CalloutBar
-              v-if="importResult.warnings && importResult.warnings.length > 0"
-              tone="warning"
-              :message="t('inbox.importModal.warningCount', { count: importResult.warnings.length })"
-            />
-            <ul v-if="importResult.warnings && importResult.warnings.length > 0" class="import-file-modal__warnings">
-              <li v-for="(warning, idx) in importResult.warnings" :key="idx">{{ warning }}</li>
-            </ul>
-            <div class="import-file-modal__actions">
-              <NButton
-                v-if="targetWaveId == null && importResult.document && !sentToWave"
-                secondary
-                @click="openSendToWavePicker"
-              >
-                {{ t('inbox.import.sendToWave') }}
-              </NButton>
-              <NButton type="primary" @click="handleUpdateShow(false)">{{ t('common.close') }}</NButton>
-            </div>
-          </div>
-        </template>
       </WizardFrame>
     </div>
   </NModal>
 
   <NModal v-model:show="showSendPicker" preset="card" :title="t('inbox.batch.chooseWave')" style="width: 420px">
-    <NSelect
-      v-model:value="targetPickerWaveId"
-      :options="waveOptions"
-      :loading="wavesLoading"
-      filterable
-      :placeholder="t('inbox.batch.chooseWave')"
-    />
+    <div class="import-file-modal__picker">
+      <NAlert v-if="waveListTruncated" type="info" :bordered="false">
+        {{ t('inbox.batch.waveListTruncated') }}
+      </NAlert>
+      <NSelect
+        v-model:value="targetPickerWaveId"
+        :options="waveOptions"
+        :loading="wavesLoading"
+        filterable
+        :placeholder="t('inbox.batch.chooseWave')"
+      />
+    </div>
     <template #footer>
       <div class="import-file-modal__actions">
         <NButton @click="showSendPicker = false">{{ t('common.cancel') }}</NButton>
@@ -524,6 +595,12 @@ const canNext = computed(() => {
 .import-file-modal__actions {
   display: flex;
   justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.import-file-modal__picker {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-2);
 }
 

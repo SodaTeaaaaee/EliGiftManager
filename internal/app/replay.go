@@ -5,7 +5,7 @@ import "github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 // ReplayFailure records a single adjustment that could not be applied during replay.
 type ReplayFailure struct {
 	AdjustmentID uint
-	Reason       string // "orphaned_line" | "ambiguous_target"
+	Reason       string // "orphaned_line" | "ambiguous_target" | "negative_quantity"
 }
 
 // ReplayMode controls how failures are handled during replay.
@@ -69,13 +69,14 @@ func ReplayAdjustments(
 			}
 			continue
 		}
-		applyAdjustment(&baselines[idx], adj)
-	}
-
-	// Final clamp: quantity must be >= 0.
-	for i := range baselines {
-		if baselines[i].Quantity < 0 {
-			baselines[i].Quantity = 0
+		if !applyAdjustment(&baselines[idx], adj) {
+			failures = append(failures, ReplayFailure{
+				AdjustmentID: adj.ID,
+				Reason:       "negative_quantity",
+			})
+			if opt.Mode == ReplayHaltOnFirstFailure {
+				break
+			}
 		}
 	}
 
@@ -204,13 +205,18 @@ func resolveFailureReason(
 	return "orphaned_line"
 }
 
-// applyAdjustment mutates the target line's Quantity based on the adjustment kind.
-func applyAdjustment(line *domain.FulfillmentLine, adj domain.FulfillmentAdjustment) {
+// applyAdjustment mutates the target line based on the adjustment kind.
+// Returns false when add/compensation/reduce/reissue would make Quantity negative.
+func applyAdjustment(line *domain.FulfillmentLine, adj domain.FulfillmentAdjustment) bool {
 	switch adj.AdjustmentKind {
 	case "add", "compensation", "reduce", string(domain.AdjustmentKindReissue):
 		// reissue is a positive re-send (sibling to compensation, decision #15):
 		// it applies as a quantity delta just like add/compensation.
-		line.Quantity += adj.QuantityDelta
+		newQty := line.Quantity + adj.QuantityDelta
+		if newQty < 0 {
+			return false
+		}
+		line.Quantity = newQty
 	case "remove":
 		line.Quantity = 0
 	case "replace":
@@ -219,4 +225,5 @@ func applyAdjustment(line *domain.FulfillmentLine, adj domain.FulfillmentAdjustm
 			line.ProductID = adj.ToProductID
 		}
 	}
+	return true
 }

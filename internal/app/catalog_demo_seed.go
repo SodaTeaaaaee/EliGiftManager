@@ -126,11 +126,15 @@ const ShipmentDemoMappingRules = `{
 // import_supplier_shipment (rouzao 13-column express return), and
 // export_supplier_order (exact six-column xlsx contract).
 //
-// Idempotent:
-//   - profile: skip create when ProfileKey already exists
-//   - template: skip create when TemplateKey already exists
+// Idempotent and non-clobbering:
+//   - profile: skip create when ProfileKey already exists. Leftover DemandKind
+//     is cleared to empty (documentType is explicit; DemandKind is not inferred).
+//     Operator capabilities and other profile fields are not overwritten.
+//   - template: skip create when TemplateKey already exists (MappingRules
+//     are not clobbered). Missing templates are created.
 //   - binding: skip create when a default binding already exists for
-//     (profileID, document_type)
+//     (profileID, document_type). Missing defaults are created only when
+//     ValidateProfileDocumentType allows the document type on the profile.
 //
 // templateRepo / bindingRepo may be nil only when the caller does not need
 // template+binding seeding (no-op for those parts). profileRepo is required.
@@ -158,7 +162,7 @@ func SeedCatalogDemo(
 		return nil, err
 	}
 
-	if err := ensureCatalogDemoBinding(ctx, bindingRepo, profile.ID, tmpl.ID); err != nil {
+	if err := ensureCatalogDemoBinding(ctx, bindingRepo, profile, tmpl.ID); err != nil {
 		return nil, err
 	}
 
@@ -167,7 +171,7 @@ func SeedCatalogDemo(
 		return nil, err
 	}
 
-	if err := ensureShipmentDemoBinding(ctx, bindingRepo, profile.ID, shipTmpl.ID); err != nil {
+	if err := ensureShipmentDemoBinding(ctx, bindingRepo, profile, shipTmpl.ID); err != nil {
 		return nil, err
 	}
 
@@ -176,7 +180,7 @@ func SeedCatalogDemo(
 		return nil, err
 	}
 
-	if err := ensureSupplierOrderDemoBinding(ctx, bindingRepo, profile.ID, orderTmpl.ID); err != nil {
+	if err := ensureSupplierOrderDemoBinding(ctx, bindingRepo, profile, orderTmpl.ID); err != nil {
 		return nil, err
 	}
 
@@ -189,10 +193,14 @@ func ensureCatalogDemoProfile(
 ) (*domain.IntegrationProfile, error) {
 	existing, err := profileRepo.FindByProfileKey(ctx, CatalogDemoProfileKey)
 	if err == nil && existing != nil {
-		if !existing.SupportsExportSupplierOrder {
-			existing.SupportsExportSupplierOrder = true
+		// DemandKind is leftover and must not be treated as the unique document
+		// type. Factory demo binds catalog/shipment/export types; empty leftover
+		// matches ResolveDemandImportDocumentType (no inference). Do not touch
+		// operator capabilities or MappingRules owned by templates.
+		if existing.DemandKind != "" {
+			existing.DemandKind = ""
 			if err := profileRepo.Update(ctx, existing); err != nil {
-				return nil, fmt.Errorf("seed catalog demo profile %q capability update: %w", CatalogDemoProfileKey, err)
+				return nil, fmt.Errorf("seed catalog demo profile %q leftover DemandKind: %w", CatalogDemoProfileKey, err)
 			}
 		}
 		return existing, nil
@@ -208,6 +216,9 @@ func ensureCatalogDemoProfile(
 		SupportsImportProductCatalog:   true,
 		SupportsImportSupplierShipment: true,
 		SupportsExportSupplierOrder:    true,
+		// Leftover hints stay empty: documentType owns demand kind/identity.
+		DemandKind:       "",
+		IdentityStrategy: "",
 		// Factory demo does not channel-sync; keep readiness green without a connector.
 		TrackingSyncMode: "unsupported",
 	}
@@ -239,8 +250,12 @@ func ensureCatalogDemoTemplate(
 
 	// Validate MappingRules at seed time so a bad constant fails loudly in tests
 	// and on first seed rather than at first import.
-	if _, err := ParseMappingRules(CatalogDemoMappingRules); err != nil {
+	rules, err := ParseMappingRules(CatalogDemoMappingRules)
+	if err != nil {
 		return nil, fmt.Errorf("seed catalog demo mapping rules invalid: %w", err)
+	}
+	if err := ValidateMappingRulesConfig(CatalogDemoDocType, rules); err != nil {
+		return nil, fmt.Errorf("seed catalog demo mapping rules illegal: %w", err)
 	}
 
 	tmpl := &domain.DocumentTemplate{
@@ -259,9 +274,10 @@ func ensureCatalogDemoTemplate(
 func ensureCatalogDemoBinding(
 	ctx context.Context,
 	bindingRepo domain.ProfileTemplateBindingRepository,
-	profileID, templateID uint,
+	profile *domain.IntegrationProfile,
+	templateID uint,
 ) error {
-	return ensureDemoBinding(ctx, bindingRepo, profileID, templateID, CatalogDemoDocType, "catalog")
+	return ensureDemoBinding(ctx, bindingRepo, profile, templateID, CatalogDemoDocType, "catalog")
 }
 
 func ensureShipmentDemoTemplate(
@@ -300,9 +316,10 @@ func ensureShipmentDemoTemplate(
 func ensureShipmentDemoBinding(
 	ctx context.Context,
 	bindingRepo domain.ProfileTemplateBindingRepository,
-	profileID, templateID uint,
+	profile *domain.IntegrationProfile,
+	templateID uint,
 ) error {
-	return ensureDemoBinding(ctx, bindingRepo, profileID, templateID, ShipmentDemoDocType, "shipment")
+	return ensureDemoBinding(ctx, bindingRepo, profile, templateID, ShipmentDemoDocType, "shipment")
 }
 
 func ensureSupplierOrderDemoTemplate(
@@ -340,35 +357,44 @@ func ensureSupplierOrderDemoTemplate(
 func ensureSupplierOrderDemoBinding(
 	ctx context.Context,
 	bindingRepo domain.ProfileTemplateBindingRepository,
-	profileID, templateID uint,
+	profile *domain.IntegrationProfile,
+	templateID uint,
 ) error {
-	return ensureDemoBinding(ctx, bindingRepo, profileID, templateID, SupplierOrderDemoDocType, "supplier order")
+	return ensureDemoBinding(ctx, bindingRepo, profile, templateID, SupplierOrderDemoDocType, "supplier order")
 }
 
 func ensureDemoBinding(
 	ctx context.Context,
 	bindingRepo domain.ProfileTemplateBindingRepository,
-	profileID, templateID uint,
+	profile *domain.IntegrationProfile,
+	templateID uint,
 	docType, label string,
 ) error {
-	existing, err := bindingRepo.FindDefaultByProfileAndType(ctx, profileID, docType)
+	if profile == nil {
+		return fmt.Errorf("seed %s demo binding: profile is required", label)
+	}
+	// Do not write a default binding the profile cannot own, and do not flip
+	// operator capability flags to make the binding legal.
+	if err := ValidateProfileDocumentType(profile, docType); err != nil {
+		return nil
+	}
+
+	existing, err := bindingRepo.FindDefaultByProfileAndType(ctx, profile.ID, docType)
 	if err != nil {
-		// Some test stubs return an error for "not found"; treat that as absent.
-		// Real infra returns (nil, nil) when no default binding exists.
-		existing = nil
+		return fmt.Errorf("seed %s demo binding lookup profile=%d type=%s: %w", label, profile.ID, docType, err)
 	}
 	if existing != nil {
 		return nil
 	}
 
 	b := &domain.IntegrationProfileTemplateBinding{
-		IntegrationProfileID: profileID,
+		IntegrationProfileID: profile.ID,
 		DocumentType:         docType,
 		TemplateID:           templateID,
 		IsDefault:            true,
 	}
 	if err := bindingRepo.Create(ctx, b); err != nil {
-		return fmt.Errorf("seed %s demo binding profile=%d template=%d: %w", label, profileID, templateID, err)
+		return fmt.Errorf("seed %s demo binding profile=%d template=%d: %w", label, profile.ID, templateID, err)
 	}
 	return nil
 }

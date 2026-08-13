@@ -7,35 +7,100 @@ import (
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
+	"gorm.io/gorm"
 )
 
 type addressManagementUseCase struct {
 	addressRepo     domain.CustomerAddressRepository
 	fulfillmentRepo domain.FulfillmentLineRepository
+	db              *gorm.DB
 }
 
 func NewAddressManagementUseCase(
 	addressRepo domain.CustomerAddressRepository,
 	fulfillmentRepo domain.FulfillmentLineRepository,
+	extra ...any,
 ) AddressManagementUseCase {
-	return &addressManagementUseCase{
+	uc := &addressManagementUseCase{
 		addressRepo:     addressRepo,
 		fulfillmentRepo: fulfillmentRepo,
 	}
+	for _, dep := range extra {
+		if db, ok := dep.(*gorm.DB); ok && db != nil {
+			uc.db = db
+		}
+	}
+	return uc
+}
+
+// addressDefaultMutator is the ClearDefault + persist surface wrapped in a transaction.
+type addressDefaultMutator interface {
+	ClearDefaultByProfile(ctx context.Context, profileID uint) error
+	Create(ctx context.Context, addr *domain.CustomerAddress) error
+	Update(ctx context.Context, addr *domain.CustomerAddress) error
+}
+
+// gormAddressWriter rebinds address writes onto a transaction (or nested savepoint) handle.
+type gormAddressWriter struct {
+	db *gorm.DB
+}
+
+func (w *gormAddressWriter) ClearDefaultByProfile(ctx context.Context, profileID uint) error {
+	return w.db.WithContext(ctx).Model(&persistence.CustomerAddress{}).
+		Where("customer_profile_id = ? AND is_default = ?", profileID, true).
+		Update("is_default", false).Error
+}
+
+func (w *gormAddressWriter) Create(ctx context.Context, addr *domain.CustomerAddress) error {
+	p := persistence.CustomerAddressFromDomain(addr)
+	if err := w.db.WithContext(ctx).Create(p).Error; err != nil {
+		return err
+	}
+	*addr = *persistence.CustomerAddressToDomain(p)
+	return nil
+}
+
+func (w *gormAddressWriter) Update(ctx context.Context, addr *domain.CustomerAddress) error {
+	p := persistence.CustomerAddressFromDomain(addr)
+	p.ID = addr.ID
+	return w.db.WithContext(ctx).Save(p).Error
+}
+
+func (uc *addressManagementUseCase) persistAfterClearDefault(
+	ctx context.Context,
+	profileID uint,
+	addr *domain.CustomerAddress,
+	create bool,
+) error {
+	write := func(repo addressDefaultMutator) error {
+		if err := repo.ClearDefaultByProfile(ctx, profileID); err != nil {
+			return fmt.Errorf("clear existing defaults: %w", err)
+		}
+		if create {
+			return repo.Create(ctx, addr)
+		}
+		return repo.Update(ctx, addr)
+	}
+	if uc.db == nil {
+		return write(uc.addressRepo)
+	}
+	// GORM uses a savepoint when db is already a transaction, so controller
+	// (or import) outer txs are not double-committed as independent sessions.
+	return uc.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return write(&gormAddressWriter{db: tx})
+	})
 }
 
 func (uc *addressManagementUseCase) CreateAddress(ctx context.Context, input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error) {
 	if err := requireCustomerResolutionFeature(ctx, uc.addressRepo, domain.CustomerResolutionFeatureWrites); err != nil {
 		return nil, err
 	}
+	if input.CustomerProfileID == 0 {
+		return nil, fmt.Errorf("customer profile ID is required")
+	}
 	if input.Label == "" {
 		return nil, fmt.Errorf("address label is required")
-	}
-
-	if input.IsDefault {
-		if err := uc.addressRepo.ClearDefaultByProfile(ctx, input.CustomerProfileID); err != nil {
-			return nil, fmt.Errorf("clear existing defaults: %w", err)
-		}
 	}
 
 	status := input.ValidationStatus
@@ -64,7 +129,11 @@ func (uc *addressManagementUseCase) CreateAddress(ctx context.Context, input dto
 		UpdatedAt:         time.Now(),
 	}
 
-	if err := uc.addressRepo.Create(ctx, addr); err != nil {
+	if input.IsDefault {
+		if err := uc.persistAfterClearDefault(ctx, input.CustomerProfileID, addr, true); err != nil {
+			return nil, err
+		}
+	} else if err := uc.addressRepo.Create(ctx, addr); err != nil {
 		return nil, err
 	}
 	result := addressToDTO(addr)
@@ -80,16 +149,17 @@ func (uc *addressManagementUseCase) UpdateAddress(ctx context.Context, input dto
 		return nil, err
 	}
 
+	if input.CustomerProfileID != 0 {
+		if existing.CustomerProfileID != 0 && existing.CustomerProfileID != input.CustomerProfileID {
+			return nil, fmt.Errorf("cannot reassign address %d from profile %d to profile %d", existing.ID, existing.CustomerProfileID, input.CustomerProfileID)
+		}
+		existing.CustomerProfileID = input.CustomerProfileID
+	}
+
 	if input.Label != "" {
 		existing.Label = input.Label
 	}
-	if input.IsDefault && !existing.IsDefault {
-		if err := uc.addressRepo.ClearDefaultByProfile(ctx, input.CustomerProfileID); err != nil {
-			return nil, fmt.Errorf("clear existing defaults: %w", err)
-		}
-	}
 
-	existing.CustomerProfileID = input.CustomerProfileID
 	existing.RecipientName = input.RecipientName
 	existing.Phone = input.Phone
 	existing.Country = input.Country
@@ -99,14 +169,19 @@ func (uc *addressManagementUseCase) UpdateAddress(ctx context.Context, input dto
 	existing.AddressLine1 = input.AddressLine1
 	existing.AddressLine2 = input.AddressLine2
 	existing.PostalCode = input.PostalCode
-	existing.IsDefault = input.IsDefault
 	existing.IsTest = input.IsTest
 	existing.ValidationStatus = input.ValidationStatus
 	existing.ValidationDetail = input.ValidationDetail
 	existing.ExtraData = input.ExtraData
 	existing.UpdatedAt = time.Now()
 
-	if err := uc.addressRepo.Update(ctx, existing); err != nil {
+	promoteDefault := input.IsDefault && !existing.IsDefault
+	existing.IsDefault = input.IsDefault
+	if promoteDefault {
+		if err := uc.persistAfterClearDefault(ctx, existing.CustomerProfileID, existing, false); err != nil {
+			return nil, err
+		}
+	} else if err := uc.addressRepo.Update(ctx, existing); err != nil {
 		return nil, err
 	}
 	result := addressToDTO(existing)
@@ -153,6 +228,10 @@ func (uc *addressManagementUseCase) BindAddressToLine(ctx context.Context, input
 	line, err := uc.fulfillmentRepo.FindByID(ctx, input.FulfillmentLineID)
 	if err != nil {
 		return nil, fmt.Errorf("fulfillment line not found: %w", err)
+	}
+
+	if line.CustomerProfileID == nil || addr.CustomerProfileID != *line.CustomerProfileID {
+		return nil, fmt.Errorf("cannot bind address to fulfillment line: customer profile mismatch")
 	}
 
 	line.CustomerAddressID = &addr.ID
@@ -225,12 +304,11 @@ func (uc *addressManagementUseCase) UpsertAddressFromImport(ctx context.Context,
 		applyRecipientDraft(match, draft)
 		match.UpdatedAt = now
 		if draft.IsDefault && !match.IsDefault {
-			if err := uc.addressRepo.ClearDefaultByProfile(ctx, customerProfileID); err != nil {
-				return nil, fmt.Errorf("clear existing defaults: %w", err)
-			}
 			match.IsDefault = true
-		}
-		if err := uc.addressRepo.Update(ctx, match); err != nil {
+			if err := uc.persistAfterClearDefault(ctx, customerProfileID, match, false); err != nil {
+				return nil, err
+			}
+		} else if err := uc.addressRepo.Update(ctx, match); err != nil {
 			return nil, fmt.Errorf("update matched address: %w", err)
 		}
 		result := addressToDTO(match)
@@ -241,11 +319,6 @@ func (uc *addressManagementUseCase) UpsertAddressFromImport(ctx context.Context,
 	label := draft.Label
 	if label == "" {
 		label = "import"
-	}
-	if draft.IsDefault {
-		if err := uc.addressRepo.ClearDefaultByProfile(ctx, customerProfileID); err != nil {
-			return nil, fmt.Errorf("clear existing defaults: %w", err)
-		}
 	}
 	// First address for a profile becomes default when the draft does not opt out.
 	isDefault := draft.IsDefault
@@ -270,7 +343,11 @@ func (uc *addressManagementUseCase) UpsertAddressFromImport(ctx context.Context,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
-	if err := uc.addressRepo.Create(ctx, addr); err != nil {
+	if draft.IsDefault {
+		if err := uc.persistAfterClearDefault(ctx, customerProfileID, addr, true); err != nil {
+			return nil, err
+		}
+	} else if err := uc.addressRepo.Create(ctx, addr); err != nil {
 		return nil, fmt.Errorf("create address from import: %w", err)
 	}
 	result := addressToDTO(addr)
@@ -312,13 +389,13 @@ func applyRecipientDraft(addr *domain.CustomerAddress, draft RecipientAddressDra
 }
 
 func deriveAddressState(validationStatus string) string {
-	switch validationStatus {
-	case "valid":
-		return "ready"
-	case "invalid":
-		return "invalid"
+	switch domain.AddressValidationStatus(validationStatus) {
+	case domain.AddressValidationStatusValid:
+		return string(domain.AddressStateReady)
+	case domain.AddressValidationStatusInvalid:
+		return string(domain.AddressStateInvalid)
 	default:
-		return "ready"
+		return string(domain.AddressStateMissing)
 	}
 }
 

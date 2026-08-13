@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
 func TestParseMappingRules_V1Compat(t *testing.T) {
@@ -152,6 +154,92 @@ func TestApplyRow_HeaderTransformsAndRequired(t *testing.T) {
 	}
 	if out["line.line_type"] != "sku_order" {
 		t.Errorf("line_type default: %q", out["line.line_type"])
+	}
+}
+
+func TestApplyRow_DefaultDoesNotOverwriteMapped(t *testing.T) {
+	t.Parallel()
+	rules, err := ParseMappingRules(`{
+		"version": 2,
+		"mode": "header",
+		"columns": {"line.external_title": "Name"},
+		"defaults": {"line.external_title": "DEFAULT_TITLE"}
+	}`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	out, _, err := ApplyRow([]string{"Mapped Title"}, []string{"Name"}, rules)
+	if err != nil {
+		t.Fatalf("ApplyRow: %v", err)
+	}
+	if out["line.external_title"] != "Mapped Title" {
+		t.Errorf("mapped value must win over default: got %q", out["line.external_title"])
+	}
+}
+
+func TestApplyRow_DefaultFillsEmptyDest(t *testing.T) {
+	t.Parallel()
+
+	t.Run("dest not in columns", func(t *testing.T) {
+		t.Parallel()
+		rules, err := ParseMappingRules(`{
+			"version": 2,
+			"mode": "header",
+			"columns": {"line.external_title": "Name"},
+			"defaults": {"line.line_type": "sku_order"}
+		}`)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		out, _, err := ApplyRow([]string{"Poster"}, []string{"Name"}, rules)
+		if err != nil {
+			t.Fatalf("ApplyRow: %v", err)
+		}
+		if out["line.line_type"] != "sku_order" {
+			t.Errorf("missing dest should get default: got %q", out["line.line_type"])
+		}
+		if out["line.external_title"] != "Poster" {
+			t.Errorf("mapped dest: %q", out["line.external_title"])
+		}
+	})
+
+	t.Run("mapped to blank", func(t *testing.T) {
+		t.Parallel()
+		rules, err := ParseMappingRules(`{
+			"version": 2,
+			"mode": "header",
+			"columns": {"line.external_title": "Name", "line.line_type": "Type"},
+			"defaults": {"line.line_type": "sku_order"}
+		}`)
+		if err != nil {
+			t.Fatalf("parse: %v", err)
+		}
+		out, _, err := ApplyRow([]string{"Poster", "  "}, []string{"Name", "Type"}, rules)
+		if err != nil {
+			t.Fatalf("ApplyRow: %v", err)
+		}
+		if out["line.line_type"] != "sku_order" {
+			t.Errorf("blank mapped dest should get default: got %q", out["line.line_type"])
+		}
+	})
+}
+
+func TestApplyRow_HeaderTrimSpace(t *testing.T) {
+	t.Parallel()
+	rules, err := ParseMappingRules(`{
+		"version": 2,
+		"mode": "header",
+		"columns": {"line.external_title": "Name"}
+	}`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	out, _, err := ApplyRow([]string{"Standee", "1"}, []string{" Name ", "Qty"}, rules)
+	if err != nil {
+		t.Fatalf("ApplyRow: %v", err)
+	}
+	if out["line.external_title"] != "Standee" {
+		t.Errorf("padded header should still map: got %q", out["line.external_title"])
 	}
 }
 
@@ -327,6 +415,7 @@ func TestMapCSVRowUnknownField(t *testing.T) {
 }
 
 func TestMapCSVRowInvalidQuantity(t *testing.T) {
+	t.Parallel()
 	rules := &TemplateMappingRules{
 		Mode: "header",
 		Columns: map[string]string{
@@ -337,6 +426,56 @@ func TestMapCSVRowInvalidQuantity(t *testing.T) {
 	_, err := MapCSVRowToDemandLine(row, rules)
 	if err == nil {
 		t.Error("expected error for invalid quantity")
+	}
+}
+
+func TestRequestedQuantity_RejectsNonPositiveAndNonInteger(t *testing.T) {
+	t.Parallel()
+
+	t.Run("2 succeeds", func(t *testing.T) {
+		t.Parallel()
+		line := &domain.DemandLine{}
+		if err := setDemandLineField(line, "requested_quantity", "2"); err != nil {
+			t.Fatalf("expected success for %q: %v", "2", err)
+		}
+		if line.RequestedQuantity != 2 {
+			t.Errorf("got qty %d", line.RequestedQuantity)
+		}
+
+		rowRules := &TemplateMappingRules{
+			Mode:    "header",
+			Columns: map[string]string{"requested_quantity": "Qty"},
+		}
+		mapped, err := MapCSVRowToDemandLine(map[string]string{"Qty": "2"}, rowRules)
+		if err != nil {
+			t.Fatalf("MapCSVRowToDemandLine: %v", err)
+		}
+		if mapped.RequestedQuantity != 2 {
+			t.Errorf("MapCSVRowToDemandLine qty: %d", mapped.RequestedQuantity)
+		}
+	})
+
+	for _, raw := range []string{"0", "-1", "1.5", "abc"} {
+		raw := raw
+		t.Run("invalid_"+raw, func(t *testing.T) {
+			t.Parallel()
+			line := &domain.DemandLine{RequestedQuantity: 7}
+			err := setDemandLineField(line, "requested_quantity", raw)
+			if err == nil {
+				t.Fatalf("expected error for quantity %q", raw)
+			}
+			if line.RequestedQuantity != 7 {
+				t.Errorf("must not write invalid quantity %q: got %d", raw, line.RequestedQuantity)
+			}
+
+			rowRules := &TemplateMappingRules{
+				Mode:    "header",
+				Columns: map[string]string{"requested_quantity": "Qty"},
+			}
+			if _, err := MapCSVRowToDemandLine(map[string]string{"Qty": raw}, rowRules); err == nil {
+				t.Fatalf("MapCSVRowToDemandLine expected error for quantity %q", raw)
+			}
+		})
 	}
 }
 

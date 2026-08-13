@@ -10,6 +10,9 @@ import (
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
+	"gorm.io/gorm"
 )
 
 // ── mock DocumentTemplateRepository ──
@@ -1123,5 +1126,97 @@ func TestInterpretDemandImportDocumentType(t *testing.T) {
 				t.Fatalf("got %+v, want %+v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestSetDefaultBindingWriteIsTransactional(t *testing.T) {
+	gdb := setupDualModeTestDB(t)
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+
+	ctx := context.Background()
+	profileRepo := infra.NewIntegrationProfileRepository(gdb)
+	templateRepo := infra.NewDocumentTemplateRepository(gdb)
+	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
+	uc := NewTemplateManagementUseCase(templateRepo, bindingRepo, profileRepo, gdb)
+
+	profile := &domain.IntegrationProfile{
+		ProfileKey:    "tx-profile",
+		SourceChannel: "test",
+		SourceSurface: string(domain.SourceSurfaceMembership),
+		DemandKind:    string(domain.DemandKindMembershipEntitlement),
+	}
+	if err := profileRepo.Create(ctx, profile); err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+
+	tmplA, err := uc.CreateDocumentTemplate(ctx, validCreateTemplateInput())
+	if err != nil {
+		t.Fatalf("create template A: %v", err)
+	}
+	inputB := validCreateTemplateInput()
+	inputB.TemplateKey = "tmpl-tx-002"
+	tmplB, err := uc.CreateDocumentTemplate(ctx, inputB)
+	if err != nil {
+		t.Fatalf("create template B: %v", err)
+	}
+
+	bindingA, err := uc.BindTemplateToProfile(ctx, dto.BindTemplateToProfileInput{
+		IntegrationProfileID: profile.ID,
+		DocumentType:         "import_entitlement",
+		TemplateID:           tmplA.ID,
+		IsDefault:            true,
+	})
+	if err != nil {
+		t.Fatalf("bind A: %v", err)
+	}
+	bindingB, err := uc.BindTemplateToProfile(ctx, dto.BindTemplateToProfileInput{
+		IntegrationProfileID: profile.ID,
+		DocumentType:         "import_entitlement",
+		TemplateID:           tmplB.ID,
+		IsDefault:            false,
+	})
+	if err != nil {
+		t.Fatalf("bind B: %v", err)
+	}
+
+	const cbName = "test_fail_binding_save"
+	if err := gdb.Callback().Update().Before("gorm:update").Register(cbName, func(tx *gorm.DB) {
+		table := tx.Statement.Table
+		if tx.Statement.Schema != nil && table == "" {
+			table = tx.Statement.Schema.Table
+		}
+		if table != "integration_profile_template_bindings" {
+			return
+		}
+		dest, ok := tx.Statement.Dest.(*persistence.IntegrationProfileTemplateBinding)
+		if ok && dest.ID != 0 && dest.IsDefault {
+			_ = tx.AddError(fmt.Errorf("forced binding save failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register update callback: %v", err)
+	}
+	t.Cleanup(func() { _ = gdb.Callback().Update().Remove(cbName) })
+
+	if err := uc.SetDefaultBinding(ctx, bindingB.ID); err == nil {
+		t.Fatal("expected SetDefaultBinding persist to fail")
+	}
+
+	gotA, err := bindingRepo.FindByID(ctx, bindingA.ID)
+	if err != nil {
+		t.Fatalf("lookup A: %v", err)
+	}
+	if gotA == nil || !gotA.IsDefault {
+		t.Fatalf("binding A must remain default after rolled-back ClearDefault+Update, got %+v", gotA)
+	}
+	gotB, err := bindingRepo.FindByID(ctx, bindingB.ID)
+	if err != nil {
+		t.Fatalf("lookup B: %v", err)
+	}
+	if gotB == nil || gotB.IsDefault {
+		t.Fatalf("binding B must not become default after rolled-back promote, got %+v", gotB)
 	}
 }

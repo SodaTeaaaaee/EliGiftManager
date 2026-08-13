@@ -81,3 +81,42 @@ func TestGetSupplierOrderLineShippedSummary_FullyShipped(t *testing.T) {
 		t.Errorf("RemainingQuantity = %d, want 0", line11.RemainingQuantity)
 	}
 }
+
+func TestGetSupplierOrderLineShippedSummary_ExcludesVoidedShipments(t *testing.T) {
+	t.Parallel()
+
+	shipmentRepo, supplierRepo, _ := buildImportFixture()
+	shipmentRepo.shipments[1] = &domain.Shipment{
+		ID:              1,
+		SupplierOrderID: 1,
+		Status:          string(domain.ShipmentStatusShipped),
+	}
+	shipmentRepo.shipmentLines[1] = []*domain.ShipmentLine{
+		{ID: 1, ShipmentID: 1, SupplierOrderLineID: 10, FulfillmentLineID: 100, Quantity: 2},
+	}
+	shipmentRepo.shipments[3] = &domain.Shipment{
+		ID:              3,
+		SupplierOrderID: 1,
+		Status:          string(domain.ShipmentStatusVoided),
+	}
+	shipmentRepo.shipmentLines[3] = []*domain.ShipmentLine{
+		{ID: 3, ShipmentID: 3, SupplierOrderLineID: 10, FulfillmentLineID: 100, Quantity: 5},
+	}
+
+	uc := NewShipmentReconciliationQueryUseCase(supplierRepo, shipmentRepo)
+	result, err := uc.GetSupplierOrderLineShippedSummary(context.Background(), 1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	line10 := findLineResult(result, 10)
+	if line10 == nil {
+		t.Fatalf("expected a result entry for SOL 10, got %+v", result)
+	}
+	if line10.ShippedQuantity != 2 {
+		t.Errorf("ShippedQuantity = %d, want 2 (voided qty excluded)", line10.ShippedQuantity)
+	}
+	if line10.RemainingQuantity != 3 {
+		t.Errorf("RemainingQuantity = %d, want 3", line10.RemainingQuantity)
+	}
+}

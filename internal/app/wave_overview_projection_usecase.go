@@ -85,22 +85,24 @@ func (uc *waveOverviewProjectionUseCase) ProjectWaveOverview(ctx context.Context
 	// This is the single authoritative stage aggregation point.
 	projectedStage := deriveStage(base)
 
-	hasUncoveredFailures, err := uc.hasUncoveredFailedItems(ctx, jobs, decisions)
-	if err != nil {
-		return dto.WaveOverviewDTO{}, err
-	}
+	if projectedStage != string(domain.LifecycleStageClosed) {
+		hasUncoveredFailures, err := uc.hasUncoveredFailedItems(ctx, jobs, decisions)
+		if err != nil {
+			return dto.WaveOverviewDTO{}, err
+		}
 
-	activeCount := pendingCount + runningCount + partialSuccessCount
-	if activeCount > 0 {
-		projectedStage = "syncing_back"
-	} else if hasUncoveredFailures {
-		projectedStage = "awaiting_manual_closure"
-	} else if hasUncoveredManualClosureCandidates(base, len(decisions)) {
-		projectedStage = "awaiting_manual_closure"
-	} else if len(jobs) > 0 || base.ManualClosureCandidateCount > 0 || base.AutoClosureCandidateCount > 0 {
-		// We have reached the closure stage and there are no active jobs and no
-		// uncovered failures/candidates left → closed.
-		projectedStage = "closed"
+		activeCount := pendingCount + runningCount + partialSuccessCount
+		if activeCount > 0 {
+			projectedStage = "syncing_back"
+		} else if hasUncoveredFailures {
+			projectedStage = "awaiting_manual_closure"
+		} else if hasUncoveredManualClosureCandidates(base, len(decisions)) {
+			projectedStage = "awaiting_manual_closure"
+		} else if len(jobs) > 0 || base.ManualClosureCandidateCount > 0 || base.AutoClosureCandidateCount > 0 {
+			// We have reached the closure stage and there are no active jobs and no
+			// uncovered failures/candidates left → closed.
+			projectedStage = "closed"
+		}
 	}
 
 	base.ChannelSyncJobCount = len(jobs)
@@ -199,7 +201,14 @@ func hasUncoveredManualClosureCandidates(base dto.WaveOverviewDTO, decisionCount
 // deriveStage computes the authoritative lifecycle stage from observable state.
 // This is the single source of truth for the projected stage — frontend pages
 // must not independently derive stage labels.
+//
+// Persisted LifecycleStage=closed is terminal and is not re-derived from counts
+// (a closed wave typically still has shipments, which would otherwise map to
+// execution).
 func deriveStage(base dto.WaveOverviewDTO) string {
+	if base.Wave.LifecycleStage == string(domain.LifecycleStageClosed) {
+		return string(domain.LifecycleStageClosed)
+	}
 	if base.DemandCount == 0 {
 		return "intake"
 	}

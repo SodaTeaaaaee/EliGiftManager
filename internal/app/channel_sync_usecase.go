@@ -46,6 +46,14 @@ func (uc *channelSyncUseCase) CreateChannelSyncJob(ctx context.Context, input dt
 		return nil, nil, fmt.Errorf("unsupported direction: %q (only push_tracking is allowed)", input.Direction)
 	}
 
+	existing, existingItems, err := lookupPendingPushTrackingJob(ctx, uc.channelSyncRepo, input.WaveID, input.IntegrationProfileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if existing != nil {
+		return existing, existingItems, nil
+	}
+
 	// Validate reference chain for every item (all checks outside transaction).
 	for i, it := range input.Items {
 		shipment, err := uc.shipmentRepo.FindByID(ctx, it.ShipmentID)

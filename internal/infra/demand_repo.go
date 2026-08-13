@@ -73,9 +73,15 @@ func (r *demandRepository) CountByIntegrationProfileID(ctx context.Context, prof
 	return count, nil
 }
 
+func (r *demandRepository) assignedDemandDocumentIDs() *gorm.DB {
+	// Model() applies GORM's deleted_at IS NULL scope. Table() would include
+	// soft-deleted assignments and hide those documents from the unassigned pool.
+	return r.db.Model(&persistence.WaveDemandAssignment{}).Select("demand_document_id")
+}
+
 func (r *demandRepository) ListUnassigned(ctx context.Context) ([]domain.DemandDocument, error) {
 	var ps []persistence.DemandDocument
-	if err := r.db.WithContext(ctx).Where("id NOT IN (?)", r.db.Table("wave_demand_assignments").Select("demand_document_id")).Find(&ps).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id NOT IN (?)", r.assignedDemandDocumentIDs()).Find(&ps).Error; err != nil {
 		return nil, err
 	}
 	result := make([]domain.DemandDocument, len(ps))
@@ -89,7 +95,7 @@ func (r *demandRepository) ListUnassignedByCustomerProfileID(ctx context.Context
 	var ps []persistence.DemandDocument
 	if err := r.db.WithContext(ctx).
 		Where("customer_profile_id = ?", profileID).
-		Where("id NOT IN (?)", r.db.Table("wave_demand_assignments").Select("demand_document_id")).
+		Where("id NOT IN (?)", r.assignedDemandDocumentIDs()).
 		Find(&ps).Error; err != nil {
 		return nil, err
 	}

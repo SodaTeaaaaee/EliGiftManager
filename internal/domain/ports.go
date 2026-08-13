@@ -177,8 +177,8 @@ type ShipmentRepository interface {
 	ListLinesByShipment(ctx context.Context, shipmentID uint) ([]ShipmentLine, error)
 
 	// SumShippedQuantityBySOL returns the total quantity already shipped for a given
-	// SupplierOrderLine across all existing shipments. Used for cumulative over-shipment
-	// validation before persisting a new shipment.
+	// SupplierOrderLine across non-voided shipments. Voided shipments do not occupy
+	// quota. Used for cumulative over-shipment validation and shipped/remaining display.
 	SumShippedQuantityBySOL(ctx context.Context, supplierOrderLineID uint) (int, error)
 
 	// AtomicCreateShipment creates a shipment, its lines, and optional basis pin atomically.

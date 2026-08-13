@@ -2,11 +2,26 @@ package infra
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
 )
+
+// FactorySKU is trimmed (strings.TrimSpace) on Create/Update and on
+// FindByPlatformAndSKU / FindByWaveAndSKU. SQLite unique indexes
+// idx_pm_platform_sku and idx_product_wave_platform_sku are case-sensitive;
+// SKUs are not case-folded.
+
+func normalizeRequiredFactorySKU(sku *string) error {
+	*sku = strings.TrimSpace(*sku)
+	if *sku == "" {
+		return fmt.Errorf("factory_sku is required")
+	}
+	return nil
+}
 
 // ---- ProductMasterRepository ----
 
@@ -19,6 +34,9 @@ func NewProductMasterRepository(db *gorm.DB) domain.ProductMasterRepository {
 }
 
 func (r *productMasterRepository) Create(ctx context.Context, master *domain.ProductMaster) error {
+	if err := normalizeRequiredFactorySKU(&master.FactorySKU); err != nil {
+		return err
+	}
 	p := persistence.ProductMasterFromDomain(master)
 	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
 		return err
@@ -48,6 +66,7 @@ func (r *productMasterRepository) List(ctx context.Context) ([]domain.ProductMas
 }
 
 func (r *productMasterRepository) FindByPlatformAndSKU(ctx context.Context, platform, sku string) (*domain.ProductMaster, error) {
+	sku = strings.TrimSpace(sku)
 	var p persistence.ProductMaster
 	if err := r.db.WithContext(ctx).Where("supplier_platform = ? AND factory_sku = ?", platform, sku).First(&p).Error; err != nil {
 		return nil, err
@@ -56,6 +75,9 @@ func (r *productMasterRepository) FindByPlatformAndSKU(ctx context.Context, plat
 }
 
 func (r *productMasterRepository) Update(ctx context.Context, master *domain.ProductMaster) error {
+	if err := normalizeRequiredFactorySKU(&master.FactorySKU); err != nil {
+		return err
+	}
 	p := persistence.ProductMasterFromDomain(master)
 	p.ID = master.ID
 	if err := r.db.WithContext(ctx).Save(p).Error; err != nil {
@@ -76,6 +98,9 @@ func NewProductRepository(db *gorm.DB) domain.ProductRepository {
 }
 
 func (r *productRepository) Create(ctx context.Context, product *domain.Product) error {
+	if err := normalizeRequiredFactorySKU(&product.FactorySKU); err != nil {
+		return err
+	}
 	p := persistence.ProductFromDomain(product)
 	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
 		return err
@@ -113,6 +138,7 @@ func (r *productRepository) ListByWave(ctx context.Context, waveID uint) ([]doma
 }
 
 func (r *productRepository) FindByWaveAndSKU(ctx context.Context, waveID uint, platform, sku string) (*domain.Product, error) {
+	sku = strings.TrimSpace(sku)
 	var p persistence.Product
 	if err := r.db.WithContext(ctx).Where("wave_id = ? AND supplier_platform = ? AND factory_sku = ?", waveID, platform, sku).First(&p).Error; err != nil {
 		return nil, err

@@ -267,14 +267,10 @@ export async function parseTabularFile(
   hasHeader = true,
 ): Promise<dto.CSVFilePreviewDTO> {
   assertWailsRuntime();
-  try {
-    if (typeof ParseTabularFile === 'function') {
-      return await ParseTabularFile(path, hasHeader);
-    }
-  } catch {
-    // Runtime may not expose ParseTabularFile yet — fall through to CSV path.
+  if (typeof ParseTabularFile !== 'function') {
+    return ParseCSVFile(path);
   }
-  return ParseCSVFile(path);
+  return ParseTabularFile(path, hasHeader);
 }
 
 /** @deprecated Prefer `parseTabularFile` — kept for compatibility; forwards to multi-format parse. */
@@ -342,8 +338,11 @@ export async function importDemandDocument(input: {
   assertWailsRuntime();
   const req = dto.CreateDemandInput.createFrom({
     ...input,
-    kind: input.documentType || input.kind,
-  });
+    kind: input.kind,
+  }) as dto.CreateDemandInput & { documentType: string };
+  // createFrom() drops unknown properties; generated CreateDemandInput has no
+  // documentType yet. Assign it explicitly so both fields reach the backend.
+  req.documentType = input.documentType ?? '';
   return ImportDemandDocument(req);
 }
 
@@ -1353,21 +1352,39 @@ export async function pickCsvFile(): Promise<string> {
   return PickCSVFile();
 }
 
+function tabularPathMatchesExtensions(path: string, extensions: string[]): boolean {
+  const lower = path.toLowerCase();
+  return extensions.some((ext) => {
+    const suffix = ext.startsWith('.') ? ext.toLowerCase() : `.${ext.toLowerCase()}`;
+    return lower.endsWith(suffix);
+  });
+}
+
 /**
  * Native dialog for CSV / XLSX / XLS. Falls back to `PickCSVFile` when the
  * generated binding is missing (older runtime without `PickTabularFile`).
+ * When `extensions` is set (e.g. `['.csv', '.xlsx']`), a picked path that
+ * does not match is rejected so callers never receive an unsupported type.
  */
-export async function pickTabularFile(): Promise<string> {
+export async function pickTabularFile(extensions?: string[]): Promise<string> {
   assertWailsRuntime();
+  let path: string | undefined;
   try {
     if (typeof PickTabularFile === 'function') {
-      return await PickTabularFile();
+      path = await PickTabularFile();
     }
   } catch {
     // Runtime may not expose PickTabularFile yet — fall through.
   }
-  // Fallback: CSV-only picker.
-  return PickCSVFile();
+  if (path === undefined) {
+    // Fallback: CSV-only picker.
+    path = await PickCSVFile();
+  }
+  if (!path) return path;
+  if (extensions && extensions.length > 0 && !tabularPathMatchesExtensions(path, extensions)) {
+    throw new Error(`unsupported file type; expected ${extensions.join(', ')}`);
+  }
+  return path;
 }
 
 export async function pickZipFile(): Promise<string> {

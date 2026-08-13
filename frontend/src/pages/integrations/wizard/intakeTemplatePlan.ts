@@ -21,7 +21,7 @@ export function canProceedFromSample(input: {
 }): boolean {
   const hasFile = input.filePath.trim().length > 0 || input.detectedHeaders.length > 0
   if (!hasFile) return false
-  return mappingIsConfigured(input.mapping) || input.detectedHeaders.length > 0
+  return mappingIsConfigured(input.mapping)
 }
 
 export function intakeFormatFromPath(filePath: string): string {
@@ -33,7 +33,9 @@ export function intakeFormatFromPath(filePath: string): string {
 }
 
 export function formatSupportsDocumentType(format: string, documentType: string): boolean {
-  if (documentType === 'export_supplier_order') return format === 'csv' || format === 'xlsx'
+  if (documentType === 'export_supplier_order' || documentType === 'export_source_tracking_update') {
+    return format === 'csv' || format === 'xlsx'
+  }
   if (documentType === 'import_product_catalog') return ['csv', 'xls', 'xlsx', 'zip'].includes(format)
   return ['csv', 'xls', 'xlsx'].includes(format)
 }

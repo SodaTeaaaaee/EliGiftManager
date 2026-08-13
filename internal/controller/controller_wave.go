@@ -75,11 +75,24 @@ func NewWaveController() *WaveController {
 	}
 }
 
-func (c *WaveController) persistLifecycle(waveID uint) {
-	ctx := appContext
-	if c.lifecycleSvc != nil {
-		_ = c.lifecycleSvc.ProjectAndPersist(ctx, waveID)
+func (c *WaveController) persistLifecycle(waveID uint) error {
+	if c.lifecycleSvc == nil {
+		return nil
 	}
+	// ProjectAndPersist treats persisted LifecycleStage=closed as terminal, so
+	// GenerateParticipants / MapDemandLines / undo cannot reopen a closed wave
+	// via count-based stage (same rule as overview deriveStage).
+	if err := c.lifecycleSvc.ProjectAndPersist(appContext, waveID); err != nil {
+		return fmt.Errorf("persist lifecycle for wave %d: %w", waveID, err)
+	}
+	return nil
+}
+
+func rejectAssignToClosedWave(waveID uint, lifecycleStage string) error {
+	if lifecycleStage == string(domain.LifecycleStageClosed) {
+		return fmt.Errorf("wave %d is closed; demand cannot be assigned", waveID)
+	}
+	return nil
 }
 
 // CreateWave creates a new wave.
@@ -178,15 +191,14 @@ func (c *WaveController) ListWaveDashboardRows() ([]dto.WaveDashboardRowDTO, err
 // AssignDemandToWave assigns a demand document to a wave.
 func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) error {
 	ctx := appContext
-	defer c.persistLifecycle(waveID)
 
-	gormDB := c.gdb
-
-	// Validate wave existence
-	if _, err := c.waveUC.GetWave(ctx, waveID); err != nil {
+	wave, err := c.waveUC.GetWave(ctx, waveID)
+	if err != nil {
 		return err
 	}
-	// Validate demand document existence
+	if err := rejectAssignToClosedWave(waveID, wave.LifecycleStage); err != nil {
+		return err
+	}
 	if _, err := c.demandRepo.FindByID(ctx, demandDocumentID); err != nil {
 		return err
 	}
@@ -196,7 +208,7 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		return err
 	}
 
-	return gormDB.Transaction(func(tx *gorm.DB) error {
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
 		repos := infra.NewTxRepos(tx)
 		assignmentRepo := repos.AssignmentRepo
 		historyScopeRepo := repos.HistoryScope
@@ -213,6 +225,17 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
+
+		liveWave, findWaveErr := waveRepo.FindByID(ctx, waveID)
+		if findWaveErr != nil {
+			return findWaveErr
+		}
+		if liveWave == nil {
+			return fmt.Errorf("wave %d not found", waveID)
+		}
+		if err := rejectAssignToClosedWave(waveID, liveWave.LifecycleStage); err != nil {
+			return err
+		}
 
 		now := time.Now()
 		assignment := &domain.WaveDemandAssignment{
@@ -263,12 +286,15 @@ func (c *WaveController) AssignDemandToWave(waveID uint, demandDocumentID uint) 
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	return c.persistLifecycle(waveID)
 }
 
 // GenerateParticipants generates WaveParticipantSnapshots from accepted demand lines.
 func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 	ctx := appContext
-	defer c.persistLifecycle(waveID)
 
 	gormDB := c.gdb
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
@@ -326,13 +352,15 @@ func (c *WaveController) GenerateParticipants(waveID uint) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	if persistErr := c.persistLifecycle(waveID); persistErr != nil {
+		return count, persistErr
+	}
 	return count, nil
 }
 
 // MapDemandLines converts eligible demand-driven DemandLines into FulfillmentLines.
 func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, error) {
 	ctx := appContext
-	defer c.persistLifecycle(waveID)
 
 	gormDB := c.gdb
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, waveID)
@@ -391,6 +419,9 @@ func (c *WaveController) MapDemandLines(waveID uint) (*dto.DemandMappingResult, 
 	})
 	if err != nil {
 		return nil, err
+	}
+	if persistErr := c.persistLifecycle(waveID); persistErr != nil {
+		return mappingResult, persistErr
 	}
 
 	return mappingResult, nil
@@ -476,7 +507,6 @@ func (c *WaveController) buildUndoRedoUC(tx *gorm.DB) app.UndoRedoUseCase {
 // UndoWaveAction undoes the last action for the given wave.
 func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
 	ctx := appContext
-	defer c.persistLifecycle(waveID)
 	var summary string
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
 		s, undoErr := c.buildUndoRedoUC(tx).Undo(ctx, waveID)
@@ -486,13 +516,15 @@ func (c *WaveController) UndoWaveAction(waveID uint) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if persistErr := c.persistLifecycle(waveID); persistErr != nil {
+		return summary, persistErr
+	}
 	return summary, nil
 }
 
 // RedoWaveAction redoes the last undone action for the given wave.
 func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
 	ctx := appContext
-	defer c.persistLifecycle(waveID)
 	var summary string
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
 		s, redoErr := c.buildUndoRedoUC(tx).Redo(ctx, waveID)
@@ -501,6 +533,9 @@ func (c *WaveController) RedoWaveAction(waveID uint) (string, error) {
 	})
 	if err != nil {
 		return "", err
+	}
+	if persistErr := c.persistLifecycle(waveID); persistErr != nil {
+		return summary, persistErr
 	}
 	return summary, nil
 }

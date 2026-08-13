@@ -13,6 +13,7 @@ type shipmentImportUseCase struct {
 	shipmentRepo     domain.ShipmentRepository
 	supplierRepo     domain.SupplierOrderRepository
 	fulfillRepo      domain.FulfillmentLineRepository
+	waveRepo         domain.WaveRepository
 	basisStamp       *BasisStampService
 	reconcile        *shipmentReconcileDeps
 	evidence         *ImportEvidenceUseCase
@@ -30,6 +31,16 @@ func WithShipmentExternalCarrierRegistry(uc ShipmentImportUseCase, registry *Ext
 	s, ok := uc.(*shipmentImportUseCase)
 	if ok {
 		s.externalRegistry = registry
+	}
+	return uc
+}
+
+// WithShipmentImportWaveRepo attaches a WaveRepository so ImportShipments can
+// reject closed waves. Optional so existing unit callers keep compiling.
+func WithShipmentImportWaveRepo(uc ShipmentImportUseCase, waveRepo domain.WaveRepository) ShipmentImportUseCase {
+	s, ok := uc.(*shipmentImportUseCase)
+	if ok {
+		s.waveRepo = waveRepo
 	}
 	return uc
 }
@@ -131,6 +142,16 @@ func (uc *shipmentImportUseCase) importShipmentsCoreWithOutcome(ctx context.Cont
 		return nil, fmt.Errorf("invalid importMode %q: must be \"reject_all\" or \"skip_invalid\"", mode)
 	}
 
+	if uc.waveRepo != nil {
+		wave, waveErr := uc.waveRepo.FindByID(ctx, input.WaveID)
+		if waveErr != nil {
+			return nil, fmt.Errorf("wave %d not found: %w", input.WaveID, waveErr)
+		}
+		if wave != nil && wave.LifecycleStage == string(domain.LifecycleStageClosed) {
+			return nil, fmt.Errorf("wave %d is closed and cannot import shipments", input.WaveID)
+		}
+	}
+
 	// 1. Validate that the wave has at least one supplier order.
 	supplierOrders, err := uc.supplierRepo.ListByWave(ctx, input.WaveID)
 	if err != nil {
@@ -202,6 +223,7 @@ func (uc *shipmentImportUseCase) importShipmentsCoreWithOutcome(ctx context.Cont
 	}
 
 	validated := make([]validatedGroup, 0, len(groupOrder))
+	fileShipped := map[uint]int{}
 
 	// 3. Validation pass — iterate all groups, collect errors and valid lines.
 	//    No persistence happens here regardless of mode.
@@ -290,7 +312,7 @@ func (uc *shipmentImportUseCase) importShipmentsCoreWithOutcome(ctx context.Cont
 				})
 				continue
 			}
-			alreadyShipped, sumErr := uc.shipmentRepo.SumShippedQuantityBySOL(ctx, sol.ID)
+			alreadyShipped, sumErr := sumActiveShippedQuantityBySOL(ctx, uc.shipmentRepo, sol.SupplierOrderID, sol.ID)
 			if sumErr != nil {
 				groupErr = append(groupErr, dto.ImportShipmentError{
 					EntryIndex: idx,
@@ -298,13 +320,16 @@ func (uc *shipmentImportUseCase) importShipmentsCoreWithOutcome(ctx context.Cont
 				})
 				continue
 			}
-			if alreadyShipped+e.Quantity > sol.SubmittedQuantity {
+			cap := shippedQuantityCap(*sol)
+			occupied := alreadyShipped + fileShipped[sol.ID]
+			if occupied+e.Quantity > cap {
 				groupErr = append(groupErr, dto.ImportShipmentError{
 					EntryIndex: idx,
-					Reason:     fmt.Sprintf("entry %d: over-shipment: already shipped %d + %d > submitted %d for SOL %d", idx, alreadyShipped, e.Quantity, sol.SubmittedQuantity, sol.ID),
+					Reason:     fmt.Sprintf("entry %d: over-shipment: already shipped %d + %d > max %d for SOL %d", idx, occupied, e.Quantity, cap, sol.ID),
 				})
 				continue
 			}
+			fileShipped[sol.ID] += e.Quantity
 
 			// All checks passed for this entry.
 			_ = so // used for wave membership check above
@@ -322,6 +347,15 @@ func (uc *shipmentImportUseCase) importShipmentsCoreWithOutcome(ctx context.Cont
 				Quantity:            e.Quantity,
 				CreatedAt:           now,
 			})
+		}
+
+		if len(groupErr) > 0 {
+			for _, l := range groupLines {
+				fileShipped[l.SupplierOrderLineID] -= l.Quantity
+				if fileShipped[l.SupplierOrderLineID] <= 0 {
+					delete(fileShipped, l.SupplierOrderLineID)
+				}
+			}
 		}
 
 		validated = append(validated, validatedGroup{
@@ -437,20 +471,8 @@ func (uc *shipmentImportUseCase) importShipmentsCoreWithOutcome(ctx context.Cont
 				SupplierState: "shipped",
 			})
 		}
-		if len(stateUpdates) > 0 {
-			if updateErr := uc.fulfillRepo.BulkUpdateStates(ctx, stateUpdates); updateErr != nil {
-				if mode == "reject_all" {
-					return nil, fmt.Errorf("project shipment group %q supplier state: %w", vg.grp.externalNo, updateErr)
-				}
-				for _, idx := range vg.grp.indices {
-					result.Errors = append(result.Errors, dto.ImportShipmentError{
-						EntryIndex: idx,
-						Reason:     fmt.Sprintf("project supplier state failed: %v", updateErr),
-					})
-				}
-				result.ErrorCount += len(vg.grp.indices)
-				continue
-			}
+		if updateErr := applyFulfillmentSupplierStates(ctx, uc.fulfillRepo, stateUpdates); updateErr != nil {
+			return nil, fmt.Errorf("project shipment group %q supplier state: %w", vg.grp.externalNo, updateErr)
 		}
 
 		// Collect result DTO.

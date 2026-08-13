@@ -361,10 +361,12 @@ func AllocationPolicyRuleFromDomain(d *domain.AllocationPolicyRule) (*Allocation
 	}, nil
 }
 
-func AllocationPolicyRuleToDomain(p *AllocationPolicyRule) *domain.AllocationPolicyRule {
+func AllocationPolicyRuleToDomain(p *AllocationPolicyRule) (*domain.AllocationPolicyRule, error) {
 	var selector domain.SelectorPayload
 	if p.SelectorPayload != "" {
-		_ = json.Unmarshal([]byte(p.SelectorPayload), &selector)
+		if err := json.Unmarshal([]byte(p.SelectorPayload), &selector); err != nil {
+			return nil, fmt.Errorf("unmarshal selector payload: %w", err)
+		}
 	}
 	return &domain.AllocationPolicyRule{
 		ID:                   p.ID,
@@ -378,7 +380,7 @@ func AllocationPolicyRuleToDomain(p *AllocationPolicyRule) *domain.AllocationPol
 		Active:               p.Active,
 		CreatedAt:            p.CreatedAt,
 		UpdatedAt:            p.UpdatedAt,
-	}
+	}, nil
 }
 
 // ---- SupplierOrder ----

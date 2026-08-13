@@ -61,6 +61,15 @@ func (s *LifecycleProjectionService) ProjectAndPersist(ctx context.Context, wave
 func (s *LifecycleProjectionService) compute(ctx context.Context, waveID uint) (string, ProgressSnapshot, error) {
 	var snap ProgressSnapshot
 
+	wave, err := s.waveRepo.FindByID(ctx, waveID)
+	if err != nil {
+		return "", snap, fmt.Errorf("load wave: %w", err)
+	}
+	persistedStage := ""
+	if wave != nil {
+		persistedStage = wave.LifecycleStage
+	}
+
 	// Count demand documents assigned
 	assignments, err := s.assignmentRepo.ListByWave(ctx, waveID)
 	if err != nil {
@@ -103,12 +112,16 @@ func (s *LifecycleProjectionService) compute(ctx context.Context, waveID uint) (
 	}
 	snap.ParticipantCount = len(participants)
 
-	// Derive lifecycle stage
-	stage := deriveStageFromCounts(snap, jobs)
+	// Derive lifecycle stage. Persisted LifecycleStage=closed is terminal and
+	// is not re-derived from counts (same rule as overview deriveStage).
+	stage := deriveStageFromCounts(persistedStage, snap, jobs)
 	return stage, snap, nil
 }
 
-func deriveStageFromCounts(snap ProgressSnapshot, jobs []domain.ChannelSyncJob) string {
+func deriveStageFromCounts(persistedStage string, snap ProgressSnapshot, jobs []domain.ChannelSyncJob) string {
+	if persistedStage == string(domain.LifecycleStageClosed) {
+		return string(domain.LifecycleStageClosed)
+	}
 	if snap.DemandCount == 0 {
 		return "intake"
 	}

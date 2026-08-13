@@ -3,8 +3,24 @@ package tabular
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
+)
+
+// Read limits applied by ReadTabularFile. Sized for desktop catalog/demand
+// imports: large enough for real workbooks, small enough to bound memory.
+const (
+	// MaxFileBytes is the maximum on-disk size accepted (32 MiB).
+	MaxFileBytes int64 = 32 << 20
+	// MaxRows is the maximum number of records accepted, including the header
+	// row when HasHeader is set.
+	MaxRows = 100_000
+	// MaxUnzipBytes is excelize UnzipSizeLimit: decompressed xlsx cap (64 MiB).
+	MaxUnzipBytes int64 = 64 << 20
+	// MaxUnzipXMLBytes is excelize UnzipXMLSizeLimit per worksheet / shared
+	// strings part (16 MiB). Must be <= MaxUnzipBytes.
+	MaxUnzipXMLBytes int64 = 16 << 20
 )
 
 // ReadOptions controls how ReadTabularFile interprets an on-disk spreadsheet.
@@ -18,8 +34,9 @@ type ReadOptions struct {
 	SheetName string
 	// HasHeader treats the first row as column headers when true.
 	HasHeader bool
-	// Encoding controls CSV text decoding. "auto" (or empty) tries UTF-8 (with BOM)
-	// then falls back to GBK. Explicit values: "utf-8", "gbk".
+	// Encoding controls CSV and XLS text decoding. "auto" (or empty) tries UTF-8
+	// (with BOM) then falls back to GBK. Explicit values: "utf-8", "gbk".
+	// XLSX is Unicode and ignores Encoding.
 	Encoding string
 }
 
@@ -30,20 +47,34 @@ type Sheet struct {
 }
 
 // HeaderKeyedRows converts each data row into a header→value map.
-// Cells beyond the header count are dropped; short rows omit trailing keys.
+//
+// Short rows omit keys for missing trailing cells (unchanged).
+//
+// If a row has more cells than Headers and those extra cells are non-empty,
+// they are kept under synthetic keys "_extra_N" where N is the 0-based column
+// index (e.g. a third cell with two headers is "_extra_2"). Empty extra cells
+// are omitted. Sheet.Headers is not mutated, so positional callers that use
+// Headers + Rows stay stable. Normal header-aligned rows are unchanged.
 func (s *Sheet) HeaderKeyedRows() []map[string]string {
 	if s == nil {
 		return nil
 	}
+	headerN := len(s.Headers)
 	out := make([]map[string]string, 0, len(s.Rows))
 	for _, record := range s.Rows {
-		row := make(map[string]string, len(s.Headers))
-		n := len(s.Headers)
+		row := make(map[string]string, headerN)
+		n := headerN
 		if len(record) < n {
 			n = len(record)
 		}
 		for i := 0; i < n; i++ {
 			row[s.Headers[i]] = record[i]
+		}
+		for i := headerN; i < len(record); i++ {
+			if record[i] == "" {
+				continue
+			}
+			row[fmt.Sprintf("_extra_%d", i)] = record[i]
 		}
 		out = append(out, row)
 	}
@@ -112,4 +143,23 @@ func splitHeaderRows(records [][]string, hasHeader bool) (*Sheet, error) {
 		rows = [][]string{}
 	}
 	return &Sheet{Headers: headers, Rows: rows}, nil
+}
+
+func checkFileByteLimit(path string, limit int64) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.Size() > limit {
+		return errByteLimit(path, info.Size(), limit)
+	}
+	return nil
+}
+
+func errByteLimit(path string, size, limit int64) error {
+	return fmt.Errorf("file %q is %d bytes, exceeds the %d-byte limit", path, size, limit)
+}
+
+func errRowLimit(path string, got, limit int) error {
+	return fmt.Errorf("file %q has %d rows, exceeds the %d-row limit", path, got, limit)
 }

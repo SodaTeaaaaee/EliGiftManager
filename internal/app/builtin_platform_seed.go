@@ -31,8 +31,10 @@ func NormalizeBuiltinPlatformKey(key string) (string, error) {
 }
 
 // SeedBuiltinPlatform installs one named builtin (Bilibili source or 柔造 factory)
-// by reusing SeedBilibiliDemo / SeedCatalogDemo. Idempotent if already installed.
-// Does not seed membership_default.
+// by reusing SeedBilibiliDemo / SeedCatalogDemo, including that demo's default
+// template bindings. Idempotent if already installed: existing operator
+// mappings and profile capabilities are not overwritten. Does not seed
+// membership_default.
 func SeedBuiltinPlatform(
 	ctx context.Context,
 	key string,

@@ -22,16 +22,35 @@ func NewDemandIntakeUseCase(demandRepo domain.DemandDocumentRepository) DemandIn
 }
 
 func (uc *demandIntakeUseCase) ImportDemand(ctx context.Context, doc *domain.DemandDocument, lines []*domain.DemandLine) error {
-	// NOTE: This operation is not fully transactional — the DemandDocumentRepository
-	// does not expose a Delete method, so if a line creation fails after the document
-	// is persisted, an orphaned document may remain. Callers that need atomicity
-	// (e.g. ImportDemandDocument in the controller) should wrap this call in a
-	// gorm.DB.Transaction to get full rollback semantics.
+	// NOTE: This operation is not fully transactional. DemandDocumentRepository has
+	// no transaction API, so this usecase cannot begin or join a DB transaction
+	// itself (and must not take a *gorm.DB). ImportDemandDocument in
+	// controller_demand.go already wraps this call in gorm.DB.Transaction, which
+	// provides atomic rollback for document+lines. Other callers that need
+	// atomicity should wrap similarly. If a line creation fails after the document
+	// is persisted outside a transaction, an orphaned document may remain because
+	// the repository does not expose a Delete method.
 	now := time.Now()
 	if doc.CreatedAt.IsZero() {
 		doc.CreatedAt = now
 	}
 	doc.UpdatedAt = now
+
+	if doc.SourceDocumentNo != "" && doc.IntegrationProfileID != nil {
+		existing, err := uc.demandRepo.List(ctx)
+		if err != nil {
+			return err
+		}
+		for i := range existing {
+			other := &existing[i]
+			if other.IntegrationProfileID == nil {
+				continue
+			}
+			if *other.IntegrationProfileID == *doc.IntegrationProfileID && other.SourceDocumentNo == doc.SourceDocumentNo {
+				return fmt.Errorf("duplicate demand document: integration profile %d already has source_document_no %q", *doc.IntegrationProfileID, doc.SourceDocumentNo)
+			}
+		}
+	}
 
 	if err := uc.demandRepo.Create(ctx, doc); err != nil {
 		return err
@@ -142,63 +161,110 @@ func (uc *waveUseCase) GenerateParticipants(ctx context.Context, waveID uint) (i
 		existingProfiles[snap.CustomerProfileID] = true
 	}
 
-	// Track profiles we generate in this run (dedup within batch)
-	generatedProfiles := make(map[uint]bool)
-	count := 0
+	// Group assigned documents by CustomerProfileID (skip nil profile).
+	grouped := make(map[uint][]domain.DemandDocument)
+	profileOrder := make([]uint, 0)
 	skippedNoProfile := 0
-
 	for docIdx := range docs {
-		doc := &docs[docIdx]
-
-		// Documents without a CustomerProfileID cannot generate participant snapshots
+		doc := docs[docIdx]
 		if doc.CustomerProfileID == nil {
 			skippedNoProfile++
 			continue
 		}
 		profileID := *doc.CustomerProfileID
+		if _, seen := grouped[profileID]; !seen {
+			profileOrder = append(profileOrder, profileID)
+		}
+		grouped[profileID] = append(grouped[profileID], doc)
+	}
 
-		// Skip if already exists or already generated in this batch
-		if existingProfiles[profileID] || generatedProfiles[profileID] {
+	count := 0
+	for _, profileID := range profileOrder {
+		if existingProfiles[profileID] {
 			continue
 		}
+		profileDocs := grouped[profileID]
 
-		// Get demand lines for this document
-		lines, err := uc.demandRepo.ListLinesByDocument(ctx, doc.ID)
-		if err != nil {
-			return count, err
+		hasNonRetail := false
+		var firstNonRetail, firstRetail *domain.DemandDocument
+		docIDs := make([]uint, 0, len(profileDocs))
+		for i := range profileDocs {
+			d := &profileDocs[i]
+			docIDs = append(docIDs, d.ID)
+			if d.Kind != "retail_order" {
+				hasNonRetail = true
+				if firstNonRetail == nil {
+					firstNonRetail = d
+				}
+			} else if firstRetail == nil {
+				firstRetail = d
+			}
 		}
 
-		// Find first accepted line to extract GiftLevelSnapshot
-		var giftLevel string
-		hasAccepted := false
-		for lineIdx := range lines {
-			if lines[lineIdx].RoutingDisposition == "accepted" {
-				giftLevel = lines[lineIdx].GiftLevelSnapshot
-				hasAccepted = true
+		var giftFromMembership, giftFromAny string
+		sawMembershipAccepted, sawAnyAccepted := false, false
+		for i := range profileDocs {
+			d := &profileDocs[i]
+			lines, lineErr := uc.demandRepo.ListLinesByDocument(ctx, d.ID)
+			if lineErr != nil {
+				return count, lineErr
+			}
+			for lineIdx := range lines {
+				if lines[lineIdx].RoutingDisposition != "accepted" {
+					continue
+				}
+				if !sawAnyAccepted {
+					giftFromAny = lines[lineIdx].GiftLevelSnapshot
+					sawAnyAccepted = true
+				}
+				if d.Kind != "retail_order" && !sawMembershipAccepted {
+					giftFromMembership = lines[lineIdx].GiftLevelSnapshot
+					sawMembershipAccepted = true
+				}
 				break
 			}
 		}
 
-		// Only generate snapshot if there's at least one accepted line
-		if !hasAccepted {
+		// Only generate snapshot if there's at least one accepted line on any doc
+		if !sawAnyAccepted {
 			continue
 		}
 
-		// Determine snapshot type based on demand document kind
-		snapshotType := "member"
-		if doc.Kind == "retail_order" {
-			snapshotType = "buyer"
+		giftLevel := giftFromAny
+		if sawMembershipAccepted {
+			giftLevel = giftFromMembership
+		}
+
+		snapshotType := "buyer"
+		if hasNonRetail {
+			snapshotType = "member"
+		}
+
+		identityDoc := firstRetail
+		if firstNonRetail != nil {
+			identityDoc = firstNonRetail
+		}
+		var identityPlatform, identityValue string
+		if identityDoc != nil {
+			identityPlatform = identityDoc.SourceChannel
+			identityValue = identityDoc.SourceCustomerRef
+		}
+
+		sort.Slice(docIDs, func(i, j int) bool { return docIDs[i] < docIDs[j] })
+		refParts := make([]string, len(docIDs))
+		for i, id := range docIDs {
+			refParts[i] = fmt.Sprintf("%d", id)
 		}
 
 		snap := domain.WaveParticipantSnapshot{
 			WaveID:             waveID,
 			CustomerProfileID:  profileID,
 			SnapshotType:       snapshotType,
-			IdentityPlatform:   doc.SourceChannel,
-			IdentityValue:      doc.SourceCustomerRef,
+			IdentityPlatform:   identityPlatform,
+			IdentityValue:      identityValue,
 			DisplayName:        "",
 			GiftLevel:          giftLevel,
-			SourceDocumentRefs: fmt.Sprintf("%d", doc.ID),
+			SourceDocumentRefs: strings.Join(refParts, ","),
 			SourceProfileRefs:  "",
 			CreatedAt:          time.Now(),
 		}
@@ -207,7 +273,6 @@ func (uc *waveUseCase) GenerateParticipants(ctx context.Context, waveID uint) (i
 			return count, err
 		}
 
-		generatedProfiles[profileID] = true
 		count++
 	}
 
@@ -359,10 +424,13 @@ func (uc *demandMappingUseCase) MapDemandToFulfillment(ctx context.Context, wave
 			}
 
 			// Address readiness gate: when addressRepo is wired, block lines whose
-			// profile has no valid addresses.
+			// profile has no valid addresses. A ListByProfile error fails the mapping.
 			if uc.addressRepo != nil && doc.CustomerProfileID != nil {
 				addrs, addrErr := uc.addressRepo.ListByProfile(ctx, *doc.CustomerProfileID)
-				if addrErr == nil && len(addrs) == 0 {
+				if addrErr != nil {
+					return nil, addrErr
+				}
+				if len(addrs) == 0 {
 					blockedLines = append(blockedLines, dto.DemandMappingBlockedLine{
 						DemandLineID:    dl.ID,
 						DemandLineTitle: dl.ExternalTitle,
@@ -687,10 +755,14 @@ func (uc *exportUseCase) exportSupplierOrderWithProfile(
 	lines := make([]*domain.SupplierOrderLine, len(fulfillLines))
 	for i := range fulfillLines {
 		fl := &fulfillLines[i]
+		sku, skuErr := resolveSupplierSKU(ctx, fl, uc.productRepo, productCache)
+		if skuErr != nil {
+			return nil, fmt.Errorf("fulfillment line %d: %w", fl.ID, skuErr)
+		}
 		lines[i] = &domain.SupplierOrderLine{
 			FulfillmentLineID: fl.ID,
 			SupplierLineNo:    i + 1,
-			SupplierSKU:       resolveSupplierSKU(ctx, fl, uc.productRepo, productCache),
+			SupplierSKU:       sku,
 			SubmittedQuantity: fl.Quantity,
 			Status:            "draft",
 			CreatedAt:         now,
@@ -711,30 +783,42 @@ func (uc *exportUseCase) exportSupplierOrderWithProfile(
 }
 
 // resolveSupplierSKU fills SupplierOrderLine.SupplierSKU from the wave Product
-// snapshot's FactorySKU when available.
+// snapshot's FactorySKU. An empty SKU is never returned; callers must treat
+// lookup and missing-SKU failures as errors.
 func resolveSupplierSKU(
 	ctx context.Context,
 	fl *domain.FulfillmentLine,
 	productRepo domain.ProductRepository,
 	cache map[uint]*domain.Product,
-) string {
-	if fl == nil || fl.ProductID == nil || productRepo == nil {
-		return ""
+) (string, error) {
+	if fl == nil || fl.ProductID == nil {
+		return "", fmt.Errorf("fulfillment line has no product")
+	}
+	if productRepo == nil {
+		return "", fmt.Errorf("product repository is required to resolve supplier SKU")
 	}
 	pid := *fl.ProductID
-	if p, ok := cache[pid]; ok {
-		if p == nil {
-			return ""
+	p, ok := cache[pid]
+	if !ok {
+		found, err := productRepo.FindByID(ctx, pid)
+		if err != nil {
+			return "", fmt.Errorf("product %d lookup failed: %w", pid, err)
 		}
-		return p.FactorySKU
+		if found == nil {
+			return "", fmt.Errorf("product %d not found", pid)
+		}
+		p = found
+		if cache != nil {
+			cache[pid] = found
+		}
 	}
-	p, err := productRepo.FindByID(ctx, pid)
-	if err != nil || p == nil {
-		cache[pid] = nil
-		return ""
+	if p == nil {
+		return "", fmt.Errorf("product %d not found", pid)
 	}
-	cache[pid] = p
-	return p.FactorySKU
+	if strings.TrimSpace(p.FactorySKU) == "" {
+		return "", fmt.Errorf("product %d has no factory SKU", pid)
+	}
+	return p.FactorySKU, nil
 }
 
 // projectSupplierStateFromOrder maps a SupplierOrder.Status to the corresponding

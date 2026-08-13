@@ -5,6 +5,10 @@ dist-ssr/
 .vite/
 .cache/
 coverage/
+test-results/
+blob-report/
+playwright-report/
+.vite-inspect/
 *.local
 *.tsbuildinfo
 package.json.md5

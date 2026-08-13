@@ -3,6 +3,8 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +16,59 @@ import (
 	"gorm.io/gorm"
 )
 
+// demandTabularMaxBytes caps on-disk spreadsheet reads so ParseTabularFile /
+// ImportDemandCSV never follow an unbounded os.ReadFile of a user-picked path.
+const demandTabularMaxBytes int64 = tabular.MaxFileBytes
+
+func demandTabularAllowedExts() map[string]struct{} {
+	return map[string]struct{}{
+		".csv":  {},
+		".xlsx": {},
+		".xls":  {},
+	}
+}
+
+// validateDemandImportFilePath rejects NUL, `..` segments, disallowed extensions,
+// missing files, directories, and files larger than maxBytes. Users may pick files
+// outside the app data dir (e.g. Downloads); this is a local content guard only.
+func validateDemandImportFilePath(path string, maxBytes int64, allowedExts map[string]struct{}) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("tabular file path is empty")
+	}
+	if strings.IndexByte(path, 0) >= 0 {
+		return fmt.Errorf("tabular file path contains a NUL byte")
+	}
+	for _, seg := range strings.FieldsFunc(path, func(r rune) bool {
+		return r == '/' || r == '\\'
+	}) {
+		if seg == ".." {
+			return fmt.Errorf("tabular file path must not contain '..' segments")
+		}
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	if _, ok := allowedExts[ext]; !ok {
+		return fmt.Errorf("unsupported tabular extension %q", ext)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat tabular file: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("tabular path is a directory")
+	}
+	if info.Size() > maxBytes {
+		return fmt.Errorf("tabular file exceeds max size of %d bytes", maxBytes)
+	}
+	return nil
+}
+
+func demandImportEvidenceRowIndex(row app.DemandImportMappedRow) int {
+	if row.Line != nil && row.Line.SourceLineNo > 0 {
+		return row.Line.SourceLineNo - 1
+	}
+	return -1
+}
+
 // ParseTabularFile reads a locally-picked spreadsheet (CSV / XLSX / XLS; path typically
 // obtained via App.PickTabularFile) and returns headers plus every data row as a
 // header-keyed map. Format is detected from the file extension. The frontend reuses the
@@ -24,6 +79,9 @@ import (
 // remains data. When hasHeader is false and the sheet has no headers, synthetic
 // col_0..col_N names are generated so Rows stay addressable as maps.
 func (c *DemandController) ParseTabularFile(path string, hasHeader bool) (dto.CSVFilePreviewDTO, error) {
+	if err := validateDemandImportFilePath(path, demandTabularMaxBytes, demandTabularAllowedExts()); err != nil {
+		return dto.CSVFilePreviewDTO{}, err
+	}
 	sheet, err := tabular.ReadTabularFile(path, tabular.ReadOptions{
 		// Empty Format → extension-based detection (csv / xlsx / xls).
 		Format:    "",
@@ -105,6 +163,9 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 	totalHint := len(input.Rows)
 
 	if input.FilePath != "" {
+		if err := validateDemandImportFilePath(input.FilePath, demandTabularMaxBytes, demandTabularAllowedExts()); err != nil {
+			return dto.ImportDemandCSVResult{}, err
+		}
 		_, rules, resolveErr := c.templateMapping.ResolveDemandImportTemplateAndRules(ctx, profile.ID, docType, input.MappingRules)
 		if resolveErr != nil {
 			return dto.ImportDemandCSVResult{}, fmt.Errorf("template pipeline: %w", resolveErr)
@@ -136,6 +197,7 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 		ErrorCount:     len(rowErrs),
 		Errors:         make([]dto.DemandCSVImportError, len(rowErrs)),
 		Warnings:       rowWarnings,
+		Documents:      []dto.DemandDocumentDTO{},
 	}
 	for i, re := range rowErrs {
 		result.Errors[i] = dto.DemandCSVImportError{RowIndex: re.RowIndex, Reason: re.Reason}
@@ -154,9 +216,6 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 	} else {
 		result.EvidenceDisabled = true
 	}
-	for i := range evidenceRecords {
-		app.MarkImportEvidenceSuccess(evidenceRecords, i, "demand_document", 0)
-	}
 	for _, rowErr := range rowErrs {
 		app.MarkImportEvidenceFailure(evidenceRecords, rowErr.RowIndex, "mapping_error", rowErr.Reason, nil)
 	}
@@ -174,14 +233,14 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 	if mode == "reject_all" && len(rowErrs) > 0 {
 		result.SuccessCount = 0
 		if err := completeEvidenceOnly("rejected"); err != nil {
-			return dto.ImportDemandCSVResult{}, err
+			return result, err
 		}
 		return result, nil
 	}
 	// skip_invalid with zero successfully-mapped rows: nothing to persist.
 	if len(mapped) == 0 {
 		if err := completeEvidenceOnly("failed"); err != nil {
-			return dto.ImportDemandCSVResult{}, err
+			return result, err
 		}
 		return result, nil
 	}
@@ -209,11 +268,11 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 		groupKey := ref
 		if identityStrategy == app.IdentityStrategyOrderScopedProvisional {
 			groupKey = sourceDocumentNo
-			// A custom retail template may omit an order number even when the profile
-			// does not require one. Never merge such unrelated rows by customer ref.
-			if groupKey == "" {
-				groupKey = fmt.Sprintf("\x00retail-row-%d", rowIndex)
-			}
+		}
+		// Empty grouping keys must not collapse unrelated rows into one document
+		// (membership empty source_customer_ref, or retail empty order number).
+		if groupKey == "" {
+			groupKey = fmt.Sprintf("\x00row-%d", rowIndex)
 		}
 		if idx, ok := groupIndex[groupKey]; ok {
 			if groups[idx].ref == "" {
@@ -233,104 +292,137 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 		})
 	}
 
-	var firstDoc *domain.DemandDocument
+	importedDocs := make([]dto.DemandDocumentDTO, 0, len(groups))
 	persistedLines := 0
 	importedAt := time.Now().UTC()
 	err = c.gdb.Transaction(func(tx *gorm.DB) error {
-		demandRepo := infra.NewDemandRepository(tx)
-		profileRepo := infra.NewProfileRepository(tx)
-		originRepo := infra.NewCustomerProfileOriginRepository(tx)
-		observationRepo := infra.NewCustomerNameObservationRepository(tx)
-		eventRepo := infra.NewCustomerNameEventRepository(tx)
-		customerResolver := app.NewDemandCustomerResolutionService(profileRepo, originRepo)
-		nameService := app.NewCustomerNameObservationService(profileRepo, observationRepo, eventRepo)
-		intakeUC := app.NewDemandIntakeUseCase(demandRepo)
-
 		for _, group := range groups {
-			displayName := ""
-			for _, row := range group.rows {
-				if candidate := strings.TrimSpace(row.Document.DisplayName); candidate != "" {
-					displayName = candidate
-					break
-				}
-			}
-			if displayName == "" {
-				displayName = group.ref
-			}
+			var saved domain.DemandDocument
+			groupErr := tx.Transaction(func(groupTx *gorm.DB) error {
+				demandRepo := infra.NewDemandRepository(groupTx)
+				profileRepo := infra.NewProfileRepository(groupTx)
+				originRepo := infra.NewCustomerProfileOriginRepository(groupTx)
+				observationRepo := infra.NewCustomerNameObservationRepository(groupTx)
+				eventRepo := infra.NewCustomerNameEventRepository(groupTx)
+				customerResolver := app.NewDemandCustomerResolutionService(profileRepo, originRepo)
+				nameService := app.NewCustomerNameObservationService(profileRepo, observationRepo, eventRepo)
+				intakeUC := app.NewDemandIntakeUseCase(demandRepo)
 
-			resolved, resolveErr := customerResolver.Resolve(ctx, app.DemandCustomerResolutionInput{
-				IntegrationProfileID: profile.ID,
-				IdentityStrategy:     identityStrategy,
-				SourceChannel:        profile.SourceChannel,
-				SourceDocumentNo:     group.sourceDocumentNo,
-				SourceCustomerRef:    group.ref,
-				DisplayName:          displayName,
-				ObservedAt:           importedAt,
-			})
-			if resolveErr != nil {
-				return fmt.Errorf("customer resolution for %q: %w", group.sourceDocumentNo, resolveErr)
-			}
-			customerProfileID, identityID, originID := resolved.CustomerProfileID, resolved.IdentityID, resolved.OriginID
-
-			lines := make([]*domain.DemandLine, len(group.rows))
-			for i := range group.rows {
-				lines[i] = group.rows[i].Line
-			}
-			doc := domain.DemandDocument{
-				Kind: kind, CaptureMode: "document_import", SourceChannel: profile.SourceChannel,
-				SourceSurface: sourceSurface, SourceDocumentNo: group.sourceDocumentNo,
-				SourceCustomerRef: group.ref, CustomerProfileID: customerProfileID, IntegrationProfileID: &profile.ID,
-			}
-			if err := intakeUC.ImportDemand(ctx, &doc, lines); err != nil {
-				return fmt.Errorf("persist demand group %q: %w", group.sourceDocumentNo, err)
-			}
-			for _, row := range group.rows {
-				app.MarkImportEvidenceSuccess(evidenceRecords, row.Line.SourceLineNo-1, "demand_document", doc.ID)
-			}
-
-			if originID != nil {
-				if err := customerResolver.AttachOriginDocument(ctx, *originID, doc.ID); err != nil {
-					return err
-				}
-			}
-
-			if customerProfileID != nil && displayName != "" {
-				nameKind := domain.CustomerNameKindStableIdentityNickname
-				if identityStrategy == app.IdentityStrategyOrderScopedProvisional {
-					nameKind = domain.CustomerNameKindTrustedNickname
-				}
-				if _, observeErr := nameService.Observe(ctx, app.ObserveCustomerNameInput{
-					CustomerProfileID: *customerProfileID, Name: displayName, NameKind: nameKind,
-					Authority: profile.SourceChannel, SourceEventKey: fmt.Sprintf("demand-document:%d:name", doc.ID),
-					SourceIntegrationProfileID: &profile.ID, SourceDocumentID: &doc.ID,
-					SourceIdentityID: identityID, ObservedAt: importedAt,
-				}); observeErr != nil {
-					return fmt.Errorf("observe customer name: %w", observeErr)
-				}
-			}
-
-			if customerProfileID != nil {
+				displayName := ""
 				for _, row := range group.rows {
-					if row.Recipient == nil || strings.TrimSpace(row.Recipient.RecipientName) == "" {
-						continue
-					}
-					upsertErr := tx.Transaction(func(addressTx *gorm.DB) error {
-						addressUC := app.NewAddressManagementUseCase(infra.NewAddressRepository(addressTx), infra.NewFulfillmentRepository(addressTx))
-						_, err := addressUC.UpsertAddressFromImport(ctx, *customerProfileID, *row.Recipient)
-						return err
-					})
-					if upsertErr != nil {
-						result.Errors = append(result.Errors, dto.DemandCSVImportError{RowIndex: -1, Reason: fmt.Sprintf("address upsert: %v", upsertErr)})
-						result.ErrorCount++
+					if candidate := strings.TrimSpace(row.Document.DisplayName); candidate != "" {
+						displayName = candidate
+						break
 					}
 				}
-			}
+				if displayName == "" {
+					displayName = group.ref
+				}
 
-			persistedLines += len(lines)
-			if firstDoc == nil {
-				copy := doc
-				firstDoc = &copy
+				var customerProfileID, identityID, originID *uint
+				// Membership/entitlement always resolves identity. Empty
+				// source_customer_ref is an error and must not persist a
+				// CustomerProfileID=nil document. Retail order-scoped
+				// resolution still requires sourceDocumentNo.
+				needsIdentity := identityStrategy != app.IdentityStrategyOrderScopedProvisional ||
+					strings.TrimSpace(group.sourceDocumentNo) != ""
+				if needsIdentity {
+					resolved, resolveErr := customerResolver.Resolve(ctx, app.DemandCustomerResolutionInput{
+						IntegrationProfileID: profile.ID,
+						IdentityStrategy:     identityStrategy,
+						SourceChannel:        profile.SourceChannel,
+						SourceDocumentNo:     group.sourceDocumentNo,
+						SourceCustomerRef:    group.ref,
+						DisplayName:          displayName,
+						ObservedAt:           importedAt,
+					})
+					if resolveErr != nil {
+						resolveLabel := strings.TrimSpace(group.sourceDocumentNo)
+						if resolveLabel == "" {
+							resolveLabel = strings.TrimSpace(group.ref)
+						}
+						if resolveLabel == "" {
+							resolveLabel = "(empty source_customer_ref)"
+						}
+						return fmt.Errorf("customer resolution for %q: %w", resolveLabel, resolveErr)
+					}
+					customerProfileID, identityID, originID = resolved.CustomerProfileID, resolved.IdentityID, resolved.OriginID
+					if customerProfileID == nil {
+						return fmt.Errorf("customer resolution for %q produced no customer profile", group.ref)
+					}
+				}
+
+				lines := make([]*domain.DemandLine, len(group.rows))
+				for i := range group.rows {
+					lines[i] = group.rows[i].Line
+				}
+				doc := domain.DemandDocument{
+					Kind: kind, CaptureMode: "document_import", SourceChannel: profile.SourceChannel,
+					SourceSurface: sourceSurface, SourceDocumentNo: group.sourceDocumentNo,
+					SourceCustomerRef: group.ref, CustomerProfileID: customerProfileID, IntegrationProfileID: &profile.ID,
+				}
+				if err := intakeUC.ImportDemand(ctx, &doc, lines); err != nil {
+					return fmt.Errorf("persist demand group %q: %w", group.sourceDocumentNo, err)
+				}
+
+				if originID != nil {
+					if err := customerResolver.AttachOriginDocument(ctx, *originID, doc.ID); err != nil {
+						return err
+					}
+				}
+
+				if customerProfileID != nil && displayName != "" {
+					nameKind := domain.CustomerNameKindStableIdentityNickname
+					if identityStrategy == app.IdentityStrategyOrderScopedProvisional {
+						nameKind = domain.CustomerNameKindTrustedNickname
+					}
+					if _, observeErr := nameService.Observe(ctx, app.ObserveCustomerNameInput{
+						CustomerProfileID: *customerProfileID, Name: displayName, NameKind: nameKind,
+						Authority: profile.SourceChannel, SourceEventKey: fmt.Sprintf("demand-document:%d:name", doc.ID),
+						SourceIntegrationProfileID: &profile.ID, SourceDocumentID: &doc.ID,
+						SourceIdentityID: identityID, ObservedAt: importedAt,
+					}); observeErr != nil {
+						return fmt.Errorf("observe customer name: %w", observeErr)
+					}
+				}
+
+				if customerProfileID != nil {
+					addressUC := app.NewAddressManagementUseCase(infra.NewAddressRepository(groupTx), infra.NewFulfillmentRepository(groupTx))
+					for _, row := range group.rows {
+						if row.Recipient == nil || strings.TrimSpace(row.Recipient.RecipientName) == "" {
+							continue
+						}
+						if _, err := addressUC.UpsertAddressFromImport(ctx, *customerProfileID, *row.Recipient); err != nil {
+							return fmt.Errorf("address upsert: %w", err)
+						}
+					}
+				}
+
+				saved = doc
+				return nil
+			})
+			if groupErr != nil {
+				if mode == "reject_all" {
+					return groupErr
+				}
+				for _, row := range group.rows {
+					rowIdx := demandImportEvidenceRowIndex(row)
+					reason := groupErr.Error()
+					result.Errors = append(result.Errors, dto.DemandCSVImportError{RowIndex: rowIdx, Reason: reason})
+					result.ErrorCount++
+					app.MarkImportEvidenceFailure(evidenceRecords, rowIdx, "persist_error", reason, nil)
+				}
+				continue
 			}
+			docDTO := domainToDemandDTO(&saved)
+			importedDocs = append(importedDocs, docDTO)
+			for _, row := range group.rows {
+				app.MarkImportEvidenceSuccess(evidenceRecords, demandImportEvidenceRowIndex(row), "demand_document", saved.ID)
+			}
+			persistedLines += len(group.rows)
+		}
+		if persistedLines == 0 {
+			return evidence.CompleteImportEvidence(ctx, evidenceRun, evidenceRecords, "failed")
 		}
 		status := "completed"
 		if result.ErrorCount > 0 {
@@ -339,15 +431,16 @@ func (c *DemandController) ImportDemandCSV(input dto.ImportDemandCSVInput) (dto.
 		return evidence.CompleteImportEvidence(ctx, evidenceRun, evidenceRecords, status)
 	})
 	if err != nil {
-		return dto.ImportDemandCSVResult{}, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
+		return result, errors.Join(err, evidence.FinalizeFailure(ctx, "failed", err))
 	}
 	if err := evidence.FinalizePending(ctx); err != nil {
-		return dto.ImportDemandCSVResult{}, err
+		return result, err
 	}
 
 	result.SuccessCount = persistedLines
-	if firstDoc != nil {
-		docDTO := domainToDemandDTO(firstDoc)
+	result.Documents = importedDocs
+	if len(importedDocs) > 0 {
+		docDTO := importedDocs[0]
 		result.Document = &docDTO
 	}
 	return result, nil

@@ -47,6 +47,17 @@ func (uc *adjustmentUseCase) RecordAdjustment(ctx context.Context, input dto.Rec
 		return nil, fmt.Errorf("invalid adjustment kind: %q", input.AdjustmentKind)
 	}
 
+	switch input.AdjustmentKind {
+	case "add", "compensation", string(domain.AdjustmentKindReissue):
+		if input.QuantityDelta <= 0 {
+			return nil, fmt.Errorf("adjustment kind %q requires a positive quantity_delta", input.AdjustmentKind)
+		}
+	case "reduce":
+		if input.QuantityDelta >= 0 {
+			return nil, fmt.Errorf("adjustment kind %q requires a negative quantity_delta", input.AdjustmentKind)
+		}
+	}
+
 	// Validate target kind and enforce kind-target constraints
 	switch targetKind {
 	case "fulfillment_line":

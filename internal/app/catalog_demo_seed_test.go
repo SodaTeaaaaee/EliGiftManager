@@ -3,6 +3,8 @@ package app
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -116,6 +118,10 @@ func TestCatalogDemoMappingRules_Parseable(t *testing.T) {
 	if l.TabularGlob != "*.csv" {
 		t.Errorf("tabularGlob = %q, want *.csv", l.TabularGlob)
 	}
+
+	if err := ValidateMappingRulesConfig(CatalogDemoDocType, rules); err != nil {
+		t.Fatalf("ValidateMappingRulesConfig: %v", err)
+	}
 }
 
 func TestShipmentDemoMappingRules_ParseableAndLegal(t *testing.T) {
@@ -185,6 +191,17 @@ func TestSeedCatalogDemo_Idempotent(t *testing.T) {
 	}
 	if !p1.SupportsExportSupplierOrder {
 		t.Error("SupportsExportSupplierOrder = false, want true")
+	}
+	if p1.DemandKind != "" {
+		t.Errorf("DemandKind = %q, want empty leftover (documentType is explicit)", p1.DemandKind)
+	}
+	if p1.IdentityStrategy != "" {
+		t.Errorf("IdentityStrategy = %q, want empty leftover", p1.IdentityStrategy)
+	}
+	for _, docType := range []string{CatalogDemoDocType, ShipmentDemoDocType, SupplierOrderDemoDocType} {
+		if err := ValidateProfileDocumentType(p1, docType); err != nil {
+			t.Errorf("ValidateProfileDocumentType(%q): %v", docType, err)
+		}
 	}
 	if p1.ID == 0 {
 		t.Error("expected non-zero profile ID after create")
@@ -377,6 +394,9 @@ func TestSeedCatalogDemo_ProfileOnlyWhenTemplateReposNil(t *testing.T) {
 	if p.ProfileKey != CatalogDemoProfileKey {
 		t.Errorf("ProfileKey = %q", p.ProfileKey)
 	}
+	if p.DemandKind != "" {
+		t.Errorf("DemandKind = %q, want empty leftover", p.DemandKind)
+	}
 
 	// Re-seed still idempotent for profile.
 	p2, err := SeedCatalogDemo(ctx, profileRepo, nil, nil)
@@ -388,31 +408,115 @@ func TestSeedCatalogDemo_ProfileOnlyWhenTemplateReposNil(t *testing.T) {
 	}
 }
 
-func TestSeedCatalogDemoUpgradesExistingExportCapability(t *testing.T) {
+func TestSeedCatalogDemo_DoesNotOverwriteExistingMappingsOrCapabilities(t *testing.T) {
 	t.Parallel()
+
 	profileRepo := newMockIntegrationProfileRepoSimple()
+	templateRepo := newMockDocumentTemplateRepo()
+	bindingRepo := newMockProfileTemplateBindingRepo()
+	ctx := context.Background()
+
+	const operatorRules = `{"version":2,"mode":"header","hasHeader":true,"columns":{"product.factory_sku":"SKU"}}`
 	stale := &domain.IntegrationProfile{
 		ProfileKey:                     CatalogDemoProfileKey,
 		SourceSurface:                  string(domain.SourceSurfaceFactory),
 		FactorySupplierPlatform:        "rouzao",
+		DemandKind:                     string(domain.DemandKindRetailOrder),
 		SupportsImportProductCatalog:   true,
 		SupportsImportSupplierShipment: true,
+		// Operator left export capability off — seed must not flip it.
+		SupportsExportSupplierOrder: false,
 	}
-	if err := profileRepo.Create(context.Background(), stale); err != nil {
+	if err := profileRepo.Create(ctx, stale); err != nil {
 		t.Fatalf("create stale profile: %v", err)
 	}
+	existingTmpl := &domain.DocumentTemplate{
+		TemplateKey:  CatalogDemoTemplateKey,
+		DocumentType: CatalogDemoDocType,
+		Format:       "csv",
+		MappingRules: operatorRules,
+	}
+	if err := templateRepo.Create(ctx, existingTmpl); err != nil {
+		t.Fatalf("create operator template: %v", err)
+	}
 
-	profile, err := SeedCatalogDemo(context.Background(), profileRepo, nil, nil)
+	profile, err := SeedCatalogDemo(ctx, profileRepo, templateRepo, bindingRepo)
 	if err != nil {
 		t.Fatalf("SeedCatalogDemo: %v", err)
 	}
-	if !profile.SupportsExportSupplierOrder {
-		t.Fatal("existing demo profile was not upgraded with SupportsExportSupplierOrder")
+	if profile.SupportsExportSupplierOrder {
+		t.Fatal("seed overwrote operator SupportsExportSupplierOrder")
 	}
-	stored, err := profileRepo.FindByID(context.Background(), stale.ID)
-	if err != nil || !stored.SupportsExportSupplierOrder {
-		t.Fatalf("stored profile capability = %v, err=%v", stored, err)
+	if !profile.SupportsImportProductCatalog || !profile.SupportsImportSupplierShipment {
+		t.Fatalf("catalog/shipment capabilities changed: %+v", profile)
 	}
+	if profile.DemandKind != "" {
+		t.Fatalf("leftover DemandKind = %q, want empty (documentType is explicit)", profile.DemandKind)
+	}
+
+	storedTmpl, err := templateRepo.FindByKey(ctx, CatalogDemoTemplateKey)
+	if err != nil || storedTmpl == nil {
+		t.Fatalf("catalog template: tmpl=%v err=%v", storedTmpl, err)
+	}
+	if storedTmpl.MappingRules != operatorRules || storedTmpl.Format != "csv" {
+		t.Fatalf("seed clobbered operator MappingRules/Format: %+v", storedTmpl)
+	}
+
+	shipTmpl, err := templateRepo.FindByKey(ctx, ShipmentDemoTemplateKey)
+	if err != nil || shipTmpl == nil {
+		t.Fatalf("missing shipment template was not created: tmpl=%v err=%v", shipTmpl, err)
+	}
+	orderTmpl, err := templateRepo.FindByKey(ctx, SupplierOrderDemoTemplateKey)
+	if err != nil || orderTmpl == nil {
+		t.Fatalf("missing supplier-order template was not created: tmpl=%v err=%v", orderTmpl, err)
+	}
+
+	catalogBinding, err := bindingRepo.FindDefaultByProfileAndType(ctx, profile.ID, CatalogDemoDocType)
+	if err != nil || catalogBinding == nil || catalogBinding.TemplateID != storedTmpl.ID {
+		t.Fatalf("catalog default binding: binding=%v err=%v", catalogBinding, err)
+	}
+	shipBinding, err := bindingRepo.FindDefaultByProfileAndType(ctx, profile.ID, ShipmentDemoDocType)
+	if err != nil || shipBinding == nil || shipBinding.TemplateID != shipTmpl.ID {
+		t.Fatalf("shipment default binding: binding=%v err=%v", shipBinding, err)
+	}
+	orderBinding, err := bindingRepo.FindDefaultByProfileAndType(ctx, profile.ID, SupplierOrderDemoDocType)
+	if err != nil {
+		t.Fatalf("export binding lookup: %v", err)
+	}
+	if orderBinding != nil {
+		t.Fatalf("export default binding created despite missing capability: %+v", orderBinding)
+	}
+
+	if _, err := SeedCatalogDemo(ctx, profileRepo, templateRepo, bindingRepo); err != nil {
+		t.Fatalf("second seed: %v", err)
+	}
+	again, _ := templateRepo.FindByKey(ctx, CatalogDemoTemplateKey)
+	if again.MappingRules != operatorRules {
+		t.Fatalf("second seed clobbered MappingRules: %+v", again)
+	}
+}
+
+func TestSeedCatalogDemo_PropagatesBindingLookupError(t *testing.T) {
+	t.Parallel()
+
+	profileRepo := newMockIntegrationProfileRepoSimple()
+	templateRepo := newMockDocumentTemplateRepo()
+	bindingRepo := &failLookupBindingRepo{mockProfileTemplateBindingRepo: newMockProfileTemplateBindingRepo()}
+	_, err := SeedCatalogDemo(context.Background(), profileRepo, templateRepo, bindingRepo)
+	if err == nil {
+		t.Fatal("expected binding lookup error, got nil")
+	}
+	if !strings.Contains(err.Error(), "db unavailable") {
+		t.Fatalf("error = %v, want binding lookup failure", err)
+	}
+}
+
+type failLookupBindingRepo struct {
+	*mockProfileTemplateBindingRepo
+}
+
+func (m *failLookupBindingRepo) FindDefaultByProfileAndType(context.Context, uint, string) (*domain.IntegrationProfileTemplateBinding, error) {
+	return nil, fmt.Errorf("db unavailable")
 }
 
 // Ensure mockIntegrationProfileRepoSimple is available (defined in import_reconcile_test.go).

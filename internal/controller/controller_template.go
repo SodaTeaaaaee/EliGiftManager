@@ -17,7 +17,7 @@ func NewTemplateController() *TemplateController {
 	bindingRepo := infra.NewProfileTemplateBindingRepository(gdb)
 	profileRepo := infra.NewIntegrationProfileRepository(gdb)
 	return &TemplateController{
-		templateUC: app.NewTemplateManagementUseCase(templateRepo, bindingRepo, profileRepo),
+		templateUC: app.NewTemplateManagementUseCase(templateRepo, bindingRepo, profileRepo, gdb),
 	}
 }
 
@@ -69,8 +69,7 @@ func (c *TemplateController) UnbindTemplate(bindingID uint) error {
 }
 
 func (c *TemplateController) SetDefaultBinding(bindingID uint) error {
-	ctx := appContext
-	return c.templateUC.SetDefaultBinding(ctx, bindingID)
+	return c.templateUC.SetDefaultBinding(appContext, bindingID)
 }
 
 // GetDefaultTemplateForProfile returns the default template bound to the given

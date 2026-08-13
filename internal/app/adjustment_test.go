@@ -570,3 +570,48 @@ func TestRecordReplaceMissingToProductID(t *testing.T) {
 		t.Fatal("expected error: replace without ToProductID should fail, got nil")
 	}
 }
+
+func TestRecordAdjustmentAddRejectsNegativeDelta(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := validAdjustmentInput()
+	input.AdjustmentKind = "add"
+	input.QuantityDelta = -1
+
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected error for add with negative quantity_delta, got nil")
+	}
+}
+
+func TestRecordAdjustmentReduceRejectsPositiveDelta(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := validAdjustmentInput()
+	input.AdjustmentKind = "reduce"
+	input.QuantityDelta = 1
+
+	_, err := s.uc.RecordAdjustment(context.Background(), input)
+	if err == nil {
+		t.Fatal("expected error for reduce with positive quantity_delta, got nil")
+	}
+}
+
+func TestRecordAdjustmentAddAcceptsPositiveDelta(t *testing.T) {
+	t.Parallel()
+	s := newAdjustmentTestSetup()
+
+	input := validAdjustmentInput()
+	input.AdjustmentKind = "add"
+	input.QuantityDelta = 2
+
+	adj, err := s.uc.RecordAdjustment(context.Background(), input)
+	if err != nil {
+		t.Fatalf("expected add with +2 to succeed, got %v", err)
+	}
+	if adj.QuantityDelta != 2 {
+		t.Errorf("QuantityDelta = %d, want 2", adj.QuantityDelta)
+	}
+}

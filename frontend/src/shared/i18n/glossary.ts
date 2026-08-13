@@ -97,7 +97,7 @@ export type InitialAllocationStrategyValue = 'policy_driven' | 'demand_driven'
 
 /** `CreateProfileInput.identityStrategy` — how a customer identity is resolved for this
  * integration profile's demand imports. */
-export type IdentityStrategyValue = 'platform_uid' | 'email' | 'external_buyer_id'
+export type IdentityStrategyValue = 'platform_uid' | 'email' | 'external_buyer_id' | 'order_scoped_provisional'
 
 /** `CreateProfileInput.entitlementAuthorityMode` — who asserts an entitlement is valid for
  * this profile's demand. */
@@ -373,6 +373,7 @@ export const identityStrategyGlossary: GlossaryTable<'identityStrategy'> = {
   platform_uid: entry('identityStrategy', 'platform_uid', 'neutral'),
   email: entry('identityStrategy', 'email', 'neutral'),
   external_buyer_id: entry('identityStrategy', 'external_buyer_id', 'neutral'),
+  order_scoped_provisional: entry('identityStrategy', 'order_scoped_provisional', 'warning'),
 }
 
 export const entitlementAuthorityModeGlossary: GlossaryTable<'entitlementAuthorityMode'> = {

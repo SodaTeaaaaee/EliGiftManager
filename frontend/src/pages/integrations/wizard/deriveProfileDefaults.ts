@@ -1,8 +1,9 @@
 /**
  * Pure derivation helpers for fields `CreateProfileInput` requires that the
  * intake wizard's named steps have no dedicated UI for: the 7 profile
- * "strategy" enums and `documentType` (which the backend derives 1:1 from
- * `demandKind` for demand faces; factory uses catalog/shipment/export types).
+ * "strategy" enums and `documentType` (demand faces require an explicit
+ * documentType; leftover DemandKind is not inferred. Factory uses
+ * catalog/shipment/export types).
  *
  * Rather than adding a 6th wizard step, these are deterministically derived
  * from answers the operator already gave (business surface + capability
@@ -23,11 +24,11 @@ export interface FactoryProfileCapabilities {
   supportsImportSupplierShipment: boolean
 }
 
-/** `documentType` for demand faces — must match `validDocumentTypes` backend. */
+/** `documentType` for demand faces — empty leftover DemandKind is not inferred. */
 export function documentTypeForDemandKind(demandKind: DemandKind): string {
   if (demandKind === 'retail_order') return 'import_sales_order'
   if (demandKind === 'membership_entitlement') return 'import_entitlement'
-  return 'import_entitlement'
+  return ''
 }
 
 /**

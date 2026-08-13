@@ -3,6 +3,9 @@ package controller
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
@@ -52,12 +55,13 @@ func NewShipmentController() *ShipmentController {
 	carrierUC := app.NewCarrierMappingUseCase(carrierMappingRepo, profileRepo)
 	masterRepo := infra.NewProductMasterRepository(gdb)
 	importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+	importUC = app.WithShipmentImportWaveRepo(importUC, waveRepo)
 	importUC = app.WithShipmentReconcileDeps(importUC, mapping, productRepo, masterRepo, addressRepo, carrierUC)
 	importUC = app.WithShipmentImportEvidence(importUC, app.NewImportEvidenceUseCase(infra.NewImportEvidenceRepository(gdb)))
 	importUC = app.WithShipmentExternalCarrierRegistry(importUC, app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(gdb)))
 
 	return &ShipmentController{
-		shipmentUC:          app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp),
+		shipmentUC:          app.WithShipmentWaveRepo(app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp), waveRepo),
 		shipmentImportUC:    importUC,
 		shipmentRepo:        shipmentRepo,
 		gdb:                 gdb,
@@ -65,6 +69,10 @@ func NewShipmentController() *ShipmentController {
 		projHashSvc:         app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo),
 		snapshotSvc:         snapshotSvc,
 	}
+}
+
+func newShipmentLifecycleUC(repos *infra.TxRepos, writeRepo domain.ShipmentWriteRepository) app.ShipmentLifecycleUseCase {
+	return app.NewShipmentLifecycleUseCase(repos.ShipmentRepo, writeRepo, repos.FulfillRepo, repos.SupplierRepo)
 }
 
 // CreateShipment creates a shipment with its lines.
@@ -95,7 +103,7 @@ func (c *ShipmentController) CreateShipment(input dto.CreateShipmentInput) (dto.
 
 		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
-		shipmentUC := app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		shipmentUC := app.WithShipmentWaveRepo(app.NewShipmentUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp), waveRepo)
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
 		historySvc := app.NewHistoryRecordingService(historyScopeRepo, historyNodeRepo, historyCheckpointRepo, app.WithSnapshotService(snapshotSvc))
 		projHashSvc := app.NewProjectionHashService(fulfillRepo, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, productRepo, closureDecisionRepo)
@@ -221,6 +229,7 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
 		importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		importUC = app.WithShipmentImportWaveRepo(importUC, waveRepo)
 		importUC = app.WithShipmentImportEvidence(importUC, evidence)
 		importUC = app.WithShipmentExternalCarrierRegistry(importUC, app.NewExternalCarrierUseCase(infra.NewExternalCarrierRepository(tx)))
 		snapshotSvc := app.NewWaveSnapshotService(tx, ruleRepo, adjustmentRepo, assignmentRepo, waveRepo, fulfillRepo, closureDecisionRepo)
@@ -265,6 +274,9 @@ func (c *ShipmentController) ImportShipments(input dto.ImportShipmentInput) (dto
 // then imports the reconciled entries. History recording mirrors ImportShipments.
 func (c *ShipmentController) MapAndReconcileShipments(input dto.MapAndReconcileShipmentsInput) (dto.ImportShipmentResult, error) {
 	ctx := appContext
+	if err := validateShipmentImportFilePath(input.FilePath); err != nil {
+		return dto.ImportShipmentResult{}, err
+	}
 	baseProfileRepo := infra.NewIntegrationProfileRepository(c.gdb)
 	baseMapping := app.NewTemplateMappingService(infra.NewDocumentTemplateRepository(c.gdb), infra.NewProfileTemplateBindingRepository(c.gdb), baseProfileRepo)
 	evidence := app.NewDeferredImportEvidenceUseCase(infra.NewImportEvidenceRepository(c.gdb))
@@ -300,6 +312,7 @@ func (c *ShipmentController) MapAndReconcileShipments(input dto.MapAndReconcileS
 		historyHeadUC := app.NewHistoryHeadQueryUseCase(historyScopeRepo, historyNodeRepo)
 		basisStamp := app.NewBasisStampService(historyHeadUC, historyPinRepo)
 		importUC := app.NewShipmentImportUseCase(shipmentRepo, supplierRepo, fulfillRepo, basisStamp)
+		importUC = app.WithShipmentImportWaveRepo(importUC, waveRepo)
 
 		templateRepo := infra.NewDocumentTemplateRepository(tx)
 		bindingRepo := infra.NewProfileTemplateBindingRepository(tx)
@@ -366,4 +379,47 @@ func domainToShipmentLineDTO(l *domain.ShipmentLine) dto.ShipmentLineDTO {
 		Quantity:            l.Quantity,
 		CreatedAt:           l.CreatedAt,
 	}
+}
+
+const defaultMaxShipmentImportFileBytes int64 = 32 << 20
+
+// maxShipmentImportFileBytes is the import size ceiling. Tests may lower it.
+var maxShipmentImportFileBytes = defaultMaxShipmentImportFileBytes
+
+func validateShipmentImportFilePath(path string) error {
+	if path == "" {
+		return nil
+	}
+	if strings.IndexByte(path, 0) >= 0 {
+		return fmt.Errorf("import file path contains a NUL byte")
+	}
+	if importPathHasDotDot(path) {
+		return fmt.Errorf("import file path must not contain ..")
+	}
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".csv", ".xlsx", ".xls":
+	default:
+		return fmt.Errorf("unsupported import file extension %q", ext)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("stat import file: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("import path is a directory")
+	}
+	if info.Size() > maxShipmentImportFileBytes {
+		return fmt.Errorf("import file exceeds maximum size of %d bytes", maxShipmentImportFileBytes)
+	}
+	return nil
+}
+
+func importPathHasDotDot(path string) bool {
+	for _, seg := range strings.Split(filepath.ToSlash(path), "/") {
+		if seg == ".." {
+			return true
+		}
+	}
+	return false
 }

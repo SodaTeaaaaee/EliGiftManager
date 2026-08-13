@@ -24,7 +24,11 @@ func (r *ruleRepository) Create(ctx context.Context, rule *domain.AllocationPoli
 	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
 		return err
 	}
-	*rule = *persistence.AllocationPolicyRuleToDomain(p)
+	mapped, err := persistence.AllocationPolicyRuleToDomain(p)
+	if err != nil {
+		return err
+	}
+	*rule = *mapped
 	return nil
 }
 
@@ -33,7 +37,7 @@ func (r *ruleRepository) FindByID(ctx context.Context, id uint) (*domain.Allocat
 	if err := r.db.WithContext(ctx).First(&p, id).Error; err != nil {
 		return nil, err
 	}
-	return persistence.AllocationPolicyRuleToDomain(&p), nil
+	return persistence.AllocationPolicyRuleToDomain(&p)
 }
 
 func (r *ruleRepository) ListByWave(ctx context.Context, waveID uint) ([]domain.AllocationPolicyRule, error) {
@@ -43,7 +47,11 @@ func (r *ruleRepository) ListByWave(ctx context.Context, waveID uint) ([]domain.
 	}
 	result := make([]domain.AllocationPolicyRule, len(ps))
 	for i, p := range ps {
-		result[i] = *persistence.AllocationPolicyRuleToDomain(&p)
+		mapped, err := persistence.AllocationPolicyRuleToDomain(&p)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = *mapped
 	}
 	return result, nil
 }
@@ -57,7 +65,11 @@ func (r *ruleRepository) Update(ctx context.Context, rule *domain.AllocationPoli
 	if err := r.db.WithContext(ctx).Save(p).Error; err != nil {
 		return err
 	}
-	*rule = *persistence.AllocationPolicyRuleToDomain(p)
+	mapped, err := persistence.AllocationPolicyRuleToDomain(p)
+	if err != nil {
+		return err
+	}
+	*rule = *mapped
 	return nil
 }
 

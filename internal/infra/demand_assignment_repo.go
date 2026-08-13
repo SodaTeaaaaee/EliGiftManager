@@ -4,11 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
 )
+
+func isDuplicateAssignmentErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique constraint") || strings.Contains(msg, "duplicated key")
+}
 
 type waveDemandAssignmentRepository struct {
 	db *gorm.DB
@@ -30,9 +42,17 @@ func (r *waveDemandAssignmentRepository) Create(ctx context.Context, assignment 
 		}
 	}
 
+	// SQLite unique indexes include soft-deleted rows. Purge leftover
+	// soft-deleted residue for this pair so a later re-assign does not collide.
+	if err := r.db.WithContext(ctx).Unscoped().
+		Where("wave_id = ? AND demand_document_id = ? AND deleted_at IS NOT NULL", assignment.WaveID, assignment.DemandDocumentID).
+		Delete(&persistence.WaveDemandAssignment{}).Error; err != nil {
+		return err
+	}
+
 	p := persistence.WaveDemandAssignmentFromDomain(assignment)
 	if err := r.db.WithContext(ctx).Create(p).Error; err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) {
+		if isDuplicateAssignmentErr(err) {
 			return fmt.Errorf("demand document %d is already assigned to wave %d", assignment.DemandDocumentID, assignment.WaveID)
 		}
 		return err
@@ -51,8 +71,18 @@ func (r *waveDemandAssignmentRepository) ExistsByDocument(ctx context.Context, d
 }
 
 func (r *waveDemandAssignmentRepository) DeleteByWaveAndDocument(ctx context.Context, waveID uint, demandDocumentID uint) error {
-	return r.db.WithContext(ctx).Where("wave_id = ? AND demand_document_id = ?", waveID, demandDocumentID).
-		Delete(&persistence.WaveDemandAssignment{}).Error
+	// Hard-delete so idx_wave_demand does not keep occupying the unique slot
+	// after unassign (same Unscoped treatment as the undo path).
+	res := r.db.WithContext(ctx).Unscoped().
+		Where("wave_id = ? AND demand_document_id = ?", waveID, demandDocumentID).
+		Delete(&persistence.WaveDemandAssignment{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("demand document %d is not assigned to wave %d; nothing to unassign", demandDocumentID, waveID)
+	}
+	return nil
 }
 
 func (r *waveDemandAssignmentRepository) DeleteByWave(ctx context.Context, waveID uint) error {

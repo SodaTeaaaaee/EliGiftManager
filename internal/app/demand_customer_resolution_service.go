@@ -87,7 +87,7 @@ func (s *DemandCustomerResolutionService) Resolve(
 	identityValue := strings.TrimSpace(input.SourceCustomerRef)
 	namespace := strings.TrimSpace(input.SourceChannel)
 	if identityValue == "" || namespace == "" {
-		return &DemandCustomerResolutionResult{}, nil
+		return nil, fmt.Errorf("stable customer resolution requires sourceCustomerRef and sourceChannel")
 	}
 	identityType := ResolveIdentityStrategy(input.IdentityStrategy)
 	if identityType == "" {

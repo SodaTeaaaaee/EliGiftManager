@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
@@ -82,8 +83,18 @@ func (r *fulfillmentRepository) BulkUpdateStates(ctx context.Context, updates []
 			if len(cols) == 0 {
 				continue
 			}
-			if err := tx.Model(&persistence.FulfillmentLine{}).Where("id = ?", u.ID).Updates(cols).Error; err != nil {
-				return err
+			res := tx.Model(&persistence.FulfillmentLine{}).Where("id = ?", u.ID).Updates(cols)
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				var n int64
+				if err := tx.Model(&persistence.FulfillmentLine{}).Where("id = ?", u.ID).Count(&n).Error; err != nil {
+					return err
+				}
+				if n == 0 {
+					return fmt.Errorf("fulfillment line %d not found", u.ID)
+				}
 			}
 		}
 		return nil

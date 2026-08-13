@@ -81,7 +81,7 @@ func (c *WaveController) UpdateWave(input dto.UpdateWaveInput) (dto.WaveDTO, err
 // CloseWave explicitly closes a wave (plan 3.2 / 5.2). Force + a note are required
 // when residual (unresolved) fulfillment lines still exist.
 //
-// Deliberately does NOT defer c.persistLifecycle: that helper recomputes
+// Deliberately does NOT call c.persistLifecycle: that helper recomputes
 // lifecycle_stage from live repository counts (LifecycleProjectionService) and
 // would immediately overwrite the explicit "closed" transition — most visibly for
 // a forced close with residual items, which would never naturally derive back to
@@ -124,14 +124,13 @@ func (c *WaveController) CloseWave(input dto.CloseWaveInput) (dto.CloseWaveResul
 // permitted before allocation has started for it (plan 5.2).
 func (c *WaveController) UnassignDemandFromWave(input dto.UnassignDemandInput) error {
 	ctx := appContext
-	defer c.persistLifecycle(input.WaveID)
 
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
 	if err != nil {
 		return err
 	}
 
-	return c.gdb.Transaction(func(tx *gorm.DB) error {
+	err = c.gdb.Transaction(func(tx *gorm.DB) error {
 		waveLifecycleUC := c.buildWaveLifecycleUC(tx)
 		if ucErr := waveLifecycleUC.UnassignDemandFromWave(ctx, input.WaveID, input.DemandDocumentID); ucErr != nil {
 			return ucErr
@@ -143,6 +142,10 @@ func (c *WaveController) UnassignDemandFromWave(input dto.UnassignDemandInput) e
 			InversePatchPayload: fmt.Sprintf(`{"op":"assign_demand","wave_id":%d,"demand_document_id":%d}`, input.WaveID, input.DemandDocumentID),
 		})
 	})
+	if err != nil {
+		return err
+	}
+	return c.persistLifecycle(input.WaveID)
 }
 
 // BatchUnassignDemandFromWave returns multiple demand documents to the unassigned
@@ -151,7 +154,6 @@ func (c *WaveController) UnassignDemandFromWave(input dto.UnassignDemandInput) e
 // single Ctrl+Z instead of N.
 func (c *WaveController) BatchUnassignDemandFromWave(input dto.BatchUnassignDemandInput) (dto.BatchUnassignDemandResult, error) {
 	ctx := appContext
-	defer c.persistLifecycle(input.WaveID)
 
 	preSnapshot, err := c.snapshotSvc.CaptureSnapshot(ctx, input.WaveID)
 	if err != nil {
@@ -184,6 +186,9 @@ func (c *WaveController) BatchUnassignDemandFromWave(input dto.BatchUnassignDema
 	if txErr != nil {
 		return dto.BatchUnassignDemandResult{}, txErr
 	}
+	if persistErr := c.persistLifecycle(input.WaveID); persistErr != nil {
+		return result, persistErr
+	}
 	return result, nil
 }
 
@@ -196,9 +201,12 @@ func (c *WaveController) BatchUnassignDemandFromWave(input dto.BatchUnassignDema
 // assignments.
 func (c *WaveController) BatchAssignDemandToWave(input dto.BatchAssignDemandInput) (dto.BatchAssignDemandResult, error) {
 	ctx := appContext
-	defer c.persistLifecycle(input.WaveID)
 
-	if _, err := c.waveUC.GetWave(ctx, input.WaveID); err != nil {
+	wave, err := c.waveUC.GetWave(ctx, input.WaveID)
+	if err != nil {
+		return dto.BatchAssignDemandResult{}, err
+	}
+	if err := rejectAssignToClosedWave(input.WaveID, wave.LifecycleStage); err != nil {
 		return dto.BatchAssignDemandResult{}, err
 	}
 
@@ -245,6 +253,9 @@ func (c *WaveController) BatchAssignDemandToWave(input dto.BatchAssignDemandInpu
 		result.SuccessCount++
 	}
 
+	if persistErr := c.persistLifecycle(input.WaveID); persistErr != nil {
+		return result, persistErr
+	}
 	return result, nil
 }
 

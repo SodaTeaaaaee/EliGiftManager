@@ -113,6 +113,9 @@ func (uc *supplierOrderLifecycleUseCase) RecordSupplierOrderAcceptance(ctx conte
 		if line.SupplierOrderID != input.OrderID {
 			return nil, fmt.Errorf("supplier order line %d does not belong to supplier order %d", entry.LineID, input.OrderID)
 		}
+		if entry.AcceptedQuantity > line.SubmittedQuantity {
+			return nil, fmt.Errorf("accepted_quantity for line %d (%d) exceeds submitted_quantity %d", entry.LineID, entry.AcceptedQuantity, line.SubmittedQuantity)
+		}
 
 		if err := uc.lineWriter.UpdateLineAcceptance(ctx, entry.LineID, entry.AcceptedQuantity, string(domain.SupplierOrderStatusAccepted)); err != nil {
 			return nil, fmt.Errorf("supplier order line %d acceptance update failed: %w", entry.LineID, err)

@@ -857,3 +857,144 @@ func TestReconcileWave_ReanchorsFulfillmentLineAdjustmentTargetAfterRebuild(t *t
 		t.Fatalf("expected adjustment target %d to match current line ID %d", *updatedAdj.FulfillmentLineID, lines[0].ID)
 	}
 }
+
+func TestCreateRuleRejectsZeroProductID(t *testing.T) {
+	t.Parallel()
+
+	uc := NewAllocationPolicyUseCase(newPolicyRuleRepo(), newMockFulfillRepo(), newPolicyWaveRepo(), newPolicyAdjRepo(), nil, nil, nil)
+	selectorJSON, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
+	_, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            0,
+		SelectorPayload:      selectorJSON,
+		ContributionQuantity: 5,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err == nil {
+		t.Fatal("expected error for ProductID=0, got nil")
+	}
+}
+
+func TestCreateRuleRejectsZeroContributionQuantity(t *testing.T) {
+	t.Parallel()
+
+	uc := NewAllocationPolicyUseCase(newPolicyRuleRepo(), newMockFulfillRepo(), newPolicyWaveRepo(), newPolicyAdjRepo(), nil, nil, nil)
+	selectorJSON, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
+	_, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            10,
+		SelectorPayload:      selectorJSON,
+		ContributionQuantity: 0,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err == nil {
+		t.Fatal("expected error for ContributionQuantity=0, got nil")
+	}
+}
+
+func TestCreateRuleRejectsNegativeContributionQuantity(t *testing.T) {
+	t.Parallel()
+
+	uc := NewAllocationPolicyUseCase(newPolicyRuleRepo(), newMockFulfillRepo(), newPolicyWaveRepo(), newPolicyAdjRepo(), nil, nil, nil)
+	selectorJSON, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
+	_, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            10,
+		SelectorPayload:      selectorJSON,
+		ContributionQuantity: -1,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err == nil {
+		t.Fatal("expected error for negative ContributionQuantity, got nil")
+	}
+}
+
+func TestUpdateRuleRejectsZeroProductID(t *testing.T) {
+	t.Parallel()
+
+	productRepo := newPolicyProductRepo()
+	productRepo.products[10] = &domain.Product{ID: 10, WaveID: 1, Name: "Wave1 Product"}
+	uc := NewAllocationPolicyUseCase(newPolicyRuleRepo(), newMockFulfillRepo(), newPolicyWaveRepo(), newPolicyAdjRepo(), nil, nil, productRepo)
+
+	selectorJSON, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
+	created, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            10,
+		SelectorPayload:      selectorJSON,
+		ContributionQuantity: 5,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule failed: %v", err)
+	}
+
+	zero := uint(0)
+	if _, err := uc.UpdateRule(context.Background(), dto.UpdateAllocationPolicyRuleInput{
+		ID:        created.ID,
+		ProductID: &zero,
+	}); err == nil {
+		t.Fatal("expected error for ProductID=0, got nil")
+	}
+}
+
+func TestUpdateRuleRejectsZeroContributionQuantity(t *testing.T) {
+	t.Parallel()
+
+	uc := NewAllocationPolicyUseCase(newPolicyRuleRepo(), newMockFulfillRepo(), newPolicyWaveRepo(), newPolicyAdjRepo(), nil, nil, nil)
+	selectorJSON, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
+	created, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            10,
+		SelectorPayload:      selectorJSON,
+		ContributionQuantity: 5,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule failed: %v", err)
+	}
+
+	zero := 0
+	if _, err := uc.UpdateRule(context.Background(), dto.UpdateAllocationPolicyRuleInput{
+		ID:                   created.ID,
+		ContributionQuantity: &zero,
+	}); err == nil {
+		t.Fatal("expected error for ContributionQuantity=0, got nil")
+	}
+}
+
+func TestUpdateRuleRejectsNegativeContributionQuantity(t *testing.T) {
+	t.Parallel()
+
+	uc := NewAllocationPolicyUseCase(newPolicyRuleRepo(), newMockFulfillRepo(), newPolicyWaveRepo(), newPolicyAdjRepo(), nil, nil, nil)
+	selectorJSON, _ := json.Marshal(domain.SelectorPayload{Type: "wave_all"})
+	created, err := uc.CreateRule(context.Background(), dto.CreateAllocationPolicyRuleInput{
+		WaveID:               1,
+		ProductID:            10,
+		SelectorPayload:      selectorJSON,
+		ContributionQuantity: 5,
+		RuleKind:             "entitlement",
+		Priority:             1,
+		Active:               true,
+	})
+	if err != nil {
+		t.Fatalf("CreateRule failed: %v", err)
+	}
+
+	neg := -1
+	if _, err := uc.UpdateRule(context.Background(), dto.UpdateAllocationPolicyRuleInput{
+		ID:                   created.ID,
+		ContributionQuantity: &neg,
+	}); err == nil {
+		t.Fatal("expected error for negative ContributionQuantity, got nil")
+	}
+}

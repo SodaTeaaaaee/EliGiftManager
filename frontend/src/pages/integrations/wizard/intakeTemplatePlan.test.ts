@@ -3,6 +3,7 @@ import { parseMappingRules, type FieldMappingValue } from '@/shared/ui/field-map
 import {
   buildIntakeTemplatePlan,
   canProceedFromSample,
+  formatSupportsDocumentType,
 } from './intakeTemplatePlan'
 
 const catalogHeaderMapping: FieldMappingValue = {
@@ -67,5 +68,30 @@ describe('intake sample and template planning', () => {
       detectedHeaders: [],
       mapping: catalogHeaderMapping,
     })).toBe(false)
+  })
+
+  test('headers alone do not allow proceed without a mapping', () => {
+    expect(canProceedFromSample({
+      isFactorySurface: false,
+      filePath: 'orders.csv',
+      detectedHeaders: ['会员名', '等级'],
+      mapping: {
+        version: 2,
+        mode: 'header',
+        hasHeader: true,
+        columns: {},
+        defaults: {},
+      },
+    })).toBe(false)
+  })
+
+  test('rejects xls for export document types', () => {
+    expect(formatSupportsDocumentType('xls', 'export_supplier_order')).toBe(false)
+    expect(formatSupportsDocumentType('xls', 'export_source_tracking_update')).toBe(false)
+    expect(formatSupportsDocumentType('csv', 'export_supplier_order')).toBe(true)
+    expect(formatSupportsDocumentType('xlsx', 'export_supplier_order')).toBe(true)
+    expect(formatSupportsDocumentType('csv', 'export_source_tracking_update')).toBe(true)
+    expect(formatSupportsDocumentType('xlsx', 'export_source_tracking_update')).toBe(true)
+    expect(formatSupportsDocumentType('xls', 'import_sales_order')).toBe(true)
   })
 })

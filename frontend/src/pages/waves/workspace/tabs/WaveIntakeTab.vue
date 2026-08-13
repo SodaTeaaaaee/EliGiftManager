@@ -39,7 +39,8 @@ const router = useRouter()
 const feedback = useFeedback()
 const ctx = useWaveWorkspaceContext()
 
-const grid = useInboxGrid({ waveId: ctx.waveId })
+const { filters, rows, loading, selectedKeys, page, pageSize, totalCount, onPageChange, onSort, mutationDone } =
+  useInboxGrid({ waveId: ctx.waveId })
 
 const unassigningId = ref<number | null>(null)
 
@@ -48,7 +49,7 @@ async function handleUnassign(row: DemandInboxRow): Promise<void> {
   try {
     await unassignDemandFromWave({ waveId: ctx.waveId.value, demandDocumentId: row.demandDocumentId })
     feedback.success(t('feedback.success'))
-    await Promise.all([grid.mutationDone(), ctx.refresh()])
+    await Promise.all([mutationDone(), ctx.refresh()])
   } catch (err) {
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
@@ -61,7 +62,7 @@ async function handleUnassign(row: DemandInboxRow): Promise<void> {
 const unassigningBatch = ref(false)
 
 async function handleBatchUnassign(): Promise<void> {
-  const docIds = grid.selectedKeys.value
+  const docIds = selectedKeys.value
   if (docIds.length === 0) return
   unassigningBatch.value = true
   try {
@@ -72,8 +73,8 @@ async function handleBatchUnassign(): Promise<void> {
       feedback.success(t('feedback.success'))
     }
     feedback.receipt({ kind: 'action', summary: t('waveWorkspace.intake.unassignSelected') })
-    grid.selectedKeys.value = []
-    await Promise.all([grid.mutationDone(), ctx.refresh()])
+    selectedKeys.value = []
+    await Promise.all([mutationDone(), ctx.refresh()])
   } catch (err) {
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
@@ -82,7 +83,7 @@ async function handleBatchUnassign(): Promise<void> {
 }
 
 function handleSelectedKeysChange(keys: Array<string | number>): void {
-  grid.selectedKeys.value = keys as number[]
+  selectedKeys.value = keys as number[]
 }
 
 const columns = computed<DataGridColumnSpec<DemandInboxRow>[]>(() => [
@@ -121,11 +122,11 @@ const showPullDialog = ref(false)
 const showImportModal = ref(false)
 
 async function handlePulled(_count: number): Promise<void> {
-  await Promise.all([grid.mutationDone(), ctx.refresh()])
+  await Promise.all([mutationDone(), ctx.refresh()])
 }
 
 async function handleAssignedToWave(_docIds: number[]): Promise<void> {
-  await Promise.all([grid.mutationDone(), ctx.refresh()])
+  await Promise.all([mutationDone(), ctx.refresh()])
 }
 
 // ── Row detail panel ──
@@ -143,7 +144,7 @@ function handleDetailVisibility(visible: boolean): void {
 }
 
 async function handleDetailChanged(): Promise<void> {
-  await Promise.all([grid.mutationDone(), ctx.refresh()])
+  await Promise.all([mutationDone(), ctx.refresh()])
 }
 </script>
 
@@ -155,23 +156,23 @@ async function handleDetailChanged(): Promise<void> {
       <NButton type="primary" @click="showPullDialog = true">{{ t('waveWorkspace.intake.pullDemands') }}</NButton>
     </div>
 
-    <SavedViews :filters="grid.filters" scope-id="wave-intake" />
-    <FilterBar :filters="grid.filters" />
+    <SavedViews :filters="filters" scope-id="wave-intake" />
+    <FilterBar :filters="filters" />
 
     <DataGrid
       :columns="gridColumns"
-      :rows="grid.rows.value"
+      :rows="rows"
       row-key="demandDocumentId"
       selectable
-      :selected-keys="grid.selectedKeys"
-      :loading="grid.loading.value"
+      :selected-keys="selectedKeys"
+      :loading="loading"
       :pagination="{
         server: {
-          total: grid.totalCount.value,
-          page: grid.page.value,
-          pageSize: grid.pageSize.value,
-          onChange: grid.onPageChange,
-          onSort: grid.onSort,
+          total: totalCount,
+          page: page,
+          pageSize: pageSize,
+          onChange: onPageChange,
+          onSort: onSort,
         },
       }"
       :empty="{ title: t('inbox.empty.noneAssignedToWave') }"
@@ -180,7 +181,7 @@ async function handleDetailChanged(): Promise<void> {
     >
       <template #selection-toolbar>
         <span class="wave-intake-tab__selection-count">
-          {{ t('inbox.batch.selected', { n: grid.selectedKeys.value.length }) }}
+          {{ t('inbox.batch.selected', { n: selectedKeys.length }) }}
         </span>
         <NButton
           size="small"

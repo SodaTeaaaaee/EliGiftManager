@@ -114,8 +114,10 @@ func (r *shipmentRepository) ListLinesByShipment(ctx context.Context, shipmentID
 func (r *shipmentRepository) SumShippedQuantityBySOL(ctx context.Context, supplierOrderLineID uint) (int, error) {
 	var total int
 	err := r.db.WithContext(ctx).Model(&persistence.ShipmentLine{}).
-		Where("supplier_order_line_id = ?", supplierOrderLineID).
-		Select("COALESCE(SUM(quantity), 0)").
+		Joins("JOIN shipments ON shipments.id = shipment_lines.shipment_id AND shipments.deleted_at IS NULL").
+		Where("shipment_lines.supplier_order_line_id = ?", supplierOrderLineID).
+		Where("shipments.status <> ?", string(domain.ShipmentStatusVoided)).
+		Select("COALESCE(SUM(shipment_lines.quantity), 0)").
 		Scan(&total).Error
 	return total, err
 }

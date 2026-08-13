@@ -1142,6 +1142,7 @@ export namespace dto {
 	}
 	export class CreateDemandInput {
 	    kind: string;
+	    documentType: string;
 	    captureMode: string;
 	    sourceChannel: string;
 	    sourceSurface: string;
@@ -1158,6 +1159,7 @@ export namespace dto {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
+	        this.documentType = source["documentType"];
 	        this.captureMode = source["captureMode"];
 	        this.sourceChannel = source["sourceChannel"];
 	        this.sourceSurface = source["sourceSurface"];
@@ -3538,6 +3540,7 @@ export namespace dto {
 	    importRunId: number;
 	    evidenceDisabled: boolean;
 	    document?: DemandDocumentDTO;
+	    documents: DemandDocumentDTO[];
 	    errors: DemandCSVImportError[];
 	    totalProcessed: number;
 	    successCount: number;
@@ -3553,6 +3556,7 @@ export namespace dto {
 	        this.importRunId = source["importRunId"];
 	        this.evidenceDisabled = source["evidenceDisabled"];
 	        this.document = this.convertValues(source["document"], DemandDocumentDTO);
+	        this.documents = this.convertValues(source["documents"], DemandDocumentDTO);
 	        this.errors = this.convertValues(source["errors"], DemandCSVImportError);
 	        this.totalProcessed = source["totalProcessed"];
 	        this.successCount = source["successCount"];

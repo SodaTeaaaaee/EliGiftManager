@@ -68,10 +68,31 @@ func (uc *waveLifecycleUseCase) UpdateWave(ctx context.Context, input dto.Update
 	return toWaveDTO(updated), nil
 }
 
+// isResidualFulfillmentLine reports whether a line still has in-flight work that
+// should block an unforced close: draft allocation, missing/invalid address,
+// supplier not yet fully shipped (including accepted/producing/partially_shipped),
+// or channel sync still pending/failed.
+func isResidualFulfillmentLine(l domain.FulfillmentLine) bool {
+	if l.AllocationState == string(domain.AllocationStateDraft) {
+		return true
+	}
+	if l.AddressState == string(domain.AddressStateMissing) || l.AddressState == string(domain.AddressStateInvalid) {
+		return true
+	}
+	switch l.SupplierState {
+	case string(domain.SupplierStateNotSubmitted),
+		string(domain.SupplierStateSubmitted),
+		string(domain.SupplierStateAccepted),
+		string(domain.SupplierStateProducing),
+		string(domain.SupplierStatePartiallyShipped):
+		return true
+	}
+	return l.ChannelSyncState == string(domain.ChannelSyncStatePending) ||
+		l.ChannelSyncState == string(domain.ChannelSyncStateFailed)
+}
+
 // residualFulfillmentLineCount counts fulfillment lines that are not yet fully
-// resolved: allocation still draft, address missing/invalid, supplier not yet
-// submitted, or channel sync still pending/failed. Used to decide whether a close
-// requires force + note (plan 3.2).
+// resolved. Used to decide whether a close requires force + note (plan 3.2).
 func (uc *waveLifecycleUseCase) residualFulfillmentLineCount(ctx context.Context, waveID uint) (int, error) {
 	lines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
 	if err != nil {
@@ -79,12 +100,7 @@ func (uc *waveLifecycleUseCase) residualFulfillmentLineCount(ctx context.Context
 	}
 	count := 0
 	for _, l := range lines {
-		if l.AllocationState == string(domain.AllocationStateDraft) ||
-			l.AddressState == string(domain.AddressStateMissing) ||
-			l.AddressState == string(domain.AddressStateInvalid) ||
-			l.SupplierState == string(domain.SupplierStateNotSubmitted) ||
-			l.ChannelSyncState == string(domain.ChannelSyncStatePending) ||
-			l.ChannelSyncState == string(domain.ChannelSyncStateFailed) {
+		if isResidualFulfillmentLine(l) {
 			count++
 		}
 	}
@@ -99,6 +115,9 @@ func (uc *waveLifecycleUseCase) CloseWave(ctx context.Context, input dto.CloseWa
 	wave, err := uc.waveRepo.FindByID(ctx, input.WaveID)
 	if err != nil {
 		return dto.CloseWaveResult{}, fmt.Errorf("wave %d not found: %w", input.WaveID, err)
+	}
+	if wave.LifecycleStage == string(domain.LifecycleStageClosed) {
+		return dto.CloseWaveResult{}, fmt.Errorf("wave %d is already closed", input.WaveID)
 	}
 
 	residualCount, err := uc.residualFulfillmentLineCount(ctx, input.WaveID)
@@ -126,6 +145,8 @@ func (uc *waveLifecycleUseCase) CloseWave(ctx context.Context, input dto.CloseWa
 		}
 		notes += fmt.Sprintf("[closure] %s", input.Note)
 	}
+	// Notes and stage are written back-to-back; WaveController.CloseWave wraps
+	// this use case in a DB transaction so the pair commits or rolls back together.
 	if notes != wave.Notes {
 		if err := uc.lifecycleRepo.UpdateWaveFields(ctx, input.WaveID, wave.Name, notes, wave.LevelTags); err != nil {
 			return dto.CloseWaveResult{}, err
@@ -156,6 +177,9 @@ func (uc *waveLifecycleUseCase) UnassignDemandFromWave(ctx context.Context, wave
 	}
 	if _, err := uc.demandRepo.FindByID(ctx, demandDocumentID); err != nil {
 		return fmt.Errorf("demand document %d not found: %w", demandDocumentID, err)
+	}
+	if err := uc.requireAssignedToWave(ctx, waveID, demandDocumentID); err != nil {
+		return err
 	}
 
 	lines, err := uc.fulfillRepo.ListByWave(ctx, waveID)
@@ -195,19 +219,11 @@ func (uc *waveLifecycleUseCase) BatchUnassignDemandFromWave(ctx context.Context,
 	result := dto.BatchUnassignDemandResult{Results: make([]dto.BatchUnassignDemandItemResult, 0, len(docIDs))}
 	for _, docID := range docIDs {
 		item := dto.BatchUnassignDemandItemResult{DemandDocumentID: docID}
-		// A doc that is not currently linked to any wave must NOT count as a
-		// success: DeleteByWaveAndDocument returns nil even when it matches
-		// zero rows, and a phantom success would later make the inverse
-		// batch_assign_demand re-create an assignment that never existed.
-		exists, existErr := uc.assignmentRepo.ExistsByDocument(ctx, docID)
-		if existErr != nil {
-			item.Error = fmt.Sprintf("check assignment for demand document %d: %v", docID, existErr)
-			result.Results = append(result.Results, item)
-			result.FailureCount++
-			continue
-		}
-		if !exists {
-			item.Error = fmt.Sprintf("demand document %d is not assigned to wave %d; nothing to unassign", docID, waveID)
+		// Assignment lookup is wave-scoped: a document assigned to a different
+		// wave must not count as success just because some assignment exists and
+		// DeleteByWaveAndDocument matches zero rows.
+		if assignErr := uc.requireAssignedToWave(ctx, waveID, docID); assignErr != nil {
+			item.Error = assignErr.Error()
 			result.Results = append(result.Results, item)
 			result.FailureCount++
 			continue
@@ -231,11 +247,55 @@ func (uc *waveLifecycleUseCase) BatchUnassignDemandFromWave(ctx context.Context,
 	return result, nil
 }
 
+func rejectAssignToClosedWave(waveID uint, lifecycleStage string) error {
+	if lifecycleStage == string(domain.LifecycleStageClosed) {
+		return fmt.Errorf("wave %d is closed; demand cannot be assigned", waveID)
+	}
+	return nil
+}
+
+func unassignNotOnWaveError(demandDocumentID, requestedWaveID, assignedWaveID uint, assigned bool) error {
+	if !assigned {
+		return fmt.Errorf("demand document %d is not assigned to wave %d; nothing to unassign", demandDocumentID, requestedWaveID)
+	}
+	if assignedWaveID != requestedWaveID {
+		return fmt.Errorf("demand document %d is assigned to wave %d, not wave %d; nothing to unassign", demandDocumentID, assignedWaveID, requestedWaveID)
+	}
+	return nil
+}
+
+func (uc *waveLifecycleUseCase) liveAssignmentWaveID(ctx context.Context, demandDocumentID uint) (uint, bool, error) {
+	assignments, err := uc.assignmentRepo.ListByDemandDocument(ctx, demandDocumentID)
+	if err != nil {
+		return 0, false, fmt.Errorf("check assignment for demand document %d: %w", demandDocumentID, err)
+	}
+	for _, a := range assignments {
+		return a.WaveID, true, nil
+	}
+	return 0, false, nil
+}
+
+func (uc *waveLifecycleUseCase) requireAssignedToWave(ctx context.Context, waveID, demandDocumentID uint) error {
+	assignedWaveID, assigned, err := uc.liveAssignmentWaveID(ctx, demandDocumentID)
+	if err != nil {
+		return err
+	}
+	return unassignNotOnWaveError(demandDocumentID, waveID, assignedWaveID, assigned)
+}
+
 // assignOne performs the core single-document assignment: create the wave-demand
 // linkage and capture the profile snapshot onto the demand document. Mirrors the
 // logic in controller_wave.go's AssignDemandToWave; kept here so it is unit-testable
 // without a transaction and reusable by BatchAssignDemandToWave.
 func (uc *waveLifecycleUseCase) assignOne(ctx context.Context, waveID, demandDocumentID uint) error {
+	wave, err := uc.waveRepo.FindByID(ctx, waveID)
+	if err != nil {
+		return fmt.Errorf("wave %d not found: %w", waveID, err)
+	}
+	if err := rejectAssignToClosedWave(waveID, wave.LifecycleStage); err != nil {
+		return err
+	}
+
 	doc, err := uc.demandRepo.FindByID(ctx, demandDocumentID)
 	if err != nil {
 		return fmt.Errorf("demand document %d not found: %w", demandDocumentID, err)
@@ -302,8 +362,12 @@ func (uc *waveLifecycleUseCase) assignOne(ctx context.Context, waveID, demandDoc
 // partially-written item, and so undo/redo history can be recorded per item) should
 // wrap each call in its own transaction — see controller_wave_lifecycle.go.
 func (uc *waveLifecycleUseCase) BatchAssignDemandToWave(ctx context.Context, waveID uint, docIDs []uint) (dto.BatchAssignDemandResult, error) {
-	if _, err := uc.waveRepo.FindByID(ctx, waveID); err != nil {
+	wave, err := uc.waveRepo.FindByID(ctx, waveID)
+	if err != nil {
 		return dto.BatchAssignDemandResult{}, fmt.Errorf("wave %d not found: %w", waveID, err)
+	}
+	if err := rejectAssignToClosedWave(waveID, wave.LifecycleStage); err != nil {
+		return dto.BatchAssignDemandResult{}, err
 	}
 
 	result := dto.BatchAssignDemandResult{

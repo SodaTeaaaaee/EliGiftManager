@@ -224,3 +224,71 @@ func TestAddressBatchUseCase_BindDefaultAddressesForWave(t *testing.T) {
 		t.Errorf("expected ready line to remain bound to its original address, unchanged")
 	}
 }
+
+func TestAddressBatchUseCase_BatchBindRejectsProfileMismatch(t *testing.T) {
+	db := setupTestDB(t)
+	uc, addressRepo, fulfillmentRepo := setupAddressBatchUseCase(t, db)
+	ctx := context.Background()
+
+	ownerID := createTestProfile(t, db, "Owner")
+	otherID := createTestProfile(t, db, "Other")
+	waveID := createTestWave(t, db, "W-mismatch")
+
+	ownerAddr := &domain.CustomerAddress{
+		CustomerProfileID: ownerID,
+		Label:             "Home",
+		RecipientName:     "Owner",
+		ValidationStatus:  "valid",
+	}
+	if err := addressRepo.Create(ctx, ownerAddr); err != nil {
+		t.Fatalf("create owner address: %v", err)
+	}
+
+	otherLine := &domain.FulfillmentLine{
+		WaveID:            waveID,
+		CustomerProfileID: &otherID,
+		Quantity:          1,
+		AddressState:      string(domain.AddressStateMissing),
+		LineReason:        string(domain.LineReasonEntitlement),
+	}
+	if err := fulfillmentRepo.Create(ctx, otherLine); err != nil {
+		t.Fatalf("create other line: %v", err)
+	}
+
+	noProfileLine := &domain.FulfillmentLine{
+		WaveID:       waveID,
+		Quantity:     1,
+		AddressState: string(domain.AddressStateMissing),
+		LineReason:   string(domain.LineReasonEntitlement),
+	}
+	if err := fulfillmentRepo.Create(ctx, noProfileLine); err != nil {
+		t.Fatalf("create no-profile line: %v", err)
+	}
+
+	results, err := uc.BatchBindAddressToLines(ctx, []dto.BindAddressEntry{
+		{FulfillmentLineID: otherLine.ID, CustomerAddressID: ownerAddr.ID},
+		{FulfillmentLineID: noProfileLine.ID, CustomerAddressID: ownerAddr.ID},
+	})
+	if err != nil {
+		t.Fatalf("BatchBindAddressToLines: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	for i, result := range results {
+		if result.Success {
+			t.Errorf("entry %d: expected profile-mismatch failure", i)
+		}
+		if result.ErrorMessage == "" {
+			t.Errorf("entry %d: expected error message", i)
+		}
+	}
+
+	reloaded, err := fulfillmentRepo.FindByID(ctx, otherLine.ID)
+	if err != nil {
+		t.Fatalf("reload other line: %v", err)
+	}
+	if reloaded.CustomerAddressID != nil {
+		t.Fatal("must not bind another customer's address onto a fulfillment line")
+	}
+}

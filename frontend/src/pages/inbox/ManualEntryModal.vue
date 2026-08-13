@@ -6,7 +6,7 @@
  * leftover IntegrationProfile.demandKind is not used to filter platforms
  * or infer kind.
  */
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NInput, NInputNumber, NModal, NSelect } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
@@ -19,7 +19,7 @@ import {
   type DemandImportDocumentType,
 } from './demandImportDocumentTypes'
 
-defineProps<{
+const props = defineProps<{
   show: boolean
 }>()
 
@@ -51,9 +51,68 @@ const documentTypeOptions = computed<SelectOption[]>(() =>
   })),
 )
 
-const canSubmit = computed(
-  () => profileId.value != null && documentType.value != null && !!externalTitle.value.trim(),
+function isValidRequestedQuantity(value: number | null): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 1
+}
+
+const canSubmit = computed(() => {
+  if (profileId.value == null || documentType.value == null) return false
+  if (!externalTitle.value.trim()) return false
+  if (!isValidRequestedQuantity(requestedQuantity.value)) return false
+  if (documentType.value === 'import_entitlement' && !sourceCustomerRef.value.trim()) return false
+  return true
+})
+
+const sourceCustomerRefPlaceholder = computed(() =>
+  t(
+    documentType.value === 'import_entitlement'
+      ? 'inbox.manualEntry.sourceCustomerRefRequired'
+      : 'inbox.manualEntry.sourceCustomerRef',
+  ),
 )
+
+type ManualEntryLine = {
+  lineType: string
+  obligationTriggerKind: string
+  entitlementAuthority: string
+  recipientInputState: string
+  routingDisposition: string
+  giftLevelSnapshot?: string
+  externalTitle: string
+  requestedQuantity: number
+}
+
+function buildManualEntryLines(
+  kind: DemandImportDocumentType,
+  title: string,
+  quantity: number,
+): ManualEntryLine[] {
+  if (kind === 'import_entitlement') {
+    return [
+      {
+        lineType: 'entitlement_rule',
+        obligationTriggerKind: 'periodic_membership',
+        entitlementAuthority: 'manual_grant',
+        recipientInputState: 'not_required',
+        routingDisposition: 'accepted',
+        giftLevelSnapshot: title,
+        externalTitle: title,
+        requestedQuantity: quantity,
+      },
+    ]
+  }
+  return [
+    {
+      lineType: 'sku_order',
+      obligationTriggerKind: 'manual_compensation',
+      entitlementAuthority: 'manual_grant',
+      recipientInputState: 'ready',
+      routingDisposition: 'accepted',
+      externalTitle: title,
+      requestedQuantity: quantity,
+    },
+  ]
+}
 
 function resetForm(): void {
   profileId.value = null
@@ -85,13 +144,25 @@ async function handleOpen(): Promise<void> {
   }
 }
 
+// 打开即重置并加载 profiles——NModal 只在关闭路径回发 update:show(false)，
+// 打开路径只能由父级改 show prop 驱动，因此在这里监听。
+watch(
+  () => props.show,
+  (show) => {
+    if (show) void handleOpen()
+  },
+)
+
 function handleUpdateShow(value: boolean): void {
   emit('update:show', value)
-  if (value) void handleOpen()
 }
 
 async function handleSubmit(): Promise<void> {
-  if (profileId.value == null || documentType.value == null || !externalTitle.value.trim()) return
+  const title = externalTitle.value.trim()
+  const quantity = requestedQuantity.value
+  if (profileId.value == null || documentType.value == null || !title) return
+  if (!isValidRequestedQuantity(quantity)) return
+  if (documentType.value === 'import_entitlement' && !sourceCustomerRef.value.trim()) return
   submitting.value = true
   try {
     await importDemandDocument({
@@ -103,17 +174,7 @@ async function handleSubmit(): Promise<void> {
       sourceCustomerRef: sourceCustomerRef.value,
       customerProfileId: customerProfileId.value ?? undefined,
       integrationProfileId: profileId.value,
-      lines: [
-        {
-          lineType: 'sku_order',
-          obligationTriggerKind: 'manual_compensation',
-          entitlementAuthority: 'manual_grant',
-          recipientInputState: 'ready',
-          routingDisposition: 'accepted',
-          externalTitle: externalTitle.value.trim(),
-          requestedQuantity: requestedQuantity.value ?? 1,
-        },
-      ],
+      lines: buildManualEntryLines(documentType.value, title, quantity),
     })
     feedback.success(t('feedback.success'))
     emit('created')
@@ -124,6 +185,19 @@ async function handleSubmit(): Promise<void> {
     submitting.value = false
   }
 }
+
+defineExpose({
+  handleOpen,
+  handleSubmit,
+  profileId,
+  documentType,
+  externalTitle,
+  profileOptions,
+  sourceCustomerRef,
+  sourceCustomerRefPlaceholder,
+  requestedQuantity,
+  canSubmit,
+})
 </script>
 
 <template>
@@ -144,7 +218,7 @@ async function handleSubmit(): Promise<void> {
         :placeholder="t('inbox.manualEntry.documentTypePlaceholder')"
       />
       <NInput v-model:value="sourceDocumentNo" :placeholder="t('inbox.columns.sourceDoc')" />
-      <NInput v-model:value="sourceCustomerRef" :placeholder="t('inbox.manualEntry.sourceCustomerRef')" />
+      <NInput v-model:value="sourceCustomerRef" :placeholder="sourceCustomerRefPlaceholder" />
       <NInputNumber v-model:value="customerProfileId" style="width: 100%" :placeholder="t('inbox.manualEntry.customerProfileId')" />
       <NInput v-model:value="externalTitle" :placeholder="t('inbox.manualEntry.externalTitle')" />
       <NInputNumber v-model:value="requestedQuantity" style="width: 100%" :min="1" :placeholder="t('inbox.manualEntry.requestedQuantity')" />

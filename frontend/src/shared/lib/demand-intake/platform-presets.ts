@@ -110,7 +110,7 @@ export function fileFlagsFromPreset(preset: PlatformPreset): { entitlement: bool
   return { entitlement: true, salesOrder: false }
 }
 
-/** Mapping seed for one document type; falls back to the preset-wide mapping. */
+/** Mapping seed for one document type; leftover demandKind only when it explicitly matches. */
 export function mappingFromPresetForDocumentType(
   preset: PlatformPreset,
   docType: string,
@@ -122,7 +122,7 @@ export function mappingFromPresetForDocumentType(
   if (preset.demandKind === 'retail_order' && docType === 'import_sales_order') {
     return mappingFromPreset(preset)
   }
-  if (preset.demandKind !== 'retail_order' && docType === 'import_entitlement') {
+  if (preset.demandKind === 'membership_entitlement' && docType === 'import_entitlement') {
     return mappingFromPreset(preset)
   }
   return null
@@ -211,6 +211,7 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
           'line.requested_quantity': '1',
           'line.obligation_trigger_kind': 'periodic_membership',
           'line.entitlement_authority': 'upstream_platform',
+          'line.recipient_input_state': 'not_required',
           'line.routing_disposition': 'accepted',
         },
         columnOrder: [
@@ -231,12 +232,14 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
           'recipient.phone': '联系电话',
           'recipient.address_line1': '收货地址',
           'document.source_document_no': '订单号',
+          'document.source_customer_ref': '买家昵称',
           'document.display_name': '买家昵称',
         },
         positions: {},
         defaults: {
           'line.line_type': 'sku_order',
           'line.entitlement_authority': 'upstream_platform',
+          'line.recipient_input_state': 'ready',
           'line.routing_disposition': 'accepted',
         },
         columnOrder: [
@@ -246,6 +249,7 @@ export const PLATFORM_PRESETS: readonly PlatformPreset[] = [
           'recipient.phone',
           'recipient.address_line1',
           'document.source_document_no',
+          'document.source_customer_ref',
           'document.display_name',
         ],
       },

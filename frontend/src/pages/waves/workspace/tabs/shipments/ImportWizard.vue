@@ -85,6 +85,8 @@ void loadProfiles()
 watch(templateProfileId, (id) => {
   bindingRequestSeq += 1
   const seq = bindingRequestSeq
+  tabularFilePath.value = ''
+  csvPreview.value = null
   if (id == null) {
     defaultBinding.value = { status: 'idle' }
     return
@@ -103,7 +105,9 @@ async function handlePickFile(): Promise<void> {
     const path = await pickTabularFile()
     if (!path) return
     tabularFilePath.value = path
-    csvPreview.value = await parseTabularFile(path)
+    const binding = defaultBinding.value
+    const hasHeader = binding.status === 'loaded' ? binding.hasHeader !== false : true
+    csvPreview.value = await parseTabularFile(path, hasHeader)
   } catch (err) {
     feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {

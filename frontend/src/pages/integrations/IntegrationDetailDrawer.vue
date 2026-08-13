@@ -38,6 +38,7 @@ import {
 import type { IntegrationProfile } from '@/entities/profile'
 import type { dto } from '../../../wailsjs/go/models'
 import IntakeWizard from './wizard/IntakeWizard.vue'
+import { formatSupportsDocumentType } from './wizard/intakeTemplatePlan'
 import {
   expectedFileKinds,
   hasDefaultFileKindBinding,
@@ -167,9 +168,12 @@ const fileKindRows = computed(() => {
 const showAdvanced = ref(false)
 
 const templateFormatOptions = computed<SelectOption[]>(() => {
-  const values = templateDraft.documentType === 'import_product_catalog'
+  const candidates = templateDraft.documentType === 'import_product_catalog'
     ? ['zip', 'csv', 'xlsx', 'xls']
     : ['csv', 'xlsx', 'xls']
+  const values = templateDraft.documentType
+    ? candidates.filter((format) => formatSupportsDocumentType(format, templateDraft.documentType))
+    : candidates
   return values.map((value) => ({ label: value.toUpperCase(), value }))
 })
 
@@ -183,6 +187,16 @@ const templateDraft = reactive({
   mappingRules: '',
   isDefault: true,
 })
+
+watch(
+  () => templateDraft.documentType,
+  (documentType) => {
+    if (!documentType || !templateDraft.format) return
+    if (!formatSupportsDocumentType(templateDraft.format, documentType)) {
+      templateDraft.format = ''
+    }
+  },
+)
 
 function openTemplateCreator(): void {
   if (!profile.value || !currentProfileScope(profile.value.id)) return

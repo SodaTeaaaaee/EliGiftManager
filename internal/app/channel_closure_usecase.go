@@ -62,16 +62,9 @@ func (uc *channelClosureUseCase) PlanChannelClosure(ctx context.Context, input d
 	switch effectiveProfile.TrackingSyncMode {
 	case "api_push", "document_export":
 		result.Decision = dto.ClosureDecisionCreateJob
-
-		lowLevelInput := dto.CreateChannelSyncJobInput{
-			WaveID:               input.WaveID,
-			IntegrationProfileID: effectiveProfile.ProfileID,
-			Direction:            "push_tracking",
-			Items:                candidates,
-		}
-		job, items, err := uc.channelSyncUC.CreateChannelSyncJob(ctx, lowLevelInput)
+		job, items, err := uc.reuseOrCreatePushTrackingJob(ctx, input.WaveID, effectiveProfile.ProfileID, candidates)
 		if err != nil {
-			return nil, fmt.Errorf("create channel sync job: %w", err)
+			return nil, err
 		}
 		result.Job = domainJobToDTO(job)
 		result.Items = domainItemsToDTOs(items)
@@ -92,6 +85,73 @@ func (uc *channelClosureUseCase) PlanChannelClosure(ctx context.Context, input d
 	}
 
 	return result, nil
+}
+
+func (uc *channelClosureUseCase) reuseOrCreatePushTrackingJob(
+	ctx context.Context,
+	waveID uint,
+	profileID uint,
+	candidates []dto.CreateChannelSyncItemInput,
+) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error) {
+	existing, existingItems, err := lookupPendingPushTrackingJob(ctx, channelSyncRepoOf(uc.channelSyncUC), waveID, profileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	if existing != nil {
+		return existing, existingItems, nil
+	}
+	job, items, err := uc.channelSyncUC.CreateChannelSyncJob(ctx, dto.CreateChannelSyncJobInput{
+		WaveID:               waveID,
+		IntegrationProfileID: profileID,
+		Direction:            "push_tracking",
+		Items:                candidates,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("create channel sync job: %w", err)
+	}
+	return job, items, nil
+}
+
+func channelSyncRepoOf(uc ChannelSyncUseCase) domain.ChannelSyncRepository {
+	syncUC, ok := uc.(*channelSyncUseCase)
+	if !ok || syncUC == nil {
+		return nil
+	}
+	return syncUC.channelSyncRepo
+}
+
+func lookupPendingPushTrackingJob(
+	ctx context.Context,
+	repo domain.ChannelSyncRepository,
+	waveID uint,
+	profileID uint,
+) (*domain.ChannelSyncJob, []domain.ChannelSyncItem, error) {
+	if repo == nil {
+		return nil, nil, nil
+	}
+	jobs, err := repo.ListJobsByWave(ctx, waveID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list channel sync jobs for wave %d: %w", waveID, err)
+	}
+	var pending *domain.ChannelSyncJob
+	for i := range jobs {
+		j := &jobs[i]
+		if j.Status != "pending" || j.IntegrationProfileID != profileID || j.Direction != "push_tracking" {
+			continue
+		}
+		if pending == nil || j.ID < pending.ID {
+			copy := *j
+			pending = &copy
+		}
+	}
+	if pending == nil {
+		return nil, nil, nil
+	}
+	items, err := repo.ListItemsByJob(ctx, pending.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list items for pending channel sync job %d: %w", pending.ID, err)
+	}
+	return pending, items, nil
 }
 
 // resolveEffectiveProfileForWave returns the single consistent bound snapshot for

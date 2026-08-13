@@ -26,7 +26,7 @@ func (m *mockWaveLifecycleRepo) UpdateWaveFields(ctx context.Context, waveID uin
 	defer m.waveRepo.mu.Unlock()
 	w, ok := m.waveRepo.waves[waveID]
 	if !ok {
-		return &testErr{msg: "wave not found"}
+		return fmt.Errorf("wave not found")
 	}
 	w.Name = name
 	w.Notes = notes
@@ -39,24 +39,24 @@ func (m *mockWaveLifecycleRepo) TransitionLifecycleStage(ctx context.Context, wa
 	defer m.waveRepo.mu.Unlock()
 	w, ok := m.waveRepo.waves[waveID]
 	if !ok {
-		return &testErr{msg: "wave not found"}
+		return fmt.Errorf("wave not found")
 	}
 	w.LifecycleStage = stage
 	return nil
 }
 
 // newWaveLifecycleTestUC wires a WaveLifecycleUseCase from the shared in-memory
-// mocks (see use_cases_test.go / channel_closure_test.go), returning the wave repo
-// too so tests can seed/inspect wave state directly.
+// mocks (see use_cases_test.go), returning the wave repo too so tests can
+// seed/inspect wave state directly. profileRepo is nil: assignment tests do not
+// bind an integration profile.
 func newWaveLifecycleTestUC() (WaveLifecycleUseCase, *mockWaveRepo, *mockDemandRepo, *mockFulfillRepo) {
 	waveRepo := newMockWaveRepo()
 	demandRepo := newMockDemandRepo()
 	assignmentRepo := newMockAssignmentRepo(demandRepo)
 	fulfillRepo := newMockFulfillRepo()
-	profileRepo := newMockProfileRepo()
 	lifecycleRepo := newMockWaveLifecycleRepo(waveRepo)
 
-	uc := NewWaveLifecycleUseCase(waveRepo, lifecycleRepo, demandRepo, assignmentRepo, fulfillRepo, profileRepo)
+	uc := NewWaveLifecycleUseCase(waveRepo, lifecycleRepo, demandRepo, assignmentRepo, fulfillRepo, nil)
 	return uc, waveRepo, demandRepo, fulfillRepo
 }
 
@@ -599,5 +599,191 @@ func TestAssignOneRejectsMembershipDocWithPendingIntakeLines(t *testing.T) {
 	}
 	if !strings.Contains(item.Error, "pending_intake") {
 		t.Fatalf("expected error to contain %q, got %q", "pending_intake", item.Error)
+	}
+}
+
+func TestCloseWaveRejectsAlreadyClosedWave(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, _, _ := newWaveLifecycleTestUC()
+
+	wave := &domain.Wave{Name: "already-closed"}
+	if err := waveRepo.Create(ctx, wave); err != nil {
+		t.Fatalf("seed wave: %v", err)
+	}
+	if _, err := uc.CloseWave(ctx, dto.CloseWaveInput{WaveID: wave.ID}); err != nil {
+		t.Fatalf("first CloseWave: %v", err)
+	}
+
+	_, err := uc.CloseWave(ctx, dto.CloseWaveInput{WaveID: wave.ID, Force: true, Note: "retry"})
+	if err == nil {
+		t.Fatal("expected CloseWave to reject an already-closed wave")
+	}
+	if !strings.Contains(err.Error(), "already closed") {
+		t.Fatalf("error = %q, want already closed", err.Error())
+	}
+}
+
+func TestCloseWaveCountsInFlightSupplierStatesAsResidual(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	states := []domain.SupplierState{
+		domain.SupplierStateSubmitted,
+		domain.SupplierStateAccepted,
+		domain.SupplierStateProducing,
+		domain.SupplierStatePartiallyShipped,
+	}
+	for _, state := range states {
+		state := state
+		t.Run(string(state), func(t *testing.T) {
+			t.Parallel()
+			uc, waveRepo, _, fulfillRepo := newWaveLifecycleTestUC()
+			wave := &domain.Wave{Name: "inflight-" + string(state)}
+			if err := waveRepo.Create(ctx, wave); err != nil {
+				t.Fatalf("seed wave: %v", err)
+			}
+			if err := fulfillRepo.Create(ctx, &domain.FulfillmentLine{
+				WaveID:           wave.ID,
+				Quantity:         1,
+				AllocationState:  string(domain.AllocationStateReady),
+				AddressState:     string(domain.AddressStateReady),
+				SupplierState:    string(state),
+				ChannelSyncState: string(domain.ChannelSyncStateNotRequired),
+			}); err != nil {
+				t.Fatalf("seed fulfillment line: %v", err)
+			}
+			if _, err := uc.CloseWave(ctx, dto.CloseWaveInput{WaveID: wave.ID}); err == nil {
+				t.Fatalf("expected CloseWave without force to fail for supplier state %s", state)
+			}
+			result, err := uc.CloseWave(ctx, dto.CloseWaveInput{WaveID: wave.ID, Force: true, Note: "override in-flight remainder"})
+			if err != nil {
+				t.Fatalf("force CloseWave: %v", err)
+			}
+			if !result.Forced || result.ResidualItemCount != 1 {
+				t.Fatalf("result = %+v, want Forced with ResidualItemCount 1", result)
+			}
+		})
+	}
+}
+
+func TestCloseWaveDoesNotTreatShippedSyncedLineAsResidual(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, _, fulfillRepo := newWaveLifecycleTestUC()
+
+	wave := &domain.Wave{Name: "shipped-synced"}
+	if err := waveRepo.Create(ctx, wave); err != nil {
+		t.Fatalf("seed wave: %v", err)
+	}
+	if err := fulfillRepo.Create(ctx, &domain.FulfillmentLine{
+		WaveID:           wave.ID,
+		Quantity:         1,
+		AllocationState:  string(domain.AllocationStateReady),
+		AddressState:     string(domain.AddressStateReady),
+		SupplierState:    string(domain.SupplierStateShipped),
+		ChannelSyncState: string(domain.ChannelSyncStateSynced),
+	}); err != nil {
+		t.Fatalf("seed fulfillment line: %v", err)
+	}
+
+	result, err := uc.CloseWave(ctx, dto.CloseWaveInput{WaveID: wave.ID})
+	if err != nil {
+		t.Fatalf("CloseWave: %v", err)
+	}
+	if result.Forced || result.ResidualItemCount != 0 {
+		t.Fatalf("result = %+v, want unforced close with no residual items", result)
+	}
+}
+
+func TestAssignOneRejectsClosedWave(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, demandRepo, _ := newWaveLifecycleTestUC()
+
+	wave := &domain.Wave{Name: "closed-assign", LifecycleStage: string(domain.LifecycleStageClosed)}
+	if err := waveRepo.Create(ctx, wave); err != nil {
+		t.Fatalf("seed wave: %v", err)
+	}
+	doc := &domain.DemandDocument{Kind: "retail_order", SourceChannel: "test", SourceDocumentNo: "DOC-CLOSED"}
+	if err := demandRepo.Create(ctx, doc); err != nil {
+		t.Fatalf("seed demand document: %v", err)
+	}
+
+	_, err := uc.BatchAssignDemandToWave(ctx, wave.ID, []uint{doc.ID})
+	if err == nil {
+		t.Fatal("expected BatchAssignDemandToWave to reject a closed wave")
+	}
+	if !strings.Contains(err.Error(), "closed") {
+		t.Fatalf("error = %q, want closed-wave rejection", err.Error())
+	}
+}
+
+func TestBatchUnassignDemandFromWaveRejectsDocumentAssignedToDifferentWave(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, demandRepo, _ := newWaveLifecycleTestUC()
+
+	wave1 := &domain.Wave{Name: "unassign-src"}
+	if err := waveRepo.Create(ctx, wave1); err != nil {
+		t.Fatalf("seed wave 1: %v", err)
+	}
+	wave2 := &domain.Wave{Name: "unassign-other"}
+	if err := waveRepo.Create(ctx, wave2); err != nil {
+		t.Fatalf("seed wave 2: %v", err)
+	}
+	doc := &domain.DemandDocument{Kind: "retail_order", SourceChannel: "test", SourceDocumentNo: "DOC-OTHER-WAVE"}
+	if err := demandRepo.Create(ctx, doc); err != nil {
+		t.Fatalf("seed demand document: %v", err)
+	}
+	assigned, err := uc.BatchAssignDemandToWave(ctx, wave1.ID, []uint{doc.ID})
+	if err != nil || assigned.SuccessCount != 1 {
+		t.Fatalf("seed assignment: %+v, %v", assigned, err)
+	}
+
+	result, err := uc.BatchUnassignDemandFromWave(ctx, wave2.ID, []uint{doc.ID})
+	if err != nil {
+		t.Fatalf("BatchUnassignDemandFromWave: %v", err)
+	}
+	if result.SuccessCount != 0 || result.FailureCount != 1 {
+		t.Fatalf("result = %+v, want 0 success / 1 failure", result)
+	}
+	if result.Results[0].Success || !strings.Contains(result.Results[0].Error, "nothing to unassign") {
+		t.Fatalf("expected wave-scoped unassign failure, got %+v", result.Results[0])
+	}
+	if !strings.Contains(result.Results[0].Error, fmt.Sprintf("assigned to wave %d", wave1.ID)) {
+		t.Fatalf("expected error to name the actual wave, got %q", result.Results[0].Error)
+	}
+
+	stillThere, err := uc.BatchAssignDemandToWave(ctx, wave1.ID, []uint{doc.ID})
+	if err != nil {
+		t.Fatalf("re-check assignment: %v", err)
+	}
+	if stillThere.SuccessCount != 0 || stillThere.FailureCount != 1 || !strings.Contains(stillThere.Results[0].Error, "already assigned") {
+		t.Fatalf("document should remain assigned to wave 1, got %+v", stillThere)
+	}
+}
+
+func TestUnassignDemandFromWaveAllowsReassign(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	uc, waveRepo, demandRepo, _ := newWaveLifecycleTestUC()
+
+	wave := &domain.Wave{Name: "reassign-wave"}
+	if err := waveRepo.Create(ctx, wave); err != nil {
+		t.Fatalf("seed wave: %v", err)
+	}
+	doc := &domain.DemandDocument{Kind: "retail_order", SourceChannel: "test", SourceDocumentNo: "DOC-REASSIGN"}
+	if err := demandRepo.Create(ctx, doc); err != nil {
+		t.Fatalf("seed demand document: %v", err)
+	}
+	if assigned, err := uc.BatchAssignDemandToWave(ctx, wave.ID, []uint{doc.ID}); err != nil || assigned.SuccessCount != 1 {
+		t.Fatalf("first assign: %+v, %v", assigned, err)
+	}
+	if err := uc.UnassignDemandFromWave(ctx, wave.ID, doc.ID); err != nil {
+		t.Fatalf("UnassignDemandFromWave: %v", err)
+	}
+	reassigned, err := uc.BatchAssignDemandToWave(ctx, wave.ID, []uint{doc.ID})
+	if err != nil || reassigned.SuccessCount != 1 {
+		t.Fatalf("reassign: %+v, %v", reassigned, err)
 	}
 }

@@ -56,6 +56,14 @@ func (uc *addressBatchUseCase) bindOne(ctx context.Context, lineID, addressID ui
 		}
 	}
 
+	if line.CustomerProfileID == nil || addr.CustomerProfileID != *line.CustomerProfileID {
+		return dto.AddressBatchItemResult{
+			FulfillmentLineID: lineID,
+			Success:           false,
+			ErrorMessage:      "cannot bind address to fulfillment line: customer profile mismatch",
+		}
+	}
+
 	line.CustomerAddressID = &addr.ID
 	line.AddressState = deriveAddressState(addr.ValidationStatus)
 

@@ -8,6 +8,9 @@ import (
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
+	"gorm.io/gorm"
 )
 
 // ── mock address repo ──
@@ -229,8 +232,8 @@ func TestBindAddressToLine(t *testing.T) {
 		t.Fatalf("create address: %v", err)
 	}
 
-	// create a fulfillment line in the mock
-	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1}
+	profileID := uint(1)
+	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1, CustomerProfileID: &profileID}
 	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create line: %v", err)
 	}
@@ -270,7 +273,8 @@ func TestBindInvalidAddressToLine(t *testing.T) {
 		t.Fatalf("create address: %v", err)
 	}
 
-	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1}
+	profileID := uint(1)
+	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1, CustomerProfileID: &profileID}
 	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create line: %v", err)
 	}
@@ -303,7 +307,8 @@ func TestUnbindAddressFromLine(t *testing.T) {
 		t.Fatalf("create address: %v", err)
 	}
 
-	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1}
+	profileID := uint(1)
+	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1, CustomerProfileID: &profileID}
 	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
 		t.Fatalf("create line: %v", err)
 	}
@@ -333,8 +338,8 @@ func TestDeriveAddressState(t *testing.T) {
 	tests := []struct{ status, want string }{
 		{"valid", "ready"},
 		{"invalid", "invalid"},
-		{"unvalidated", "ready"},
-		{"unknown", "ready"},
+		{"unvalidated", "missing"},
+		{"unknown", "missing"},
 	}
 	for _, tt := range tests {
 		got := deriveAddressState(tt.status)
@@ -367,5 +372,347 @@ func TestListAddressesByProfile(t *testing.T) {
 	}
 	if len(list) != 3 {
 		t.Errorf("expected 3 addresses for profile 1, got %d", len(list))
+	}
+}
+
+func TestCreateAddressRejectsZeroProfile(t *testing.T) {
+	t.Parallel()
+	uc := NewAddressManagementUseCase(newMockAddressRepo(), newMockFulfillRepo())
+
+	_, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
+		CustomerProfileID: 0,
+		Label:             "Home",
+	})
+	if err == nil {
+		t.Fatal("expected error creating address on empty profile")
+	}
+}
+
+func TestBindAddressToLineProfileMismatch(t *testing.T) {
+	t.Parallel()
+	addrRepo := newMockAddressRepo()
+	fulfillRepo := newMockFulfillRepo()
+	uc := NewAddressManagementUseCase(addrRepo, fulfillRepo)
+
+	addr, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
+		CustomerProfileID: 1,
+		Label:             "Home",
+		ValidationStatus:  "valid",
+	})
+	if err != nil {
+		t.Fatalf("create address: %v", err)
+	}
+
+	otherProfileID := uint(2)
+	fl := &domain.FulfillmentLine{WaveID: 1, Quantity: 1, CustomerProfileID: &otherProfileID}
+	if err := fulfillRepo.Create(context.Background(), fl); err != nil {
+		t.Fatalf("create line: %v", err)
+	}
+
+	if _, err := uc.BindAddressToLine(context.Background(), dto.BindAddressInput{
+		FulfillmentLineID: fl.ID,
+		CustomerAddressID: addr.ID,
+	}); err == nil {
+		t.Fatal("expected error binding address across different profiles")
+	}
+
+	line, _ := fulfillRepo.FindByID(context.Background(), fl.ID)
+	if line.CustomerAddressID != nil {
+		t.Error("address should not be bound when profiles mismatch")
+	}
+}
+
+func TestUpdateAddressKeepsProfileWhenInputZero(t *testing.T) {
+	t.Parallel()
+	addrRepo := newMockAddressRepo()
+	uc := NewAddressManagementUseCase(addrRepo, newMockFulfillRepo())
+
+	created, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
+		CustomerProfileID: 1,
+		Label:             "Home",
+		City:              "Gehenna",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	updated, err := uc.UpdateAddress(context.Background(), dto.UpdateAddressInput{
+		ID:                created.ID,
+		CustomerProfileID: 0,
+		Label:             "Home 2",
+		City:              "Gehenna",
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.CustomerProfileID != 1 {
+		t.Errorf("expected profile 1 to be kept, got %d", updated.CustomerProfileID)
+	}
+	if updated.Label != "Home 2" {
+		t.Errorf("expected label update, got %q", updated.Label)
+	}
+}
+
+func TestUpdateAddressRejectsProfileReassign(t *testing.T) {
+	t.Parallel()
+	addrRepo := newMockAddressRepo()
+	uc := NewAddressManagementUseCase(addrRepo, newMockFulfillRepo())
+
+	created, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
+		CustomerProfileID: 1,
+		Label:             "Home",
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := uc.UpdateAddress(context.Background(), dto.UpdateAddressInput{
+		ID:                created.ID,
+		CustomerProfileID: 2,
+		Label:             "Moved",
+	}); err == nil {
+		t.Fatal("expected error reassigning address to a different profile")
+	}
+
+	got, err := addrRepo.FindByID(context.Background(), created.ID)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got.CustomerProfileID != 1 {
+		t.Errorf("profile should remain 1, got %d", got.CustomerProfileID)
+	}
+}
+
+func TestUpdateAddressDefaultClearsActualProfile(t *testing.T) {
+	t.Parallel()
+	addrRepo := newMockAddressRepo()
+	uc := NewAddressManagementUseCase(addrRepo, newMockFulfillRepo())
+
+	zeroDefault := &domain.CustomerAddress{
+		CustomerProfileID: 0,
+		Label:             "ZeroDefault",
+		IsDefault:         true,
+	}
+	if err := addrRepo.Create(context.Background(), zeroDefault); err != nil {
+		t.Fatalf("create zero-profile default: %v", err)
+	}
+
+	first, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
+		CustomerProfileID: 1,
+		Label:             "First",
+		IsDefault:         true,
+	})
+	if err != nil {
+		t.Fatalf("create first: %v", err)
+	}
+
+	second, err := uc.CreateAddress(context.Background(), dto.CreateAddressInput{
+		CustomerProfileID: 1,
+		Label:             "Second",
+		IsDefault:         false,
+	})
+	if err != nil {
+		t.Fatalf("create second: %v", err)
+	}
+
+	updated, err := uc.UpdateAddress(context.Background(), dto.UpdateAddressInput{
+		ID:                second.ID,
+		CustomerProfileID: 0,
+		Label:             "Second",
+		IsDefault:         true,
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if updated.CustomerProfileID != 1 {
+		t.Errorf("expected profile 1 to be kept, got %d", updated.CustomerProfileID)
+	}
+	if !updated.IsDefault {
+		t.Error("second address should be default")
+	}
+
+	a1, _ := addrRepo.FindByID(context.Background(), first.ID)
+	if a1.IsDefault {
+		t.Error("first address on profile 1 should no longer be default")
+	}
+
+	zero, _ := addrRepo.FindByID(context.Background(), zeroDefault.ID)
+	if !zero.IsDefault {
+		t.Error("default on profile 0 should not be cleared")
+	}
+}
+
+func pinSQLiteConn(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+}
+
+func failCustomerAddressCreates(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	const name = "test_fail_customer_address_create"
+	if err := db.Callback().Create().Before("gorm:create").Register(name, func(tx *gorm.DB) {
+		table := tx.Statement.Table
+		if tx.Statement.Schema != nil && table == "" {
+			table = tx.Statement.Schema.Table
+		}
+		if table == "customer_addresses" {
+			_ = tx.AddError(fmt.Errorf("forced address persist failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register create callback: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Create().Remove(name) })
+}
+
+func failCustomerAddressSaves(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	const name = "test_fail_customer_address_save"
+	if err := db.Callback().Update().Before("gorm:update").Register(name, func(tx *gorm.DB) {
+		table := tx.Statement.Table
+		if tx.Statement.Schema != nil && table == "" {
+			table = tx.Statement.Schema.Table
+		}
+		if table != "customer_addresses" {
+			return
+		}
+		dest, ok := tx.Statement.Dest.(*persistence.CustomerAddress)
+		if ok && dest.ID != 0 {
+			_ = tx.AddError(fmt.Errorf("forced address save failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register update callback: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Callback().Update().Remove(name) })
+}
+
+func TestCreateAddressDefaultWriteRollsBackTogether(t *testing.T) {
+	db := setupTestDB(t)
+	pinSQLiteConn(t, db)
+	ctx := context.Background()
+	profileID := createTestProfile(t, db, "DefaultRollback")
+	addrRepo := infra.NewAddressRepository(db)
+	uc := NewAddressManagementUseCase(addrRepo, infra.NewFulfillmentRepository(db), db)
+
+	first, err := uc.CreateAddress(ctx, dto.CreateAddressInput{
+		CustomerProfileID: profileID,
+		Label:             "First",
+		IsDefault:         true,
+	})
+	if err != nil {
+		t.Fatalf("create first default: %v", err)
+	}
+
+	failCustomerAddressCreates(t, db)
+	if _, err := uc.CreateAddress(ctx, dto.CreateAddressInput{
+		CustomerProfileID: profileID,
+		Label:             "Second",
+		IsDefault:         true,
+	}); err == nil {
+		t.Fatal("expected second default create to fail")
+	}
+
+	got, err := addrRepo.FindByID(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("reload first: %v", err)
+	}
+	if !got.IsDefault {
+		t.Fatal("first address must remain default when ClearDefault+Create rolls back together")
+	}
+}
+
+func TestCreateAddressDefaultWriteUsesNestedSavepoint(t *testing.T) {
+	db := setupTestDB(t)
+	pinSQLiteConn(t, db)
+	ctx := context.Background()
+	profileID := createTestProfile(t, db, "NestedSavepoint")
+	addrRepo := infra.NewAddressRepository(db)
+	uc := NewAddressManagementUseCase(addrRepo, infra.NewFulfillmentRepository(db), db)
+
+	first, err := uc.CreateAddress(ctx, dto.CreateAddressInput{
+		CustomerProfileID: profileID,
+		Label:             "First",
+		IsDefault:         true,
+	})
+	if err != nil {
+		t.Fatalf("create first default: %v", err)
+	}
+
+	failCustomerAddressCreates(t, db)
+	outerErr := db.Transaction(func(tx *gorm.DB) error {
+		inner := NewAddressManagementUseCase(infra.NewAddressRepository(tx), infra.NewFulfillmentRepository(tx), tx)
+		if _, err := inner.CreateAddress(ctx, dto.CreateAddressInput{
+			CustomerProfileID: profileID,
+			Label:             "Second",
+			IsDefault:         true,
+		}); err == nil {
+			t.Fatal("expected inner create to fail")
+		}
+		return nil
+	})
+	if outerErr != nil {
+		t.Fatalf("outer transaction: %v", outerErr)
+	}
+
+	got, err := addrRepo.FindByID(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("reload first: %v", err)
+	}
+	if !got.IsDefault {
+		t.Fatal("nested savepoint must roll back ClearDefault without committing through the outer tx")
+	}
+}
+
+func TestUpdateAddressDefaultWriteRollsBackTogether(t *testing.T) {
+	db := setupTestDB(t)
+	pinSQLiteConn(t, db)
+	ctx := context.Background()
+	profileID := createTestProfile(t, db, "UpdateDefaultRollback")
+	addrRepo := infra.NewAddressRepository(db)
+	uc := NewAddressManagementUseCase(addrRepo, infra.NewFulfillmentRepository(db), db)
+
+	first, err := uc.CreateAddress(ctx, dto.CreateAddressInput{
+		CustomerProfileID: profileID,
+		Label:             "First",
+		IsDefault:         true,
+	})
+	if err != nil {
+		t.Fatalf("create first default: %v", err)
+	}
+	second, err := uc.CreateAddress(ctx, dto.CreateAddressInput{
+		CustomerProfileID: profileID,
+		Label:             "Second",
+		IsDefault:         false,
+	})
+	if err != nil {
+		t.Fatalf("create second: %v", err)
+	}
+
+	failCustomerAddressSaves(t, db)
+	if _, err := uc.UpdateAddress(ctx, dto.UpdateAddressInput{
+		ID:                second.ID,
+		CustomerProfileID: profileID,
+		Label:             "Second",
+		IsDefault:         true,
+	}); err == nil {
+		t.Fatal("expected default promotion update to fail")
+	}
+
+	gotFirst, err := addrRepo.FindByID(ctx, first.ID)
+	if err != nil {
+		t.Fatalf("reload first: %v", err)
+	}
+	if !gotFirst.IsDefault {
+		t.Fatal("first address must remain default when ClearDefault+Update rolls back together")
+	}
+	gotSecond, err := addrRepo.FindByID(ctx, second.ID)
+	if err != nil {
+		t.Fatalf("reload second: %v", err)
+	}
+	if gotSecond.IsDefault {
+		t.Fatal("second address must not become default after rolled-back promotion")
 	}
 }

@@ -10,9 +10,24 @@ export const SUPPLIER_SHIPMENT_IMPORT_DOCUMENT_TYPE = 'import_supplier_shipment'
 export type ShipmentImportBindingState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'loaded'; templateKey: string }
+  | { status: 'loaded'; templateKey: string; hasHeader: boolean }
   | { status: 'missing' }
   | { status: 'error'; message: string }
+
+/**
+ * Read `hasHeader` from a DocumentTemplate `mappingRules` JSON string.
+ * True unless the parsed object has `hasHeader === false`. Never throws.
+ */
+export function hasHeaderFromMappingRules(raw: string | undefined | null): boolean {
+  if (raw == null || !String(raw).trim()) return true
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed == null) return true
+    return (parsed as { hasHeader?: unknown }).hasHeader !== false
+  } catch {
+    return true
+  }
+}
 
 export async function loadShipmentImportDefaultBinding(
   profileId: number,
@@ -20,7 +35,11 @@ export async function loadShipmentImportDefaultBinding(
   try {
     const tmpl = await getDefaultTemplateForProfile(profileId, SUPPLIER_SHIPMENT_IMPORT_DOCUMENT_TYPE)
     if (tmpl?.templateKey) {
-      return { status: 'loaded', templateKey: tmpl.templateKey }
+      return {
+        status: 'loaded',
+        templateKey: tmpl.templateKey,
+        hasHeader: hasHeaderFromMappingRules(tmpl.mappingRules),
+      }
     }
     return { status: 'missing' }
   } catch (err) {

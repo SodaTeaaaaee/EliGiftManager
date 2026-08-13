@@ -109,7 +109,7 @@ export const SHIPMENT_DEST_FIELDS = [
   'shipment.shipped_at',
 ] as const
 
-/** export.* keys used by source-tracking export templates (columnOrder-aware). */
+/** export.* keys used by factory-order / tracking export templates (columnOrder-aware). */
 export const EXPORT_DEST_FIELDS = [
   'export.third_party_order_no',
   'export.tracking_no',
@@ -117,10 +117,38 @@ export const EXPORT_DEST_FIELDS = [
   'export.external_document_no',
   'export.shipment_id',
   'export.recipient',
+  'export.recipient_name',
   'export.phone',
   'export.address',
   'export.factory_sku',
+  'export.supplier_sku',
   'export.quantity',
+  'export.supplier_line_no',
+  'export.product_id',
+  'export.fulfillment_line_id',
+] as const
+
+/** carrier.* keys used by ImportCarrierMapping. */
+export const CARRIER_DEST_FIELDS = [
+  'carrier.internal_carrier_code',
+  'carrier.external_carrier_code',
+  'carrier.external_carrier_name',
+  'carrier.aliases',
+  'carrier.is_default',
+] as const
+
+/** tracking.* keys used by source-tracking export templates. */
+export const TRACKING_DEST_FIELDS = [
+  'tracking.tracking_no',
+  'tracking.carrier_code',
+  'tracking.carrier_name',
+  'tracking.external_shipment_no',
+  'tracking.third_party_order_no',
+  'tracking.fulfillment_line_id',
+  'tracking.shipment_id',
+  'tracking.item_id',
+  'tracking.external_document_no',
+  'tracking.external_line_no',
 ] as const
 
 /** line.* prefixed forms of the 12 demand-line fields (v2 preferred / editor form). */
@@ -177,6 +205,10 @@ export function destKeysForDocumentType(documentType: string): readonly string[]
       return SHIPMENT_DEST_FIELDS
     case 'export_supplier_order':
       return EXPORT_DEST_FIELDS
+    case 'import_carrier_mapping':
+      return CARRIER_DEST_FIELDS
+    case 'export_source_tracking_update':
+      return [...TRACKING_DEST_FIELDS, ...EXPORT_DEST_FIELDS]
     case 'import_entitlement':
     case 'import_sales_order':
     default:

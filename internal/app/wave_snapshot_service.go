@@ -3,12 +3,20 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/gorm"
 )
+
+// ErrRestoreBlockedByNonVoidedShipments is returned by RestoreSnapshot when the
+// wave still has live (non-voided) shipments. WaveSnapshot does not include
+// shipments, so DeleteByWave of fulfillment lines would leave shipment_lines
+// pointing at deleted FulfillmentLineIDs.
+var ErrRestoreBlockedByNonVoidedShipments = errors.New("snapshot: cannot restore wave while non-voided shipments exist")
 
 const snapshotSchemaVersion = "3"
 
@@ -142,6 +150,9 @@ func (s *WaveSnapshotService) CaptureSnapshotForSupplierOrder(ctx context.Contex
 // Hard deletes are used throughout so that the original IDs are fully freed
 // before re-insertion; GORM's Create with a non-zero primary key then uses the
 // specified value directly in SQLite.
+//
+// Restore is refused when the wave has non-voided shipments: snapshots do not
+// include shipments, and deleting fulfillment lines would orphan shipment_lines.
 func (s *WaveSnapshotService) RestoreSnapshot(ctx context.Context, payload string) error {
 	var snap WaveSnapshot
 	if err := json.Unmarshal([]byte(payload), &snap); err != nil {
@@ -149,6 +160,19 @@ func (s *WaveSnapshotService) RestoreSnapshot(ctx context.Context, payload strin
 	}
 
 	waveID := snap.WaveID
+
+	// SQLite :memory: pools treat each connection as a separate empty database.
+	// Pin to one connection so the shipment guard and DeleteByWave see the
+	// same migrated schema. Production InitDB already uses MaxOpenConns(1).
+	if s.db != nil {
+		if sqlDB, err := s.db.DB(); err == nil && sqlDB != nil {
+			sqlDB.SetMaxOpenConns(1)
+		}
+	}
+
+	if err := s.refuseRestoreIfNonVoidedShipments(ctx, waveID); err != nil {
+		return err
+	}
 
 	// Hard-delete all mutable wave state.  Order matters: fulfillment lines
 	// reference participants via WaveParticipantSnapshotID; delete lines first
@@ -272,4 +296,44 @@ func (s *WaveSnapshotService) RestoreSnapshot(ctx context.Context, payload strin
 	}
 
 	return nil
+}
+
+// refuseRestoreIfNonVoidedShipments blocks undo when live shipments exist.
+// WaveSnapshot cannot be extended to shipments here without also restoring
+// shipment_lines (and related FKs) atomically; until that exists, restore
+// would DeleteByWave fulfillment lines and leave dangling FulfillmentLineIDs.
+func (s *WaveSnapshotService) refuseRestoreIfNonVoidedShipments(ctx context.Context, waveID uint) error {
+	if s.db == nil {
+		return nil
+	}
+
+	var count int64
+	err := s.db.WithContext(ctx).
+		Model(&persistence.Shipment{}).
+		Joins("JOIN supplier_orders ON supplier_orders.id = shipments.supplier_order_id").
+		Where("supplier_orders.wave_id = ?", waveID).
+		Where("shipments.status <> ?", string(domain.ShipmentStatusVoided)).
+		Count(&count).Error
+	if err != nil {
+		// History fixtures (and schema v1/v2 DBs) may not have shipment tables.
+		// Do not use Migrator().HasTable: it can open a second SQLite :memory:
+		// connection and make the original schema invisible to later queries.
+		if isNoSuchTable(err) {
+			return nil
+		}
+		return fmt.Errorf("snapshot: count non-voided shipments for wave %d: %w", waveID, err)
+	}
+	if count > 0 {
+		return fmt.Errorf("%w: wave %d has %d non-voided shipment(s); snapshots do not include shipments",
+			ErrRestoreBlockedByNonVoidedShipments, waveID, count)
+	}
+	return nil
+}
+
+func isNoSuchTable(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "no such table")
 }

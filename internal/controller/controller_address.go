@@ -17,19 +17,17 @@ func NewAddressController() *AddressController {
 	addressRepo := infra.NewAddressRepository(gdb)
 	fulfillmentRepo := infra.NewFulfillmentRepository(gdb)
 	return &AddressController{
-		uc:      app.NewAddressManagementUseCase(addressRepo, fulfillmentRepo),
+		uc:      app.NewAddressManagementUseCase(addressRepo, fulfillmentRepo, gdb),
 		batchUC: app.NewAddressBatchUseCase(addressRepo, fulfillmentRepo),
 	}
 }
 
 func (c *AddressController) CreateAddress(input dto.CreateAddressInput) (*dto.CustomerAddressDTO, error) {
-	ctx := appContext
-	return c.uc.CreateAddress(ctx, input)
+	return c.uc.CreateAddress(appContext, input)
 }
 
 func (c *AddressController) UpdateAddress(input dto.UpdateAddressInput) (*dto.CustomerAddressDTO, error) {
-	ctx := appContext
-	return c.uc.UpdateAddress(ctx, input)
+	return c.uc.UpdateAddress(appContext, input)
 }
 
 func (c *AddressController) DeleteAddress(id uint) error {

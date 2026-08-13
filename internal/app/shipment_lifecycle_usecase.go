@@ -24,11 +24,37 @@ type ShipmentLifecycleUseCase interface {
 type shipmentLifecycleUseCase struct {
 	shipmentRepo domain.ShipmentRepository
 	writeRepo    domain.ShipmentWriteRepository
+	fulfillRepo  domain.FulfillmentLineRepository
+	supplierRepo domain.SupplierOrderRepository
 }
 
 // NewShipmentLifecycleUseCase constructs a ShipmentLifecycleUseCase.
-func NewShipmentLifecycleUseCase(shipmentRepo domain.ShipmentRepository, writeRepo domain.ShipmentWriteRepository) ShipmentLifecycleUseCase {
-	return &shipmentLifecycleUseCase{shipmentRepo: shipmentRepo, writeRepo: writeRepo}
+// Extra deps may be a FulfillmentLineRepository and/or SupplierOrderRepository
+// so VoidShipment can restore supplier_state occupancy. Existing two-argument
+// callers remain valid; occupancy rollback is skipped when those repos are omitted.
+func NewShipmentLifecycleUseCase(shipmentRepo domain.ShipmentRepository, writeRepo domain.ShipmentWriteRepository, extra ...any) ShipmentLifecycleUseCase {
+	uc := &shipmentLifecycleUseCase{shipmentRepo: shipmentRepo, writeRepo: writeRepo}
+	for _, dep := range extra {
+		switch v := dep.(type) {
+		case domain.FulfillmentLineRepository:
+			uc.fulfillRepo = v
+		case domain.SupplierOrderRepository:
+			uc.supplierRepo = v
+		}
+	}
+	return uc
+}
+
+// WithShipmentLifecycleOccupancy attaches the repositories VoidShipment needs to
+// restore fulfillment-line supplier_state and supplier-order status.
+func WithShipmentLifecycleOccupancy(uc ShipmentLifecycleUseCase, fulfillRepo domain.FulfillmentLineRepository, supplierRepo domain.SupplierOrderRepository) ShipmentLifecycleUseCase {
+	s, ok := uc.(*shipmentLifecycleUseCase)
+	if !ok {
+		return uc
+	}
+	s.fulfillRepo = fulfillRepo
+	s.supplierRepo = supplierRepo
+	return s
 }
 
 // UpdateShipment corrects mutable fields on an existing shipment. Voided
@@ -92,5 +118,66 @@ func (uc *shipmentLifecycleUseCase) VoidShipment(ctx context.Context, input dto.
 	if err := uc.writeRepo.Update(ctx, shipment); err != nil {
 		return nil, fmt.Errorf("failed to void shipment %d: %w", input.ID, err)
 	}
+
+	if uc.fulfillRepo != nil {
+		if err := uc.restoreOccupancyAfterVoid(ctx, shipment); err != nil {
+			return nil, err
+		}
+	}
 	return shipment, nil
+}
+
+func (uc *shipmentLifecycleUseCase) restoreOccupancyAfterVoid(ctx context.Context, shipment *domain.Shipment) error {
+	lines, err := uc.shipmentRepo.ListLinesByShipment(ctx, shipment.ID)
+	if err != nil {
+		return fmt.Errorf("failed to list lines for voided shipment %d: %w", shipment.ID, err)
+	}
+
+	var order *domain.SupplierOrder
+	if uc.supplierRepo != nil {
+		order, err = uc.supplierRepo.FindByID(ctx, shipment.SupplierOrderID)
+		if err != nil {
+			return fmt.Errorf("supplier order %d lookup failed while voiding shipment %d: %w", shipment.SupplierOrderID, shipment.ID, err)
+		}
+	}
+
+	seenFL := map[uint]struct{}{}
+	updates := make([]domain.FulfillmentLineStateUpdate, 0, len(lines))
+	for _, line := range lines {
+		if _, dup := seenFL[line.FulfillmentLineID]; dup {
+			continue
+		}
+		seenFL[line.FulfillmentLineID] = struct{}{}
+
+		remaining, sumErr := sumActiveShippedQuantityBySOL(ctx, uc.shipmentRepo, shipment.SupplierOrderID, line.SupplierOrderLineID)
+		if sumErr != nil {
+			return fmt.Errorf("failed to recompute shipped quantity for SOL %d: %w", line.SupplierOrderLineID, sumErr)
+		}
+
+		sol := domain.SupplierOrderLine{}
+		cap := remaining
+		if uc.supplierRepo != nil {
+			found, findErr := uc.supplierRepo.FindLineByID(ctx, line.SupplierOrderLineID)
+			if findErr != nil {
+				return fmt.Errorf("supplier order line %d lookup failed while voiding shipment %d: %w", line.SupplierOrderLineID, shipment.ID, findErr)
+			}
+			if found != nil {
+				sol = *found
+				cap = shippedQuantityCap(sol)
+			}
+		}
+
+		updates = append(updates, domain.FulfillmentLineStateUpdate{
+			ID:            line.FulfillmentLineID,
+			SupplierState: restoredSupplierStateAfterVoid(sol, remaining, cap, order),
+		})
+	}
+
+	if err := applyFulfillmentSupplierStates(ctx, uc.fulfillRepo, updates); err != nil {
+		return fmt.Errorf("failed to restore fulfillment line supplier state after voiding shipment %d: %w", shipment.ID, err)
+	}
+	if err := recomputeSupplierOrderShippingStatus(ctx, uc.shipmentRepo, uc.supplierRepo, shipment.SupplierOrderID); err != nil {
+		return fmt.Errorf("failed to recompute supplier order status after voiding shipment %d: %w", shipment.ID, err)
+	}
+	return nil
 }

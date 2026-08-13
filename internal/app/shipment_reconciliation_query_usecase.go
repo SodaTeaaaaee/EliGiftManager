@@ -11,8 +11,9 @@ import (
 // ShipmentReconciliationQueryUseCase reports per-supplier-order-line shipped/remaining
 // quantity so the shipment-backfill UI can display 已发/剩余 before submission.
 // Over-ship BLOCKING is already enforced server-side by ShipmentUseCase /
-// ShipmentImportUseCase via ShipmentRepository.SumShippedQuantityBySOL — this use case
-// is a read-only display query, not an enforcement path.
+// ShipmentImportUseCase via ShipmentRepository.SumShippedQuantityBySOL (voided
+// shipments excluded) — this use case is a read-only display query, not an
+// enforcement path.
 type ShipmentReconciliationQueryUseCase interface {
 	GetSupplierOrderLineShippedSummary(ctx context.Context, orderID uint) ([]dto.SupplierOrderLineShippedDTO, error)
 }
@@ -36,12 +37,10 @@ func NewShipmentReconciliationQueryUseCase(
 }
 
 // GetSupplierOrderLineShippedSummary lists the given supplier order's lines and, for
-// each line, computes ShippedQuantity via SumShippedQuantityBySOL and
-// RemainingQuantity = SubmittedQuantity - ShippedQuantity. RemainingQuantity is
-// defensively clamped at 0: persistence-time over-ship blocking already guarantees
-// ShippedQuantity never exceeds SubmittedQuantity through the normal create/import
-// paths, but this display query does not re-derive that guarantee itself, so a floor
-// of 0 keeps the UI from ever rendering a confusing negative "remaining" value.
+// each line, computes ShippedQuantity via SumShippedQuantityBySOL (voided shipments
+// excluded) and RemainingQuantity = cap - ShippedQuantity, where cap is
+// AcceptedQuantity when recorded, otherwise SubmittedQuantity. RemainingQuantity is
+// defensively clamped at 0 so the UI never renders a negative "remaining" value.
 func (uc *shipmentReconciliationQueryUseCase) GetSupplierOrderLineShippedSummary(ctx context.Context, orderID uint) ([]dto.SupplierOrderLineShippedDTO, error) {
 	order, err := uc.supplierRepo.FindByID(ctx, orderID)
 	if err != nil {
@@ -60,7 +59,7 @@ func (uc *shipmentReconciliationQueryUseCase) GetSupplierOrderLineShippedSummary
 			return nil, fmt.Errorf("sum shipped quantity for supplier order line %d: %w", line.ID, sumErr)
 		}
 
-		remaining := line.SubmittedQuantity - shipped
+		remaining := shippedQuantityCap(line) - shipped
 		if remaining < 0 {
 			remaining = 0
 		}

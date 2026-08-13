@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -16,6 +17,7 @@ type shipmentUseCase struct {
 	shipmentRepo domain.ShipmentRepository
 	supplierRepo domain.SupplierOrderRepository
 	fulfillRepo  domain.FulfillmentLineRepository
+	waveRepo     domain.WaveRepository
 	basisStamp   *BasisStampService
 }
 
@@ -26,6 +28,16 @@ func NewShipmentUseCase(shipmentRepo domain.ShipmentRepository, supplierRepo dom
 		fulfillRepo:  fulfillRepo,
 		basisStamp:   basisStamp,
 	}
+}
+
+// WithShipmentWaveRepo attaches a WaveRepository so CreateShipment can reject
+// closed waves. Optional so existing unit callers keep compiling.
+func WithShipmentWaveRepo(uc ShipmentUseCase, waveRepo domain.WaveRepository) ShipmentUseCase {
+	s, ok := uc.(*shipmentUseCase)
+	if ok {
+		s.waveRepo = waveRepo
+	}
+	return uc
 }
 
 func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateShipmentInput) (*domain.Shipment, []domain.ShipmentLine, error) {
@@ -39,8 +51,21 @@ func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateS
 	if err != nil {
 		return nil, nil, fmt.Errorf("supplier order %d not found: %w", input.SupplierOrderID, err)
 	}
+	if uc.waveRepo != nil {
+		wave, waveErr := uc.waveRepo.FindByID(ctx, supplierOrder.WaveID)
+		if waveErr != nil {
+			return nil, nil, fmt.Errorf("wave %d not found: %w", supplierOrder.WaveID, waveErr)
+		}
+		if wave != nil && wave.LifecycleStage == string(domain.LifecycleStageClosed) {
+			return nil, nil, fmt.Errorf("wave %d is closed and cannot create shipments", supplierOrder.WaveID)
+		}
+	}
 	// 3. Validate each line (all checks outside transaction)
+	pendingBySOL := map[uint]int{}
 	for _, li := range input.Lines {
+		if li.Quantity <= 0 {
+			return nil, nil, fmt.Errorf("quantity must be positive, got %d", li.Quantity)
+		}
 		// Validate supplier order line existence
 		sol, err := uc.supplierRepo.FindLineByID(ctx, li.SupplierOrderLineID)
 		if err != nil {
@@ -63,15 +88,19 @@ func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateS
 		if fl.WaveID != supplierOrder.WaveID {
 			return nil, nil, fmt.Errorf("fulfillment line %d belongs to wave %d, not wave %d", li.FulfillmentLineID, fl.WaveID, supplierOrder.WaveID)
 		}
-		// Validate cumulative shipped quantity does not exceed submitted quantity.
-		alreadyShipped, err := uc.shipmentRepo.SumShippedQuantityBySOL(ctx, sol.ID)
+		// Validate cumulative shipped quantity does not exceed accepted (when
+		// present) or submitted quantity. Voided shipments do not occupy quota.
+		alreadyShipped, err := sumActiveShippedQuantityBySOL(ctx, uc.shipmentRepo, input.SupplierOrderID, sol.ID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to query shipped quantity for SOL %d: %w", sol.ID, err)
 		}
-		if alreadyShipped+li.Quantity > sol.SubmittedQuantity {
+		cap := shippedQuantityCap(*sol)
+		occupied := alreadyShipped + pendingBySOL[sol.ID]
+		if occupied+li.Quantity > cap {
 			return nil, nil, fmt.Errorf("over-shipment: SOL %d already shipped %d, requesting %d, max %d",
-				sol.ID, alreadyShipped, li.Quantity, sol.SubmittedQuantity)
+				sol.ID, occupied, li.Quantity, cap)
 		}
+		pendingBySOL[sol.ID] += li.Quantity
 	}
 
 	// 4. Resolve basis stamp from the supplier order's wave
@@ -141,10 +170,8 @@ func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateS
 				SupplierState: "shipped",
 			})
 		}
-		if len(stateUpdates) > 0 {
-			if err := uc.fulfillRepo.BulkUpdateStates(ctx, stateUpdates); err != nil {
-				slog.Warn("supplier order status projection failed", "error", err)
-			}
+		if err := applyFulfillmentSupplierStates(ctx, uc.fulfillRepo, stateUpdates); err != nil {
+			return nil, nil, fmt.Errorf("failed to mark fulfillment lines shipped after creating shipment: %w", err)
 		}
 	}
 
@@ -162,49 +189,133 @@ func (uc *shipmentUseCase) CreateShipment(ctx context.Context, input dto.CreateS
 }
 
 // projectSupplierOrderStatus recomputes and saves the SupplierOrder status after a shipment
-// is created. It compares total shipped quantity against total submitted quantity across all
-// SOLs belonging to the order:
+// is created. It compares total shipped quantity against the per-line cap (accepted
+// quantity when present, otherwise submitted) across all SOLs belonging to the order:
 //   - all SOLs fully shipped → "shipped"
 //   - at least one SOL has any shipped quantity → "partially_shipped"
-//   - otherwise → no change
+//   - otherwise → accepted / submitted / unchanged draft
 //
-// Errors are intentionally swallowed: status projection is best-effort and must not
-// roll back an already-persisted shipment.
+// Errors are intentionally swallowed by CreateShipment: status projection is
+// best-effort and must not roll back an already-persisted shipment. VoidShipment
+// returns projection errors so the surrounding transaction can roll back.
 func (uc *shipmentUseCase) projectSupplierOrderStatus(ctx context.Context, supplierOrderID uint) error {
-	sols, err := uc.supplierRepo.ListLinesByOrder(ctx, supplierOrderID)
+	return recomputeSupplierOrderShippingStatus(ctx, uc.shipmentRepo, uc.supplierRepo, supplierOrderID)
+}
+
+// shippedQuantityCap is the over-ship ceiling for a supplier order line.
+// AcceptedQuantity, when recorded (>0), is the factory-confirmed cap; otherwise
+// SubmittedQuantity is used.
+func shippedQuantityCap(sol domain.SupplierOrderLine) int {
+	if sol.AcceptedQuantity > 0 {
+		return sol.AcceptedQuantity
+	}
+	return sol.SubmittedQuantity
+}
+
+// sumActiveShippedQuantityBySOL returns shipped quantity for a SOL excluding
+// voided shipments. ShipmentRepository.SumShippedQuantityBySOL is the occupancy
+// source of truth; supplierOrderID is kept so callers can stay order-scoped.
+func sumActiveShippedQuantityBySOL(ctx context.Context, repo domain.ShipmentRepository, _, solID uint) (int, error) {
+	return repo.SumShippedQuantityBySOL(ctx, solID)
+}
+
+// applyFulfillmentSupplierStates writes supplier_state (and optional channel
+// sync state). If BulkUpdateStates fails, it compensates with per-line Update
+// so a shipment is not left occupying quantity while fulfillment lines stay
+// unshipped. Callers without an outer transaction rely on that compensation;
+// callers inside a transaction still return error on total failure so the
+// transaction can roll back the shipment.
+func applyFulfillmentSupplierStates(ctx context.Context, fulfillRepo domain.FulfillmentLineRepository, updates []domain.FulfillmentLineStateUpdate) error {
+	if fulfillRepo == nil || len(updates) == 0 {
+		return nil
+	}
+	err := fulfillRepo.BulkUpdateStates(ctx, updates)
+	if err == nil {
+		return nil
+	}
+	for _, u := range updates {
+		fl, findErr := fulfillRepo.FindByID(ctx, u.ID)
+		if findErr != nil {
+			return errors.Join(err, findErr)
+		}
+		if u.SupplierState != "" {
+			fl.SupplierState = u.SupplierState
+		}
+		if u.ChannelSyncState != "" {
+			fl.ChannelSyncState = u.ChannelSyncState
+		}
+		if updErr := fulfillRepo.Update(ctx, fl); updErr != nil {
+			return errors.Join(err, updErr)
+		}
+	}
+	return nil
+}
+
+func recomputeSupplierOrderShippingStatus(ctx context.Context, shipmentRepo domain.ShipmentRepository, supplierRepo domain.SupplierOrderRepository, supplierOrderID uint) error {
+	if supplierRepo == nil || shipmentRepo == nil {
+		return nil
+	}
+	sols, err := supplierRepo.ListLinesByOrder(ctx, supplierOrderID)
 	if err != nil || len(sols) == 0 {
 		return err
 	}
 
-	totalSubmitted := 0
+	totalCap := 0
 	totalShipped := 0
 	anyShipped := false
-
+	anyAccepted := false
 	for _, sol := range sols {
-		shipped, err := uc.shipmentRepo.SumShippedQuantityBySOL(ctx, sol.ID)
-		if err != nil {
-			return err
+		shipped, sumErr := sumActiveShippedQuantityBySOL(ctx, shipmentRepo, supplierOrderID, sol.ID)
+		if sumErr != nil {
+			return sumErr
 		}
-		totalSubmitted += sol.SubmittedQuantity
+		totalCap += shippedQuantityCap(sol)
 		totalShipped += shipped
 		if shipped > 0 {
 			anyShipped = true
 		}
+		if sol.AcceptedQuantity > 0 {
+			anyAccepted = true
+		}
 	}
 
-	var newStatus string
-	if totalSubmitted > 0 && totalShipped >= totalSubmitted {
-		newStatus = "shipped"
-	} else if anyShipped {
-		newStatus = "partially_shipped"
-	} else {
-		return nil // no change needed
-	}
-
-	order, err := uc.supplierRepo.FindByID(ctx, supplierOrderID)
+	order, err := supplierRepo.FindByID(ctx, supplierOrderID)
 	if err != nil {
 		return err
 	}
+
+	var newStatus string
+	switch {
+	case totalCap > 0 && totalShipped >= totalCap:
+		newStatus = string(domain.SupplierOrderStatusShipped)
+	case anyShipped:
+		newStatus = string(domain.SupplierOrderStatusPartiallyShipped)
+	case anyAccepted || order.Status == string(domain.SupplierOrderStatusAccepted):
+		newStatus = string(domain.SupplierOrderStatusAccepted)
+	case order.Status == string(domain.SupplierOrderStatusDraft):
+		return nil
+	default:
+		newStatus = string(domain.SupplierOrderStatusSubmitted)
+	}
+	if order.Status == newStatus {
+		return nil
+	}
 	order.Status = newStatus
-	return uc.supplierRepo.Update(ctx, order)
+	return supplierRepo.Update(ctx, order)
+}
+
+func restoredSupplierStateAfterVoid(sol domain.SupplierOrderLine, remaining, cap int, order *domain.SupplierOrder) string {
+	if remaining > 0 {
+		if cap > 0 && remaining >= cap {
+			return string(domain.SupplierStateShipped)
+		}
+		return string(domain.SupplierStatePartiallyShipped)
+	}
+	if sol.AcceptedQuantity > 0 {
+		return string(domain.SupplierStateAccepted)
+	}
+	if order != nil && order.Status == string(domain.SupplierOrderStatusDraft) {
+		return string(domain.SupplierStateNotSubmitted)
+	}
+	return string(domain.SupplierStateSubmitted)
 }

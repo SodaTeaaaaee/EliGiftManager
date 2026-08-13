@@ -1,9 +1,13 @@
 package controller
 
 import (
+	"context"
 	"testing"
 
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -80,5 +84,73 @@ func TestCreateWave_RejectsInvalidWaveType(t *testing.T) {
 
 	if _, err := c.CreateWave(dto.CreateWaveInput{Name: "Bad Wave", WaveType: "bogus"}); err == nil {
 		t.Fatal("expected an error for an invalid waveType, got nil")
+	}
+}
+
+func TestPersistLifecycleNilServiceIsNoop(t *testing.T) {
+	t.Parallel()
+	c := &WaveController{}
+	if err := c.persistLifecycle(1); err != nil {
+		t.Fatalf("nil lifecycleSvc should be a no-op, got %v", err)
+	}
+}
+
+func TestPersistLifecycleDoesNotReopenClosedWave(t *testing.T) {
+	t.Parallel()
+
+	gdb, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open in-memory database: %v", err)
+	}
+	if err := gdb.AutoMigrate(
+		&persistence.Wave{},
+		&persistence.WaveParticipantSnapshot{},
+		&persistence.WaveDemandAssignment{},
+		&persistence.FulfillmentLine{},
+		&persistence.SupplierOrder{},
+		&persistence.Shipment{},
+		&persistence.ChannelSyncJob{},
+	); err != nil {
+		t.Fatalf("auto-migrate: %v", err)
+	}
+
+	waveRepo := infra.NewWaveRepository(gdb)
+	assignmentRepo := infra.NewWaveDemandAssignmentRepository(gdb)
+	fulfillRepo := infra.NewFulfillmentRepository(gdb)
+	supplierRepo := infra.NewSupplierOrderRepository(gdb)
+	shipmentRepo := infra.NewShipmentRepository(gdb)
+	channelSyncRepo := infra.NewChannelSyncRepository(gdb)
+
+	ctx := context.Background()
+	wave := &domain.Wave{
+		WaveNo:         "WAVE-CLOSED-1",
+		Name:           "closed",
+		LifecycleStage: string(domain.LifecycleStageClosed),
+	}
+	if err := waveRepo.Create(ctx, wave); err != nil {
+		t.Fatalf("Create wave: %v", err)
+	}
+	if err := assignmentRepo.Create(ctx, &domain.WaveDemandAssignment{
+		WaveID:           wave.ID,
+		DemandDocumentID: 1,
+	}); err != nil {
+		t.Fatalf("Create assignment: %v", err)
+	}
+
+	c := &WaveController{
+		lifecycleSvc: app.NewLifecycleProjectionService(
+			waveRepo, fulfillRepo, supplierRepo, shipmentRepo, assignmentRepo, channelSyncRepo,
+		),
+	}
+	if err := c.persistLifecycle(wave.ID); err != nil {
+		t.Fatalf("persistLifecycle: %v", err)
+	}
+
+	got, err := waveRepo.FindByID(ctx, wave.ID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if got.LifecycleStage != string(domain.LifecycleStageClosed) {
+		t.Errorf("LifecycleStage = %q, want %q (counts would otherwise be allocation)", got.LifecycleStage, domain.LifecycleStageClosed)
 	}
 }

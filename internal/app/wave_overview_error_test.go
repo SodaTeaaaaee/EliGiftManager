@@ -13,7 +13,7 @@ import (
 
 // errorChannelSyncRepo always returns an error from ListJobsByWave.
 type errorChannelSyncRepo struct {
-	*mockChannelSyncRepo
+	*overviewProjSyncRepo
 }
 
 func (e *errorChannelSyncRepo) ListJobsByWave(ctx context.Context, _ uint) ([]domain.ChannelSyncJob, error) {
@@ -22,7 +22,7 @@ func (e *errorChannelSyncRepo) ListJobsByWave(ctx context.Context, _ uint) ([]do
 
 // errorClosureDecisionRepo always returns an error from ListByWave.
 type errorClosureDecisionRepo struct {
-	*mockClosureDecisionRepo
+	*overviewProjClosureRepo
 }
 
 func (e *errorClosureDecisionRepo) ListByWave(ctx context.Context, _ uint) ([]domain.ChannelClosureDecisionRecord, error) {
@@ -35,8 +35,8 @@ func (e *errorClosureDecisionRepo) ListByWave(ctx context.Context, _ uint) ([]do
 func TestProjectWaveOverviewChannelSyncRepoErrorPropagates(t *testing.T) {
 	t.Parallel()
 
-	syncRepo := &errorChannelSyncRepo{newMockChannelSyncRepo()}
-	closureRepo := newMockClosureDecisionRepo()
+	syncRepo := &errorChannelSyncRepo{newOverviewProjSyncRepo()}
+	closureRepo := newOverviewProjClosureRepo()
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{})
 
 	_, err := uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
@@ -49,8 +49,8 @@ func TestProjectWaveOverviewChannelSyncRepoErrorPropagates(t *testing.T) {
 func TestProjectWaveOverviewClosureRepoErrorPropagates(t *testing.T) {
 	t.Parallel()
 
-	syncRepo := newMockChannelSyncRepo()
-	closureRepo := &errorClosureDecisionRepo{newMockClosureDecisionRepo()}
+	syncRepo := newOverviewProjSyncRepo()
+	closureRepo := &errorClosureDecisionRepo{newOverviewProjClosureRepo()}
 	uc := NewWaveOverviewProjectionUseCase(syncRepo, closureRepo, noopDriftUC{}, noopHistoryHeadUC{})
 
 	_, err := uc.ProjectWaveOverview(context.Background(), baseOverview(1, "execution"))
@@ -86,8 +86,8 @@ func TestProjectWaveOverviewNoHistoryScopeReturnsEmptyDriftSignals(t *testing.T)
 func TestProjectWaveOverviewHistoryHeadErrorPropagates(t *testing.T) {
 	t.Parallel()
 
-	syncRepo := newMockChannelSyncRepo()
-	closureRepo := newMockClosureDecisionRepo()
+	syncRepo := newOverviewProjSyncRepo()
+	closureRepo := newOverviewProjClosureRepo()
 
 	// historyHeadUC that always errors
 	errHeadUC := &errorHistoryHeadUC{}
@@ -189,8 +189,9 @@ func TestProjectWaveOverviewPreservesBaseFields(t *testing.T) {
 	if result.TrackedFulfillmentCount != 5 {
 		t.Errorf("TrackedFulfillmentCount = %d, want 5", result.TrackedFulfillmentCount)
 	}
-	// No sync jobs → stage derived from observable facts (shipments exist → execution)
-	if result.ProjectedLifecycleStage != "execution" {
+	// Persisted LifecycleStage=closed is authoritative even when observable
+	// facts would otherwise derive execution (shipments exist, no sync jobs).
+	if result.ProjectedLifecycleStage != string(domain.LifecycleStageClosed) {
 		t.Errorf("ProjectedLifecycleStage = %q, want closed", result.ProjectedLifecycleStage)
 	}
 }

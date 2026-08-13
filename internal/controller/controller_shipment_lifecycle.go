@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
@@ -20,7 +19,7 @@ func (c *ShipmentController) UpdateShipment(input dto.UpdateShipmentInput) (dto.
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
 		repos := infra.NewTxRepos(tx)
 		writeRepo := infra.NewShipmentWriterRepository(tx)
-		uc := app.NewShipmentLifecycleUseCase(repos.ShipmentRepo, writeRepo)
+		uc := newShipmentLifecycleUC(repos, writeRepo)
 
 		updated, ucErr := uc.UpdateShipment(ctx, input)
 		if ucErr != nil {
@@ -44,7 +43,7 @@ func (c *ShipmentController) VoidShipment(input dto.VoidShipmentInput) (dto.Ship
 	err := c.gdb.Transaction(func(tx *gorm.DB) error {
 		repos := infra.NewTxRepos(tx)
 		writeRepo := infra.NewShipmentWriterRepository(tx)
-		uc := app.NewShipmentLifecycleUseCase(repos.ShipmentRepo, writeRepo)
+		uc := newShipmentLifecycleUC(repos, writeRepo)
 
 		voided, ucErr := uc.VoidShipment(ctx, input)
 		if ucErr != nil {

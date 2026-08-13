@@ -55,9 +55,22 @@ func InitDB(dbPath string) (*gorm.DB, error) {
 	sqlDB.SetMaxIdleConns(1)
 
 	// Performance and integrity PRAGMAs.
-	db.Exec("PRAGMA journal_mode = WAL;")
-	db.Exec("PRAGMA foreign_keys = ON;")
-	db.Exec("PRAGMA busy_timeout = 5000;")
+	if err := db.Exec("PRAGMA journal_mode = WAL;").Error; err != nil {
+		return nil, fmt.Errorf("initialize SQLite database failed: set journal_mode WAL: %w", err)
+	}
+	if err := db.Exec("PRAGMA foreign_keys = ON;").Error; err != nil {
+		return nil, fmt.Errorf("initialize SQLite database failed: enable foreign_keys: %w", err)
+	}
+	var foreignKeys int
+	if err := db.Raw("PRAGMA foreign_keys").Scan(&foreignKeys).Error; err != nil {
+		return nil, fmt.Errorf("initialize SQLite database failed: verify foreign_keys: %w", err)
+	}
+	if foreignKeys != 1 {
+		return nil, fmt.Errorf("initialize SQLite database failed: foreign_keys pragma did not take effect (got %d)", foreignKeys)
+	}
+	if err := db.Exec("PRAGMA busy_timeout = 5000;").Error; err != nil {
+		return nil, fmt.Errorf("initialize SQLite database failed: set busy_timeout: %w", err)
+	}
 
 	// Customer resolution and merge audit schema is critical data infrastructure.
 	// It is applied through the checksummed ledger before the legacy best-effort

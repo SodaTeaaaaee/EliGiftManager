@@ -7,6 +7,8 @@ import (
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/dto"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
+	"gorm.io/gorm"
 )
 
 var validDocumentTypes = map[string]bool{
@@ -160,18 +162,52 @@ type templateManagementUseCase struct {
 	templateRepo domain.DocumentTemplateRepository
 	bindingRepo  domain.ProfileTemplateBindingRepository
 	profileRepo  domain.IntegrationProfileRepository
+	db           *gorm.DB
 }
 
 func NewTemplateManagementUseCase(
 	templateRepo domain.DocumentTemplateRepository,
 	bindingRepo domain.ProfileTemplateBindingRepository,
 	profileRepo domain.IntegrationProfileRepository,
+	extra ...any,
 ) TemplateManagementUseCase {
-	return &templateManagementUseCase{
+	uc := &templateManagementUseCase{
 		templateRepo: templateRepo,
 		bindingRepo:  bindingRepo,
 		profileRepo:  profileRepo,
 	}
+	for _, dep := range extra {
+		if db, ok := dep.(*gorm.DB); ok && db != nil {
+			uc.db = db
+		}
+	}
+	return uc
+}
+
+type bindingDefaultMutator interface {
+	ClearDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) error
+	Update(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error
+}
+
+type gormBindingWriter struct {
+	db *gorm.DB
+}
+
+func (w *gormBindingWriter) ClearDefaultByProfileAndType(ctx context.Context, profileID uint, docType string) error {
+	return w.db.WithContext(ctx).
+		Model(&persistence.IntegrationProfileTemplateBinding{}).
+		Where("integration_profile_id = ? AND document_type = ? AND is_default = ?", profileID, docType, true).
+		Update("is_default", false).Error
+}
+
+func (w *gormBindingWriter) Update(ctx context.Context, b *domain.IntegrationProfileTemplateBinding) error {
+	p := persistence.ProfileTemplateBindingFromDomain(b)
+	p.ID = b.ID
+	if err := w.db.WithContext(ctx).Save(p).Error; err != nil {
+		return err
+	}
+	*b = *persistence.ProfileTemplateBindingToDomain(p)
+	return nil
 }
 
 func (uc *templateManagementUseCase) CreateDocumentTemplate(ctx context.Context, input dto.CreateDocumentTemplateInput) (*dto.DocumentTemplateDTO, error) {
@@ -408,14 +444,22 @@ func (uc *templateManagementUseCase) SetDefaultBinding(ctx context.Context, bind
 	}
 
 	// Clear any existing default for the same (profile, documentType), then promote this row.
-	if err := uc.bindingRepo.ClearDefaultByProfileAndType(ctx, binding.IntegrationProfileID, binding.DocumentType); err != nil {
-		return fmt.Errorf("clear existing default for profile %d / type %q: %w", binding.IntegrationProfileID, binding.DocumentType, err)
+	promote := func(repo bindingDefaultMutator) error {
+		if err := repo.ClearDefaultByProfileAndType(ctx, binding.IntegrationProfileID, binding.DocumentType); err != nil {
+			return fmt.Errorf("clear existing default for profile %d / type %q: %w", binding.IntegrationProfileID, binding.DocumentType, err)
+		}
+		binding.IsDefault = true
+		if err := repo.Update(ctx, binding); err != nil {
+			return fmt.Errorf("set binding %d as default: %w", bindingID, err)
+		}
+		return nil
 	}
-	binding.IsDefault = true
-	if err := uc.bindingRepo.Update(ctx, binding); err != nil {
-		return fmt.Errorf("set binding %d as default: %w", bindingID, err)
+	if uc.db == nil {
+		return promote(uc.bindingRepo)
 	}
-	return nil
+	return uc.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		return promote(&gormBindingWriter{db: tx})
+	})
 }
 
 func (uc *templateManagementUseCase) GetDefaultTemplateForProfile(ctx context.Context, profileID uint, docType string) (*dto.DocumentTemplateDTO, error) {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/csvformula"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
@@ -91,19 +92,19 @@ func (e *csvExportExecutor) Execute(
 	defer f.Close()
 
 	w := csv.NewWriter(f)
-	if err := w.Write([]string{"fulfillment_line_id", "shipment_id", "tracking_no", "carrier_code", "external_document_no", "external_line_no"}); err != nil {
+	if err := w.Write(csvformula.SanitizeRow([]string{"fulfillment_line_id", "shipment_id", "tracking_no", "carrier_code", "external_document_no", "external_line_no"})); err != nil {
 		return nil, fmt.Errorf("csv_export: write header: %w", err)
 	}
 
 	for _, it := range items {
-		if err := w.Write([]string{
+		if err := w.Write(csvformula.SanitizeRow([]string{
 			fmt.Sprintf("%d", it.FulfillmentLineID),
 			fmt.Sprintf("%d", it.ShipmentID),
 			it.TrackingNo,
 			it.CarrierCode,
 			it.ExternalDocumentNo,
 			it.ExternalLineNo,
-		}); err != nil {
+		})); err != nil {
 			return nil, fmt.Errorf("csv_export: write row: %w", err)
 		}
 	}

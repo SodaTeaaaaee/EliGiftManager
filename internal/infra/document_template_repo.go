@@ -3,6 +3,8 @@ package infra
 import (
 	"context"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra/persistence"
@@ -85,5 +87,17 @@ func (r *documentTemplateRepository) Update(ctx context.Context, t *domain.Docum
 }
 
 func (r *documentTemplateRepository) Delete(ctx context.Context, id uint) error {
-	return r.db.WithContext(ctx).Delete(&persistence.DocumentTemplate{}, id).Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var tmpl persistence.DocumentTemplate
+		if err := tx.First(&tmpl, id).Error; err != nil {
+			return err
+		}
+		// SQLite unique indexes include soft-deleted rows. Rewrite the key before
+		// soft deletion so operators may recreate the same stable template key.
+		deletedKey := fmt.Sprintf("%s__deleted_%d_%d", tmpl.TemplateKey, id, time.Now().UTC().UnixNano())
+		if err := tx.Model(&tmpl).Update("template_key", deletedKey).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&tmpl).Error
+	})
 }
