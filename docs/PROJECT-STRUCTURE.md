@@ -1,7 +1,7 @@
 # Project Structure
 
-> 本文件描述 2026-07-13 前端切换后的当前代码结构。
-> 业务语义说明见 [`docs/PRODUCT-DOMAIN-AND-PAIN-POINTS.md`](./PRODUCT-DOMAIN-AND-PAIN-POINTS.md) 和 [`docs/fulfillment-v2-refactor/`](./fulfillment-v2-refactor/)。
+> 本文件描述当前代码结构。
+> 业务语义说明见 [`CONTEXT.md`](../CONTEXT.md) 和 [`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md)。
 
 ## Top Level
 
@@ -22,12 +22,10 @@ SampleData/, testdata/       示例输入与测试夹具
 
 - `docs/PROJECT-STRUCTURE.md` — 当前仓库结构与模块边界。
 - `docs/DEVELOPMENT.md` — 日常开发命令、格式与验证入口。
-- `docs/PRODUCT-DOMAIN-AND-PAIN-POINTS.md` — 业务域、需求类型、平台维度与核心痛点。
-- `docs/FRONTEND-REDESIGN-PLAN.md` — 前端重设计的历史方案和实施阶段。
-- `docs/fulfillment-v2-refactor/` — 履约重构设计文档，覆盖业务边界、数据模型、工作流、profile 系统、非功能基础与实施治理。
-- `docs/FULFILLMENT-V2-REFACTOR-PLAN.md` — 指向 `fulfillment-v2-refactor/README.md` 的兼容入口。
+- `CONTEXT.md` — 当前领域术语表。
+- `docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md` — 当前产品心智模型、领域模型、模板配置和重做范围。
 
-口径冲突时，优先级为：当前代码实现、`docs/fulfillment-v2-refactor/` 设计文档、其他说明文档。
+口径冲突时，优先级为：`CONTEXT.md`、`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`、当前代码实现、其他说明文档。
 
 ## Desktop Boundary
 
@@ -41,7 +39,7 @@ SampleData/, testdata/       示例输入与测试夹具
 `internal/controller/`（package `controller`）下的 `controller_*.go` 是应用层到 Wails 的传输边界。生成绑定位于 `frontend/wailsjs/go/controller/`（`App` 自身仍在 `frontend/wailsjs/go/main/`）。主要绑定按职责分组如下：
 
 - 任务与查询：`ActionCenterController`、`ListPaginationController`。
-- 需求与波次：`DemandController`、`WaveController`，相关 CSV 导入、收件箱查询和生命周期方法拆分在同名前缀文件中。
+- 输入事实与波次：`InputController`、`WaveController`，相关文件导入、收件箱查询和生命周期方法拆分在同名前缀文件中。
 - 执行链：`ExportController`、`ShipmentController`、`ChannelSyncController`、`AdjustmentController`。
 - 配置与主数据：`TemplateController`、`AllocationPolicyController`、`ProductController`、`ProfileController`、`AddressController`。
 - 客户与归并：`CustomerProfileController`、`MergeController`、`MergeUndoController`。

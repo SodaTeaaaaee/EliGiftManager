@@ -79,7 +79,7 @@ cd frontend && deno task preview      # preview production build
 11. **Undo/Redo**: Wave undo/redo lives in `frontend/src/pages/waves/workspace/useWaveUndoRedo.ts`, handles Ctrl+Z/Ctrl+Shift+Z/Ctrl+Y with an editable-target focus guard, and refreshes workspace data after success.
 12. **Design system**: The new frontend does not use Tailwind. Shared components consume semantic CSS tokens from `frontend/src/shared/theme/`; skins may override token values but must not introduce application code.
 13. **UI guardrails**: User-facing strings go through vue-i18n, domain states render through shared status/glossary helpers, and pages use shared layout/feedback components. Run `deno task lint:guardrails` after UI changes.
-14. **History scope**: Only `wave` scope is implemented. Profile/template history is explicitly deferred (see `docs/fulfillment-v2-refactor/03-data-model/06a-history-scope-deferral.md`).
+14. **Current domain model**: Use `CONTEXT.md` and `docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md` as the source of truth. Older Fulfillment V2 design docs were removed because the rewrite has no backward-compatibility burden.
 15. **Legacy freeze**: Do not add features to `frontend-legacy/`. It exists only as a frozen rollback reference for one release cycle after the 2026-07-13 cutover and is then removed.
 
 ## Code Style

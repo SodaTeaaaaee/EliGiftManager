@@ -59,7 +59,7 @@ Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths
 
 | Controller                  | Responsibility                                              |
 | --------------------------- | ----------------------------------------------------------- |
-| `DemandController`          | Demand document intake and routing                          |
+| `InputController`           | Input fact intake, inbox routing, and wave assignment        |
 | `WaveController`            | Wave lifecycle, participants, overview                      |
 | `ExportController`          | Supplier order export with execution grouping               |
 | `ShipmentController`        | Shipment creation and bulk import                           |
@@ -75,7 +75,7 @@ Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths
 
 ## Core Workflow
 
-1. **Demand Intake** — Import demand documents with profile binding
+1. **Input intake** — Import input facts through profile and template binding
 2. **Wave Creation** — Group demands, generate participants
 3. **Fulfillment Generation** — Dual-path: demand-driven mapping + policy-driven allocation
 4. **Supplier Export** — Grouped by execution boundary (profile + template)
@@ -127,5 +127,5 @@ cd frontend && deno task preview      # preview production build
 
 - [`docs/PROJECT-STRUCTURE.md`](docs/PROJECT-STRUCTURE.md) — Code structure, layering, architecture principles
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — Dev commands, code style, testing
-- [`docs/PRODUCT-DOMAIN-AND-PAIN-POINTS.md`](docs/PRODUCT-DOMAIN-AND-PAIN-POINTS.md) — Business domain, demand types, platform model, pain points
-- [`docs/fulfillment-v2-refactor/`](docs/fulfillment-v2-refactor/) — Fulfillment redesign docs (boundaries, data model, workflows, profile system, non-functional foundations)
+- [`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`](docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md) — Current product mental model, domain model, template configuration, and rewrite scope
+- [`CONTEXT.md`](CONTEXT.md) — Current ubiquitous language glossary

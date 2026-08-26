@@ -32,6 +32,8 @@ go.work.sum
 
 # ── Frontend (Deno + Vite) ─────────────────────────────────────────────────
 node_modules/
+dist/
+dist-ssr/
 *.tsbuildinfo
 coverage/
 frontend/.vite/
@@ -83,6 +85,7 @@ tmp/
 .agents/
 .agent-team/
 .superpowers/
+.omp/
 mcps/
 AGENTS.md
 # CLAUDE.md is tracked on purpose — do not ignore it.
@@ -103,8 +106,16 @@ docs/handoff/
 .vscode/
 .idea/
 .vs/
+.fleet/
+.zed/
 *.swp
 *~
+*.bak
+*.backup
+*.sublime-project
+*.sublime-workspace
+__pycache__/
+*.pyc
 .DS_Store
 Thumbs.db
 ehthumbs.db

@@ -1,7 +1,7 @@
 # Development Guide
 
 > 当前代码的开发指南。
-> 业务设计见 [`docs/fulfillment-v2-refactor/README.md`](./fulfillment-v2-refactor/README.md)。
+> 业务设计见 [`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md)。
 > 代码结构见 [`docs/PROJECT-STRUCTURE.md`](./PROJECT-STRUCTURE.md)。
 
 ## 1. 技术栈
@@ -36,7 +36,7 @@ cd frontend && deno install && cd ..
 
 ## 4. 代码风格
 
-- Go：`gofmt` clean，tab 缩进，domain 命名用业务语言（`CustomerProfile`、`FulfillmentLine` 等）
+- Go：`gofmt` clean，tab 缩进，domain 命名用业务语言（`CustomerProfile`、`FulfillmentResult`、`SupplierOrderLine` 等）
 - Vue/TS/CSS/JSON：2 空格缩进，TypeScript 使用单引号且不写分号
 - 生成物不要手工美化
 
@@ -111,7 +111,7 @@ frontend/scripts/          guardrails 与枚举生成器
 
 ## 10. 开发判断原则
 
-- 领域实体用当前业务语言命名（`CustomerProfile`、`FulfillmentLine`），不要使用旧术语（`Member`、`DispatchRecord` 等）
+- 领域实体用当前业务语言命名（`CustomerProfile`、`FulfillmentResult`、`SupplierOrderLine`），不要使用旧术语（`Member`、`DispatchRecord`、`Demand` 等）
 - 业务逻辑在 `internal/app/` 用例层，不要堆在控制器
 - 不要绕过 `path_service` 自己拼运行时目录
 - 不要在页面里直接散落 `wailsjs` 调用
@@ -119,4 +119,4 @@ frontend/scripts/          guardrails 与枚举生成器
 - 不要把 TODO 文档或旧分支思路当作当前产品真相
 - 问题在删库从零开始后仍然存在，视为真实问题；仅在旧库升级中出现的，默认不作为高优先级
 
-需要确认业务语义时，先看 [`docs/fulfillment-v2-refactor/`](./fulfillment-v2-refactor/)。
+需要确认业务语义时，先看 [`CONTEXT.md`](../CONTEXT.md) 和 [`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md)。
