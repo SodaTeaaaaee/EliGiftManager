@@ -1,9 +1,8 @@
 <script setup lang="ts">
 /**
- * RowDetailPanel — the demand-inbox grid's row inspector (plan P4, wide
- * side panel per `docs/FRONTEND-REDESIGN-PLAN.md:249`, replacing the old
- * tree's narrow 3/8-column 7-col-table layout — `DetailDrawer size="lg"`,
- * the widest house drawer variant). Hosts, for one `DemandInboxRow`:
+ * RowDetailPanel — the demand-inbox grid's row inspector, using a wide
+ * side panel (`DetailDrawer size="lg"`, the widest house drawer variant),
+ * replacing the old tree's narrow 3/8-column 7-col-table layout. Hosts, for one `DemandInboxRow`:
  *
  * - the document header (kind/capture mode/source channel/surface/document
  *   no/integration profile),
