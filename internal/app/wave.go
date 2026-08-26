@@ -187,6 +187,17 @@ func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) err
 	}
 	qty := map[key]int{}
 	cust := map[uint]*uint{}
+	existing, err := ws.Store.ListResults(ctx, waveID)
+	if err != nil {
+		return err
+	}
+	frozen := map[key]struct{}{}
+	for _, r := range existing {
+		if !r.Frozen || r.SourceKind != string(domain.SourceEntitlementInstance) || r.EntitlementInstanceID == nil || r.ProductItemID == nil {
+			continue
+		}
+		frozen[key{*r.EntitlementInstanceID, *r.ProductItemID}] = struct{}{}
+	}
 	for _, inst := range instances {
 		customerID := inst.CustomerProfileID
 		if customerID == nil && inst.PlatformIdentityID != nil {
@@ -217,6 +228,9 @@ func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) err
 	}
 	for k, n := range qty {
 		if n == 0 {
+			continue
+		}
+		if _, ok := frozen[k]; ok {
 			continue
 		}
 		instID := k.inst

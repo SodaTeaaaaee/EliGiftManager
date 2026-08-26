@@ -370,6 +370,8 @@ func TestMainPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListResultViews after generate: %v", err)
 	}
+	var frozenEntitlement domain.FulfillmentResult
+	entitlementCount := 0
 	for _, v := range frozenViews {
 		if !v.Result.Frozen {
 			t.Fatalf("expected result %d to be frozen after order generation", v.Result.ID)
@@ -377,6 +379,45 @@ func TestMainPath(t *testing.T) {
 		if firstTrackingID == fmt.Sprintf("%d", v.Result.ID) {
 			t.Fatalf("tracking id must not equal fulfillment result id %d", v.Result.ID)
 		}
+		if v.Result.SourceKind == string(domain.SourceEntitlementInstance) {
+			entitlementCount++
+			frozenEntitlement = v.Result
+		}
+	}
+	if entitlementCount != 1 {
+		t.Fatalf("expected 1 frozen entitlement result, got %d", entitlementCount)
+	}
+
+	rule.Quantity = 9
+	if err := ws.UpsertRule(ctx, rule); err != nil {
+		t.Fatalf("UpsertRule after freeze: %v", err)
+	}
+	afterFreezeEdit, err := ws.Store.ListResults(ctx, wave.ID)
+	if err != nil {
+		t.Fatalf("ListResults after freeze+rule edit: %v", err)
+	}
+	entitlementAfterEdit := 0
+	unfrozenEntitlement := 0
+	for _, r := range afterFreezeEdit {
+		if r.SourceKind != string(domain.SourceEntitlementInstance) {
+			continue
+		}
+		entitlementAfterEdit++
+		if !r.Frozen {
+			unfrozenEntitlement++
+		}
+		if r.ID != frozenEntitlement.ID {
+			t.Fatalf("expected frozen entitlement result %d to remain, found %d", frozenEntitlement.ID, r.ID)
+		}
+		if r.Quantity != frozenEntitlement.Quantity {
+			t.Fatalf("frozen entitlement quantity changed from %d to %d", frozenEntitlement.Quantity, r.Quantity)
+		}
+	}
+	if entitlementAfterEdit != 1 {
+		t.Fatalf("expected no cloned entitlement result after freeze+rule edit, got %d", entitlementAfterEdit)
+	}
+	if unfrozenEntitlement != 0 {
+		t.Fatalf("expected no unfrozen entitlement clone after freeze+rule edit, got %d", unfrozenEntitlement)
 	}
 
 	// 12. VoidFactoryOrder on unexported order: results unfrozen, tracking ids retired.
@@ -469,6 +510,37 @@ func TestMainPath(t *testing.T) {
 		t.Fatalf("expected ErrOrderExported on voiding exported order, got %v", err)
 	}
 
+	grantAfterExport, err := ws.CreateGrant(ctx, wave.ID, customer.ID, product.ID, 2)
+	if err != nil {
+		t.Fatalf("CreateGrant after export: %v", err)
+	}
+	viewsAfterGrant, err := ws.ListResultViews(ctx, wave.ID)
+	if err != nil {
+		t.Fatalf("ListResultViews after post-export grant: %v", err)
+	}
+	for _, v := range viewsAfterGrant {
+		if v.Result.ID != grantAfterExport.ID {
+			continue
+		}
+		for _, b := range v.Blocks {
+			if b == domain.BlockUnusableAddress {
+				if err := ws.SetResultAddress(ctx, v.Result.ID, address.ID); err != nil {
+					t.Fatalf("SetResultAddress on post-export grant: %v", err)
+				}
+			}
+		}
+	}
+	order3, lines3, err := ws.GenerateFactoryOrder(ctx, wave.ID, factoryPlatform.ID)
+	if err != nil {
+		t.Fatalf("GenerateFactoryOrder after export: %v", err)
+	}
+	if order3.ID == order2.ID {
+		t.Fatalf("expected a new factory order after export, got %d", order3.ID)
+	}
+	if len(lines3) == 0 {
+		t.Fatal("expected supplier lines on second generated order after export")
+	}
+
 	// 15. ImportShipment by tracking id: import two shipments / parcels for secondTrackingID.
 	shipment1, err := ws.ImportShipment(ctx, secondTrackingID, "SF20260826001", "SF", "顺丰速运", 7)
 	if err != nil {
@@ -491,6 +563,12 @@ func TestMainPath(t *testing.T) {
 		t.Fatalf("ListResultViews after shipments: %v", err)
 	}
 	for _, v := range shippedViews {
+		if v.Result.ID == grantAfterExport.ID {
+			if v.WorkState != domain.WorkStateInFactory {
+				t.Fatalf("post-export grant result %d work state = %s, want in_factory", v.Result.ID, v.WorkState)
+			}
+			continue
+		}
 		if v.WorkState != domain.WorkStateShipped {
 			t.Fatalf("expected result %d to be in shipped state, got %s", v.Result.ID, v.WorkState)
 		}
