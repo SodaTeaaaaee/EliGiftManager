@@ -58,8 +58,10 @@ import type {
   DuplicateObservation,
   EntitlementRule,
   FulfillmentResult,
+  GenerateFactoryOrderResult,
   HomeBuckets,
   InboxRow,
+  IngestDocumentResult,
   IngestFactInput,
   InputDocument,
   Platform,
@@ -75,6 +77,8 @@ import type {
   Wave,
   ChannelWritebackItem,
 } from '@/entities/models'
+
+import type { app as wailsApp, domain as wailsDomain } from '../../../wailsjs/go/models'
 
 import { markBridgeMissing, markBridgeSeen } from './health'
 
@@ -133,7 +137,7 @@ export async function getCustomer(id: number): Promise<CustomerProfile> {
 
 export async function createAddress(input: Partial<RecipientAddress>): Promise<RecipientAddress> {
   assertWailsRuntime()
-  const res = await _CreateAddress(input as Record<string, unknown>)
+  const res = await _CreateAddress(input as wailsDomain.RecipientAddress)
   return res as unknown as RecipientAddress
 }
 
@@ -147,7 +151,7 @@ export async function listAddresses(customerID: number): Promise<RecipientAddres
 
 export async function createProduct(input: Partial<ProductItem>): Promise<ProductItem> {
   assertWailsRuntime()
-  const res = await _CreateProduct(input as Record<string, unknown>)
+  const res = await _CreateProduct(input as wailsDomain.ProductItem)
   return res as unknown as ProductItem
 }
 
@@ -159,7 +163,7 @@ export async function listProducts(): Promise<ProductItem[]> {
 
 export async function createAlias(input: Partial<ProductAlias>): Promise<ProductAlias> {
   assertWailsRuntime()
-  const res = await _CreateAlias(input as Record<string, unknown>)
+  const res = await _CreateAlias(input as wailsDomain.ProductAlias)
   return res as unknown as ProductAlias
 }
 
@@ -173,7 +177,7 @@ export async function listAliases(productID: number): Promise<ProductAlias[]> {
 
 export async function createTemplate(input: Partial<TemplateConfig>): Promise<TemplateConfig> {
   assertWailsRuntime()
-  const res = await _CreateTemplate(input as Record<string, unknown>)
+  const res = await _CreateTemplate(input as wailsDomain.TemplateConfig)
   return res as unknown as TemplateConfig
 }
 
@@ -197,7 +201,7 @@ export async function getNamedTransformers(): Promise<string[]> {
 
 export async function createCarrierMapping(input: Partial<CarrierMapping>): Promise<CarrierMapping> {
   assertWailsRuntime()
-  const res = await _CreateCarrierMapping(input as Record<string, unknown>)
+  const res = await _CreateCarrierMapping(input as wailsDomain.CarrierMapping)
   return res as unknown as CarrierMapping
 }
 
@@ -225,7 +229,7 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function saveSettings(input: Partial<AppSettings>): Promise<void> {
   assertWailsRuntime()
-  await _SaveSettings(input as Record<string, unknown>)
+  await _SaveSettings(input as wailsDomain.AppSettings)
 }
 
 // ── WorkspaceController: Inbox & Ingestion ──
@@ -233,10 +237,13 @@ export async function saveSettings(input: Partial<AppSettings>): Promise<void> {
 export async function ingestDocument(
   doc: Partial<InputDocument>,
   facts: IngestFactInput[],
-): Promise<{ doc: InputDocument; dups: DuplicateObservation[] }> {
+): Promise<IngestDocumentResult> {
   assertWailsRuntime()
-  const res = await _IngestDocument(doc as Record<string, unknown>, facts as unknown as Record<string, unknown>[])
-  return res as unknown as { doc: InputDocument; dups: DuplicateObservation[] }
+  const res = await _IngestDocument(doc as wailsDomain.InputDocument, facts as wailsApp.IngestFactInput[])
+  return {
+    Document: res.Document as unknown as InputDocument,
+    Duplicates: (res.Duplicates ?? []) as unknown as DuplicateObservation[],
+  }
 }
 
 export async function attachIdentity(identityID: number, customerID: number): Promise<void> {
@@ -289,7 +296,7 @@ export async function reopenWave(id: number): Promise<void> {
 
 export async function upsertRule(rule: Partial<EntitlementRule>): Promise<EntitlementRule> {
   assertWailsRuntime()
-  const res = await _UpsertRule(rule as Record<string, unknown>)
+  const res = await _UpsertRule(rule as wailsDomain.EntitlementRule)
   return res as unknown as EntitlementRule
 }
 
@@ -332,10 +339,13 @@ export async function setResultAddress(resultID: number, addressID: number): Pro
 export async function generateFactoryOrder(
   waveID: number,
   factoryID: number,
-): Promise<SupplierOrder> {
+): Promise<GenerateFactoryOrderResult> {
   assertWailsRuntime()
   const res = await _GenerateFactoryOrder(waveID, factoryID)
-  return res as unknown as SupplierOrder
+  return {
+    Order: res.Order as unknown as SupplierOrder,
+    Lines: (res.Lines ?? []) as unknown as SupplierOrderLine[],
+  }
 }
 
 export async function exportFactoryOrder(orderID: number): Promise<SupplierOrder> {

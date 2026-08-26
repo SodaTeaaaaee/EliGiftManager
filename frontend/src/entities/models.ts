@@ -388,3 +388,13 @@ export interface IngestFactInput {
   CustomerProfileID?: number | null
   Lines: IngestLine[]
 }
+
+export interface IngestDocumentResult {
+  Document: InputDocument
+  Duplicates: DuplicateObservation[]
+}
+
+export interface GenerateFactoryOrderResult {
+  Order: SupplierOrder
+  Lines: SupplierOrderLine[]
+}

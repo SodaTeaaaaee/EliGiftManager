@@ -9,6 +9,11 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
+type GenerateFactoryOrderResult struct {
+	Order domain.SupplierOrder
+	Lines []domain.SupplierOrderLine
+}
+
 func (ws *Workspace) GenerateFactoryOrder(ctx context.Context, waveID, factoryID uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
 	if _, err := ws.Store.FindOpenSupplierOrder(ctx, waveID, factoryID); err == nil {
 		return nil, nil, ErrOrderAlreadyOpen

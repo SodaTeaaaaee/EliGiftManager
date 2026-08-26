@@ -100,8 +100,15 @@ func (c *WorkspaceController) SaveSettings(s domain.AppSettings) error {
 	return c.ws.SaveSettings(c.ctx(), &s)
 }
 
-func (c *WorkspaceController) IngestDocument(doc domain.InputDocument, facts []app.IngestFactInput) (*domain.InputDocument, []domain.DuplicateObservation, error) {
-	return c.ws.IngestDocument(c.ctx(), &doc, facts)
+func (c *WorkspaceController) IngestDocument(doc domain.InputDocument, facts []app.IngestFactInput) (*app.IngestDocumentResult, error) {
+	document, duplicates, err := c.ws.IngestDocument(c.ctx(), &doc, facts)
+	if err != nil {
+		return nil, err
+	}
+	if duplicates == nil {
+		duplicates = []domain.DuplicateObservation{}
+	}
+	return &app.IngestDocumentResult{Document: *document, Duplicates: duplicates}, nil
 }
 
 func (c *WorkspaceController) AttachIdentity(identityID, customerID uint) error {
@@ -163,8 +170,15 @@ func (c *WorkspaceController) SetResultAddress(resultID, addressID uint) error {
 	return c.ws.SetResultAddress(c.ctx(), resultID, addressID)
 }
 
-func (c *WorkspaceController) GenerateFactoryOrder(waveID, factoryID uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
-	return c.ws.GenerateFactoryOrder(c.ctx(), waveID, factoryID)
+func (c *WorkspaceController) GenerateFactoryOrder(waveID, factoryID uint) (*app.GenerateFactoryOrderResult, error) {
+	order, lines, err := c.ws.GenerateFactoryOrder(c.ctx(), waveID, factoryID)
+	if err != nil {
+		return nil, err
+	}
+	if lines == nil {
+		lines = []domain.SupplierOrderLine{}
+	}
+	return &app.GenerateFactoryOrderResult{Order: *order, Lines: lines}, nil
 }
 
 func (c *WorkspaceController) ExportFactoryOrder(orderID uint) (*domain.SupplierOrder, error) {

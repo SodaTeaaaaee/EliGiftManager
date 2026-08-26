@@ -37,6 +37,11 @@ type InboxRow struct {
 	Unattached bool
 }
 
+type IngestDocumentResult struct {
+	Document   domain.InputDocument
+	Duplicates []domain.DuplicateObservation
+}
+
 func (ws *Workspace) IngestDocument(ctx context.Context, doc *domain.InputDocument, facts []IngestFactInput) (*domain.InputDocument, []domain.DuplicateObservation, error) {
 	settings, err := ws.Store.GetSettings(ctx)
 	if err != nil {
