@@ -119,6 +119,28 @@ func TestOpenSupplierOrderUniquePerWaveFactory(t *testing.T) {
 	}
 }
 
+func TestExportedSupplierOrderDoesNotOccupyOpenSlot(t *testing.T) {
+	ctx := context.Background()
+	store := newTestWorkspace(t).Store
+	factory := &domain.Platform{Key: "rozao", Name: "柔造", Kind: string(domain.PlatformKindFactory)}
+	if err := store.CreatePlatform(ctx, factory); err != nil {
+		t.Fatalf("platform: %v", err)
+	}
+	w := &domain.Wave{WaveNo: "W-000001", Name: "w", CloseResult: string(domain.WaveCloseResultOpen)}
+	if err := store.CreateWave(ctx, w); err != nil {
+		t.Fatalf("wave: %v", err)
+	}
+	if err := store.CreateSupplierOrder(ctx, &domain.SupplierOrder{WaveID: w.ID, FactoryPlatformID: factory.ID, Status: string(domain.SupplierOrderExported)}); err != nil {
+		t.Fatalf("exported order: %v", err)
+	}
+	if _, err := store.FindOpenSupplierOrder(ctx, w.ID, factory.ID); err != domain.ErrNotFound {
+		t.Fatalf("FindOpenSupplierOrder after export = %v, want ErrNotFound", err)
+	}
+	if err := store.CreateSupplierOrder(ctx, &domain.SupplierOrder{WaveID: w.ID, FactoryPlatformID: factory.ID, Status: string(domain.SupplierOrderGenerated)}); err != nil {
+		t.Fatalf("generated after exported: %v", err)
+	}
+}
+
 func isConstraint(err error) bool {
 	if err == nil {
 		return false

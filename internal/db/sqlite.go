@@ -22,9 +22,13 @@ func AutoMigrateAll(db *gorm.DB) error {
 	if err := db.AutoMigrate(persistence.AllModels()...); err != nil {
 		return err
 	}
+	// Recreate: IF NOT EXISTS would keep a previous WHERE that treated exported rows as occupying the slot.
+	if err := db.Exec(`DROP INDEX IF EXISTS idx_supplier_orders_wave_factory_open`).Error; err != nil {
+		return fmt.Errorf("drop open-order unique index: %w", err)
+	}
 	statements := []string{
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_input_facts_stable ON input_facts (platform_id, stable_external_id) WHERE stable_external_id != ''`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_supplier_orders_wave_factory_open ON supplier_orders (wave_id, factory_platform_id) WHERE status IN ('draft','generated','exported')`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_supplier_orders_wave_factory_open ON supplier_orders (wave_id, factory_platform_id) WHERE status IN ('draft','generated')`,
 	}
 	for _, sql := range statements {
 		if err := db.Exec(sql).Error; err != nil {
