@@ -1,131 +1,82 @@
 # EliGiftManager
 
-Desktop gift fulfillment management application built with Wails v2.
+EliGiftManager is a Wails desktop app for creator merchandise fulfillment. It turns external facts into mapped fulfillment responsibilities, exports supplier production orders, imports shipment results, and writes tracking data back to the source platforms.
 
-## Tech Stack
+The current product model is documented in [CONTEXT.md](./CONTEXT.md) and [docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md](./docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md). Older Demand/Fulfillment V2 language is not a compatibility target.
 
-| Layer    | Technology                                              |
-| -------- | ------------------------------------------------------- |
-| Backend  | Go + Wails v2 + GORM + SQLite (WAL mode)                |
-| Frontend | Vue 3 SFC + TypeScript + Vite + Pinia + vue-i18n + Naive UI + token/skin CSS |
-| Tooling  | Deno (exclusive frontend toolchain)                     |
-| Desktop  | Wails native window lifecycle via `main.go`             |
+## Product model
+
+The smallest workflow is input -> mapping -> output.
+
+Input enters the Inbox as input documents and input fact lines. Operators assign accepted facts into a Wave. A Wave resolves membership facts, retail orders, operational grants, product alignment, addresses, and remediation into source-level fulfillment results.
+
+The Wave workbench is a large editable responsibility list. Users can sort it or group it by supporter, product, source type, platform, factory, status, or any supported operational view. Grouping changes the view only. The leaf fulfillment results keep their source facts and quantities.
+
+Supplier order export creates supplier order lines and internal tracking IDs. Factory shipment files map back through those tracking IDs. Source platforms receive writeback items, including multiple parcels for one source order when the platform supports it.
+
+## Core domain terms
+
+| Term | Meaning |
+|------|---------|
+| InputDocument | Raw file, API response, or manual batch submitted to the system. |
+| InputFact / InputFactLine | Parsed business fact. Membership identity, retail order, operational grant, and remediation are different fact types. |
+| Wave | A bounded fulfillment work scope. A membership identity fact must be resolved inside one Wave. |
+| ProductItem | Internal physical product fact, anchored to one responsible factory SKU. |
+| ProductAlias | External platform product ID, name, or spec mapped to a ProductItem. |
+| Entitlement rule | Product-centered membership benefit rule made from membership identity deltas and per-person deltas. |
+| FulfillmentResult | Source-level responsibility to deliver a product and quantity to a recipient. |
+| SupplierOrderLine | Factory execution line. It is not a fulfillment result. |
+| Internal tracking ID | Stable ID generated per supplier order line for supplier export and shipment import correlation. |
+| ChannelWritebackItem | Source-platform update record, usually carrying shipment and parcel data. |
+| TemplateConfig | Versioned mapping between external document fields and internal semantics, in either input or output direction. |
 
 ## Architecture
 
-### Backend — 4-layer
-
-```
-internal/domain/        Pure business structs, repository interfaces, enums
-internal/app/           Use cases, DTOs, business orchestration
-internal/infra/         Repository implementations (GORM), one file per aggregate
-internal/controller/    Wails-bound methods (controller_*.go, one file per domain)
-```
-
-Each controller is self-contained: it constructs its own repos and use cases from the `database.GetDB()` singleton. Adding a new controller requires `wails generate module` to produce JS/TS bindings.
-
-### Frontend — feature-sliced
-
-```
-frontend/src/app/                 App root and hash router
-frontend/src/pages/               Route screens and page-local workflows
-frontend/src/entities/            DTO aliases and frontend-specific entity types
-frontend/src/shared/api/          Wails bridge, health state, generated contracts
-frontend/src/shared/i18n/         zh-CN/en-US messages and domain glossary
-frontend/src/shared/lib/          Reusable algorithms and workflow composables
-frontend/src/shared/model/        Cross-page Pinia stores
-frontend/src/shared/theme/        Tokens, theme/density state, skins, Naive adapter
-frontend/src/shared/ui/           Shared shell, feedback, grid, status, and form UI
-frontend/src/skins/               Static skin packages
-frontend/scripts/                 Guardrails and Go-to-TypeScript enum generation
-frontend/wailsjs/                 Generated Wails bindings (committed)
+```text
+internal/domain/       domain entities, enums, repository ports
+internal/app/          use cases, DTOs, orchestration, projections, executors
+internal/infra/        GORM repos, migrations, persistence mapping
+internal/controller/   Wails bindings
+frontend/src/app/      Vue bootstrap and hash router
+frontend/src/pages/    route-level screens and workflow modules
+frontend/src/entities/ frontend types derived from Go DTOs
+frontend/src/shared/   API bridge, UI, composables, theme, i18n
 ```
 
-All runtime Wails calls go through `frontend/src/shared/api/bridge.ts`. Direct controller imports from `wailsjs/` outside that layer are not allowed; type-only imports from `wailsjs/go/models` are permitted.
-
-`frontend-legacy/` is the frozen pre-cutover frontend. It is retained for one release cycle after the 2026-07-13 cutover and then removed.
-
-### Data directory — three-tier resolution
-
-Path resolution via `internal/service/path_service.go`:
-
-1. **Dev** — `data/` under the working directory
-2. **Portable** — `.portable` marker file present next to the binary
-3. **System** — `UserConfigDir` (OS default)
-
-Use `service.ResolveDataDir()` / `service.ResolveAssetsDir()` for all data paths.
-
-## Domain Controllers
-
-| Controller                  | Responsibility                                              |
-| --------------------------- | ----------------------------------------------------------- |
-| `InputController`           | Input fact intake, inbox routing, and wave assignment        |
-| `WaveController`            | Wave lifecycle, participants, overview                      |
-| `ExportController`          | Supplier order export with execution grouping               |
-| `ShipmentController`        | Shipment creation and bulk import                           |
-| `ChannelSyncController`     | Channel sync planning and execution                         |
-| `AdjustmentController`      | Fulfillment adjustments and replay                          |
-| `ProductController`         | Product catalog management                                  |
-| `ProfileController`         | Integration profile configuration                           |
-| `TemplateController`        | Document template and binding management                    |
-| `AllocationPolicyController`| Policy-driven allocation rules                              |
-| `AddressController`         | Customer address management                                 |
-| `CustomerProfileController` | Customer profile CRUD                                       |
-| `MergeController`           | Customer profile merge suggestions                          |
-
-## Core Workflow
-
-1. **Input intake** — Import input facts through profile and template binding
-2. **Wave Creation** — Group demands, generate participants
-3. **Fulfillment Generation** — Dual-path: demand-driven mapping + policy-driven allocation
-4. **Supplier Export** — Grouped by execution boundary (profile + template)
-5. **Shipment Tracking** — Manual creation + bulk import with quantity safety
-6. **Channel Sync** — Profile-driven closure with carrier mapping enforcement
-
-## Key Design Principles
-
-- Workspace history with undo/redo (wave scope) — `pages/waves/workspace/useWaveUndoRedo.ts`
-- Basis drift detection with review requirement signals
-- Bound profile behavior for active waves
-- Import failure mode selection (reject-all / skip-invalid)
-- DTO convention: generated Wails models are authoritative; `frontend/src/entities/` adds aliases or frontend-only shapes
-- Enum convention: `internal/domain/enums.go` is authoritative; `deno task gen:enums` updates `shared/api/generated/enums.ts`
+Runtime Wails calls go through `frontend/src/shared/api/bridge.ts`. Type-only imports from `frontend/wailsjs/go/models` are allowed.
 
 ## Development
 
 ```bash
-# Backend
-go mod tidy                           # install Go deps
-go test ./...                         # run all tests
-go test -v -run TestX ./internal/...  # run specific test
-wails dev                             # start desktop dev server
-wails build                           # build packaged binary
+go mod tidy
+go test ./...
+wails dev
+wails build
 
-# Frontend (Deno only — never npm/yarn/pnpm)
-cd frontend && deno install           # install deps
-cd frontend && deno task dev          # Vite dev server on :5173
-cd frontend && deno task build        # typecheck + production build
-cd frontend && deno task typecheck    # vue-tsc type checking only
-cd frontend && deno task test         # Vitest unit tests
-cd frontend && deno task lint:guardrails # UI/import guardrails + enum consistency
-cd frontend && deno task gen:enums    # regenerate TS enums from Go enums
-cd frontend && deno task preview      # preview production build
+cd frontend && deno task dev
+cd frontend && deno task typecheck
+cd frontend && deno task test
+cd frontend && deno task build
+cd frontend && deno task lint:guardrails
+cd frontend && deno task gen:enums
 ```
 
-## Generated vs. Authored
+Deno is the frontend task runner. Do not use npm, yarn, or pnpm for project tasks.
 
-| Path                                          | Status              |
-| --------------------------------------------- | ------------------- |
-| `frontend/wailsjs/`                           | Generated, committed|
-| `frontend/src/shared/api/generated/enums.ts`  | Generated, committed|
-| `frontend/dist/`, `frontend/node_modules/`    | Generated, ignored  |
-| `build/bin/`                                  | Generated, ignored  |
-| `frontend-legacy/`                            | Frozen for one release cycle |
-| `.cache/`, `.claude/`, `.agents/`             | Tool caches, ignored|
+## Generated and runtime paths
+
+| Path | Status |
+|------|--------|
+| `frontend/wailsjs/` | Generated Wails bindings, committed. |
+| `frontend/src/shared/api/generated/enums.ts` | Generated from Go domain enums, committed. |
+| `frontend/dist/`, `frontend/node_modules/`, `build/bin/` | Generated output, ignored. |
+| `data/` | Runtime data, ignored. |
+| `.cache/`, `.claude/`, `.agents/` | Local tool caches, ignored. |
 
 ## Documentation
 
-- [`docs/PROJECT-STRUCTURE.md`](docs/PROJECT-STRUCTURE.md) — Code structure, layering, architecture principles
-- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) — Dev commands, code style, testing
-- [`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`](docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md) — Current product mental model, domain model, template configuration, and rewrite scope
-- [`CONTEXT.md`](CONTEXT.md) — Current ubiquitous language glossary
+- [CONTEXT.md](./CONTEXT.md) is the domain glossary.
+- [docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md](./docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md) is the product and data-model target.
+- [docs/CURRENT-DESIGN-DECISIONS.md](./docs/CURRENT-DESIGN-DECISIONS.md) is the current decision summary.
+- [docs/PROJECT-STRUCTURE.md](./docs/PROJECT-STRUCTURE.md) describes source layout and ownership.
+- [docs/DEVELOPMENT.md](./docs/DEVELOPMENT.md) describes commands, validation, and implementation guardrails.

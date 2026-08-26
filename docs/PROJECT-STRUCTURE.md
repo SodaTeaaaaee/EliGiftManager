@@ -1,7 +1,7 @@
 # Project Structure
 
-> 本文件描述当前代码结构。
-> 业务语义说明见 [`CONTEXT.md`](../CONTEXT.md) 和 [`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md)。
+> 本文件描述仓库里尚未按目标模型重写的代码结构，不是重做目标。
+> 目标语言、工作流和现行决定见 [`CONTEXT.md`](../CONTEXT.md)、[`docs/TARGET-DOMAIN-AND-PRODUCT-MODEL.md`](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md) 和 [`docs/CURRENT-DESIGN-DECISIONS.md`](./CURRENT-DESIGN-DECISIONS.md)。
 
 ## Top Level
 
