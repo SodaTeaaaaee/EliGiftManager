@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"log/slog"
 	"os"
@@ -44,6 +45,10 @@ func main() {
 	defer sqlDB.Close()
 
 	ws := application.NewWorkspace(infra.NewGormStore(gdb))
+	if err := ws.EnsureBuiltinPlatforms(context.Background()); err != nil {
+		logger.Error("seed builtin platforms", "error", err)
+		os.Exit(1)
+	}
 	zoom := LoadZoom()
 
 	err = wails.Run(&options.App{

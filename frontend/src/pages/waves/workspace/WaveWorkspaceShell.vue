@@ -1,100 +1,182 @@
 <script setup lang="ts">
-/**
- * WaveWorkspaceShell — the P2 parent route component for `/waves/:id`
- * (plan section 7). Owns the ONE `useWaveWorkspace()` instance for this
- * wave and `provide()`s it to every descendant (header, nav, tabs) via
- * `provideWaveWorkspaceContext` — no descendant calls
- * `getWaveWorkspaceSnapshot` on its own.
- *
- * `<RouterView/>` below carries NO `:key` — switching tabs, and undo/redo's
- * `refresh()`, both update the SAME provided context in place, so the
- * active tab component never unmounts/remounts on either action (the
- * "撤销不丢 UI 状态" acceptance criterion).
- */
-import { computed, onBeforeMount, onBeforeUnmount } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { EmptyState } from '@/shared/ui/empty-state'
-import { WorkspaceNav, type WorkspaceNavGroupSpec, type WorkspaceNavItemSpec } from '@/shared/ui/shell'
-import { useWaveWorkspace, provideWaveWorkspaceContext } from '@/shared/lib/wave-workspace/useWaveWorkspace'
-import { registerRefreshTarget } from '@/shared/lib/view-hotkeys'
-import { NAV_GROUPS, STEP_LABEL_KEY, routeForStep, routeNameForStep, toneForStepStatus, type RouteStepKey } from '@/shared/lib/wave-workspace/step-keys'
-import WaveWorkspaceHeader from './WaveWorkspaceHeader.vue'
+import {
+  NButton,
+  NForm,
+  NFormItem,
+  NInput,
+  NModal,
+  NRadio,
+  NRadioGroup,
+  NSpace,
+  NSpin,
+  NTabs,
+  NTab,
+} from 'naive-ui'
+import { PageHeader } from '@/shared/ui/shell'
+import { StatusBadge } from '@/shared/ui/status'
+import { closeWave, getWave, reopenWave } from '@/shared/api/bridge'
+import type { Wave } from '@/entities/models'
 
-const { t } = useI18n({ useScope: 'global' })
+const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
-const waveId = computed(() => Number(Array.isArray(route.params.id) ? route.params.id[0] : route.params.id))
+const waveId = computed(() => Number(route.params.id))
+const loading = ref(false)
+const actionLoading = ref(false)
+const wave = ref<Wave | null>(null)
 
-const ctx = useWaveWorkspace(() => waveId.value)
-provideWaveWorkspaceContext(ctx)
+const showCloseModal = ref(false)
+const closeForm = ref({ result: 'clean', note: '' })
 
-let unregisterRefresh: (() => void) | undefined
-onBeforeMount(() => {
-  unregisterRefresh = registerRefreshTarget(ctx.refresh)
+const activeTab = computed({
+  get() {
+    if (route.path.endsWith('/results')) return 'results'
+    return 'rules'
+  },
+  set(val: string) {
+    void router.push(`/waves/${waveId.value}/${val}`)
+  },
 })
-onBeforeUnmount(() => unregisterRefresh?.())
 
-// ── WorkspaceNav wiring ──
-//
-// Baseline tone comes from `WaveStepStateDTO.status` (a static per-step
-// label, see `toneForStepStatus`'s doc comment); it is UPGRADED to
-// warning/error when `snapshot.guidance` carries a signal targeting that
-// route (a real, dynamic blocking/warning condition) — guidance always
-// wins because it is the actually-meaningful signal.
-function guidanceToneFor(step: RouteStepKey) {
-  let worst: 'warning' | 'error' | undefined
-  for (const g of ctx.snapshot.value?.guidance ?? []) {
-    if (routeForStep(g.targetStepKey) !== step) continue
-    if (g.severity === 'error') return 'error' as const
-    if (g.severity === 'warning') worst = 'warning'
-  }
-  return worst
-}
-
-function stepStateFor(step: RouteStepKey) {
-  // stepStates can be JSON null if the Go side ever emits a nil slice.
-  return ctx.snapshot.value?.stepStates?.find((s) => routeForStep(s.stepKey) === step)
-}
-
-function buildNavItem(step: RouteStepKey): WorkspaceNavItemSpec {
-  const state = stepStateFor(step)
-  const tone = guidanceToneFor(step) ?? (state ? toneForStepStatus(state.status) : undefined)
-  return {
-    key: step || 'overview',
-    labelKey: STEP_LABEL_KEY[step],
-    to: { name: routeNameForStep(step), params: { id: waveId.value } },
-    tone,
-    count: state && state.primaryCount > 0 ? state.primaryCount : undefined,
+async function loadWave() {
+  if (!waveId.value || isNaN(waveId.value)) return
+  loading.value = true
+  try {
+    wave.value = await getWave(waveId.value)
+  } catch (err) {
+    console.error('Failed to load wave:', err)
+  } finally {
+    loading.value = false
   }
 }
 
-// The overview tab is its own ungrouped cluster (no `labelKey` -> no
-// visible group heading), rendered above 准备/审查/执行 — WorkspaceNav's
-// `WorkspaceNavGroupSpec.labelKey` being optional is exactly this hook.
-const navGroups = computed<WorkspaceNavGroupSpec[]>(() => [
-  { key: 'overview', items: [buildNavItem('')] },
-  ...NAV_GROUPS.map((group) => ({
-    key: group.key,
-    labelKey: group.labelKey,
-    items: group.steps.map(buildNavItem),
-  })),
-])
+watch(waveId, () => {
+  void loadWave()
+})
+
+onMounted(() => {
+  void loadWave()
+})
+
+function handleBack() {
+  void router.push('/waves')
+}
+
+async function handleClose() {
+  if (!wave.value) return
+  actionLoading.value = true
+  try {
+    await closeWave(wave.value.ID, closeForm.value.result, closeForm.value.note)
+    showCloseModal.value = false
+    await loadWave()
+  } catch (err) {
+    console.error('Failed to close wave:', err)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+async function handleReopen() {
+  if (!wave.value) return
+  actionLoading.value = true
+  try {
+    await reopenWave(wave.value.ID)
+    await loadWave()
+  } catch (err) {
+    console.error('Failed to reopen wave:', err)
+  } finally {
+    actionLoading.value = false
+  }
+}
 </script>
 
 <template>
   <div class="wave-workspace-shell">
-    <EmptyState v-if="ctx.loading.value && !ctx.snapshot.value" :title="t('waveWorkspace.shell.loading')" />
-    <EmptyState v-else-if="ctx.error.value || !ctx.snapshot.value" :title="t('waveWorkspace.shell.notFound')" />
-    <template v-else>
-      <WaveWorkspaceHeader />
-      <div class="wave-workspace-shell__body">
-        <WorkspaceNav :groups="navGroups" />
-        <div class="wave-workspace-shell__content">
-          <RouterView />
-        </div>
+    <NSpin :show="loading && !wave">
+      <PageHeader
+        :title="wave ? `${wave.WaveNo} - ${wave.Name}` : t('waves.title')"
+        :description="wave?.Notes || t('waveWorkspace.waveInfo')"
+      >
+        <template #actions>
+          <NSpace align="center">
+            <StatusBadge
+              v-if="wave"
+              dimension="waveCloseResult"
+              :value="wave.CloseResult || 'open'"
+            />
+            <NButton
+              v-if="wave && (wave.CloseResult === 'open' || !wave.CloseResult)"
+              size="small"
+              type="warning"
+              @click="showCloseModal = true"
+            >
+              {{ t('waves.close') }}
+            </NButton>
+            <NButton
+              v-else-if="wave"
+              size="small"
+              type="info"
+              :loading="actionLoading"
+              @click="handleReopen"
+            >
+              {{ t('waves.reopen') }}
+            </NButton>
+            <NButton size="small" @click="handleBack">
+              {{ t('common.back') }}
+            </NButton>
+          </NSpace>
+        </template>
+      </PageHeader>
+
+      <div class="wave-workspace-shell__tabs">
+        <NTabs v-model:value="activeTab" type="line" animated>
+          <NTab name="rules">{{ t('waveWorkspace.rulesTab') }}</NTab>
+          <NTab name="results">{{ t('waveWorkspace.resultsTab') }}</NTab>
+        </NTabs>
       </div>
-    </template>
+
+      <div class="wave-workspace-shell__content">
+        <RouterView :wave-id="waveId" :wave="wave" @refresh="loadWave" />
+      </div>
+    </NSpin>
+
+    <!-- Close Modal -->
+    <NModal
+      v-model:show="showCloseModal"
+      preset="card"
+      :title="t('waves.close')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('waves.status')">
+          <NRadioGroup v-model:value="closeForm.result">
+            <NSpace>
+              <NRadio value="clean">{{ t('waves.cleanClose') }}</NRadio>
+              <NRadio value="residual">{{ t('waves.residualClose') }}</NRadio>
+            </NSpace>
+          </NRadioGroup>
+        </NFormItem>
+        <NFormItem :label="t('waves.closeNote')">
+          <NInput
+            v-model:value="closeForm.note"
+            type="textarea"
+            :placeholder="t('waves.closeNote')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showCloseModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :loading="actionLoading" @click="handleClose">
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -102,22 +184,14 @@ const navGroups = computed<WorkspaceNavGroupSpec[]>(() => [
 .wave-workspace-shell {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  height: 100%;
-  min-height: 0;
+  gap: var(--space-3);
 }
 
-.wave-workspace-shell__body {
-  display: flex;
-  align-items: stretch;
-  flex: 1 1 auto;
-  min-height: 0;
-  gap: var(--space-4);
+.wave-workspace-shell__tabs {
+  margin-bottom: var(--space-2);
 }
 
 .wave-workspace-shell__content {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow-y: auto;
+  min-height: 400px;
 }
 </style>

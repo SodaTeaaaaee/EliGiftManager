@@ -120,14 +120,14 @@ function isFieldMappingValue(value: unknown): value is FieldMappingValue {
  * unprefixed). Returns a stable untranslated reason code, or undefined when
  * valid / no rule applies.
  *
- * Covers demand-intake (`requested_quantity`) and shipment import
+ * Covers product quantity (`requested_quantity`) and shipment import
  * (`quantity`, reconciliation integers) so ImportWizard / IntakeWizard /
  * ImportFileModal share one mechanism.
  */
 type DestFieldValidator = (value: string) => string | undefined
 
 const DEST_FIELD_VALIDATORS: Record<string, DestFieldValidator> = {
-  // Demand line quantity — integer (backend setDemandLineField).
+  // Product quantity — integer.
   requested_quantity: (value) => (/^-?\d+$/.test(value.trim()) ? undefined : 'invalid_integer'),
   // Shipment quantity — positive integer.
   quantity: (value) => {

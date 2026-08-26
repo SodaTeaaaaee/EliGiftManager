@@ -1,122 +1,453 @@
 <script setup lang="ts">
-/**
- * InboxPage — the global demand-inbox page (plan P4 §3.5). Master-detail:
- * `PageHeader` (import CSV / manual entry actions) + the bespoke 3-way
- * assignment toggle (per foundations decision #5, NOT a FilterBar
- * dimension) + the business-surface segmented control (all / membership /
- * retail — folds into the `demandKind` filter via `businessSurface.ts`) +
- * `FilterBar`/`SavedViews` (the `demandKind` + `routingDisposition`
- * dimensions) + `DataGrid` (server-paginated via `useInboxGrid`) + row-click ->
- * `RowDetailPanel` + `#selection-toolbar` -> `BatchActionBar`.
- *
- * Wires together `useInboxGrid` + `inbox-grid/{filter-schema,columns}` with
- * `BatchActionBar` and `RowDetailPanel`, reacting to their `'done'`/
- * `'changed'` emits by calling `mutationDone()` (refetches the current
- * page/filter state in place — no route remount).
- */
-import { computed, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NRadioButton, NRadioGroup } from 'naive-ui'
+import {
+  NButton,
+  NDataTable,
+  NForm,
+  NFormItem,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSelect,
+  NSpace,
+  NSpin,
+  NTag,
+} from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
-import { FilterBar, SavedViews } from '@/shared/ui/filter-bar'
-import { DataGrid, createColumns } from '@/shared/ui/data-grid'
-import { useInboxGrid } from './inbox-grid/useInboxGrid'
-import { buildInboxColumns } from './inbox-grid/columns'
-import { kindsFromSurface, surfaceFromKinds, type BusinessSurface } from './inbox-grid/businessSurface'
-import BatchActionBar from './inbox-grid/BatchActionBar.vue'
-import RowDetailPanel from './inbox-grid/RowDetailPanel.vue'
-import ImportFileModal from './ImportFileModal.vue'
-import ManualEntryModal from './ManualEntryModal.vue'
-import type { DemandInboxRow } from '@/entities/demand'
+import { SectionCard } from '@/shared/ui/cards'
+import { EmptyState } from '@/shared/ui/empty-state'
+import { StatusBadge } from '@/shared/ui/status'
+import {
+  assignLines,
+  attachIdentity,
+  ingestDocument,
+  listCustomers,
+  listInboxRows,
+  listWaves,
+} from '@/shared/api/bridge'
+import type { CustomerProfile, InboxRow, Wave } from '@/entities/models'
 
-const { t } = useI18n({ useScope: 'global' })
+const { t } = useI18n()
 
-const { assignment, filters, rows, loading, selectedKeys, selectedRows, page, pageSize, totalCount, onPageChange, onSort, mutationDone } =
-  useInboxGrid()
+const loading = ref(false)
+const actionLoading = ref(false)
+const rows = ref<InboxRow[]>([])
+const waves = ref<Wave[]>([])
+const customers = ref<CustomerProfile[]>([])
+const selectedLineKeys = ref<number[]>([])
+const selectedDocumentFilter = ref<string>('all')
 
-const columns = computed(() => createColumns(buildInboxColumns(t)))
+const showAssignModal = ref(false)
+const selectedWaveId = ref<number | null>(null)
 
-const businessSurface = computed<BusinessSurface>(() => surfaceFromKinds(filters.state.demandKind))
+const showAttachModal = ref(false)
+const selectedCustomerId = ref<number | null>(null)
+const targetIdentityId = ref<number | null>(null)
 
-function handleSurfaceChange(surface: BusinessSurface): void {
-  filters.setEnumValues('demandKind', kindsFromSurface(surface))
+const showIngestModal = ref(false)
+const ingestForm = ref({
+  originalName: '',
+  kind: 'membership',
+  identityValue: '',
+  identityType: 'platform_uid',
+  membershipLevel: '舰长',
+  externalSku: '',
+  externalTitle: '',
+  quantity: 1,
+})
+
+async function loadData() {
+  loading.value = true
+  try {
+    const [inboxRes, waveRes, custRes] = await Promise.all([
+      listInboxRows(),
+      listWaves(),
+      listCustomers(),
+    ])
+    rows.value = inboxRes
+    waves.value = waveRes.filter((w) => w.CloseResult === 'open' || !w.CloseResult)
+    customers.value = custRes
+  } catch (err) {
+    console.error('Failed to load inbox data:', err)
+  } finally {
+    loading.value = false
+  }
 }
 
-function handleSelectedKeysChange(keys: Array<string | number>): void {
-  selectedKeys.value = keys as number[]
+onMounted(() => {
+  void loadData()
+})
+
+const documentOptions = computed(() => {
+  const map = new Map<string, string>()
+  for (const r of rows.value) {
+    if (r.Document) {
+      map.set(String(r.Document.ID), r.Document.OriginalName || `Doc #${r.Document.ID}`)
+    }
+  }
+  const opts = [{ label: t('inbox.allDocuments'), value: 'all' }]
+  for (const [id, name] of map.entries()) {
+    opts.push({ label: name, value: id })
+  }
+  return opts
+})
+
+const filteredRows = computed(() => {
+  if (selectedDocumentFilter.value === 'all') {
+    return rows.value
+  }
+  return rows.value.filter(
+    (r) => r.Document && String(r.Document.ID) === selectedDocumentFilter.value,
+  )
+})
+
+const waveOptions = computed(() =>
+  waves.value.map((w) => ({
+    label: `${w.WaveNo} - ${w.Name}`,
+    value: w.ID,
+  })),
+)
+
+const customerOptions = computed(() =>
+  customers.value.map((c) => ({
+    label: `${c.DisplayName} (ID: ${c.ID})`,
+    value: c.ID,
+  })),
+)
+
+async function handleAssignWave() {
+  if (!selectedWaveId.value || selectedLineKeys.value.length === 0) return
+  actionLoading.value = true
+  try {
+    await assignLines(selectedWaveId.value, selectedLineKeys.value)
+    showAssignModal.value = false
+    selectedLineKeys.value = []
+    selectedWaveId.value = null
+    await loadData()
+  } catch (err) {
+    console.error('Failed to assign lines:', err)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
-// ── Row detail panel ──
-
-const detailRow = ref<DemandInboxRow | null>(null)
-const showDetail = ref(false)
-
-function handleRowClick(row: DemandInboxRow): void {
-  detailRow.value = row
-  showDetail.value = true
+function openAttachModal(identityId: number) {
+  targetIdentityId.value = identityId
+  selectedCustomerId.value = null
+  showAttachModal.value = true
 }
 
-function handleDetailVisibility(visible: boolean): void {
-  showDetail.value = visible
+async function handleAttachIdentity() {
+  if (!targetIdentityId.value || !selectedCustomerId.value) return
+  actionLoading.value = true
+  try {
+    await attachIdentity(targetIdentityId.value, selectedCustomerId.value)
+    showAttachModal.value = false
+    targetIdentityId.value = null
+    selectedCustomerId.value = null
+    await loadData()
+  } catch (err) {
+    console.error('Failed to attach identity:', err)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
-// ── Import / manual-entry modals ──
+async function handleIngest() {
+  actionLoading.value = true
+  try {
+    await ingestDocument(
+      {
+        PlatformID: 1,
+        DocumentType: 'manual_ingest',
+        Direction: 'input',
+        OriginalName: ingestForm.value.originalName || 'Manual Ingest',
+      },
+      [
+        {
+          Kind: ingestForm.value.kind,
+          IdentityType: ingestForm.value.identityType,
+          IdentityValue: ingestForm.value.identityValue,
+          MembershipLevel: ingestForm.value.membershipLevel,
+          Lines: [
+            {
+              SourceLineNo: 1,
+              ExternalSKU: ingestForm.value.externalSku,
+              ExternalTitle: ingestForm.value.externalTitle,
+              ExternalSpec: '',
+              Quantity: ingestForm.value.quantity,
+            },
+          ],
+        },
+      ],
+    )
+    showIngestModal.value = false
+    await loadData()
+  } catch (err) {
+    console.error('Failed to ingest document:', err)
+  } finally {
+    actionLoading.value = false
+  }
+}
 
-const showImportModal = ref(false)
-const showManualEntryModal = ref(false)
+const columns = [
+  {
+    type: 'selection' as const,
+    disabled(row: InboxRow) {
+      return row.Assigned
+    },
+  },
+  {
+    title: t('inbox.lineNo'),
+    key: 'SourceLineNo',
+    width: 80,
+    render(row: InboxRow) {
+      return `#${row.Line.SourceLineNo}`
+    },
+  },
+  {
+    title: t('inbox.kind'),
+    key: 'Kind',
+    width: 120,
+    render(row: InboxRow) {
+      return h(StatusBadge, {
+        dimension: 'inputFactKind',
+        value: row.Fact.Kind || 'membership',
+      })
+    },
+  },
+  {
+    title: t('inbox.externalInfo'),
+    key: 'ExternalInfo',
+    render(row: InboxRow) {
+      const parts = [
+        row.Line.ExternalTitle,
+        row.Line.ExternalSKU,
+        row.Line.ExternalSpec,
+      ].filter(Boolean)
+      return parts.length ? parts.join(' / ') : '—'
+    },
+  },
+  {
+    title: t('inbox.quantity'),
+    key: 'Quantity',
+    width: 90,
+    render(row: InboxRow) {
+      return row.Line.Quantity
+    },
+  },
+  {
+    title: t('inbox.assigned'),
+    key: 'Assigned',
+    width: 110,
+    render(row: InboxRow) {
+      return row.Assigned
+        ? h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
+        : h(NTag, { type: 'warning', size: 'small' }, { default: () => t('common.no') })
+    },
+  },
+  {
+    title: t('inbox.unaligned'),
+    key: 'Unaligned',
+    width: 130,
+    render(row: InboxRow) {
+      return row.Unaligned
+        ? h(StatusBadge, {
+            dimension: 'blockReason',
+            value: 'unaligned_product',
+          })
+        : h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
+    },
+  },
+  {
+    title: t('inbox.unattached'),
+    key: 'Unattached',
+    width: 140,
+    render(row: InboxRow) {
+      if (row.Unattached && row.Fact.PlatformIdentityID) {
+        return h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'warning',
+            secondary: true,
+            onClick: () => openAttachModal(row.Fact.PlatformIdentityID!),
+          },
+          { default: () => t('inbox.attachIdentity') },
+        )
+      }
+      return row.Unattached
+        ? h(StatusBadge, {
+            dimension: 'blockReason',
+            value: 'identity_unattached',
+          })
+        : h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
+    },
+  },
+  {
+    title: t('inbox.documentNo'),
+    key: 'Document',
+    render(row: InboxRow) {
+      return row.Document?.OriginalName || row.Fact.SourceDocumentNo || '—'
+    },
+  },
+]
 </script>
 
 <template>
   <div class="inbox-page">
     <PageHeader :title="t('inbox.title')" :description="t('inbox.subtitle')">
       <template #actions>
-        <NButton secondary @click="showManualEntryModal = true">{{ t('inbox.manualEntryButton') }}</NButton>
-        <NButton type="primary" @click="showImportModal = true">{{ t('inbox.importFileButton') }}</NButton>
+        <NSpace>
+          <NButton size="small" @click="showIngestModal = true">
+            {{ t('inbox.importDocument') }}
+          </NButton>
+          <NButton
+            size="small"
+            type="primary"
+            :disabled="selectedLineKeys.length === 0"
+            @click="showAssignModal = true"
+          >
+            {{ t('inbox.assignToWave') }} ({{ selectedLineKeys.length }})
+          </NButton>
+          <NButton size="small" :loading="loading" @click="loadData">
+            {{ t('common.refresh') }}
+          </NButton>
+        </NSpace>
       </template>
     </PageHeader>
 
-    <div class="inbox-page__assignment">
-      <span class="inbox-page__assignment-label">{{ t('inbox.filters.assignment') }}</span>
-      <NRadioGroup v-model:value="assignment">
-        <NRadioButton value="all">{{ t('inbox.assignment.all') }}</NRadioButton>
-        <NRadioButton value="assigned">{{ t('inbox.assignment.assigned') }}</NRadioButton>
-        <NRadioButton value="unassigned">{{ t('inbox.assignment.unassigned') }}</NRadioButton>
-      </NRadioGroup>
-    </div>
-
-    <div class="inbox-page__surface">
-      <span class="inbox-page__assignment-label">{{ t('inbox.filters.businessSurface') }}</span>
-      <NRadioGroup :value="businessSurface" @update:value="handleSurfaceChange">
-        <NRadioButton value="all">{{ t('inbox.surface.all') }}</NRadioButton>
-        <NRadioButton value="membership_entitlement">{{ t('inbox.surface.membership') }}</NRadioButton>
-        <NRadioButton value="retail_order">{{ t('inbox.surface.retail') }}</NRadioButton>
-      </NRadioGroup>
-    </div>
-
-    <SavedViews :filters="filters" scope-id="inbox-grid" />
-    <FilterBar :filters="filters" />
-
-    <DataGrid
-      :columns="columns"
-      :rows="rows"
-      row-key="demandDocumentId"
-      selectable
-      :selected-keys="selectedKeys"
-      :loading="loading"
-      :pagination="{ server: { total: totalCount, page: page, pageSize: pageSize, onChange: onPageChange, onSort } }"
-      :empty="{ title: t('inbox.empty.noRows') }"
-      @update:selected-keys="handleSelectedKeysChange"
-      @row-click="handleRowClick"
-    >
-      <template #selection-toolbar>
-        <BatchActionBar :selected-rows="selectedRows" @done="mutationDone" />
+    <SectionCard :title="t('inbox.title')">
+      <template #actions>
+        <div class="inbox-page__filter">
+          <NSelect
+            v-model:value="selectedDocumentFilter"
+            :options="documentOptions"
+            size="small"
+            style="width: 220px"
+          />
+        </div>
       </template>
-    </DataGrid>
 
-    <RowDetailPanel :row="detailRow" :show="showDetail" @update:show="handleDetailVisibility" @changed="mutationDone" />
+      <NSpin :show="loading">
+        <div v-if="!filteredRows.length" class="inbox-page__empty">
+          <EmptyState :title="t('inbox.empty')" size="sm" />
+        </div>
+        <div v-else class="inbox-page__table">
+          <NDataTable
+            v-model:checked-row-keys="selectedLineKeys"
+            :columns="columns"
+            :data="filteredRows"
+            :row-key="(row: InboxRow) => row.Line.ID"
+            size="small"
+          />
+        </div>
+      </NSpin>
+    </SectionCard>
 
-    <ImportFileModal v-model:show="showImportModal" @imported="mutationDone" />
-    <ManualEntryModal v-model:show="showManualEntryModal" @created="mutationDone" />
+    <!-- Assign to Wave Modal -->
+    <NModal
+      v-model:show="showAssignModal"
+      preset="card"
+      :title="t('inbox.assignToWave')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('inbox.selectWave')">
+          <NSelect
+            v-model:value="selectedWaveId"
+            :options="waveOptions"
+            :placeholder="t('inbox.selectWave')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showAssignModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!selectedWaveId"
+            @click="handleAssignWave"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Attach Identity Modal -->
+    <NModal
+      v-model:show="showAttachModal"
+      preset="card"
+      :title="t('inbox.attachIdentity')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('inbox.selectCustomer')">
+          <NSelect
+            v-model:value="selectedCustomerId"
+            :options="customerOptions"
+            :placeholder="t('inbox.selectCustomer')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showAttachModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!selectedCustomerId"
+            @click="handleAttachIdentity"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Ingest Document Modal -->
+    <NModal
+      v-model:show="showIngestModal"
+      preset="card"
+      :title="t('inbox.importDocument')"
+      style="width: 520px"
+    >
+      <NForm label-placement="left" label-width="100">
+        <NFormItem :label="t('library.documentType')">
+          <NInput v-model:value="ingestForm.originalName" />
+        </NFormItem>
+        <NFormItem :label="t('inbox.kind')">
+          <NSelect
+            v-model:value="ingestForm.kind"
+            :options="[
+              { label: 'membership', value: 'membership' },
+              { label: 'retail_order', value: 'retail_order' },
+              { label: 'operator_grant', value: 'operator_grant' },
+            ]"
+          />
+        </NFormItem>
+        <NFormItem :label="t('library.identities')">
+          <NInput v-model:value="ingestForm.identityValue" />
+        </NFormItem>
+        <NFormItem :label="t('library.productName')">
+          <NInput v-model:value="ingestForm.externalTitle" />
+        </NFormItem>
+        <NFormItem :label="t('inbox.quantity')">
+          <NInputNumber v-model:value="ingestForm.quantity" :min="1" />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showIngestModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton type="primary" :loading="actionLoading" @click="handleIngest">
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -127,17 +458,17 @@ const showManualEntryModal = ref(false)
   gap: var(--space-4);
 }
 
-.inbox-page__assignment,
-.inbox-page__surface {
+.inbox-page__filter {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
-.inbox-page__assignment-label {
-  font-family: var(--font-body);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--color-text-secondary);
+.inbox-page__empty {
+  padding: var(--space-4) 0;
+}
+
+.inbox-page__table {
+  width: 100%;
 }
 </style>

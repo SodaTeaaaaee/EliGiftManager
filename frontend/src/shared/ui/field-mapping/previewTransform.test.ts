@@ -1,14 +1,6 @@
 import { describe, expect, test } from 'vitest'
-import { documentTypeForDemandKind } from '@/pages/integrations/wizard/deriveProfileDefaults'
 import { applyMapping, applyPreviewTransforms } from './previewTransform'
 import { parseMappingRules, serializeMappingRules, type FieldMappingValue } from './types'
-
-describe('profile document type derivation', () => {
-  test('retail demand uses sales-order import instead of entitlement fallback', () => {
-    expect(documentTypeForDemandKind('retail_order')).toBe('import_sales_order')
-    expect(documentTypeForDemandKind('membership_entitlement')).toBe('import_entitlement')
-  })
-})
 
 describe('mapping preview contract', () => {
   test('applies backend-compatible transforms in order', () => {
