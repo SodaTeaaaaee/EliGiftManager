@@ -1,625 +1,377 @@
 package domain
 
-import (
-	"database/sql/driver"
-	"encoding/json"
-	"fmt"
-	"time"
-)
+import "time"
 
-// ---- SelectorPayload ----
-// Custom type implementing database/sql.Scanner and driver.Valuer for JSON union serialization.
-// Stored as JSON TEXT in the database. Supports four selector types:
-// wave_all, platform_all, identity_level, explicit_override.
-
-type SelectorPayload struct {
-	Type           string `json:"type"`
-	Platform       string `json:"platform,omitempty"`
-	Level          string `json:"level,omitempty"`
-	ParticipantIDs []uint `json:"participant_ids,omitempty"`
+type Platform struct {
+	ID        uint
+	Key       string
+	Name      string
+	Kind      string
+	Notes     string
+	ExtraData string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
-
-// Value implements driver.Valuer — serializes to JSON string for DB storage.
-func (s SelectorPayload) Value() (driver.Value, error) {
-	b, err := json.Marshal(s)
-	if err != nil {
-		return nil, fmt.Errorf("SelectorPayload.Value: %w", err)
-	}
-	return string(b), nil
-}
-
-// Scan implements sql.Scanner — deserializes JSON string from DB.
-func (s *SelectorPayload) Scan(src any) error {
-	if src == nil {
-		*s = SelectorPayload{}
-		return nil
-	}
-	var data []byte
-	switch v := src.(type) {
-	case string:
-		data = []byte(v)
-	case []byte:
-		data = v
-	default:
-		return fmt.Errorf("SelectorPayload.Scan: unsupported type %T", src)
-	}
-	if len(data) == 0 {
-		*s = SelectorPayload{}
-		return nil
-	}
-	return json.Unmarshal(data, s)
-}
-
-// ---- CustomerProfile ----
 
 type CustomerProfile struct {
-	ID                       uint
-	DisplayName              string
-	ProfileType              string
-	Status                   string
-	MergedIntoProfileID      *uint
-	RowVersion               uint64
-	DisplayNameMode          string
-	DisplayNameObservationID *uint
-	ExtraData                string
-	CreatedAt                time.Time
-	UpdatedAt                time.Time
+	ID          uint
+	DisplayName string
+	Notes       string
+	ExtraData   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
-// CustomerMergePayload records the exact rows moved by a profile merge.
-type CustomerMergePayload struct {
-	IdentityIDs        []uint `json:"identityIds"`
-	AddressIDs         []uint `json:"addressIds"`
-	DemandDocumentIDs  []uint `json:"demandDocumentIds"`
-	NameObservationIDs []uint `json:"nameObservationIds,omitempty"`
-	NameEventIDs       []uint `json:"nameEventIds,omitempty"`
-	OriginIDs          []uint `json:"originIds,omitempty"`
-}
-
-// CustomerMergeRecord is the durable audit record for a reversible profile merge.
-type CustomerMergeRecord struct {
-	ID                     uint
-	SourceProfileID        uint
-	TargetProfileID        uint
-	MergeCandidateID       *uint
-	MergePolicyRevisionID  *uint
-	MergeMode              string
-	DecisionSource         string
-	DecisionReason         string
-	ActorRef               string
-	CorrelationID          string
-	SourceRowVersion       uint64
-	TargetRowVersion       uint64
-	EvidenceSnapshot       string
-	Payload                string
-	RowVersion             uint64
-	OperationKey           string
-	CommandHash            string
-	PreviewHash            string
-	MovePlanHash           string
-	Status                 string
-	DependsOnMergeRecordID *uint
-	SourceRowVersionAfter  uint64
-	TargetRowVersionAfter  uint64
-	SourceProfileSnapshot  string
-	TargetProfileSnapshot  string
-	CompletedAt            *time.Time
-	UndoOperationKey       string
-	LastUndoPlanHash       string
-	LastUndoCheckedAt      *time.Time
-	UndoneBy               string
-	UndoReason             string
-	UndoneSourceRowVersion uint64
-	UndoneTargetRowVersion uint64
-	CreatedAt              time.Time
-	UndoneAt               *time.Time
-}
-
-// ---- CustomerIdentity ----
-
-type CustomerIdentity struct {
-	ID                         uint
-	CustomerProfileID          uint
-	IdentityPlatform           string
-	IdentityValue              string
-	IdentityType               string
-	Namespace                  string
-	NormalizedValue            string
-	NormalizationVersion       string
-	Authority                  string
-	VerificationStatus         string
-	SourceIntegrationProfileID *uint
-	ResolutionStatus           string
-	FirstSeenAt                *time.Time
-	LastSeenAt                 *time.Time
-	IsPrimary                  bool
-	ExtraData                  string
-	CreatedAt                  time.Time
-	UpdatedAt                  time.Time
-}
-
-// ---- CustomerAddress ----
-
-type CustomerAddress struct {
-	ID                   uint
-	CustomerProfileID    uint
-	Label                string
-	RecipientName        string
-	Phone                string
-	NormalizedPhone      string
-	AddressFingerprint   string
-	NormalizationVersion string
-	QualityStatus        string
-	Country              string
-	Province             string
-	City                 string
-	District             string
-	AddressLine1         string
-	AddressLine2         string
-	PostalCode           string
-	IsDefault            bool
-	IsTest               bool
-	ValidationStatus     string
-	ValidationDetail     string
-	ExtraData            string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-}
-
-// ---- DemandDocument ----
-
-type DemandDocument struct {
-	ID                   uint
-	Kind                 string
-	CaptureMode          string
-	SourceChannel        string
-	SourceSurface        string
-	IntegrationProfileID *uint
-	SourceDocumentNo     string
-	SourceCustomerRef    string
-	CustomerProfileID    *uint
-	SourceCreatedAt      *time.Time
-	SourcePaidAt         *time.Time
-	Currency             string
-	AuthoritySnapshotAt  *time.Time
-	RawPayload           string
-	ExtraData            string
-	BoundProfileSnapshot string // JSON snapshot of execution-relevant profile fields at wave assignment time
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-}
-
-// ---- DemandLine ----
-
-type DemandLine struct {
-	ID                    uint
-	DemandDocumentID      uint
-	SourceLineNo          int
-	LineType              string
-	ObligationTriggerKind string
-	EntitlementAuthority  string
-	RecipientInputState   string
-	RoutingDisposition    string
-	RoutingReasonCode     string
-	EligibilityContextRef string
-	ProductMasterID       *uint
-	ExternalTitle         string
-	RequestedQuantity     int
-	EntitlementCode       string
-	GiftLevelSnapshot     string
-	RecipientInputPayload string
-	RawPayload            string
-	ExtraData             string
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
-}
-
-// ---- Wave ----
-
-type Wave struct {
-	ID               uint
-	WaveNo           string
-	Name             string
-	WaveType         string
-	LifecycleStage   string
-	ProgressSnapshot string
-	Notes            string
-	LevelTags        string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
-}
-
-// ---- WaveParticipantSnapshot ----
-// Does not have UpdatedAt per V2 spec.
-
-type WaveParticipantSnapshot struct {
-	ID                 uint
-	WaveID             uint
-	CustomerProfileID  uint
-	SnapshotType       string
-	IdentityPlatform   string
-	IdentityValue      string
-	DisplayName        string
-	GiftLevel          string
-	SourceDocumentRefs string
-	SourceProfileRefs  string
-	ExtraData          string
-	CreatedAt          time.Time
-}
-
-// ---- FulfillmentLine ----
-
-type FulfillmentLine struct {
-	ID                        uint
-	WaveID                    uint
-	CustomerProfileID         *uint
-	WaveParticipantSnapshotID *uint
-	ProductID                 *uint
-	DemandDocumentID          *uint
-	DemandLineID              *uint
-	CustomerAddressID         *uint
-	Quantity                  int
-	AllocationState           string
-	AddressState              string
-	SupplierState             string
-	ChannelSyncState          string
-	LineReason                string
-	GeneratedBy               string
-	ExtraData                 string
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
-}
-
-// ---- AllocationPolicyRule ----
-
-type AllocationPolicyRule struct {
-	ID                   uint
-	WaveID               uint
-	ProductID            uint
-	SelectorPayload      SelectorPayload
-	ProductTargetRef     string
-	ContributionQuantity int
-	RuleKind             string
-	Priority             int
-	Active               bool
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-}
-
-// ---- SupplierOrder ----
-
-type SupplierOrder struct {
-	ID     uint
-	WaveID uint
-	// FactoryIntegrationProfileID records the explicitly selected factory
-	// execution profile. Nil is retained only for legacy rows created before the
-	// factory-profile routing contract was introduced.
-	FactoryIntegrationProfileID *uint
-	SupplierPlatform            string
-	TemplateID                  string
-	BatchNo                     string
-	ExternalOrderNo             string
-	SubmissionMode              string
-	SubmittedAt                 *time.Time
-	Status                      string
-	RequestPayload              string
-	ResponsePayload             string
-	BasisHistoryNodeID          string
-	BasisProjectionHash         string
-	BasisPayloadSnapshot        string
-	ExtraData                   string
-	CreatedAt                   time.Time
-	UpdatedAt                   time.Time
-}
-
-// ---- SupplierOrderLine ----
-
-type SupplierOrderLine struct {
+type PlatformIdentity struct {
 	ID                uint
-	SupplierOrderID   uint
-	FulfillmentLineID uint
-	SupplierLineNo    int
-	SupplierSKU       string
-	SubmittedQuantity int
-	AcceptedQuantity  int
-	Status            string
+	CustomerProfileID *uint
+	PlatformID        uint
+	IdentityType      string
+	IdentityValue     string
+	NormalizedValue   string
 	ExtraData         string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
 
-// ---- WaveDemandAssignment ----
-
-type WaveDemandAssignment struct {
-	ID               uint
-	WaveID           uint
-	DemandDocumentID uint
-	AcceptedAt       *time.Time
-	AcceptedBy       string
-	ExtraData        string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+type RecipientAddress struct {
+	ID                uint
+	CustomerProfileID uint
+	Label             string
+	RecipientName     string
+	Phone             string
+	Country           string
+	Province          string
+	City              string
+	District          string
+	AddressLine1      string
+	AddressLine2      string
+	PostalCode        string
+	IsDefault         bool
+	ExtraData         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
-// ---- Shipment ----
-
-type Shipment struct {
-	ID                   uint
-	SupplierOrderID      uint
-	SupplierPlatform     string
-	ShipmentNo           string
-	ExternalShipmentNo   string
-	CarrierCode          string
-	CarrierName          string
-	TrackingNo           string
-	Status               string
-	ShippedAt            *time.Time
-	BasisHistoryNodeID   string
-	BasisProjectionHash  string
-	BasisPayloadSnapshot string
-	ExtraData            string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+type AddressSnapshot struct {
+	SourceAddressID *uint  `json:"source_address_id,omitempty"`
+	RecipientName   string `json:"recipient_name"`
+	Phone           string `json:"phone"`
+	Country         string `json:"country"`
+	Province        string `json:"province"`
+	City            string `json:"city"`
+	District        string `json:"district"`
+	AddressLine1    string `json:"address_line1"`
+	AddressLine2    string `json:"address_line2"`
+	PostalCode      string `json:"postal_code"`
 }
 
-// ---- ShipmentLine ----
-
-type ShipmentLine struct {
-	ID                  uint
-	ShipmentID          uint
-	SupplierOrderLineID uint
-	FulfillmentLineID   uint
-	Quantity            int
-	CreatedAt           time.Time
+func (a AddressSnapshot) Usable() bool {
+	return a.RecipientName != "" && a.AddressLine1 != ""
 }
 
-// ---- ChannelSyncJob ----
-
-type ChannelSyncJob struct {
-	ID                   uint
-	WaveID               uint
-	IntegrationProfileID uint
-	Direction            string
-	Status               string
-	BasisHistoryNodeID   string
-	BasisProjectionHash  string
-	BasisPayloadSnapshot string
-	RequestPayload       string
-	ResponsePayload      string
-	ErrorMessage         string
-	StartedAt            *time.Time
-	FinishedAt           *time.Time
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+type ProductItem struct {
+	ID                uint
+	Name              string
+	FactoryPlatformID uint
+	FactorySKU        string
+	Notes             string
+	ExtraData         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
-// ---- ChannelSyncItem ----
-
-type ChannelSyncItem struct {
-	ID                 uint
-	ChannelSyncJobID   uint
-	FulfillmentLineID  uint
-	ShipmentID         uint
-	ExternalDocumentNo string
-	ExternalLineNo     string
-	TrackingNo         string
-	CarrierCode        string
-	Status             string
-	ErrorMessage       string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+type ProductAlias struct {
+	ID                uint
+	ProductItemID     uint
+	PlatformID        uint
+	ExternalProductID string
+	Title             string
+	Spec              string
+	ExtraData         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
-// ---- IntegrationProfile ----
-
-type IntegrationProfile struct {
+type ProductBundleComponent struct {
 	ID            uint
-	ProfileKey    string
-	SourceChannel string
-	// SourceSurface distinguishes factory vs source platform. Leftover
-	// membership/retail values must not force a second profile row; one
-	// source platform may bind both demand import types.
-	SourceSurface             string
-	// DemandKind is a leftover optional hint. It is not the unique document
-	// type for this profile; one platform may bind both import_entitlement
-	// and import_sales_order.
-	DemandKind                string
-	InitialAllocationStrategy string
-	// IdentityStrategy is leftover. Import-time identity follows
-	// InterpretDemandImportDocumentType; identity is not stored per-platform.
-	IdentityStrategy          string
-	EntitlementAuthorityMode  string
-	RecipientInputMode        string
-	ReferenceStrategy         string
-	TrackingSyncMode          string
-	ClosurePolicy             string
-	SupportsPartialShipment   bool
-	SupportsAPIImport         bool
-	SupportsAPIExport         bool
-	RequiresCarrierMapping    bool
-	RequiresExternalOrderNo   bool
-	AllowsManualClosure       bool
-	// Factory-surface capability flags (zero for legacy / non-factory profiles).
-	SupportsExportSupplierOrder    bool
-	SupportsImportProductCatalog   bool
-	SupportsImportSupplierShipment bool
-	ConnectorKey                   string
-	// FactorySupplierPlatform is the factory-facing platform label written onto
-	// SupplierOrder.SupplierPlatform. When empty, export falls back to ConnectorKey.
-	FactorySupplierPlatform string
-	SupportedLocales        string
-	DefaultLocale           string
-	ExtraData               string
-	CreatedAt               time.Time
-	UpdatedAt               time.Time
+	AliasID       uint
+	ProductItemID uint
+	Quantity      int
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
-// ---- ChannelClosureDecisionRecord ----
-
-type ChannelClosureDecisionRecord struct {
-	ID                   uint
-	WaveID               uint
-	IntegrationProfileID uint
-	FulfillmentLineID    uint
-	DecisionKind         string
-	ReasonCode           string
-	Note                 string
-	EvidenceRef          string
-	OperatorID           string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-}
-
-// ---- FulfillmentAdjustment ----
-
-type FulfillmentAdjustment struct {
-	ID                        uint
-	WaveID                    uint
-	TargetKind                string // "fulfillment_line" or "participant"
-	FulfillmentLineID         *uint  // required when TargetKind == "fulfillment_line"
-	WaveParticipantSnapshotID *uint  // required when TargetKind == "participant"
-	AdjustmentKind            string
-	QuantityDelta             int
-	FromProductID             *uint // used by "replace" kind: source product to swap out
-	ToProductID               *uint // used by "replace" kind: target product to swap in
-	ReasonCode                string
-	OperatorID                string
-	Note                      string
-	EvidenceRef               string
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
-}
-
-// ---- DocumentTemplate ----
-
-type DocumentTemplate struct {
+type TemplateConfig struct {
 	ID           uint
-	TemplateKey  string
+	PlatformID   uint
 	DocumentType string
-	Format       string
-	MappingRules string
+	Direction    string
+	Name         string
+	Version      int
+	Builtin      bool
+	MappingJSON  string
+	LayoutJSON   string
+	Notes        string
 	ExtraData    string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
 
-// ---- IntegrationProfileTemplateBinding ----
-
-type IntegrationProfileTemplateBinding struct {
-	ID                   uint
-	IntegrationProfileID uint
-	DocumentType         string
-	TemplateID           uint
-	IsDefault            bool
-	CreatedAt            time.Time
+type CarrierMapping struct {
+	ID           uint
+	PlatformID   uint
+	ExternalCode string
+	InternalCode string
+	InternalName string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
-// ---- HistoryScope ----
+type InputDocument struct {
+	ID              uint
+	PlatformID      uint
+	DocumentType    string
+	Direction       string
+	OriginalName    string
+	RawPayload      string
+	TemplateID      *uint
+	TemplateVersion int
+	ImportedAt      time.Time
+	ExtraData       string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
+}
 
-type HistoryScope struct {
+type InputFact struct {
+	ID                 uint
+	DocumentID         *uint
+	PlatformID         uint
+	Kind               string
+	StableExternalID   string
+	CustomerProfileID  *uint
+	PlatformIdentityID *uint
+	MembershipLevel    string
+	SourceDocumentNo   string
+	SourceCreatedAt    *time.Time
+	ExtraData          string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type InputFactLine struct {
+	ID            uint
+	FactID        uint
+	SourceLineNo  int
+	ExternalSKU   string
+	ExternalTitle string
+	ExternalSpec  string
+	ProductItemID *uint
+	Quantity      int
+	WaveID        *uint
+	ExtraData     string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+type DuplicateObservation struct {
+	ID             uint
+	DocumentID     uint
+	ExistingFactID uint
+	Verdict        string
+	Reason         string
+	Decided        bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+type Wave struct {
+	ID          uint
+	WaveNo      string
+	Name        string
+	Notes       string
+	CloseResult string
+	CloseNote   string
+	ClosedAt    *time.Time
+	ReopenedAt  *time.Time
+	ExtraData   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type EntitlementSelector struct {
+	Type       string `json:"type"`
+	PlatformID uint   `json:"platform_id,omitempty"`
+	Level      string `json:"level,omitempty"`
+	InstanceID *uint  `json:"instance_id,omitempty"`
+}
+
+type EntitlementRule struct {
+	ID        uint
+	WaveID    uint
+	ProductID uint
+	Selector  EntitlementSelector
+	Quantity  int
+	Active    bool
+	ExtraData string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type EntitlementException struct {
+	ID         uint
+	WaveID     uint
+	ProductID  uint
+	InstanceID uint
+	Quantity   int
+	Note       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type EntitlementInstance struct {
+	ID                 uint
+	WaveID             uint
+	InputFactLineID    uint
+	CustomerProfileID  *uint
+	PlatformIdentityID *uint
+	MembershipLevel    string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+type FulfillmentResult struct {
+	ID                    uint
+	WaveID                uint
+	SourceKind            string
+	EntitlementInstanceID *uint
+	InputFactLineID       *uint
+	InputFactID           *uint
+	CustomerProfileID     *uint
+	ProductItemID         *uint
+	Quantity              int
+	Address               AddressSnapshot
+	Frozen                bool
+	ExtraData             string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+type ExecutionQuantityLink struct {
+	ID                  uint
+	FulfillmentResultID uint
+	SupplierOrderLineID uint
+	Quantity            int
+	CreatedAt           time.Time
+}
+
+type SupplierOrder struct {
 	ID                uint
-	ScopeType         string
-	ScopeKey          string
-	CurrentHeadNodeID uint
+	WaveID            uint
+	FactoryPlatformID uint
+	Status            string
+	ExportedAt        *time.Time
+	VoidedAt          *time.Time
+	ExportPayload     string
+	ExtraData         string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 }
 
-// ---- HistoryNode ----
-
-type HistoryNode struct {
-	ID                   uint
-	HistoryScopeID       uint
-	ParentNodeID         uint
-	PreferredRedoChildID uint
-	CommandKind          string
-	CommandSummary       string
-	PatchPayload         string
-	InversePatchPayload  string
-	CheckpointHint       bool
-	ProjectionHash       string
-	CreatedBy            string
-	CreatedAt            time.Time
-}
-
-// ---- HistoryCheckpoint ----
-
-type HistoryCheckpoint struct {
+type SupplierOrderLine struct {
 	ID              uint
-	HistoryScopeID  uint
-	HistoryNodeID   uint
-	SnapshotPayload string
-	SchemaVersion   string
+	SupplierOrderID uint
+	ProductItemID   uint
+	FactorySKU      string
+	Quantity        int
+	TrackingID      string
+	TrackingRetired bool
+	ExtraData       string
 	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
-// ---- HistoryPin ----
-
-type HistoryPin struct {
-	ID            uint
-	HistoryNodeID uint
-	PinKind       string
-	RefType       string
-	RefID         uint
-	CreatedAt     time.Time
+type RetiredTrackingID struct {
+	ID         uint
+	TrackingID string
+	WaveID     uint
+	RetiredAt  time.Time
 }
 
-// BasisPinParam carries the parameters needed to create a HistoryPin
-// inside an atomic transaction alongside the parent object.
-type BasisPinParam struct {
-	HistoryNodeID uint
-	PinKind       string
-	RefType       string
+type Shipment struct {
+	ID          uint
+	TrackingID  string
+	CarrierCode string
+	CarrierName string
+	TrackingNo  string
+	ShippedAt   *time.Time
+	Quantity    int
+	ExtraData   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
-// ---- ProductMaster ----
-
-type ProductMaster struct {
-	ID                 uint
-	SupplierPlatform   string
-	FactorySKU         string
-	SupplierProductRef string
-	Name               string
-	ProductKind        ProductKind
-	Archived           bool
-	// CoverImagePath is a relative path under the product asset store (Master only;
-	// wave Product snapshots intentionally do not copy image fields).
-	CoverImagePath string
-	// DetailImagePaths is a JSON-encoded []string of relative detail image paths
-	// (Master only; wave Product snapshots intentionally do not copy image fields).
-	DetailImagePaths string
-	ExtraData        string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+type ChannelWritebackItem struct {
+	ID           uint
+	InputFactID  uint
+	ShipmentID   uint
+	TrackingNo   string
+	CarrierCode  string
+	Status       string
+	ErrorMessage string
+	Payload      string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
-// ---- Product ----
-
-type Product struct {
-	ID               uint
-	WaveID           uint
-	ProductMasterID  *uint
-	SupplierPlatform string
-	FactorySKU       string
-	Name             string
-	ExtraData        string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+type AppSettings struct {
+	ID                     uint
+	Locale                 string
+	Theme                  string
+	Density                string
+	DuplicateRecordMinutes int
+	DuplicateAskDays       int
+	UpdatedAt              time.Time
 }
 
-// ---- CarrierMapping ----
+var SemanticDictionary = []string{
+	"customer.display_name",
+	"identity.platform",
+	"identity.value",
+	"identity.type",
+	"membership.level",
+	"source.document_no",
+	"source.line_no",
+	"source.created_at",
+	"product.alias_id",
+	"product.alias_title",
+	"product.alias_spec",
+	"product.factory_sku",
+	"product.name",
+	"quantity",
+	"recipient.name",
+	"recipient.phone",
+	"recipient.country",
+	"recipient.province",
+	"recipient.city",
+	"recipient.district",
+	"recipient.address_line1",
+	"recipient.address_line2",
+	"recipient.postal_code",
+	"tracking.id",
+	"shipment.tracking_no",
+	"shipment.carrier_code",
+	"shipment.carrier_name",
+	"shipment.shipped_at",
+	"shipment.quantity",
+}
 
-// CarrierMapping maps an internal carrier code to a platform-specific external code.
-// Aliases holds a JSON-encoded []string of alternate external codes that should
-// resolve to the same mapping (e.g. factory abbreviations).
-type CarrierMapping struct {
-	ID                   uint
-	IntegrationProfileID uint
-	InternalCarrierCode  string
-	ExternalCarrierCode  string
-	ExternalCarrierName  string
-	Aliases              string // JSON []string
-	IsDefault            bool
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+var NamedTransformers = []string{
+	"trim",
+	"strip_quotes",
+	"parseDate",
+	"mapEnum",
+	"normalizePhone",
+	"splitSkuQuantity",
+	"joinAddress",
 }

@@ -80,6 +80,7 @@ wailsdev.log
 tmp/
 
 # ── Agent / tooling scratch ────────────────────────────────────────────────
+.dagr/
 .claude/
 .agent/
 .agents/

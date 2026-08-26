@@ -1,16 +1,5 @@
 package domain
 
-// CustomerProfile: ProfileType
-type ProfileType string
-
-const (
-	ProfileTypeMember ProfileType = "member"
-	ProfileTypeBuyer  ProfileType = "buyer"
-	ProfileTypeMixed  ProfileType = "mixed"
-	ProfileTypeManual ProfileType = "manual"
-)
-
-// CustomerIdentity: IdentityType
 type IdentityType string
 
 const (
@@ -20,265 +9,92 @@ const (
 	IdentityTypeExternalBuyerID IdentityType = "external_buyer_id"
 )
 
-// DemandDocument: Kind
-type DemandKind string
+type PlatformKind string
 
 const (
-	DemandKindMembershipEntitlement DemandKind = "membership_entitlement"
-	DemandKindRetailOrder           DemandKind = "retail_order"
+	PlatformKindSource  PlatformKind = "source"
+	PlatformKindFactory PlatformKind = "factory"
 )
 
-// DemandDocument: CaptureMode
-type CaptureMode string
+type InputFactKind string
 
 const (
-	CaptureModeDocumentImport CaptureMode = "document_import"
-	CaptureModeAPIIngest      CaptureMode = "api_ingest"
-	CaptureModeManualEntry    CaptureMode = "manual_entry"
+	InputFactKindMembership    InputFactKind = "membership"
+	InputFactKindRetailOrder   InputFactKind = "retail_order"
+	InputFactKindOperatorGrant InputFactKind = "operator_grant"
 )
 
-// DemandLine: LineType
-type DemandLineType string
+type TemplateDirection string
 
 const (
-	DemandLineTypeEntitlementRule DemandLineType = "entitlement_rule"
-	DemandLineTypeSKUOrder        DemandLineType = "sku_order"
-	DemandLineTypeManualEntry     DemandLineType = "manual_entry"
+	TemplateDirectionInput  TemplateDirection = "input"
+	TemplateDirectionOutput TemplateDirection = "output"
 )
 
-// DemandLine: ObligationTriggerKind
-type ObligationTriggerKind string
+type WaveCloseResult string
 
 const (
-	ObligationTriggerKindPeriodicMembership         ObligationTriggerKind = "periodic_membership"
-	ObligationTriggerKindLoyaltyMembership          ObligationTriggerKind = "loyalty_membership"
-	ObligationTriggerKindSupporterOnlyPurchase      ObligationTriggerKind = "supporter_only_purchase"
-	ObligationTriggerKindMemberOnlyDiscountPurchase ObligationTriggerKind = "member_only_discount_purchase"
-	ObligationTriggerKindCampaignReward             ObligationTriggerKind = "campaign_reward"
-	ObligationTriggerKindManualCompensation         ObligationTriggerKind = "manual_compensation"
+	WaveCloseResultOpen     WaveCloseResult = "open"
+	WaveCloseResultClean    WaveCloseResult = "clean"
+	WaveCloseResultResidual WaveCloseResult = "residual"
 )
 
-// DemandLine: EntitlementAuthority
-type EntitlementAuthority string
+type EntitlementSelectorType string
 
 const (
-	EntitlementAuthorityLocalPolicy      EntitlementAuthority = "local_policy"
-	EntitlementAuthorityUpstreamPlatform EntitlementAuthority = "upstream_platform"
-	EntitlementAuthorityManualGrant      EntitlementAuthority = "manual_grant"
+	SelectorPlatformLevel EntitlementSelectorType = "platform_level"
+	SelectorWaveAll       EntitlementSelectorType = "wave_all"
+	SelectorInstance      EntitlementSelectorType = "instance"
 )
 
-// DemandLine: RecipientInputState
-type RecipientInputState string
+type FulfillmentSourceKind string
 
 const (
-	RecipientInputStateNotRequired        RecipientInputState = "not_required"
-	RecipientInputStateWaitingForInput    RecipientInputState = "waiting_for_input"
-	RecipientInputStatePartiallyCollected RecipientInputState = "partially_collected"
-	RecipientInputStateReady              RecipientInputState = "ready"
-	RecipientInputStateWaived             RecipientInputState = "waived"
-	RecipientInputStateExpired            RecipientInputState = "expired"
+	SourceEntitlementInstance FulfillmentSourceKind = "entitlement_instance"
+	SourceRetailLine          FulfillmentSourceKind = "retail_line"
+	SourceOperatorGrant       FulfillmentSourceKind = "operator_grant"
 )
 
-// DemandLine: RoutingDisposition
-type RoutingDisposition string
+type BlockReason string
 
 const (
-	RoutingDispositionPendingIntake     RoutingDisposition = "pending_intake"
-	RoutingDispositionAccepted          RoutingDisposition = "accepted"
-	RoutingDispositionDeferred          RoutingDisposition = "deferred"
-	RoutingDispositionExcludedManual    RoutingDisposition = "excluded_manual"
-	RoutingDispositionExcludedDuplicate RoutingDisposition = "excluded_duplicate"
-	RoutingDispositionExcludedRevoked   RoutingDisposition = "excluded_revoked"
+	BlockUnalignedProduct        BlockReason = "unaligned_product"
+	BlockUnusableAddress         BlockReason = "unusable_address"
+	BlockIdentityUnattached      BlockReason = "identity_unattached"
+	BlockQuantitySplitNotSumming BlockReason = "quantity_split_not_summing"
 )
 
-// Wave: WaveType
-type WaveType string
-
-const (
-	WaveTypeMembership WaveType = "membership"
-	WaveTypeRetail     WaveType = "retail"
-	WaveTypeMixed      WaveType = "mixed"
-)
-
-// WaveParticipantSnapshot: SnapshotType
-type SnapshotType string
-
-const (
-	SnapshotTypeMember SnapshotType = "member"
-	SnapshotTypeBuyer  SnapshotType = "buyer"
-	SnapshotTypeMixed  SnapshotType = "mixed"
-)
-
-// FulfillmentLine: LineReason
-type FulfillmentLineReason string
-
-const (
-	LineReasonEntitlement    FulfillmentLineReason = "entitlement"
-	LineReasonRetailOrder    FulfillmentLineReason = "retail_order"
-	LineReasonWaveAdjustment FulfillmentLineReason = "wave_adjustment"
-)
-
-// SupplierOrder: SubmissionMode
-type SubmissionMode string
-
-const (
-	SubmissionModeCSV    SubmissionMode = "csv"
-	SubmissionModeManual SubmissionMode = "manual"
-	SubmissionModeAPI    SubmissionMode = "api"
-)
-
-// SupplierOrder: Status
 type SupplierOrderStatus string
 
 const (
-	SupplierOrderStatusDraft            SupplierOrderStatus = "draft"
-	SupplierOrderStatusSubmitted        SupplierOrderStatus = "submitted"
-	SupplierOrderStatusAccepted         SupplierOrderStatus = "accepted"
-	SupplierOrderStatusPartiallyShipped SupplierOrderStatus = "partially_shipped"
-	SupplierOrderStatusShipped          SupplierOrderStatus = "shipped"
-	SupplierOrderStatusCanceled         SupplierOrderStatus = "canceled"
+	SupplierOrderDraft     SupplierOrderStatus = "draft"
+	SupplierOrderGenerated SupplierOrderStatus = "generated"
+	SupplierOrderExported  SupplierOrderStatus = "exported"
+	SupplierOrderVoided    SupplierOrderStatus = "voided"
 )
 
-// Shipment: ShipmentStatus
-type ShipmentStatus string
+type DuplicateVerdict string
 
 const (
-	ShipmentStatusPending   ShipmentStatus = "pending"
-	ShipmentStatusShipped   ShipmentStatus = "shipped"
-	ShipmentStatusInTransit ShipmentStatus = "in_transit"
-	ShipmentStatusDelivered ShipmentStatus = "delivered"
-	ShipmentStatusException ShipmentStatus = "exception"
-	ShipmentStatusReturned  ShipmentStatus = "returned"
-	ShipmentStatusVoided    ShipmentStatus = "voided"
+	DuplicateRecordOnly        DuplicateVerdict = "record_only"
+	DuplicateAskOperator       DuplicateVerdict = "ask_operator"
+	DuplicateNewResponsibility DuplicateVerdict = "new_responsibility"
 )
 
-// Adjustment: AdjustmentKind
-// ReasonCode remains free-text pending product sign-off on its controlled vocabulary (plan 5.2 / open item).
-type AdjustmentKind string
+type WritebackStatus string
 
 const (
-	AdjustmentKindAdd          AdjustmentKind = "add"
-	AdjustmentKindReduce       AdjustmentKind = "reduce"
-	AdjustmentKindCompensation AdjustmentKind = "compensation"
-	AdjustmentKindRemove       AdjustmentKind = "remove"
-	AdjustmentKindReplace      AdjustmentKind = "replace"
-	AdjustmentKindReissue      AdjustmentKind = "reissue"
+	WritebackPending WritebackStatus = "pending"
+	WritebackSent    WritebackStatus = "sent"
+	WritebackFailed  WritebackStatus = "failed"
 )
 
-// FulfillmentLine: AllocationState
-type AllocationState string
+type WorkState string
 
 const (
-	AllocationStateDraft AllocationState = "draft"
-	AllocationStateReady AllocationState = "ready"
-)
-
-// FulfillmentLine: AddressState
-type AddressState string
-
-const (
-	AddressStateMissing AddressState = "missing"
-	AddressStateReady   AddressState = "ready"
-	AddressStateInvalid AddressState = "invalid"
-)
-
-// CustomerAddress: ValidationStatus
-type AddressValidationStatus string
-
-const (
-	AddressValidationStatusUnvalidated AddressValidationStatus = "unvalidated"
-	AddressValidationStatusValid       AddressValidationStatus = "valid"
-	AddressValidationStatusInvalid     AddressValidationStatus = "invalid"
-)
-
-// FulfillmentLine: SupplierState
-type SupplierState string
-
-const (
-	SupplierStateNotSubmitted     SupplierState = "not_submitted"
-	SupplierStateSubmitted        SupplierState = "submitted"
-	SupplierStateAccepted         SupplierState = "accepted"
-	SupplierStateProducing        SupplierState = "producing"
-	SupplierStatePartiallyShipped SupplierState = "partially_shipped"
-	SupplierStateShipped          SupplierState = "shipped"
-	SupplierStateCanceled         SupplierState = "canceled"
-)
-
-// FulfillmentLine: ChannelSyncState
-type ChannelSyncState string
-
-const (
-	ChannelSyncStateNotRequired     ChannelSyncState = "not_required"
-	ChannelSyncStateUnsupported     ChannelSyncState = "unsupported"
-	ChannelSyncStatePending         ChannelSyncState = "pending"
-	ChannelSyncStateSynced          ChannelSyncState = "synced"
-	ChannelSyncStateManualConfirmed ChannelSyncState = "manual_confirmed"
-	ChannelSyncStateSkipped         ChannelSyncState = "skipped"
-	ChannelSyncStateFailed          ChannelSyncState = "failed"
-)
-
-// Wave: LifecycleStage
-type LifecycleStage string
-
-const (
-	LifecycleStageIntake          LifecycleStage = "intake"
-	LifecycleStageAllocation      LifecycleStage = "allocation"
-	LifecycleStageReview          LifecycleStage = "review"
-	LifecycleStageExecution       LifecycleStage = "execution"
-	LifecycleStageSyncingBack     LifecycleStage = "syncing_back"
-	LifecycleStageAwaitingClosure LifecycleStage = "awaiting_manual_closure"
-	LifecycleStageClosed          LifecycleStage = "closed"
-)
-
-// History command kinds — user-intent operations only
-const (
-	CmdSystemBaseline        = "_system_baseline"
-	CmdAssignDemand          = "assign_demand"
-	CmdGenerateParticipants  = "generate_participants"
-	CmdMapDemandLines        = "map_demand_lines"
-	CmdReconcileWave         = "reconcile_wave"
-	CmdCreateRule            = "create_rule"
-	CmdUpdateRule            = "update_rule"
-	CmdDeleteRule            = "delete_rule"
-	CmdRecordAdjustment      = "record_adjustment"
-	CmdExportSupplierOrder   = "export_supplier_order"
-	CmdCreateShipment        = "create_shipment"
-	CmdCreateChannelSyncJob  = "create_channel_sync_job"
-	CmdExecuteChannelSyncJob = "execute_channel_sync_job"
-	CmdRetryChannelSyncJob   = "retry_channel_sync_job"
-	CmdRecordClosureDecision = "record_closure_decision"
-)
-
-// ProductMaster: ProductKind
-type ProductKind string
-
-const (
-	ProductKindBadge    ProductKind = "badge"
-	ProductKindStandee  ProductKind = "standee"
-	ProductKindCharm    ProductKind = "charm"
-	ProductKindPostcard ProductKind = "postcard"
-	ProductKindPrint    ProductKind = "print"
-	ProductKindBundle   ProductKind = "bundle"
-	ProductKindOther    ProductKind = "other"
-)
-
-// BusinessSurface is the operator-facing business face of an integration
-// profile (membership entitlement, retail store order, or factory-side catalog).
-type BusinessSurface string
-
-const (
-	BusinessSurfaceMembership BusinessSurface = "membership"
-	BusinessSurfaceRetail     BusinessSurface = "retail"
-	BusinessSurfaceFactory    BusinessSurface = "factory"
-)
-
-// SourceSurface is the persisted IntegrationProfile.SourceSurface value set.
-// Same wire values as BusinessSurface; kept as an independent type so callers
-// can express "this is a stored source surface" without aliasing ambiguity.
-type SourceSurface string
-
-const (
-	SourceSurfaceMembership SourceSurface = "membership"
-	SourceSurfaceRetail     SourceSurface = "retail"
-	SourceSurfaceFactory    SourceSurface = "factory"
+	WorkStateBlocked         WorkState = "blocked"
+	WorkStateReady           WorkState = "ready"
+	WorkStateInFactory       WorkState = "in_factory"
+	WorkStateShipped         WorkState = "shipped"
+	WorkStateWritebackFailed WorkState = "writeback_failed"
 )
