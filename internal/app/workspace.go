@@ -12,6 +12,9 @@ type Workspace struct {
 	Store         domain.Store
 	Now           func() time.Time
 	NewTrackingID func() (string, error)
+	// ResolveDataDir overrides where export files land; tests point it at a
+	// temp dir. Nil falls back to the shared service resolver.
+	ResolveDataDir func() (string, error)
 }
 
 func NewWorkspace(store domain.Store) *Workspace {

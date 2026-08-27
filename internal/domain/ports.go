@@ -1,6 +1,9 @@
 package domain
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type Store interface {
 	WithTx(ctx context.Context, fn func(Store) error) error
@@ -38,6 +41,7 @@ type Store interface {
 	GetAlias(ctx context.Context, id uint) (*ProductAlias, error)
 	FindAlias(ctx context.Context, platformID uint, externalID string) (*ProductAlias, error)
 	ListAliases(ctx context.Context, productID uint) ([]ProductAlias, error)
+	UpdateAlias(ctx context.Context, a *ProductAlias) error
 
 	CreateBundleComponent(ctx context.Context, c *ProductBundleComponent) error
 	ListBundleComponents(ctx context.Context, aliasID uint) ([]ProductBundleComponent, error)
@@ -65,6 +69,7 @@ type Store interface {
 	ListFactLines(ctx context.Context, factID uint) ([]InputFactLine, error)
 	ListUnassignedFactLines(ctx context.Context) ([]InputFactLine, error)
 	ListFactLinesByWave(ctx context.Context, waveID uint) ([]InputFactLine, error)
+	ListFactLinesByExternalSKU(ctx context.Context, platformID uint, sku string) ([]InputFactLine, error)
 	UpdateFactLine(ctx context.Context, l *InputFactLine) error
 
 	CreateDuplicate(ctx context.Context, d *DuplicateObservation) error
@@ -123,6 +128,7 @@ type Store interface {
 	CreateShipment(ctx context.Context, s *Shipment) error
 	GetShipment(ctx context.Context, id uint) (*Shipment, error)
 	ListShipmentsByTracking(ctx context.Context, trackingID string) ([]Shipment, error)
+	UpdateShipmentShippedAt(ctx context.Context, id uint, shippedAt *time.Time) error
 
 	CreateWriteback(ctx context.Context, w *ChannelWritebackItem) error
 	ListWritebacksByFact(ctx context.Context, factID uint) ([]ChannelWritebackItem, error)

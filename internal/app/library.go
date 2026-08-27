@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
@@ -79,6 +80,96 @@ func (ws *Workspace) CreateAlias(ctx context.Context, a *domain.ProductAlias) er
 
 func (ws *Workspace) ListAliases(ctx context.Context, productID uint) ([]domain.ProductAlias, error) {
 	return ws.Store.ListAliases(ctx, productID)
+}
+
+// UpdateAlias re-points an alias at another unified product and re-runs the
+// alignment this alias drives: fact lines carrying the alias's external SKU
+// move to the new product, their plain retail results follow in place
+// (addresses stay), and bundle-expanded results are rebuilt from the new
+// alias's components. Lines whose results are already frozen by a factory
+// order keep the old alignment — execution history is not rewritten.
+func (ws *Workspace) UpdateAlias(ctx context.Context, aliasID, productItemID uint) error {
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		tws := ws.withStore(tx)
+		alias, err := tx.GetAlias(ctx, aliasID)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.GetProduct(ctx, productItemID); err != nil {
+			return fmt.Errorf("update alias: target product: %w", err)
+		}
+		if alias.ProductItemID == productItemID {
+			return nil
+		}
+		alias.ProductItemID = productItemID
+		if err := tx.UpdateAlias(ctx, alias); err != nil {
+			return err
+		}
+		return tws.realignAliasLines(ctx, alias)
+	})
+}
+
+// realignAliasLines re-runs alignment for the lines an alias resolves.
+func (ws *Workspace) realignAliasLines(ctx context.Context, alias *domain.ProductAlias) error {
+	lines, err := ws.Store.ListFactLinesByExternalSKU(ctx, alias.PlatformID, alias.ExternalProductID)
+	if err != nil {
+		return err
+	}
+	waves, err := ws.Store.ListWaves(ctx)
+	if err != nil {
+		return err
+	}
+	for i := range lines {
+		line := &lines[i]
+		if line.ProductItemID != nil && *line.ProductItemID == alias.ProductItemID {
+			continue
+		}
+		fact, err := ws.Store.GetFact(ctx, line.FactID)
+		if err != nil {
+			return err
+		}
+		rebuilt := false
+		for _, w := range waves {
+			results, err := ws.Store.ListResults(ctx, w.ID)
+			if err != nil {
+				return err
+			}
+			for j := range results {
+				r := &results[j]
+				if r.InputFactLineID == nil || *r.InputFactLineID != line.ID || r.SourceKind != string(domain.SourceRetailLine) {
+					continue
+				}
+				if r.Frozen {
+					// Frozen by a factory order: execution wins over alignment.
+					continue
+				}
+				if strings.Contains(r.ExtraData, "bundle_alias_line") {
+					// Bundle composition changed with the alias: rebuild.
+					if err := ws.Store.DeleteResult(ctx, r.ID); err != nil {
+						return err
+					}
+					rebuilt = true
+					continue
+				}
+				pid := alias.ProductItemID
+				r.ProductItemID = &pid
+				if err := ws.Store.UpdateResult(ctx, r); err != nil {
+					return err
+				}
+			}
+		}
+		if line.WaveID != nil && rebuilt {
+			if err := ws.ensureRetailResult(ctx, *line.WaveID, fact, line); err != nil {
+				return err
+			}
+		}
+		pid := alias.ProductItemID
+		line.ProductItemID = &pid
+		if err := ws.Store.UpdateFactLine(ctx, line); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (ws *Workspace) CreateBundleComponent(ctx context.Context, c *domain.ProductBundleComponent) error {

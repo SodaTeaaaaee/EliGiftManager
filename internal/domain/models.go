@@ -263,6 +263,7 @@ type ExecutionQuantityLink struct {
 	FulfillmentResultID uint
 	SupplierOrderLineID uint
 	Quantity            int
+	ConfigVersion       int
 	CreatedAt           time.Time
 }
 
@@ -271,6 +272,8 @@ type SupplierOrder struct {
 	WaveID            uint
 	FactoryPlatformID uint
 	Status            string
+	TemplateID        uint
+	TemplateVersion   int
 	ExportedAt        *time.Time
 	VoidedAt          *time.Time
 	ExportPayload     string
@@ -313,16 +316,18 @@ type Shipment struct {
 }
 
 type ChannelWritebackItem struct {
-	ID           uint
-	InputFactID  uint
-	ShipmentID   uint
-	TrackingNo   string
-	CarrierCode  string
-	Status       string
-	ErrorMessage string
-	Payload      string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID              uint
+	InputFactID     uint
+	ShipmentID      uint
+	TrackingNo      string
+	CarrierCode     string
+	Status          string
+	TemplateID      uint
+	TemplateVersion int
+	ErrorMessage    string
+	Payload         string
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 type AppSettings struct {

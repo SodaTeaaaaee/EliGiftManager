@@ -312,6 +312,16 @@ func (s *GormStore) ListAliases(ctx context.Context, productID uint) ([]domain.P
 	return out, nil
 }
 
+func (s *GormStore) UpdateAlias(ctx context.Context, a *domain.ProductAlias) error {
+	return s.db.WithContext(ctx).Model(&persistence.ProductAlias{}).Where("id = ?", a.ID).Updates(map[string]any{
+		"product_item_id": a.ProductItemID,
+		"title":           a.Title,
+		"spec":            a.Spec,
+		"extra_data":      a.ExtraData,
+		"updated_at":      time.Now(),
+	}).Error
+}
+
 func (s *GormStore) CreateBundleComponent(ctx context.Context, c *domain.ProductBundleComponent) error {
 	row := persistence.ProductBundleComponent{AliasID: c.AliasID, ProductItemID: c.ProductItemID, Quantity: c.Quantity}
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
@@ -510,6 +520,22 @@ func (s *GormStore) ListUnassignedFactLines(ctx context.Context) ([]domain.Input
 func (s *GormStore) ListFactLinesByWave(ctx context.Context, waveID uint) ([]domain.InputFactLine, error) {
 	var rows []persistence.InputFactLine
 	if err := s.db.WithContext(ctx).Where("wave_id = ?", waveID).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.InputFactLine, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, lineToDomain(r))
+	}
+	return out, nil
+}
+
+func (s *GormStore) ListFactLinesByExternalSKU(ctx context.Context, platformID uint, sku string) ([]domain.InputFactLine, error) {
+	var rows []persistence.InputFactLine
+	if err := s.db.WithContext(ctx).
+		Joins("JOIN input_facts ON input_facts.id = input_fact_lines.fact_id").
+		Where("input_facts.platform_id = ? AND input_fact_lines.external_sku = ?", platformID, sku).
+		Order("input_fact_lines.id").
+		Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]domain.InputFactLine, 0, len(rows))
@@ -804,7 +830,7 @@ func (s *GormStore) DeleteResult(ctx context.Context, id uint) error {
 }
 
 func (s *GormStore) CreateLink(ctx context.Context, l *domain.ExecutionQuantityLink) error {
-	row := persistence.ExecutionQuantityLink{FulfillmentResultID: l.FulfillmentResultID, SupplierOrderLineID: l.SupplierOrderLineID, Quantity: l.Quantity}
+	row := persistence.ExecutionQuantityLink{FulfillmentResultID: l.FulfillmentResultID, SupplierOrderLineID: l.SupplierOrderLineID, Quantity: l.Quantity, ConfigVersion: l.ConfigVersion}
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 		return err
 	}
@@ -971,8 +997,15 @@ func (s *GormStore) ListShipmentsByTracking(ctx context.Context, trackingID stri
 	return out, nil
 }
 
+func (s *GormStore) UpdateShipmentShippedAt(ctx context.Context, id uint, shippedAt *time.Time) error {
+	return s.db.WithContext(ctx).Model(&persistence.Shipment{}).Where("id = ?", id).Updates(map[string]any{
+		"shipped_at": shippedAt,
+		"updated_at": time.Now(),
+	}).Error
+}
+
 func (s *GormStore) CreateWriteback(ctx context.Context, w *domain.ChannelWritebackItem) error {
-	row := persistence.ChannelWritebackItem{InputFactID: w.InputFactID, ShipmentID: w.ShipmentID, TrackingNo: w.TrackingNo, CarrierCode: w.CarrierCode, Status: w.Status, ErrorMessage: w.ErrorMessage, Payload: w.Payload}
+	row := persistence.ChannelWritebackItem{InputFactID: w.InputFactID, ShipmentID: w.ShipmentID, TrackingNo: w.TrackingNo, CarrierCode: w.CarrierCode, Status: w.Status, TemplateID: w.TemplateID, TemplateVersion: w.TemplateVersion, ErrorMessage: w.ErrorMessage, Payload: w.Payload}
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 		return err
 	}
@@ -1112,10 +1145,10 @@ func resultToDomain(r persistence.FulfillmentResult) (domain.FulfillmentResult, 
 	return domain.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, Address: addr, Frozen: r.Frozen, AddressPinned: r.AddressPinned, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
 }
 func orderFromDomain(o domain.SupplierOrder) persistence.SupplierOrder {
-	return persistence.SupplierOrder{ID: o.ID, WaveID: o.WaveID, FactoryPlatformID: o.FactoryPlatformID, Status: o.Status, ExportedAt: o.ExportedAt, VoidedAt: o.VoidedAt, ExportPayload: o.ExportPayload, ExtraData: o.ExtraData, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt}
+	return persistence.SupplierOrder{ID: o.ID, WaveID: o.WaveID, FactoryPlatformID: o.FactoryPlatformID, Status: o.Status, TemplateID: o.TemplateID, TemplateVersion: o.TemplateVersion, ExportedAt: o.ExportedAt, VoidedAt: o.VoidedAt, ExportPayload: o.ExportPayload, ExtraData: o.ExtraData, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt}
 }
 func orderToDomain(r persistence.SupplierOrder) domain.SupplierOrder {
-	return domain.SupplierOrder{ID: r.ID, WaveID: r.WaveID, FactoryPlatformID: r.FactoryPlatformID, Status: r.Status, ExportedAt: r.ExportedAt, VoidedAt: r.VoidedAt, ExportPayload: r.ExportPayload, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+	return domain.SupplierOrder{ID: r.ID, WaveID: r.WaveID, FactoryPlatformID: r.FactoryPlatformID, Status: r.Status, TemplateID: r.TemplateID, TemplateVersion: r.TemplateVersion, ExportedAt: r.ExportedAt, VoidedAt: r.VoidedAt, ExportPayload: r.ExportPayload, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func solFromDomain(l domain.SupplierOrderLine) persistence.SupplierOrderLine {
 	return persistence.SupplierOrderLine{ID: l.ID, SupplierOrderID: l.SupplierOrderID, ProductItemID: l.ProductItemID, FactorySKU: l.FactorySKU, Quantity: l.Quantity, TrackingID: l.TrackingID, TrackingRetired: l.TrackingRetired, ExtraData: l.ExtraData, CreatedAt: l.CreatedAt, UpdatedAt: l.UpdatedAt}
@@ -1126,14 +1159,14 @@ func solToDomain(r persistence.SupplierOrderLine) domain.SupplierOrderLine {
 func linksToDomain(rows []persistence.ExecutionQuantityLink) []domain.ExecutionQuantityLink {
 	out := make([]domain.ExecutionQuantityLink, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.ExecutionQuantityLink{ID: r.ID, FulfillmentResultID: r.FulfillmentResultID, SupplierOrderLineID: r.SupplierOrderLineID, Quantity: r.Quantity, CreatedAt: r.CreatedAt})
+		out = append(out, domain.ExecutionQuantityLink{ID: r.ID, FulfillmentResultID: r.FulfillmentResultID, SupplierOrderLineID: r.SupplierOrderLineID, Quantity: r.Quantity, ConfigVersion: r.ConfigVersion, CreatedAt: r.CreatedAt})
 	}
 	return out
 }
 func writebacksToDomain(rows []persistence.ChannelWritebackItem) []domain.ChannelWritebackItem {
 	out := make([]domain.ChannelWritebackItem, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.ChannelWritebackItem{ID: r.ID, InputFactID: r.InputFactID, ShipmentID: r.ShipmentID, TrackingNo: r.TrackingNo, CarrierCode: r.CarrierCode, Status: r.Status, ErrorMessage: r.ErrorMessage, Payload: r.Payload, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
+		out = append(out, domain.ChannelWritebackItem{ID: r.ID, InputFactID: r.InputFactID, ShipmentID: r.ShipmentID, TrackingNo: r.TrackingNo, CarrierCode: r.CarrierCode, Status: r.Status, TemplateID: r.TemplateID, TemplateVersion: r.TemplateVersion, ErrorMessage: r.ErrorMessage, Payload: r.Payload, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
 	}
 	return out
 }

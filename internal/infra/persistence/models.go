@@ -275,6 +275,7 @@ type ExecutionQuantityLink struct {
 	FulfillmentResultID uint `gorm:"index;not null"`
 	SupplierOrderLineID uint `gorm:"index;not null"`
 	Quantity            int  `gorm:"not null"`
+	ConfigVersion       int  `gorm:"not null;default:0"`
 	CreatedAt           time.Time
 }
 
@@ -285,6 +286,8 @@ type SupplierOrder struct {
 	WaveID            uint   `gorm:"index;not null"`
 	FactoryPlatformID uint   `gorm:"index;not null"`
 	Status            string `gorm:"not null;default:'generated'"`
+	TemplateID        uint   `gorm:"not null;default:0"`
+	TemplateVersion   int    `gorm:"not null;default:0"`
 	ExportedAt        *time.Time
 	VoidedAt          *time.Time
 	ExportPayload     string `gorm:"type:text"`
@@ -335,16 +338,18 @@ type Shipment struct {
 func (Shipment) TableName() string { return "shipments" }
 
 type ChannelWritebackItem struct {
-	ID           uint `gorm:"primaryKey"`
-	InputFactID  uint `gorm:"index;not null"`
-	ShipmentID   uint `gorm:"index;not null"`
-	TrackingNo   string
-	CarrierCode  string
-	Status       string `gorm:"not null;default:'pending'"`
-	ErrorMessage string
-	Payload      string `gorm:"type:text"`
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID              uint `gorm:"primaryKey"`
+	InputFactID     uint `gorm:"index;not null"`
+	ShipmentID      uint `gorm:"index;not null"`
+	TrackingNo      string
+	CarrierCode     string
+	Status          string `gorm:"not null;default:'pending'"`
+	TemplateID      uint   `gorm:"not null;default:0"`
+	TemplateVersion int    `gorm:"not null;default:0"`
+	ErrorMessage    string
+	Payload         string `gorm:"type:text"`
+	CreatedAt       time.Time
+	UpdatedAt       time.Time
 }
 
 func (ChannelWritebackItem) TableName() string { return "channel_writeback_items" }

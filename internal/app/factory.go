@@ -73,6 +73,12 @@ func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID
 	if len(groups) == 0 {
 		return nil, nil, ErrNothingToSubmit
 	}
+	// Snapshot the factory order output template version into the execution
+	// links; 0 means no output template was configured.
+	configVersion := 0
+	if tpl := ws.findTemplate(ctx, factoryID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); tpl != nil {
+		configVersion = tpl.Version
+	}
 	order := &domain.SupplierOrder{WaveID: waveID, FactoryPlatformID: factoryID, Status: string(domain.SupplierOrderGenerated)}
 	if err := ws.Store.CreateSupplierOrder(ctx, order); err != nil {
 		return nil, nil, err
@@ -96,7 +102,7 @@ func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID
 		}
 		for i := range g.results {
 			r := g.results[i]
-			if err := ws.Store.CreateLink(ctx, &domain.ExecutionQuantityLink{FulfillmentResultID: r.ID, SupplierOrderLineID: line.ID, Quantity: r.Quantity}); err != nil {
+			if err := ws.Store.CreateLink(ctx, &domain.ExecutionQuantityLink{FulfillmentResultID: r.ID, SupplierOrderLineID: line.ID, Quantity: r.Quantity, ConfigVersion: configVersion}); err != nil {
 				return nil, nil, err
 			}
 			r.Frozen = true
@@ -252,6 +258,16 @@ func (ws *Workspace) generateWritebacks(ctx context.Context, factID uint) ([]dom
 	}
 	seenShipment := map[uint]struct{}{}
 	var created []domain.ChannelWritebackItem
+	// Snapshot the writeback output template (0 when none is configured).
+	var wbTplID uint
+	var wbTplVersion int
+	fact, err := ws.Store.GetFact(ctx, factID)
+	if err != nil {
+		return nil, err
+	}
+	if tpl := ws.findTemplate(ctx, fact.PlatformID, domain.TemplateDirectionOutput, DocumentTypeWriteback); tpl != nil {
+		wbTplID, wbTplVersion = tpl.ID, tpl.Version
+	}
 	for _, w := range waves {
 		results, err := ws.Store.ListResults(ctx, w.ID)
 		if err != nil {
@@ -283,12 +299,14 @@ func (ws *Workspace) generateWritebacks(ctx context.Context, factID uint) ([]dom
 					}
 					seenShipment[sh.ID] = struct{}{}
 					item := &domain.ChannelWritebackItem{
-						InputFactID: factID,
-						ShipmentID:  sh.ID,
-						TrackingNo:  sh.TrackingNo,
-						CarrierCode: sh.CarrierCode,
-						Status:      string(domain.WritebackPending),
-						Payload:     strings.Join([]string{sh.TrackingNo, sh.CarrierCode}, ","),
+						InputFactID:     factID,
+						ShipmentID:      sh.ID,
+						TrackingNo:      sh.TrackingNo,
+						CarrierCode:     sh.CarrierCode,
+						Status:          string(domain.WritebackPending),
+						TemplateID:      wbTplID,
+						TemplateVersion: wbTplVersion,
+						Payload:         strings.Join([]string{sh.TrackingNo, sh.CarrierCode}, ","),
 					}
 					if err := ws.Store.CreateWriteback(ctx, item); err != nil {
 						return nil, err
