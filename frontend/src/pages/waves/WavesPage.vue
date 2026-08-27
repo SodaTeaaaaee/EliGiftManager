@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { h, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, h, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   NButton,
@@ -13,6 +13,7 @@ import {
   NRadioGroup,
   NSpace,
   NSpin,
+  NTag,
 } from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard } from '@/shared/ui/cards'
@@ -21,12 +22,14 @@ import { StatusBadge } from '@/shared/ui/status'
 import {
   closeWave,
   createWave,
+  listResultViews,
   listWaves,
   reopenWave,
 } from '@/shared/api/bridge'
 import type { Wave } from '@/entities/models'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
@@ -40,6 +43,84 @@ const showCloseModal = ref(false)
 const targetCloseWave = ref<Wave | null>(null)
 const closeForm = ref({ result: 'clean', note: '' })
 
+// ── Home deep-link filter (?filter=blocked|writebackFailed|residual) ──
+
+const homeFilter = computed(() => {
+  const raw = route.query.filter
+  return typeof raw === 'string' ? raw : ''
+})
+
+interface WaveFlags {
+  blocked: boolean
+  writebackFailed: boolean
+}
+
+const flagsLoading = ref(false)
+const waveFlags = ref<Record<number, WaveFlags>>({})
+
+async function loadWaveFlags() {
+  if (homeFilter.value !== 'blocked' && homeFilter.value !== 'writebackFailed') return
+  flagsLoading.value = true
+  try {
+    const flags: Record<number, WaveFlags> = {}
+    for (const w of waves.value) {
+      const open = w.CloseResult === 'open' || !w.CloseResult
+      // The blocked bucket only counts open waves (home semantics); writeback
+      // failures can linger on closed waves, so those still get inspected.
+      if (homeFilter.value === 'blocked' && !open) {
+        flags[w.ID] = { blocked: false, writebackFailed: false }
+        continue
+      }
+      try {
+        const views = await listResultViews(w.ID)
+        flags[w.ID] = {
+          blocked: views.some((v) => v.WorkState === 'blocked'),
+          writebackFailed: views.some((v) => v.WritebackFailed),
+        }
+      } catch (err) {
+        console.error('Failed to load result views for wave flags:', err)
+        flags[w.ID] = { blocked: false, writebackFailed: false }
+      }
+    }
+    waveFlags.value = flags
+  } finally {
+    flagsLoading.value = false
+  }
+}
+
+const displayWaves = computed(() => {
+  switch (homeFilter.value) {
+    case 'blocked':
+      return waves.value.filter((w) => waveFlags.value[w.ID]?.blocked)
+    case 'writebackFailed':
+      return waves.value.filter((w) => waveFlags.value[w.ID]?.writebackFailed)
+    case 'residual':
+      return waves.value.filter((w) => w.CloseResult === 'residual')
+    default:
+      return waves.value
+  }
+})
+
+function clearHomeFilter() {
+  void router.replace({ query: { ...route.query, filter: undefined } })
+}
+
+async function refreshAll() {
+  await loadData()
+  await loadWaveFlags()
+}
+
+watch(
+  () => route.query.filter,
+  () => {
+    void loadWaveFlags()
+  },
+)
+
+onMounted(() => {
+  void refreshAll()
+})
+
 async function loadData() {
   loading.value = true
   try {
@@ -50,10 +131,6 @@ async function loadData() {
     loading.value = false
   }
 }
-
-onMounted(() => {
-  void loadData()
-})
 
 function openWorkspace(wave: Wave) {
   void router.push(`/waves/${wave.ID}/rules`)
@@ -198,7 +275,7 @@ const columns = [
           <NButton type="primary" size="small" @click="showCreateModal = true">
             {{ t('waves.createWave') }}
           </NButton>
-          <NButton size="small" :loading="loading" @click="loadData">
+          <NButton size="small" :loading="loading" @click="refreshAll">
             {{ t('common.refresh') }}
           </NButton>
         </NSpace>
@@ -206,12 +283,29 @@ const columns = [
     </PageHeader>
 
     <SectionCard :title="t('waves.title')">
-      <NSpin :show="loading">
-        <div v-if="!waves.length" class="waves-page__empty">
+      <template #actions>
+        <div class="waves-page__filter">
+          <NTag
+            v-if="homeFilter"
+            closable
+            size="small"
+            @close="clearHomeFilter"
+          >
+            {{ t('common.deepLinkFilter') }}
+          </NTag>
+        </div>
+      </template>
+      <NSpin :show="loading || flagsLoading">
+        <div v-if="!displayWaves.length" class="waves-page__empty">
           <EmptyState :title="t('waves.empty')" size="sm" />
         </div>
         <div v-else class="waves-page__table">
-          <NDataTable :columns="columns" :data="waves" :row-key="(row: Wave) => row.ID" size="small" />
+          <NDataTable
+            :columns="columns"
+            :data="displayWaves"
+            :row-key="(row: Wave) => row.ID"
+            size="small"
+          />
         </div>
       </NSpin>
     </SectionCard>
@@ -295,6 +389,12 @@ const columns = [
 
 .waves-page__empty {
   padding: var(--space-4) 0;
+}
+
+.waves-page__filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .waves-page__table {

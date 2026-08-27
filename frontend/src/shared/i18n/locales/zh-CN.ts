@@ -26,6 +26,7 @@ export const zhCN = {
     no: '否',
     actions: '操作',
     pleaseSelect: '请选择',
+    deepLinkFilter: '首页深链筛选生效中',
     locales: {
       zhCN: '简体中文',
       enUS: 'English',
@@ -278,6 +279,8 @@ export const zhCN = {
     dismissRevisionSuccess: '修订已忽略',
     moveToWave: '移动到其他波次',
     moveSuccess: '所选行已移动到目标波次',
+    duplicatesFilterHint:
+      '重复观察没有行视图：已按待决策四类（待修订、未对齐、未挂靠、未归属）预筛收件箱，请结合导入回执处理重复判定。',
     empty: '收件箱暂无未处理事实行',
     lineNo: '行号',
     kind: '类型',

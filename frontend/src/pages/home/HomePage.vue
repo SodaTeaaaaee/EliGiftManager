@@ -61,7 +61,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     value: String(buckets.value.Unassigned),
     caption: t('home.buckets.unassignedDesc'),
     tone: buckets.value.Unassigned > 0 ? 'warning' : 'neutral',
-    to: '/inbox',
+    to: '/inbox?filter=unassigned',
     warning: '',
   },
   {
@@ -70,7 +70,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     value: String(buckets.value.DuplicateAsk),
     caption: t('home.buckets.duplicateAskDesc'),
     tone: buckets.value.DuplicateAsk > 0 ? 'warning' : 'neutral',
-    to: '/inbox',
+    to: '/inbox?filter=duplicates',
     warning: '',
   },
   {
@@ -79,7 +79,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     value: String(buckets.value.AlignmentConflict),
     caption: t('home.buckets.alignmentConflictDesc'),
     tone: buckets.value.AlignmentConflict > 0 ? 'error' : 'neutral',
-    to: '/inbox',
+    to: '/inbox?filter=alignment',
     warning: '',
   },
   {
@@ -88,7 +88,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     value: String(buckets.value.IdentityUnattached),
     caption: t('home.buckets.identityUnattachedDesc'),
     tone: buckets.value.IdentityUnattached > 0 ? 'error' : 'neutral',
-    to: '/inbox',
+    to: '/inbox?filter=unattached',
     warning: '',
   },
   {
@@ -107,7 +107,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
         : buckets.value.RevisionFrozenConflicts > 0
           ? 'error'
           : 'warning',
-    to: '/inbox',
+    to: '/inbox?filter=revisions',
     warning:
       buckets.value.RevisionFrozenConflicts > 0
         ? t('home.buckets.revisionFrozenConflict', {
@@ -121,7 +121,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     value: String(buckets.value.BlockedResults),
     caption: t('home.buckets.blockedResultsDesc'),
     tone: buckets.value.BlockedResults > 0 ? 'error' : 'neutral',
-    to: '/waves',
+    to: '/waves?filter=blocked',
     warning: '',
   },
   {
@@ -130,7 +130,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     value: String(buckets.value.WritebackFailed),
     caption: t('home.buckets.writebackFailedDesc'),
     tone: buckets.value.WritebackFailed > 0 ? 'error' : 'neutral',
-    to: '/waves',
+    to: '/waves?filter=writebackFailed',
     warning: '',
   },
   {
@@ -139,7 +139,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     value: String(buckets.value.ResidualClose),
     caption: t('home.buckets.residualCloseDesc'),
     tone: buckets.value.ResidualClose > 0 ? 'info' : 'neutral',
-    to: '/waves',
+    to: '/waves?filter=residual',
     warning: '',
   },
 ])

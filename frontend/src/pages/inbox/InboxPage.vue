@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   NButton,
@@ -50,6 +51,8 @@ import type {
 } from '@/entities/models'
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const feedback = useFeedback()
 
 function errMsg(err: unknown): string {
@@ -137,7 +140,40 @@ async function loadData() {
 
 onMounted(() => {
   void loadData()
+  // Duplicate observations have no inbox row view; the deep link falls back
+  // to the four decision-pending row categories and says so once.
+  if (homeFilter.value === 'duplicates') {
+    feedback.info(t('inbox.duplicatesFilterHint'))
+  }
 })
+
+// ── Home deep-link filter (?filter=…) ──
+
+const homeFilter = computed(() => {
+  const raw = route.query.filter
+  return typeof raw === 'string' ? raw : ''
+})
+
+function matchesHomeFilter(row: InboxRow): boolean {
+  switch (homeFilter.value) {
+    case 'unassigned':
+      return !row.Assigned && !row.RevisionPending
+    case 'duplicates':
+      return row.RevisionPending || row.Unaligned || row.Unattached || !row.Assigned
+    case 'alignment':
+      return row.Unaligned
+    case 'unattached':
+      return row.Unattached
+    case 'revisions':
+      return row.RevisionPending
+    default:
+      return true
+  }
+}
+
+function clearHomeFilter() {
+  void router.replace({ query: { ...route.query, filter: undefined } })
+}
 
 const documentOptions = computed(() => {
   const map = new Map<string, string>()
@@ -154,12 +190,16 @@ const documentOptions = computed(() => {
 })
 
 const filteredRows = computed(() => {
-  if (selectedDocumentFilter.value === 'all') {
-    return rows.value
+  let list = rows.value
+  if (selectedDocumentFilter.value !== 'all') {
+    list = list.filter(
+      (r) => r.Document && String(r.Document.ID) === selectedDocumentFilter.value,
+    )
   }
-  return rows.value.filter(
-    (r) => r.Document && String(r.Document.ID) === selectedDocumentFilter.value,
-  )
+  if (homeFilter.value) {
+    list = list.filter(matchesHomeFilter)
+  }
+  return list
 })
 
 const waveOptions = computed(() =>
@@ -678,6 +718,15 @@ const columns = [
     <SectionCard :title="t('inbox.title')">
       <template #actions>
         <div class="inbox-page__filter">
+          <NTag
+            v-if="homeFilter"
+            closable
+            size="small"
+            class="inbox-page__home-filter-tag"
+            @close="clearHomeFilter"
+          >
+            {{ t('common.deepLinkFilter') }}
+          </NTag>
           <NSelect
             v-model:value="selectedDocumentFilter"
             :options="documentOptions"
@@ -979,6 +1028,10 @@ const columns = [
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.inbox-page__home-filter-tag {
+  flex-shrink: 0;
 }
 
 .inbox-page__empty {

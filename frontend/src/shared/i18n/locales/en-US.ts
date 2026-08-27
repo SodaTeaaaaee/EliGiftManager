@@ -28,6 +28,7 @@ export const enUS: AppMessageSchema = {
     no: 'No',
     actions: 'Actions',
     pleaseSelect: 'Please select',
+    deepLinkFilter: 'Home deep-link filter active',
     locales: {
       zhCN: 'Simplified Chinese',
       enUS: 'English',
@@ -280,6 +281,8 @@ export const enUS: AppMessageSchema = {
     dismissRevisionSuccess: 'Revision dismissed',
     moveToWave: 'Move to another wave',
     moveSuccess: 'Selected lines moved to the target wave',
+    duplicatesFilterHint:
+      'Duplicate observations have no row view: the inbox is pre-filtered to the four decision-pending categories (revision pending, unaligned, unattached, unassigned) — handle duplicate verdicts from the import receipt.',
     empty: 'No unprocessed fact lines in inbox',
     lineNo: 'Line No',
     kind: 'Kind',
