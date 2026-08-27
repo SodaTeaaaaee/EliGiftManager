@@ -326,16 +326,12 @@ func (ws *Workspace) ExportFactoryOrderFile(ctx context.Context, orderID uint) (
 	if err != nil {
 		return nil, err
 	}
-	path, err := ws.writeExportFile(fmt.Sprintf("factory-orders/%d-%s", order.ID, ws.Now().Format("20060102-150405")), layout.Format, payload)
-	if err != nil {
-		return nil, err
-	}
 
 	stored := string(payload)
 	if layout.Format == alignment.FormatXLSX {
 		stored = "base64:" + base64.StdEncoding.EncodeToString(payload)
 	}
-	result := &ExportFileResult{Path: path, Rows: rows}
+	result := &ExportFileResult{Rows: rows}
 	if err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
 		// Re-read inside the transaction so a concurrent void aborts the export.
 		current, err := tx.GetSupplierOrder(ctx, orderID)
@@ -345,6 +341,17 @@ func (ws *Workspace) ExportFactoryOrderFile(ctx context.Context, orderID uint) (
 		if current.Status == string(domain.SupplierOrderVoided) {
 			return ErrOrderNotGenerated
 		}
+		// The file write lives inside the transaction and before the status
+		// flip: a write failure rolls the order back to generated, so an
+		// exported order always has its file. The residual failure mode is the
+		// reverse — a written file with a rolled-back transaction (for example
+		// the update fails) — which leaves a harmless orphan file and no dirty
+		// state.
+		path, err := ws.writeExportFile(fmt.Sprintf("factory-orders/%d-%s", order.ID, ws.Now().Format("20060102-150405")), layout.Format, payload)
+		if err != nil {
+			return err
+		}
+		result.Path = path
 		now := ws.Now()
 		if current.ExportedAt == nil {
 			current.ExportedAt = &now

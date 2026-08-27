@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -720,5 +721,29 @@ func TestImportFile_RejectsForeignTemplate(t *testing.T) {
 	}
 	if _, err := ws.ImportFile(ctx, source.ID, tpl.ID, path+"-missing"); err == nil {
 		t.Fatal("expected read error")
+	}
+}
+
+// TestExportFactoryOrderFile_WriteFailureKeepsOrderGenerated pins the
+// transaction boundary: the file write happens inside the transaction, so a
+// failed write rolls the order back to generated instead of leaving an
+// exported order without its file.
+func TestExportFactoryOrderFile_WriteFailureKeepsOrderGenerated(t *testing.T) {
+	p := setupReadyRetailPath(t, "BILI-SKU-EXPORTFAIL")
+	ws, ctx := p.ws, p.ctx
+	ws.ResolveDataDir = func() (string, error) { return "", fmt.Errorf("data dir unavailable") }
+	order, _, err := ws.GenerateFactoryOrder(ctx, p.wave.ID, p.factory.ID)
+	if err != nil {
+		t.Fatalf("GenerateFactoryOrder: %v", err)
+	}
+	if _, err := ws.ExportFactoryOrderFile(ctx, order.ID); err == nil {
+		t.Fatal("expected export to fail when the file cannot be written")
+	}
+	after, err := ws.Store.GetSupplierOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Status != string(domain.SupplierOrderGenerated) || after.ExportedAt != nil || after.ExportPayload != "" {
+		t.Fatalf("order = %+v, want still generated with no export payload", after)
 	}
 }
