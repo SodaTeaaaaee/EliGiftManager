@@ -4,6 +4,10 @@ import {domain} from '../models';
 import {app} from '../models';
 import {alignment} from '../models';
 
+export function AddException(arg1:domain.EntitlementException):Promise<void>;
+
+export function ApplyRevision(arg1:number):Promise<void>;
+
 export function AssignLines(arg1:number,arg2:Array<number>):Promise<void>;
 
 export function AttachIdentity(arg1:number,arg2:number):Promise<void>;
@@ -14,17 +18,31 @@ export function CreateAddress(arg1:domain.RecipientAddress):Promise<domain.Recip
 
 export function CreateAlias(arg1:domain.ProductAlias):Promise<domain.ProductAlias>;
 
+export function CreateBundleComponent(arg1:domain.ProductBundleComponent):Promise<void>;
+
 export function CreateCarrierMapping(arg1:domain.CarrierMapping):Promise<domain.CarrierMapping>;
 
 export function CreateCustomer(arg1:string,arg2:string):Promise<domain.CustomerProfile>;
 
 export function CreateGrant(arg1:number,arg2:number,arg3:number,arg4:number):Promise<domain.FulfillmentResult>;
 
+export function CreatePlatform(arg1:domain.Platform):Promise<void>;
+
 export function CreateProduct(arg1:domain.ProductItem):Promise<domain.ProductItem>;
 
 export function CreateTemplate(arg1:domain.TemplateConfig):Promise<domain.TemplateConfig>;
 
 export function CreateWave(arg1:string,arg2:string):Promise<domain.Wave>;
+
+export function DecideDuplicate(arg1:number,arg2:boolean):Promise<void>;
+
+export function DeleteException(arg1:number):Promise<void>;
+
+export function DeleteQuantitySplitRule(arg1:number):Promise<void>;
+
+export function DeleteRule(arg1:number):Promise<void>;
+
+export function DismissRevision(arg1:number):Promise<void>;
 
 export function EnsureBuiltinPlatforms():Promise<void>;
 
@@ -66,6 +84,8 @@ export function ListPlatforms():Promise<Array<domain.Platform>>;
 
 export function ListProducts():Promise<Array<domain.ProductItem>>;
 
+export function ListQuantitySplitRules(arg1:number):Promise<Array<domain.QuantitySplitRule>>;
+
 export function ListResultViews(arg1:number):Promise<Array<app.ResultView>>;
 
 export function ListRules(arg1:number):Promise<Array<domain.EntitlementRule>>;
@@ -77,6 +97,8 @@ export function ListSupplierOrders(arg1:number):Promise<Array<domain.SupplierOrd
 export function ListTemplates():Promise<Array<domain.TemplateConfig>>;
 
 export function ListWaves():Promise<Array<domain.Wave>>;
+
+export function MoveLines(arg1:Array<number>,arg2:number):Promise<void>;
 
 export function NamedTransformers():Promise<Array<string>>;
 
@@ -93,6 +115,10 @@ export function SemanticDictionary():Promise<Array<string>>;
 export function SetResultAddress(arg1:number,arg2:number):Promise<void>;
 
 export function UpdateAlias(arg1:number,arg2:number):Promise<void>;
+
+export function UpdateCustomer(arg1:domain.CustomerProfile):Promise<void>;
+
+export function UpsertQuantitySplitRule(arg1:domain.QuantitySplitRule):Promise<void>;
 
 export function UpsertRule(arg1:domain.EntitlementRule):Promise<domain.EntitlementRule>;
 

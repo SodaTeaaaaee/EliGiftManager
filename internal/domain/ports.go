@@ -100,6 +100,7 @@ type Store interface {
 	DeleteRule(ctx context.Context, id uint) error
 
 	CreateException(ctx context.Context, e *EntitlementException) error
+	GetException(ctx context.Context, id uint) (*EntitlementException, error)
 	ListExceptions(ctx context.Context, waveID uint) ([]EntitlementException, error)
 	DeleteException(ctx context.Context, id uint) error
 

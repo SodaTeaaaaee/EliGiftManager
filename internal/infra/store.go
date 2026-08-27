@@ -830,6 +830,15 @@ func (s *GormStore) CreateException(ctx context.Context, e *domain.EntitlementEx
 	return nil
 }
 
+func (s *GormStore) GetException(ctx context.Context, id uint) (*domain.EntitlementException, error) {
+	var row persistence.EntitlementException
+	if err := first(s.db.WithContext(ctx).Where("id = ?", id), &row); err != nil {
+		return nil, err
+	}
+	d := domain.EntitlementException{ID: row.ID, WaveID: row.WaveID, ProductID: row.ProductID, InstanceID: row.InstanceID, Quantity: row.Quantity, Note: row.Note, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	return &d, nil
+}
+
 func (s *GormStore) ListExceptions(ctx context.Context, waveID uint) ([]domain.EntitlementException, error) {
 	var rows []persistence.EntitlementException
 	if err := s.db.WithContext(ctx).Where("wave_id = ?", waveID).Order("id").Find(&rows).Error; err != nil {

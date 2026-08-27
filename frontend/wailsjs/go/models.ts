@@ -124,9 +124,11 @@ export namespace app {
 	    DuplicateAsk: number;
 	    AlignmentConflict: number;
 	    IdentityUnattached: number;
+	    PendingRevisions: number;
 	    BlockedResults: number;
 	    WritebackFailed: number;
 	    ResidualClose: number;
+	    RevisionFrozenConflicts: number;
 	    RecentWaves: domain.Wave[];
 	
 	    static createFrom(source: any = {}) {
@@ -139,9 +141,11 @@ export namespace app {
 	        this.DuplicateAsk = source["DuplicateAsk"];
 	        this.AlignmentConflict = source["AlignmentConflict"];
 	        this.IdentityUnattached = source["IdentityUnattached"];
+	        this.PendingRevisions = source["PendingRevisions"];
 	        this.BlockedResults = source["BlockedResults"];
 	        this.WritebackFailed = source["WritebackFailed"];
 	        this.ResidualClose = source["ResidualClose"];
+	        this.RevisionFrozenConflicts = source["RevisionFrozenConflicts"];
 	        this.RecentWaves = this.convertValues(source["RecentWaves"], domain.Wave);
 	    }
 	
@@ -260,6 +264,8 @@ export namespace app {
 	    Assigned: boolean;
 	    Unaligned: boolean;
 	    Unattached: boolean;
+	    RevisionPending: boolean;
+	    AliasID?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new InboxRow(source);
@@ -273,6 +279,8 @@ export namespace app {
 	        this.Assigned = source["Assigned"];
 	        this.Unaligned = source["Unaligned"];
 	        this.Unattached = source["Unattached"];
+	        this.RevisionPending = source["RevisionPending"];
+	        this.AliasID = source["AliasID"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -676,6 +684,7 @@ export namespace domain {
 	    Verdict: string;
 	    Reason: string;
 	    Decided: boolean;
+	    ExtraData: string;
 	    // Go type: time
 	    CreatedAt: any;
 	    // Go type: time
@@ -693,6 +702,53 @@ export namespace domain {
 	        this.Verdict = source["Verdict"];
 	        this.Reason = source["Reason"];
 	        this.Decided = source["Decided"];
+	        this.ExtraData = source["ExtraData"];
+	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
+	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class EntitlementException {
+	    ID: number;
+	    WaveID: number;
+	    ProductID: number;
+	    InstanceID: number;
+	    Quantity: number;
+	    Note: string;
+	    // Go type: time
+	    CreatedAt: any;
+	    // Go type: time
+	    UpdatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new EntitlementException(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.WaveID = source["WaveID"];
+	        this.ProductID = source["ProductID"];
+	        this.InstanceID = source["InstanceID"];
+	        this.Quantity = source["Quantity"];
+	        this.Note = source["Note"];
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
 	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
 	    }
@@ -909,6 +965,9 @@ export namespace domain {
 	    SourceDocumentNo: string;
 	    // Go type: time
 	    SourceCreatedAt?: any;
+	    RevisesID?: number;
+	    // Go type: time
+	    RevisionAppliedAt?: any;
 	    ExtraData: string;
 	    // Go type: time
 	    CreatedAt: any;
@@ -931,6 +990,8 @@ export namespace domain {
 	        this.MembershipLevel = source["MembershipLevel"];
 	        this.SourceDocumentNo = source["SourceDocumentNo"];
 	        this.SourceCreatedAt = this.convertValues(source["SourceCreatedAt"], null);
+	        this.RevisesID = source["RevisesID"];
+	        this.RevisionAppliedAt = this.convertValues(source["RevisionAppliedAt"], null);
 	        this.ExtraData = source["ExtraData"];
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
 	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
@@ -1102,6 +1163,48 @@ export namespace domain {
 		    return a;
 		}
 	}
+	export class ProductBundleComponent {
+	    ID: number;
+	    AliasID: number;
+	    ProductItemID: number;
+	    Quantity: number;
+	    // Go type: time
+	    CreatedAt: any;
+	    // Go type: time
+	    UpdatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new ProductBundleComponent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.AliasID = source["AliasID"];
+	        this.ProductItemID = source["ProductItemID"];
+	        this.Quantity = source["Quantity"];
+	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
+	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ProductItem {
 	    ID: number;
 	    Name: string;
@@ -1126,6 +1229,92 @@ export namespace domain {
 	        this.FactorySKU = source["FactorySKU"];
 	        this.Notes = source["Notes"];
 	        this.ExtraData = source["ExtraData"];
+	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
+	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class QuantitySplitComponent {
+	    ID: number;
+	    RuleID: number;
+	    ProductItemID: number;
+	    Quantity: number;
+	    // Go type: time
+	    CreatedAt: any;
+	    // Go type: time
+	    UpdatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuantitySplitComponent(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.RuleID = source["RuleID"];
+	        this.ProductItemID = source["ProductItemID"];
+	        this.Quantity = source["Quantity"];
+	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
+	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class QuantitySplitRule {
+	    ID: number;
+	    WaveID: number;
+	    PlatformID: number;
+	    ExternalKey: string;
+	    Components: QuantitySplitComponent[];
+	    // Go type: time
+	    CreatedAt: any;
+	    // Go type: time
+	    UpdatedAt: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new QuantitySplitRule(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.WaveID = source["WaveID"];
+	        this.PlatformID = source["PlatformID"];
+	        this.ExternalKey = source["ExternalKey"];
+	        this.Components = this.convertValues(source["Components"], QuantitySplitComponent);
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
 	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
 	    }

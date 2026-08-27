@@ -24,6 +24,10 @@ func (c *WorkspaceController) ListPlatforms() ([]domain.Platform, error) {
 	return c.ws.ListPlatforms(c.ctx())
 }
 
+func (c *WorkspaceController) CreatePlatform(p domain.Platform) error {
+	return c.ws.CreatePlatform(c.ctx(), &p)
+}
+
 func (c *WorkspaceController) CreateCustomer(name, notes string) (*domain.CustomerProfile, error) {
 	cust := &domain.CustomerProfile{DisplayName: name, Notes: notes}
 	if err := c.ws.CreateCustomer(c.ctx(), cust); err != nil {
@@ -38,6 +42,10 @@ func (c *WorkspaceController) ListCustomers() ([]domain.CustomerProfile, error) 
 
 func (c *WorkspaceController) GetCustomer(id uint) (*domain.CustomerProfile, error) {
 	return c.ws.GetCustomer(c.ctx(), id)
+}
+
+func (c *WorkspaceController) UpdateCustomer(cust domain.CustomerProfile) error {
+	return c.ws.UpdateCustomer(c.ctx(), &cust)
 }
 
 func (c *WorkspaceController) CreateAddress(a domain.RecipientAddress) (*domain.RecipientAddress, error) {
@@ -71,6 +79,10 @@ func (c *WorkspaceController) CreateAlias(a domain.ProductAlias) (*domain.Produc
 
 func (c *WorkspaceController) ListAliases(productID uint) ([]domain.ProductAlias, error) {
 	return c.ws.ListAliases(c.ctx(), productID)
+}
+
+func (c *WorkspaceController) CreateBundleComponent(comp domain.ProductBundleComponent) error {
+	return c.ws.CreateBundleComponent(c.ctx(), &comp)
 }
 
 func (c *WorkspaceController) CreateTemplate(t domain.TemplateConfig) (*domain.TemplateConfig, error) {
@@ -138,6 +150,22 @@ func (c *WorkspaceController) AssignLines(waveID uint, lineIDs []uint) error {
 	return c.ws.AssignLines(c.ctx(), waveID, lineIDs)
 }
 
+func (c *WorkspaceController) MoveLines(lineIDs []uint, targetWaveID uint) error {
+	return c.ws.MoveLines(c.ctx(), lineIDs, targetWaveID)
+}
+
+func (c *WorkspaceController) ApplyRevision(factID uint) error {
+	return c.ws.ApplyRevision(c.ctx(), factID)
+}
+
+func (c *WorkspaceController) DismissRevision(factID uint) error {
+	return c.ws.DismissRevision(c.ctx(), factID)
+}
+
+func (c *WorkspaceController) DecideDuplicate(id uint, accept bool) error {
+	return c.ws.DecideDuplicate(c.ctx(), id, accept)
+}
+
 func (c *WorkspaceController) ListInboxRows() ([]app.InboxRow, error) {
 	return c.ws.ListInboxRows(c.ctx())
 }
@@ -171,6 +199,30 @@ func (c *WorkspaceController) UpsertRule(rule domain.EntitlementRule) (*domain.E
 
 func (c *WorkspaceController) ListRules(waveID uint) ([]domain.EntitlementRule, error) {
 	return c.ws.ListRules(c.ctx(), waveID)
+}
+
+func (c *WorkspaceController) DeleteRule(id uint) error {
+	return c.ws.DeleteRule(c.ctx(), id)
+}
+
+func (c *WorkspaceController) AddException(e domain.EntitlementException) error {
+	return c.ws.AddException(c.ctx(), &e)
+}
+
+func (c *WorkspaceController) DeleteException(id uint) error {
+	return c.ws.DeleteException(c.ctx(), id)
+}
+
+func (c *WorkspaceController) UpsertQuantitySplitRule(rule domain.QuantitySplitRule) error {
+	return c.ws.UpsertQuantitySplitRule(c.ctx(), &rule)
+}
+
+func (c *WorkspaceController) DeleteQuantitySplitRule(id uint) error {
+	return c.ws.DeleteQuantitySplitRule(c.ctx(), id)
+}
+
+func (c *WorkspaceController) ListQuantitySplitRules(waveID uint) ([]domain.QuantitySplitRule, error) {
+	return c.ws.ListQuantitySplitRules(c.ctx(), waveID)
 }
 
 func (c *WorkspaceController) CreateGrant(waveID, customerID, productID uint, qty int) (*domain.FulfillmentResult, error) {

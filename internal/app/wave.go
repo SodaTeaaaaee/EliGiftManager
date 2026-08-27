@@ -123,6 +123,19 @@ func (ws *Workspace) AddException(ctx context.Context, e *domain.EntitlementExce
 	})
 }
 
+func (ws *Workspace) DeleteException(ctx context.Context, id uint) error {
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		e, err := tx.GetException(ctx, id)
+		if err != nil {
+			return err
+		}
+		if err := tx.DeleteException(ctx, id); err != nil {
+			return err
+		}
+		return recompute(ctx, tx, e.WaveID)
+	})
+}
+
 func (ws *Workspace) CreateGrant(ctx context.Context, waveID, customerID, productID uint, qty int) (*domain.FulfillmentResult, error) {
 	var grant *domain.FulfillmentResult
 	err := ws.Store.WithTx(ctx, func(tx domain.Store) error {

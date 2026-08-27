@@ -272,15 +272,53 @@ func (ws *Workspace) createFactWithLines(ctx context.Context, tx domain.Store, d
 }
 
 func (ws *Workspace) AttachIdentity(ctx context.Context, identityID, customerID uint) error {
-	ident, err := ws.Store.GetIdentity(ctx, identityID)
-	if err != nil {
-		return err
-	}
-	ident.CustomerProfileID = &customerID
-	if err := ws.Store.UpdateIdentity(ctx, ident); err != nil {
-		return err
-	}
-	return nil
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		ident, err := tx.GetIdentity(ctx, identityID)
+		if err != nil {
+			return err
+		}
+		ident.CustomerProfileID = &customerID
+		if err := tx.UpdateIdentity(ctx, ident); err != nil {
+			return err
+		}
+		// Every open wave holding a line of a fact behind this identity must
+		// recompute: attaching can unblock identity-blocked entitlement
+		// results and re-point retail customers.
+		facts, err := tx.ListFactsByPlatform(ctx, ident.PlatformID)
+		if err != nil {
+			return err
+		}
+		waves := map[uint]struct{}{}
+		for i := range facts {
+			fact := &facts[i]
+			if fact.PlatformIdentityID == nil || *fact.PlatformIdentityID != identityID {
+				continue
+			}
+			lines, err := tx.ListFactLines(ctx, fact.ID)
+			if err != nil {
+				return err
+			}
+			for _, ln := range lines {
+				if ln.WaveID == nil {
+					continue
+				}
+				wave, err := tx.GetWave(ctx, *ln.WaveID)
+				if err != nil {
+					return err
+				}
+				if wave.CloseResult != string(domain.WaveCloseResultOpen) {
+					continue
+				}
+				waves[*ln.WaveID] = struct{}{}
+			}
+		}
+		for waveID := range waves {
+			if err := recompute(ctx, tx, waveID); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (ws *Workspace) AssignLines(ctx context.Context, waveID uint, lineIDs []uint) error {
@@ -543,20 +581,42 @@ func (ws *Workspace) ListInboxRows(ctx context.Context) ([]InboxRow, error) {
 }
 
 func (ws *Workspace) DecideDuplicate(ctx context.Context, id uint, accept bool) error {
-	open, err := ws.Store.ListOpenDuplicates(ctx)
-	if err != nil {
-		return err
-	}
-	for i := range open {
-		if open[i].ID == id {
-			open[i].Decided = true
-			if accept {
-				open[i].Verdict = string(domain.DuplicateRecordOnly)
-			} else {
-				open[i].Verdict = string(domain.DuplicateNewResponsibility)
-			}
-			return ws.Store.UpdateDuplicate(ctx, &open[i])
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		open, err := tx.ListOpenDuplicates(ctx)
+		if err != nil {
+			return err
 		}
-	}
-	return domain.ErrNotFound
+		for i := range open {
+			if open[i].ID != id {
+				continue
+			}
+			obs := &open[i]
+			obs.Decided = true
+			if accept {
+				obs.Verdict = string(domain.DuplicateRecordOnly)
+			} else {
+				obs.Verdict = string(domain.DuplicateNewResponsibility)
+				// Claiming a new responsibility replays the original input
+				// stored on the observation: the fact and its lines are
+				// rebuilt under the original import document.
+				var snap duplicateInputSnapshot
+				if err := json.Unmarshal([]byte(obs.ExtraData), &snap); err != nil {
+					return fmt.Errorf("duplicate decision replay: observation %d carries no input snapshot: %w", obs.ID, err)
+				}
+				doc, err := tx.GetDocument(ctx, obs.DocumentID)
+				if err != nil {
+					return err
+				}
+				kind := snap.Fact.Kind
+				if kind == "" {
+					kind = string(domain.InputFactKindRetailOrder)
+				}
+				if _, err := ws.withStore(tx).createFactWithLines(ctx, tx, doc, snap.Fact, kind, nil); err != nil {
+					return err
+				}
+			}
+			return tx.UpdateDuplicate(ctx, obs)
+		}
+		return domain.ErrNotFound
+	})
 }
