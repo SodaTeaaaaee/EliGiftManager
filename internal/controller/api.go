@@ -7,7 +7,15 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
-func (c *WorkspaceController) ctx() context.Context { return context.Background() }
+// ctx returns the Wails application context captured at startup so backend
+// work is cancelled when the app shuts down; tests that never run startup
+// fall back to a background context.
+func (c *WorkspaceController) ctx() context.Context {
+	if appContext == nil {
+		return context.Background()
+	}
+	return appContext
+}
 
 func (c *WorkspaceController) EnsureBuiltinPlatforms() error {
 	return c.ws.EnsureBuiltinPlatforms(c.ctx())
