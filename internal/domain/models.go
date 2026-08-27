@@ -252,6 +252,7 @@ type FulfillmentResult struct {
 	Quantity              int
 	Address               AddressSnapshot
 	Frozen                bool
+	AddressPinned         bool
 	ExtraData             string
 	CreatedAt             time.Time
 	UpdatedAt             time.Time

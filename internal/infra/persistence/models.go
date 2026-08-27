@@ -262,6 +262,7 @@ type FulfillmentResult struct {
 	Quantity              int
 	AddressJSON           string `gorm:"type:text"`
 	Frozen                bool   `gorm:"not null;default:false;index"`
+	AddressPinned         bool   `gorm:"not null;default:false"`
 	ExtraData             string `gorm:"type:text"`
 	CreatedAt             time.Time
 	UpdatedAt             time.Time

@@ -1101,7 +1101,7 @@ func resultFromDomain(r domain.FulfillmentResult) (persistence.FulfillmentResult
 	if err != nil {
 		return persistence.FulfillmentResult{}, err
 	}
-	return persistence.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, AddressJSON: string(b), Frozen: r.Frozen, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
+	return persistence.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, AddressJSON: string(b), Frozen: r.Frozen, AddressPinned: r.AddressPinned, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
 }
 func resultToDomain(r persistence.FulfillmentResult) (domain.FulfillmentResult, error) {
 	var addr domain.AddressSnapshot
@@ -1110,7 +1110,7 @@ func resultToDomain(r persistence.FulfillmentResult) (domain.FulfillmentResult, 
 			return domain.FulfillmentResult{}, err
 		}
 	}
-	return domain.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, Address: addr, Frozen: r.Frozen, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
+	return domain.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, Address: addr, Frozen: r.Frozen, AddressPinned: r.AddressPinned, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
 }
 func orderFromDomain(o domain.SupplierOrder) persistence.SupplierOrder {
 	return persistence.SupplierOrder{ID: o.ID, WaveID: o.WaveID, FactoryPlatformID: o.FactoryPlatformID, Status: o.Status, ExportedAt: o.ExportedAt, VoidedAt: o.VoidedAt, ExportPayload: o.ExportPayload, ExtraData: o.ExtraData, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt}

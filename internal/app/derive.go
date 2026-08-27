@@ -109,19 +109,7 @@ func (ws *Workspace) defaultSnapshot(ctx context.Context, customerID *uint) (dom
 	if chosen == nil {
 		return domain.AddressSnapshot{}, nil
 	}
-	id := chosen.ID
-	return domain.AddressSnapshot{
-		SourceAddressID: &id,
-		RecipientName:   chosen.RecipientName,
-		Phone:           chosen.Phone,
-		Country:         chosen.Country,
-		Province:        chosen.Province,
-		City:            chosen.City,
-		District:        chosen.District,
-		AddressLine1:    chosen.AddressLine1,
-		AddressLine2:    chosen.AddressLine2,
-		PostalCode:      chosen.PostalCode,
-	}, nil
+	return snapshotFromAddress(*chosen), nil
 }
 
 func snapshotFromAddress(a domain.RecipientAddress) domain.AddressSnapshot {

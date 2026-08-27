@@ -184,9 +184,22 @@ func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) err
 // statement shares the caller's transaction; public entry points wrap it in
 // their own WithTx instead of nesting RecomputeEntitlements.
 func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID uint) error {
+	type key struct {
+		inst uint
+		prod uint
+	}
 	old, err := store.ListUnfrozenEntitlementResults(ctx, waveID)
 	if err != nil {
 		return err
+	}
+	// Operator-pinned address snapshots must survive the rebuild: collect them
+	// by (instance, product) before deleting so the recreated results keep the
+	// manual address instead of falling back to the customer default.
+	pinned := map[key]domain.AddressSnapshot{}
+	for _, r := range old {
+		if r.AddressPinned && r.EntitlementInstanceID != nil && r.ProductItemID != nil {
+			pinned[key{*r.EntitlementInstanceID, *r.ProductItemID}] = r.Address
+		}
 	}
 	for _, r := range old {
 		if err := store.DeleteResult(ctx, r.ID); err != nil {
@@ -204,10 +217,6 @@ func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID u
 	exceptions, err := store.ListExceptions(ctx, waveID)
 	if err != nil {
 		return err
-	}
-	type key struct {
-		inst uint
-		prod uint
 	}
 	qty := map[key]int{}
 	cust := map[uint]*uint{}
@@ -263,6 +272,11 @@ func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID u
 		if err != nil {
 			return err
 		}
+		addressPinned := false
+		if snap, ok := pinned[k]; ok {
+			addr = snap
+			addressPinned = true
+		}
 		res := &domain.FulfillmentResult{
 			WaveID:                waveID,
 			SourceKind:            string(domain.SourceEntitlementInstance),
@@ -271,6 +285,7 @@ func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID u
 			ProductItemID:         &prodID,
 			Quantity:              n,
 			Address:               addr,
+			AddressPinned:         addressPinned,
 		}
 		if inst, err := store.GetInstance(ctx, instID); err == nil {
 			if line, err := store.GetFactLine(ctx, inst.InputFactLineID); err == nil {
@@ -365,6 +380,7 @@ func (ws *Workspace) SetResultAddress(ctx context.Context, resultID, addressID u
 		return err
 	}
 	r.Address = snapshotFromAddress(*addr)
+	r.AddressPinned = true
 	return ws.Store.UpdateResult(ctx, r)
 }
 
