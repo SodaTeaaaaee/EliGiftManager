@@ -28,7 +28,7 @@ export const enUS: AppMessageSchema = {
     no: 'No',
     actions: 'Actions',
     pleaseSelect: 'Please select',
-    deepLinkFilter: 'Home deep-link filter active',
+    deepLinkFilter: 'Deep-link filter active: {filter}',
     locales: {
       zhCN: 'Simplified Chinese',
       enUS: 'English',
@@ -335,8 +335,7 @@ export const enUS: AppMessageSchema = {
     groupRowCount: '{n} rows',
     groupQtySum: 'subtotal {n}',
     groupNoCustomer: 'No linked customer',
-    groupNoProduct: 'No linked product',
-    notInFactory: 'Not in factory',
+    groupNoProduct: 'No product',
     generateFactoryOrder: 'Generate Factory Order',
     generateFactoryOrderSelected: 'Generate Factory Order ({n} selected)',
     generateFactoryOrderScopeSelected:
@@ -372,6 +371,7 @@ export const enUS: AppMessageSchema = {
     shipmentImported: 'Imported {n} shipments',
     shipmentSkipped: 'Skipped {n}',
     skippedRows: 'Skipped rows',
+    orderLinesLoadFailed: 'Failed to load lines for {n} orders; refresh and retry',
     manualShipment: 'Advanced: manual single entry',
     manualShipmentImport: 'Enter single shipment',
     writebackSuccess: 'Generated {count} channel writebacks',

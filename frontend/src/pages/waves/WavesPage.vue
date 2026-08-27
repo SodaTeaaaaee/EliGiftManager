@@ -47,6 +47,22 @@ const homeFilter = computed(() => {
   return typeof raw === 'string' ? raw : ''
 })
 
+/** Home bucket cards deep-link one of these filter values; unknown values
+ * keep the safe fallback (no filtering) but hide the tag since there is no
+ * honest bucket name to display. */
+const homeFilterBucketKeys: Record<string, string> = {
+  blocked: 'home.buckets.blockedResults',
+  writebackFailed: 'home.buckets.writebackFailed',
+  residual: 'home.buckets.residualClose',
+}
+
+const isKnownHomeFilter = computed(() => Boolean(homeFilterBucketKeys[homeFilter.value]))
+
+const deepLinkFilterLabel = computed(() => {
+  const key = homeFilterBucketKeys[homeFilter.value]
+  return key ? t('common.deepLinkFilter', { filter: t(key) }) : ''
+})
+
 interface WaveFlags {
   blocked: boolean
   writebackFailed: boolean
@@ -60,25 +76,27 @@ async function loadWaveFlags() {
   flagsLoading.value = true
   try {
     const flags: Record<number, WaveFlags> = {}
-    for (const w of waves.value) {
-      const open = w.CloseResult === 'open' || !w.CloseResult
-      // The blocked bucket only counts open waves (home semantics); writeback
-      // failures can linger on closed waves, so those still get inspected.
-      if (homeFilter.value === 'blocked' && !open) {
-        flags[w.ID] = { blocked: false, writebackFailed: false }
-        continue
-      }
-      try {
-        const views = await listResultViews(w.ID)
-        flags[w.ID] = {
-          blocked: views.some((v) => v.WorkState === 'blocked'),
-          writebackFailed: views.some((v) => v.WritebackFailed),
+    await Promise.all(
+      waves.value.map(async (w) => {
+        // The blocked bucket only counts strictly open waves, matching the
+        // backend's home bucket semantics; writeback failures can linger on
+        // closed waves, so those still get inspected.
+        if (homeFilter.value === 'blocked' && w.CloseResult !== 'open') {
+          flags[w.ID] = { blocked: false, writebackFailed: false }
+          return
         }
-      } catch (err) {
-        console.error('Failed to load result views for wave flags:', err)
-        flags[w.ID] = { blocked: false, writebackFailed: false }
-      }
-    }
+        try {
+          const views = await listResultViews(w.ID)
+          flags[w.ID] = {
+            blocked: views.some((v) => v.WorkState === 'blocked'),
+            writebackFailed: views.some((v) => v.WritebackFailed),
+          }
+        } catch (err) {
+          console.error('Failed to load result views for wave flags:', err)
+          flags[w.ID] = { blocked: false, writebackFailed: false }
+        }
+      }),
+    )
     waveFlags.value = flags
   } finally {
     flagsLoading.value = false
@@ -267,12 +285,12 @@ const columns = [
       <template #actions>
         <div class="waves-page__filter">
           <NTag
-            v-if="homeFilter"
+            v-if="isKnownHomeFilter"
             closable
             size="small"
             @close="clearHomeFilter"
           >
-            {{ t('common.deepLinkFilter') }}
+            {{ deepLinkFilterLabel }}
           </NTag>
         </div>
       </template>
@@ -329,7 +347,7 @@ const columns = [
     <WaveCloseDialog
       v-model:show="showCloseModal"
       :wave="targetCloseWave"
-      @closed="loadData"
+      @closed="refreshAll"
     />
   </div>
 </template>

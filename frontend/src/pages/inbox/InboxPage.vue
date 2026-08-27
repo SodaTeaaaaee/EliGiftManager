@@ -154,6 +154,24 @@ const homeFilter = computed(() => {
   return typeof raw === 'string' ? raw : ''
 })
 
+/** Home bucket cards deep-link one of these filter values; unknown values
+ * keep the safe fallback (no filtering) but hide the tag since there is no
+ * honest bucket name to display. */
+const homeFilterBucketKeys: Record<string, string> = {
+  unassigned: 'home.buckets.unassigned',
+  duplicates: 'home.buckets.duplicateAsk',
+  alignment: 'home.buckets.alignmentConflict',
+  unattached: 'home.buckets.identityUnattached',
+  revisions: 'home.buckets.pendingRevisions',
+}
+
+const isKnownHomeFilter = computed(() => Boolean(homeFilterBucketKeys[homeFilter.value]))
+
+const deepLinkFilterLabel = computed(() => {
+  const key = homeFilterBucketKeys[homeFilter.value]
+  return key ? t('common.deepLinkFilter', { filter: t(key) }) : ''
+})
+
 function matchesHomeFilter(row: InboxRow): boolean {
   switch (homeFilter.value) {
     case 'unassigned':
@@ -719,13 +737,13 @@ const columns = [
       <template #actions>
         <div class="inbox-page__filter">
           <NTag
-            v-if="homeFilter"
+            v-if="isKnownHomeFilter"
             closable
             size="small"
             class="inbox-page__home-filter-tag"
             @close="clearHomeFilter"
           >
-            {{ t('common.deepLinkFilter') }}
+            {{ deepLinkFilterLabel }}
           </NTag>
           <NSelect
             v-model:value="selectedDocumentFilter"
