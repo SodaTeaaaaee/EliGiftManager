@@ -384,6 +384,17 @@ export const zhCN = {
     exceptionDeleteSuccess: '例外已删除并重算权益',
   },
   waveRules: {
+    selectPlatform: '来源平台',
+    membershipLevel: '会员等级',
+    emptyCards: '暂无商品卡：添加规则或创建运营授予后，相关商品会按卡片展示',
+    noRulesInProduct: '本商品暂无权益规则',
+    splitMention: '该商品出现在 {n} 条数量拆分规则的组件中',
+    unlinkedTitle: '未关联商品的规则',
+    unlinkedHint: '以下规则引用的商品已不存在，请删除规则或重建商品后重新关联。',
+    unlinkedProductRef: '商品 #{id}',
+    exceptionTools: '例外维护',
+    exceptionToolsHint:
+      '例外暂无列表绑定，请手动填写例外 ID 删除；例外列表视图待后续绑定接入。',
     split: {
       title: '数量拆分',
       hint: '按波次把一个外部商品的整数数量拆解为多个内部统一商品；保存后覆盖行会立即重算。',

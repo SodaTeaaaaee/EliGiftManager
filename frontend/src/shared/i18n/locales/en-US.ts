@@ -388,6 +388,19 @@ export const enUS: AppMessageSchema = {
     exceptionDeleteSuccess: 'Exception deleted and entitlements recomputed',
   },
   waveRules: {
+    selectPlatform: 'Source platform',
+    membershipLevel: 'Membership level',
+    emptyCards:
+      'No product cards yet: add rules or create grants and the touched products appear as cards',
+    noRulesInProduct: 'No entitlement rules for this product yet',
+    splitMention: 'This product appears in {n} quantity split rule components',
+    unlinkedTitle: 'Rules without a linked product',
+    unlinkedHint:
+      'These rules reference products that no longer exist; delete the rule or recreate the product link.',
+    unlinkedProductRef: 'Product #{id}',
+    exceptionTools: 'Exception maintenance',
+    exceptionToolsHint:
+      'No exception-list binding exists yet; delete by manually entering the exception id. The list view lands with a later binding.',
     split: {
       title: 'Quantity splits',
       hint: 'Split one external product quantity into internal unified products for this wave; covered lines recompute on save.',

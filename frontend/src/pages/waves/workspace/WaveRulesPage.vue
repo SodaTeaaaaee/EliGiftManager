@@ -18,7 +18,7 @@ import {
   NSwitch,
   NTag,
 } from 'naive-ui'
-import { SectionCard, StatCard } from '@/shared/ui/cards'
+import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
 import { useFeedback } from '@/shared/ui/feedback'
@@ -95,14 +95,25 @@ const grantForm = ref({
 // ── Per-instance entitlement exceptions ──
 
 // The backend exposes AddException/DeleteException only — no list or
-// instance-lookup binding yet — so this stays a minimal manual form.
-const exceptionForm = ref({
-  productId: null as number | null,
-  instanceId: null as number | null,
-  quantity: 1,
-  note: '',
-})
+// instance-lookup binding yet — so each product card carries a minimal
+// manual add form, and deletion happens by exception id below.
+interface ExceptionDraft {
+  instanceId: number | null
+  quantity: number
+  note: string
+}
+
+const exceptionForms = ref<Record<number, ExceptionDraft>>({})
 const deleteExceptionId = ref<number | null>(null)
+
+/** Seed one draft per known product, keeping any partially-filled entries. */
+function resetExceptionForms() {
+  const next: Record<number, ExceptionDraft> = {}
+  for (const p of products.value) {
+    next[p.ID] = exceptionForms.value[p.ID] ?? { instanceId: null, quantity: 1, note: '' }
+  }
+  exceptionForms.value = next
+}
 
 // ── Quantity split rules ──
 
@@ -137,6 +148,7 @@ async function loadData() {
     platforms.value = platRes
     customers.value = custRes
     splitRules.value = splitRes
+    resetExceptionForms()
   } catch (err) {
     console.error('Failed to load wave rules:', err)
   } finally {
@@ -162,14 +174,7 @@ const productOptions = computed(() =>
   })),
 )
 
-const platformOptions = computed(() =>
-  platforms.value.map((p) => ({
-    label: `${p.Name} (${p.Key})`,
-    value: p.ID,
-  })),
-)
-
-/** Retail/source platforms — the side a quantity split key matches against. */
+/** Retail/source platforms — the side a rule selector or split key matches against. */
 const sourcePlatformOptions = computed(() =>
   platforms.value
     .filter((p) => p.Kind === 'source')
@@ -186,12 +191,95 @@ const customerOptions = computed(() =>
   })),
 )
 
+// ── Product-centered cards ──
+
+/**
+ * One card per product that carries rules and/or a positive total (grants
+ * and exceptions surface through totals). Split rules stay in their own
+ * section; cards only mention how many split components reference them.
+ */
+interface ProductCardData {
+  product: ProductItem
+  rules: EntitlementRule[]
+  total: ProductTotal | null
+  splitMentionCount: number
+  form: ExceptionDraft | undefined
+}
+
+const productCards = computed<ProductCardData[]>(() => {
+  const byId = new Map<number, ProductCardData>()
+  const ensure = (p: ProductItem): ProductCardData => {
+    let card = byId.get(p.ID)
+    if (!card) {
+      card = {
+        product: p,
+        rules: [],
+        total: null,
+        splitMentionCount: 0,
+        form: exceptionForms.value[p.ID],
+      }
+      byId.set(p.ID, card)
+    }
+    return card
+  }
+  for (const rule of rules.value) {
+    const p = products.value.find((x) => x.ID === rule.ProductID)
+    if (p) ensure(p).rules.push(rule)
+  }
+  for (const total of totals.value) {
+    if (total.Quantity <= 0) continue
+    const p = products.value.find((x) => x.ID === total.ProductID)
+    if (p) ensure(p).total = total
+  }
+  for (const split of splitRules.value) {
+    const seen = new Set<number>()
+    for (const c of split.Components) {
+      if (seen.has(c.ProductItemID)) continue
+      seen.add(c.ProductItemID)
+      const card = byId.get(c.ProductItemID)
+      if (card) card.splitMentionCount++
+    }
+  }
+  const cards = [...byId.values()]
+  cards.sort((a, b) => a.product.Name.localeCompare(b.product.Name, undefined, { numeric: true }))
+  return cards
+})
+
+/** Rules whose product no longer exists land in the fallback zone below. */
+const unlinkedRules = computed(() =>
+  rules.value.filter((r) => !products.value.some((p) => p.ID === r.ProductID)),
+)
+
+function selectorExtra(rule: EntitlementRule): string {
+  const sel = rule.Selector
+  if (sel.type === 'platform_level') {
+    const plat = platforms.value.find((p) => p.ID === sel.platform_id)
+    return `${plat ? plat.Name : ''} ${sel.level || ''}`.trim()
+  }
+  if (sel.type === 'instance') return `Inst #${sel.instance_id}`
+  return ''
+}
+
 function openCreateRule() {
   ruleForm.value = {
     ID: 0,
     ProductID: products.value[0]?.ID ?? null,
     selectorType: 'platform_level',
-    platformId: platforms.value[0]?.ID ?? null,
+    platformId: sourcePlatformOptions.value[0]?.value ?? null,
+    level: '舰长',
+    instanceId: null,
+    quantity: 1,
+    active: true,
+  }
+  showRuleModal.value = true
+}
+
+function openCreateRuleFor(product: ProductItem) {
+  ruleForm.value = {
+    ID: 0,
+    ProductID: product.ID,
+    selectorType: 'platform_level',
+    platformId: sourcePlatformOptions.value[0]?.value ?? null,
     level: '舰长',
     instanceId: null,
     quantity: 1,
@@ -205,7 +293,7 @@ function openEditRule(rule: EntitlementRule) {
     ID: rule.ID,
     ProductID: rule.ProductID,
     selectorType: rule.Selector.type,
-    platformId: rule.Selector.platform_id ?? platforms.value[0]?.ID ?? null,
+    platformId: rule.Selector.platform_id ?? sourcePlatformOptions.value[0]?.value ?? null,
     level: rule.Selector.level ?? '',
     instanceId: rule.Selector.instance_id ?? null,
     quantity: rule.Quantity,
@@ -260,24 +348,22 @@ async function handleDeleteRule(rule: EntitlementRule) {
 
 // ── Per-instance exception flow ──
 
-async function handleAddException() {
-  if (!exceptionForm.value.productId || !exceptionForm.value.instanceId) return
+async function handleAddExceptionFor(productId: number) {
+  const form = exceptionForms.value[productId]
+  if (!form || !form.instanceId) return
   actionLoading.value = true
   try {
     await addException({
       WaveID: props.waveId,
-      ProductID: exceptionForm.value.productId,
-      InstanceID: exceptionForm.value.instanceId,
-      Quantity: exceptionForm.value.quantity,
-      Note: exceptionForm.value.note.trim(),
+      ProductID: productId,
+      InstanceID: form.instanceId,
+      Quantity: form.quantity,
+      Note: form.note.trim(),
     })
     feedback.success(t('waveWorkspace.exceptionAddSuccess'))
-    exceptionForm.value = {
-      productId: exceptionForm.value.productId,
-      instanceId: null,
-      quantity: 1,
-      note: '',
-    }
+    form.instanceId = null
+    form.quantity = 1
+    form.note = ''
     await loadData()
     emit('refresh')
   } catch (err) {
@@ -425,90 +511,6 @@ function jumpToResultsByProduct(productId: number) {
   })
 }
 
-const ruleColumns = [
-  {
-    title: t('library.productName'),
-    key: 'ProductID',
-    render(row: EntitlementRule) {
-      const prod = products.value.find((p) => p.ID === row.ProductID)
-      return prod ? prod.Name : `Product #${row.ProductID}`
-    },
-  },
-  {
-    title: t('waveWorkspace.selector'),
-    key: 'Selector',
-    render(row: EntitlementRule) {
-      const selType = row.Selector.type
-      const tag = h(StatusBadge, {
-        dimension: 'entitlementSelectorType',
-        value: selType,
-      })
-      let extra = ''
-      if (selType === 'platform_level') {
-        const plat = platforms.value.find((p) => p.ID === row.Selector.platform_id)
-        extra = `${plat ? plat.Name : ''} ${row.Selector.level || ''}`
-      } else if (selType === 'instance') {
-        extra = `Inst #${row.Selector.instance_id}`
-      }
-      return h(NSpace, { align: 'center', size: 'small' }, () => [
-        tag,
-        extra ? h('span', { style: 'font-size: 13px; color: var(--color-text-secondary);' }, extra) : null,
-      ])
-    },
-  },
-  {
-    title: t('waveWorkspace.quantity'),
-    key: 'Quantity',
-    width: 100,
-    render(row: EntitlementRule) {
-      return h(
-        NTag,
-        { type: row.Quantity >= 0 ? 'success' : 'error', size: 'small' },
-        { default: () => (row.Quantity >= 0 ? `+${row.Quantity}` : String(row.Quantity)) },
-      )
-    },
-  },
-  {
-    title: t('waves.status'),
-    key: 'Active',
-    width: 100,
-    render(row: EntitlementRule) {
-      return row.Active
-        ? h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
-        : h(NTag, { type: 'default', size: 'small' }, { default: () => t('common.no') })
-    },
-  },
-  {
-    title: t('common.actions'),
-    key: 'actions',
-    width: 160,
-    render(row: EntitlementRule) {
-      return h('span', { class: 'wave-rules-page__action-cell' }, [
-        h(
-          NButton,
-          {
-            size: 'tiny',
-            secondary: true,
-            onClick: () => openEditRule(row),
-          },
-          { default: () => t('common.edit') },
-        ),
-        h(
-          NButton,
-          {
-            size: 'tiny',
-            type: 'error',
-            secondary: true,
-            disabled: actionLoading.value,
-            onClick: () => void handleDeleteRule(row),
-          },
-          { default: () => t('waveWorkspace.deleteRule') },
-        ),
-      ])
-    },
-  },
-]
-
 const splitColumns = [
   {
     title: t('waveRules.split.platform'),
@@ -523,7 +525,7 @@ const splitColumns = [
     title: t('waveRules.split.externalKey'),
     key: 'ExternalKey',
     render(row: QuantitySplitRule) {
-      return h('span', { class: 'wave-rules-page__mono' }, row.ExternalKey)
+      return row.ExternalKey
     },
   },
   {
@@ -572,25 +574,7 @@ const splitColumns = [
 
 <template>
   <div class="wave-rules-page">
-    <!-- Product Totals Banner -->
-    <SectionCard :title="t('waveWorkspace.productTotals')">
-      <div v-if="!totals.length" class="wave-rules-page__empty-totals">
-        <EmptyState :title="t('waveWorkspace.emptyRules')" size="sm" />
-      </div>
-      <div v-else class="wave-rules-page__totals-grid">
-        <StatCard
-          v-for="total in totals"
-          :key="total.ProductID"
-          :label="total.Name"
-          :value="String(total.Quantity)"
-          :clickable="true"
-          tone="progress"
-          @click="jumpToResultsByProduct(total.ProductID)"
-        />
-      </div>
-    </SectionCard>
-
-    <!-- Rules Table -->
+    <!-- Product-centered rule cards -->
     <SectionCard :title="t('waveWorkspace.productRules')">
       <template #actions>
         <NSpace>
@@ -607,121 +591,140 @@ const splitColumns = [
       </template>
 
       <NSpin :show="loading">
-        <div v-if="!rules.length" class="wave-rules-page__empty">
-          <EmptyState :title="t('waveWorkspace.emptyRules')" size="sm" />
+        <div v-if="!productCards.length && !unlinkedRules.length" class="wave-rules-page__empty">
+          <EmptyState :title="t('waveRules.emptyCards')" size="sm" />
         </div>
-        <div v-else class="wave-rules-page__table">
-          <NDataTable
-            :columns="ruleColumns"
-            :data="rules"
-            :row-key="(row: EntitlementRule) => row.ID"
-            size="small"
-          />
+        <div v-else class="wave-rules-page__cards">
+          <div
+            v-for="card in productCards"
+            :key="card.product.ID"
+            class="wave-rules-page__card"
+          >
+            <div class="wave-rules-page__card-header">
+              <div class="wave-rules-page__card-id">
+                <span class="wave-rules-page__card-name">{{ card.product.Name }}</span>
+                <span class="wave-rules-page__card-sku">{{ card.product.FactorySKU }}</span>
+              </div>
+              <NSpace size="small" align="center">
+                <NButton
+                  size="tiny"
+                  type="primary"
+                  quaternary
+                  @click="jumpToResultsByProduct(card.product.ID)"
+                >
+                  {{ t('waveWorkspace.productTotals') }} × {{ card.total?.Quantity ?? 0 }}
+                </NButton>
+                <NButton size="tiny" secondary @click="openCreateRuleFor(card.product)">
+                  {{ t('waveWorkspace.addRule') }}
+                </NButton>
+              </NSpace>
+            </div>
+
+            <p v-if="card.splitMentionCount > 0" class="wave-rules-page__split-mention">
+              {{ t('waveRules.splitMention', { n: card.splitMentionCount }) }}
+            </p>
+
+            <div v-if="card.rules.length" class="wave-rules-page__rules">
+              <div v-for="rule in card.rules" :key="rule.ID" class="wave-rules-page__rule-row">
+                <StatusBadge dimension="entitlementSelectorType" :value="rule.Selector.type" />
+                <span
+                  v-if="selectorExtra(rule)"
+                  class="wave-rules-page__rule-extra"
+                >{{ selectorExtra(rule) }}</span>
+                <NTag :type="rule.Quantity >= 0 ? 'success' : 'error'" size="small">
+                  {{ rule.Quantity >= 0 ? `+${rule.Quantity}` : rule.Quantity }}
+                </NTag>
+                <NTag v-if="rule.Active" type="success" size="small">
+                  {{ t('common.yes') }}
+                </NTag>
+                <NTag v-else type="default" size="small">{{ t('common.no') }}</NTag>
+                <span class="wave-rules-page__rule-actions">
+                  <NButton size="tiny" secondary @click="openEditRule(rule)">
+                    {{ t('common.edit') }}
+                  </NButton>
+                  <NButton
+                    size="tiny"
+                    type="error"
+                    secondary
+                    :disabled="actionLoading"
+                    @click="handleDeleteRule(rule)"
+                  >
+                    {{ t('waveWorkspace.deleteRule') }}
+                  </NButton>
+                </span>
+              </div>
+            </div>
+            <p v-else class="wave-rules-page__no-rules">{{ t('waveRules.noRulesInProduct') }}</p>
+
+            <div class="wave-rules-page__card-exception">
+              <span class="wave-rules-page__section-label">{{ t('waveWorkspace.exceptions') }}</span>
+              <div v-if="card.form" class="wave-rules-page__exception-form">
+                <NInputNumber
+                  v-model:value="card.form.instanceId"
+                  :min="1"
+                  size="small"
+                  :placeholder="t('waveWorkspace.instanceID')"
+                />
+                <NInputNumber
+                  v-model:value="card.form.quantity"
+                  size="small"
+                  :placeholder="t('waveWorkspace.quantity')"
+                />
+                <NInput
+                  v-model:value="card.form.note"
+                  size="small"
+                  :placeholder="t('library.notes')"
+                />
+                <NButton
+                  size="tiny"
+                  type="primary"
+                  :loading="actionLoading"
+                  :disabled="!card.form.instanceId"
+                  @click="handleAddExceptionFor(card.product.ID)"
+                >
+                  {{ t('waveWorkspace.addException') }}
+                </NButton>
+              </div>
+            </div>
+          </div>
         </div>
       </NSpin>
     </SectionCard>
 
-    <!-- Add/Edit Rule Modal -->
-    <NModal
-      v-model:show="showRuleModal"
-      preset="card"
-      :title="isEditingRule ? t('waveWorkspace.editRule') : t('waveWorkspace.addRule')"
-      style="width: 520px"
-    >
-      <NForm label-placement="left" label-width="110">
-        <NFormItem :label="t('library.productName')">
-          <NSelect
-            v-model:value="ruleForm.ProductID"
-            :options="productOptions"
-            :placeholder="t('library.productName')"
-          />
-        </NFormItem>
-        <NFormItem :label="t('waveWorkspace.selector')">
-          <NRadioGroup v-model:value="ruleForm.selectorType">
-            <NSpace vertical>
-              <NRadio value="platform_level">
-                {{ t('glossary.entitlementSelectorType.platform_level.label') }}
-              </NRadio>
-              <NRadio value="wave_all">
-                {{ t('glossary.entitlementSelectorType.wave_all.label') }}
-              </NRadio>
-              <NRadio value="instance">
-                {{ t('glossary.entitlementSelectorType.instance.label') }}
-              </NRadio>
-            </NSpace>
-          </NRadioGroup>
-        </NFormItem>
+    <!-- Fallback: rules whose product no longer exists -->
+    <SectionCard v-if="unlinkedRules.length" :title="t('waveRules.unlinkedTitle')">
+      <p class="wave-rules-page__hint">{{ t('waveRules.unlinkedHint') }}</p>
+      <div class="wave-rules-page__cards wave-rules-page__cards--single">
+        <div class="wave-rules-page__card">
+          <div v-for="rule in unlinkedRules" :key="rule.ID" class="wave-rules-page__rule-row">
+            <StatusBadge dimension="entitlementSelectorType" :value="rule.Selector.type" />
+            <span class="wave-rules-page__rule-extra">
+              {{ t('waveRules.unlinkedProductRef', { id: rule.ProductID }) }}
+            </span>
+            <span
+              v-if="selectorExtra(rule)"
+              class="wave-rules-page__rule-extra"
+            >{{ selectorExtra(rule) }}</span>
+            <NTag :type="rule.Quantity >= 0 ? 'success' : 'error'" size="small">
+              {{ rule.Quantity >= 0 ? `+${rule.Quantity}` : rule.Quantity }}
+            </NTag>
+            <NButton
+              size="tiny"
+              type="error"
+              secondary
+              :disabled="actionLoading"
+              @click="handleDeleteRule(rule)"
+            >
+              {{ t('waveWorkspace.deleteRule') }}
+            </NButton>
+          </div>
+        </div>
+      </div>
+    </SectionCard>
 
-        <template v-if="ruleForm.selectorType === 'platform_level'">
-          <NFormItem :label="t('library.factoryPlatform')">
-            <NSelect v-model:value="ruleForm.platformId" :options="platformOptions" />
-          </NFormItem>
-          <NFormItem :label="t('inbox.kind')">
-            <NInput v-model:value="ruleForm.level" />
-          </NFormItem>
-        </template>
-
-        <template v-else-if="ruleForm.selectorType === 'instance'">
-          <NFormItem :label="t('waveWorkspace.instanceID')">
-            <NInputNumber v-model:value="ruleForm.instanceId" :min="1" />
-          </NFormItem>
-        </template>
-
-        <NFormItem :label="t('waveWorkspace.quantity')">
-          <NInputNumber v-model:value="ruleForm.quantity" />
-        </NFormItem>
-        <NFormItem :label="t('waves.status')">
-          <NSwitch v-model:value="ruleForm.active" />
-        </NFormItem>
-      </NForm>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showRuleModal = false">{{ t('common.cancel') }}</NButton>
-          <NButton
-            type="primary"
-            :loading="actionLoading"
-            :disabled="!ruleForm.ProductID"
-            @click="handleSaveRule"
-          >
-            {{ t('common.confirm') }}
-          </NButton>
-        </NSpace>
-      </template>
-    </NModal>
-
-    <!-- Per-instance Entitlement Exceptions -->
-    <SectionCard :title="t('waveWorkspace.exceptions')">
-      <p class="wave-rules-page__hint">{{ t('waveWorkspace.exceptionsHint') }}</p>
-      <NForm label-placement="left" label-width="120" :show-feedback="false">
-        <NFormItem :label="t('library.productName')">
-          <NSelect
-            v-model:value="exceptionForm.productId"
-            :options="productOptions"
-            :placeholder="t('common.pleaseSelect')"
-          />
-        </NFormItem>
-        <NFormItem :label="t('waveWorkspace.instanceID')">
-          <NInputNumber v-model:value="exceptionForm.instanceId" :min="1" class="wave-rules-page__number" />
-        </NFormItem>
-        <NFormItem :label="t('waveWorkspace.quantity')">
-          <NInputNumber v-model:value="exceptionForm.quantity" class="wave-rules-page__number" />
-        </NFormItem>
-        <NFormItem :label="t('library.notes')">
-          <NInput v-model:value="exceptionForm.note" />
-        </NFormItem>
-      </NForm>
-      <NSpace>
-        <NButton
-          size="small"
-          type="primary"
-          :loading="actionLoading"
-          :disabled="!exceptionForm.productId || !exceptionForm.instanceId"
-          @click="handleAddException"
-        >
-          {{ t('waveWorkspace.addException') }}
-        </NButton>
-      </NSpace>
-
+    <!-- Exception maintenance (manual delete by id) -->
+    <SectionCard :title="t('waveRules.exceptionTools')">
+      <p class="wave-rules-page__hint">{{ t('waveRules.exceptionToolsHint') }}</p>
       <div class="wave-rules-page__exception-delete">
         <NInputNumber
           v-model:value="deleteExceptionId"
@@ -766,6 +769,74 @@ const splitColumns = [
         />
       </div>
     </SectionCard>
+
+    <!-- Add/Edit Rule Modal -->
+    <NModal
+      v-model:show="showRuleModal"
+      preset="card"
+      :title="isEditingRule ? t('waveWorkspace.editRule') : t('waveWorkspace.addRule')"
+      style="width: 520px"
+    >
+      <NForm label-placement="left" label-width="110">
+        <NFormItem :label="t('library.productName')">
+          <NSelect
+            v-model:value="ruleForm.ProductID"
+            :options="productOptions"
+            :placeholder="t('library.productName')"
+          />
+        </NFormItem>
+        <NFormItem :label="t('waveWorkspace.selector')">
+          <NRadioGroup v-model:value="ruleForm.selectorType">
+            <NSpace vertical>
+              <NRadio value="platform_level">
+                {{ t('glossary.entitlementSelectorType.platform_level.label') }}
+              </NRadio>
+              <NRadio value="wave_all">
+                {{ t('glossary.entitlementSelectorType.wave_all.label') }}
+              </NRadio>
+              <NRadio value="instance">
+                {{ t('glossary.entitlementSelectorType.instance.label') }}
+              </NRadio>
+            </NSpace>
+          </NRadioGroup>
+        </NFormItem>
+
+        <template v-if="ruleForm.selectorType === 'platform_level'">
+          <NFormItem :label="t('waveRules.selectPlatform')">
+            <NSelect v-model:value="ruleForm.platformId" :options="sourcePlatformOptions" />
+          </NFormItem>
+          <NFormItem :label="t('waveRules.membershipLevel')">
+            <NInput v-model:value="ruleForm.level" />
+          </NFormItem>
+        </template>
+
+        <template v-else-if="ruleForm.selectorType === 'instance'">
+          <NFormItem :label="t('waveWorkspace.instanceID')">
+            <NInputNumber v-model:value="ruleForm.instanceId" :min="1" />
+          </NFormItem>
+        </template>
+
+        <NFormItem :label="t('waveWorkspace.quantity')">
+          <NInputNumber v-model:value="ruleForm.quantity" />
+        </NFormItem>
+        <NFormItem :label="t('waves.status')">
+          <NSwitch v-model:value="ruleForm.active" />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showRuleModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!ruleForm.ProductID"
+            @click="handleSaveRule"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
 
     <!-- Create Grant Modal -->
     <NModal
@@ -873,14 +944,109 @@ const splitColumns = [
   gap: var(--space-4);
 }
 
-.wave-rules-page__totals-grid {
+.wave-rules-page__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
   gap: var(--space-3);
 }
 
-.wave-rules-page__empty,
-.wave-rules-page__empty-totals {
+.wave-rules-page__cards--single {
+  grid-template-columns: 1fr;
+}
+
+.wave-rules-page__card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wave-rules-page__card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.wave-rules-page__card-id {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.wave-rules-page__card-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.wave-rules-page__card-sku {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.wave-rules-page__split-mention,
+.wave-rules-page__no-rules {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.wave-rules-page__rules {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wave-rules-page__rule-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.wave-rules-page__rule-extra {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.wave-rules-page__rule-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.wave-rules-page__card-exception {
+  border-top: 1px dashed var(--color-border, var(--card-border-color));
+  padding-top: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wave-rules-page__section-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.wave-rules-page__exception-form {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.wave-rules-page__exception-form .n-input {
+  width: 150px;
+}
+
+.wave-rules-page__empty {
   padding: var(--space-3) 0;
 }
 
@@ -900,19 +1066,11 @@ const splitColumns = [
   gap: var(--space-2);
 }
 
-.wave-rules-page__mono {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-}
-
 .wave-rules-page__number {
   width: 180px;
 }
 
 .wave-rules-page__exception-delete {
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
-  border-top: 1px dashed var(--color-border, var(--card-border-color));
   display: flex;
   align-items: center;
   gap: var(--space-2);
