@@ -491,3 +491,313 @@ func TestNextWaveNoFromMaxSuffix(t *testing.T) {
 		t.Fatalf("created wave number = %q, want W-000004", w.WaveNo)
 	}
 }
+
+// failingUpdateStore wraps a store and fails the Nth UpdateSupplierOrderLine
+// call. It also wraps WithTx so the injection reaches inside transactions.
+type failingUpdateStore struct {
+	domain.Store
+	calls  *int
+	failOn int
+}
+
+func (s *failingUpdateStore) UpdateSupplierOrderLine(ctx context.Context, l *domain.SupplierOrderLine) error {
+	*s.calls++
+	if *s.calls == s.failOn {
+		return fmt.Errorf("injected update failure %d", *s.calls)
+	}
+	return s.Store.UpdateSupplierOrderLine(ctx, l)
+}
+
+func (s *failingUpdateStore) WithTx(ctx context.Context, fn func(domain.Store) error) error {
+	return s.Store.WithTx(ctx, func(tx domain.Store) error {
+		return fn(&failingUpdateStore{Store: tx, calls: s.calls, failOn: s.failOn})
+	})
+}
+
+// TestVoidFactoryOrderRollsBackAtomically fails the second order-line update
+// mid-void and asserts the whole void rolls back: results stay frozen, tracking
+// IDs stay unretired, links stay in place, and the order keeps its status.
+func TestVoidFactoryOrderRollsBackAtomically(t *testing.T) {
+	ctx := context.Background()
+	gdb := openTestDB(t)
+	base := infra.NewGormStore(gdb)
+	ws := NewWorkspace(base)
+
+	factory := &domain.Platform{Key: "rozao", Name: "柔造", Kind: string(domain.PlatformKindFactory)}
+	if err := base.CreatePlatform(ctx, factory); err != nil {
+		t.Fatalf("create factory: %v", err)
+	}
+	customer := &domain.CustomerProfile{DisplayName: "C"}
+	if err := base.CreateCustomer(ctx, customer); err != nil {
+		t.Fatalf("create customer: %v", err)
+	}
+	addr := &domain.RecipientAddress{CustomerProfileID: customer.ID, RecipientName: "Default", Phone: "138", AddressLine1: "1 St", IsDefault: true}
+	if err := base.CreateAddress(ctx, addr); err != nil {
+		t.Fatalf("create address: %v", err)
+	}
+	p1 := &domain.ProductItem{Name: "P1", FactoryPlatformID: factory.ID, FactorySKU: "SKU-1"}
+	p2 := &domain.ProductItem{Name: "P2", FactoryPlatformID: factory.ID, FactorySKU: "SKU-2"}
+	if err := base.CreateProduct(ctx, p1); err != nil {
+		t.Fatalf("create product 1: %v", err)
+	}
+	if err := base.CreateProduct(ctx, p2); err != nil {
+		t.Fatalf("create product 2: %v", err)
+	}
+	wave, err := ws.CreateWave(ctx, "w", "")
+	if err != nil {
+		t.Fatalf("create wave: %v", err)
+	}
+	for i, p := range []*domain.ProductItem{p1, p2} {
+		if _, err := ws.CreateGrant(ctx, wave.ID, customer.ID, p.ID, i+1); err != nil {
+			t.Fatalf("create grant %d: %v", i+1, err)
+		}
+	}
+	order, lines, err := ws.GenerateFactoryOrder(ctx, wave.ID, factory.ID)
+	if err != nil {
+		t.Fatalf("generate factory order: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 order lines, got %d", len(lines))
+	}
+
+	calls := 0
+	failing := &failingUpdateStore{Store: base, calls: &calls, failOn: 2}
+	voidWs := NewWorkspace(failing)
+	if err := voidWs.VoidFactoryOrder(ctx, order.ID); err == nil || !strings.Contains(err.Error(), "injected update failure") {
+		t.Fatalf("expected injected failure on second line update, got %v", err)
+	}
+
+	after, err := base.GetSupplierOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatalf("get order after failed void: %v", err)
+	}
+	if after.Status != string(domain.SupplierOrderGenerated) {
+		t.Fatalf("order status = %q, want %q", after.Status, domain.SupplierOrderGenerated)
+	}
+	if after.VoidedAt != nil {
+		t.Fatalf("order voided_at = %v, want nil after rollback", after.VoidedAt)
+	}
+
+	results, err := base.ListResults(ctx, wave.ID)
+	if err != nil {
+		t.Fatalf("list results: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	for _, r := range results {
+		if !r.Frozen {
+			t.Fatalf("result %d must stay frozen after void rollback", r.ID)
+		}
+		links, err := base.ListLinksByResult(ctx, r.ID)
+		if err != nil {
+			t.Fatalf("list links for result %d: %v", r.ID, err)
+		}
+		if len(links) != 1 {
+			t.Fatalf("result %d must keep its link after void rollback, got %d", r.ID, len(links))
+		}
+	}
+
+	var retired int64
+	if err := gdb.Table("retired_tracking_ids").Count(&retired).Error; err != nil {
+		t.Fatalf("count retired tracking ids: %v", err)
+	}
+	if retired != 0 {
+		t.Fatalf("expected 0 retired tracking ids after rollback, got %d", retired)
+	}
+
+	for _, ln := range lines {
+		stored, err := base.GetSupplierOrderLine(ctx, ln.ID)
+		if err != nil {
+			t.Fatalf("get order line %d: %v", ln.ID, err)
+		}
+		if stored.TrackingRetired {
+			t.Fatalf("order line %d must not be marked retired after rollback", ln.ID)
+		}
+	}
+}
+
+// TestRecomputeKeepsFrozenResult covers the pinned-and-frozen coexistence: a
+// result pinned before factory order generation is frozen with the pinned
+// address, address changes are rejected once frozen, and recompute leaves the
+// frozen row untouched instead of rebuilding it.
+func TestRecomputeKeepsFrozenResult(t *testing.T) {
+	ctx := context.Background()
+	gdb := openTestDB(t)
+	ws := NewWorkspace(infra.NewGormStore(gdb))
+	store := ws.Store
+
+	source := &domain.Platform{Key: "bilibili", Name: "B", Kind: string(domain.PlatformKindSource)}
+	factory := &domain.Platform{Key: "rozao", Name: "柔造", Kind: string(domain.PlatformKindFactory)}
+	if err := store.CreatePlatform(ctx, source); err != nil {
+		t.Fatalf("create source: %v", err)
+	}
+	if err := store.CreatePlatform(ctx, factory); err != nil {
+		t.Fatalf("create factory: %v", err)
+	}
+	customer := &domain.CustomerProfile{DisplayName: "C"}
+	if err := store.CreateCustomer(ctx, customer); err != nil {
+		t.Fatalf("create customer: %v", err)
+	}
+	addrDefault := &domain.RecipientAddress{CustomerProfileID: customer.ID, Label: "home", RecipientName: "Default Name", Phone: "138", AddressLine1: "1 Default St", IsDefault: true}
+	addrOther := &domain.RecipientAddress{CustomerProfileID: customer.ID, Label: "office", RecipientName: "Other Name", Phone: "139", AddressLine1: "9 Other Ave"}
+	if err := store.CreateAddress(ctx, addrDefault); err != nil {
+		t.Fatalf("create default address: %v", err)
+	}
+	if err := store.CreateAddress(ctx, addrOther); err != nil {
+		t.Fatalf("create other address: %v", err)
+	}
+	product := &domain.ProductItem{Name: "P", FactoryPlatformID: factory.ID, FactorySKU: "SKU-P"}
+	if err := store.CreateProduct(ctx, product); err != nil {
+		t.Fatalf("create product: %v", err)
+	}
+	wave, err := ws.CreateWave(ctx, "w", "")
+	if err != nil {
+		t.Fatalf("create wave: %v", err)
+	}
+
+	ident := &domain.PlatformIdentity{PlatformID: source.ID, IdentityType: string(domain.IdentityTypePlatformUID), IdentityValue: "uid-1", NormalizedValue: NormalizeIdentity("uid-1"), CustomerProfileID: &customer.ID}
+	if err := store.CreateIdentity(ctx, ident); err != nil {
+		t.Fatalf("create identity: %v", err)
+	}
+	fact := &domain.InputFact{PlatformID: source.ID, Kind: string(domain.InputFactKindMembership), StableExternalID: "mem-fz", CustomerProfileID: &customer.ID, PlatformIdentityID: &ident.ID, MembershipLevel: "captain"}
+	if err := store.CreateFact(ctx, fact); err != nil {
+		t.Fatalf("create fact: %v", err)
+	}
+	line := &domain.InputFactLine{FactID: fact.ID, SourceLineNo: 1, Quantity: 1}
+	if err := store.CreateFactLine(ctx, line); err != nil {
+		t.Fatalf("create fact line: %v", err)
+	}
+	if err := ws.AssignLines(ctx, wave.ID, []uint{line.ID}); err != nil {
+		t.Fatalf("assign lines: %v", err)
+	}
+	inst, err := store.GetInstanceByLine(ctx, wave.ID, line.ID)
+	if err != nil {
+		t.Fatalf("get instance: %v", err)
+	}
+
+	rule := &domain.EntitlementRule{WaveID: wave.ID, ProductID: product.ID, Selector: domain.EntitlementSelector{Type: string(domain.SelectorWaveAll)}, Quantity: 1, Active: true}
+	if err := ws.UpsertRule(ctx, rule); err != nil {
+		t.Fatalf("upsert rule: %v", err)
+	}
+
+	entitlementFor := func() domain.FulfillmentResult {
+		t.Helper()
+		results, err := store.ListResults(ctx, wave.ID)
+		if err != nil {
+			t.Fatalf("list results: %v", err)
+		}
+		var found *domain.FulfillmentResult
+		count := 0
+		for i := range results {
+			if results[i].SourceKind == string(domain.SourceEntitlementInstance) && results[i].EntitlementInstanceID != nil && *results[i].EntitlementInstanceID == inst.ID {
+				found = &results[i]
+				count++
+			}
+		}
+		if found == nil || count != 1 {
+			t.Fatalf("expected exactly 1 entitlement result for instance %d, got %d", inst.ID, count)
+		}
+		return *found
+	}
+
+	before := entitlementFor()
+	if got := before.Address.RecipientName; got != "Default Name" {
+		t.Fatalf("initial address = %q, want default snapshot", got)
+	}
+
+	// Pin the address first, then freeze via factory order generation.
+	if err := ws.SetResultAddress(ctx, before.ID, addrOther.ID); err != nil {
+		t.Fatalf("set result address before generate: %v", err)
+	}
+	if _, _, err := ws.GenerateFactoryOrder(ctx, wave.ID, factory.ID); err != nil {
+		t.Fatalf("generate factory order: %v", err)
+	}
+	frozen := entitlementFor()
+	if !frozen.Frozen || !frozen.AddressPinned {
+		t.Fatal("result must be both frozen and pinned after generation")
+	}
+	if got := frozen.Address.RecipientName; got != "Other Name" {
+		t.Fatalf("frozen address = %q, want pinned Other Name", got)
+	}
+	if frozen.ID != before.ID {
+		t.Fatalf("freeze must keep the same result row, got %d want %d", frozen.ID, before.ID)
+	}
+
+	// Address changes are rejected once frozen.
+	if err := ws.SetResultAddress(ctx, frozen.ID, addrDefault.ID); err == nil || !strings.Contains(err.Error(), "frozen") {
+		t.Fatalf("expected frozen rejection, got %v", err)
+	}
+
+	// Recompute via a rule quantity change: the frozen row survives untouched.
+	rule.Quantity = 4
+	if err := ws.UpsertRule(ctx, rule); err != nil {
+		t.Fatalf("upsert rule after freeze: %v", err)
+	}
+	after := entitlementFor()
+	if after.ID != frozen.ID {
+		t.Fatalf("recompute must not rebuild the frozen result, got id %d want %d", after.ID, frozen.ID)
+	}
+	if !after.Frozen || !after.AddressPinned {
+		t.Fatal("recomputed result must stay frozen and pinned")
+	}
+	if after.Quantity != frozen.Quantity {
+		t.Fatalf("frozen result quantity = %d, want unchanged %d", after.Quantity, frozen.Quantity)
+	}
+	if got := after.Address.RecipientName; got != "Other Name" {
+		t.Fatalf("frozen result address = %q, want unchanged Other Name", got)
+	}
+}
+
+// TestUpsertRuleEditPreservesTimestampsAndUpdateRefreshesUpdatedAt guards the
+// rule edit path: a caller-constructed rule without audit timestamps must not
+// zero created_at (backfill), and the Save-based update must still refresh
+// updated_at beyond the rewound original.
+func TestUpsertRuleEditPreservesTimestampsAndUpdateRefreshesUpdatedAt(t *testing.T) {
+	ctx := context.Background()
+	gdb := openTestDB(t)
+	ws := NewWorkspace(infra.NewGormStore(gdb))
+	store := ws.Store
+	past := time.Now().Add(-96 * time.Hour).Truncate(time.Second)
+
+	factory := &domain.Platform{Key: "rozao", Name: "柔造", Kind: string(domain.PlatformKindFactory)}
+	if err := store.CreatePlatform(ctx, factory); err != nil {
+		t.Fatalf("create factory: %v", err)
+	}
+	product := &domain.ProductItem{Name: "P", FactoryPlatformID: factory.ID, FactorySKU: "SKU-P"}
+	if err := store.CreateProduct(ctx, product); err != nil {
+		t.Fatalf("create product: %v", err)
+	}
+	wave, err := ws.CreateWave(ctx, "w", "")
+	if err != nil {
+		t.Fatalf("create wave: %v", err)
+	}
+
+	rule := &domain.EntitlementRule{WaveID: wave.ID, ProductID: product.ID, Selector: domain.EntitlementSelector{Type: string(domain.SelectorWaveAll)}, Quantity: 1, Active: true}
+	if err := ws.UpsertRule(ctx, rule); err != nil {
+		t.Fatalf("upsert rule: %v", err)
+	}
+	if err := gdb.Exec("UPDATE entitlement_rules SET created_at = ?, updated_at = ? WHERE id = ?", past, past, rule.ID).Error; err != nil {
+		t.Fatalf("rewind rule timestamps: %v", err)
+	}
+
+	// Edit as a UI would: a fresh rule struct with only the edited fields.
+	edited := &domain.EntitlementRule{ID: rule.ID, WaveID: wave.ID, ProductID: product.ID, Selector: domain.EntitlementSelector{Type: string(domain.SelectorWaveAll)}, Quantity: 3, Active: true}
+	if err := ws.UpsertRule(ctx, edited); err != nil {
+		t.Fatalf("upsert edited rule: %v", err)
+	}
+
+	after, err := store.GetRule(ctx, rule.ID)
+	if err != nil {
+		t.Fatalf("get rule: %v", err)
+	}
+	if after.Quantity != 3 {
+		t.Fatalf("quantity = %d, want 3", after.Quantity)
+	}
+	if !after.CreatedAt.Equal(past) {
+		t.Fatalf("rule created_at = %v, want backfilled %v", after.CreatedAt, past)
+	}
+	if !after.UpdatedAt.After(past) {
+		t.Fatalf("rule updated_at = %v, want refreshed after %v", after.UpdatedAt, past)
+	}
+}
