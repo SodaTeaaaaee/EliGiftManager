@@ -143,7 +143,7 @@ func (ws *Workspace) realignAliasLines(ctx context.Context, alias *domain.Produc
 					// Frozen by a factory order: execution wins over alignment.
 					continue
 				}
-				if strings.Contains(r.ExtraData, "bundle_alias_line") {
+				if strings.Contains(r.ExtraData, bundleAliasLineMarker) {
 					// Bundle composition changed with the alias: rebuild.
 					if err := ws.Store.DeleteResult(ctx, r.ID); err != nil {
 						return err

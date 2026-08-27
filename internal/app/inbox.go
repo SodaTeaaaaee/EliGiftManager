@@ -17,6 +17,11 @@ type IngestLine struct {
 	Quantity      int
 }
 
+// bundleAliasLineMarker tags fulfillment results that were expanded from a
+// bundle alias line, so alias re-alignment can find and rebuild exactly those
+// results. It rides in the result's ExtraData JSON: {"bundle_alias_line":<line id>}.
+const bundleAliasLineMarker = "bundle_alias_line"
+
 type IngestFactInput struct {
 	Kind              string
 	StableExternalID  string
@@ -426,7 +431,7 @@ func (ws *Workspace) ensureRetailResult(ctx context.Context, waveID uint, fact *
 				ProductItemID:     &pid,
 				Quantity:          line.Quantity * comp.Quantity,
 				Address:           addr,
-				ExtraData:         fmt.Sprintf(`{"bundle_alias_line":%d}`, line.ID),
+				ExtraData:         fmt.Sprintf(`{"%s":%d}`, bundleAliasLineMarker, line.ID),
 			}
 			if err := ws.Store.CreateResult(ctx, res); err != nil {
 				return err

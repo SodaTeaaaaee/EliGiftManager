@@ -526,7 +526,7 @@ func TestBundleExpansion_OnAssignment(t *testing.T) {
 				t.Fatal("bundle result must be aligned")
 			}
 			qtyByProduct[*r.ProductItemID] += r.Quantity
-			if !strings.Contains(r.ExtraData, "bundle_alias_line") {
+			if !strings.Contains(r.ExtraData, bundleAliasLineMarker) {
 				t.Fatalf("bundle marker missing: %q", r.ExtraData)
 			}
 		}
