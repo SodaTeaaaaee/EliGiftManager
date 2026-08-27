@@ -1,6 +1,6 @@
 /**
  * useUrlFilters — declarative filter schema <-> route.query two-way sync
- * (plan 3.3.2: "筛选状态写入 URL query，深链可分享、任务中心可直达").
+ * (plan 3.3.2: "筛选状态写入 URL query，深链可分享、待处理首页可直达").
  *
  * The query <-> value codec (`parseEnumMultiQuery` / `serializeKeywordQuery` /
  * etc.) is exported as plain functions operating on strings — no vue-router
@@ -159,7 +159,8 @@ export function useUrlFilters<S extends FilterSchema>(schema: S, options?: UseUr
     )
 
     // Keep state in sync with external route.query changes (back/forward nav,
-    // a task-center deep link, another component editing the same query).
+    // a deep link from the pending home, another component editing the same
+    // query).
     watch(
       () => route.query,
       (query) => {
