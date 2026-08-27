@@ -17,6 +17,12 @@ import {
   CreateProduct as _CreateProduct,
   CreateTemplate as _CreateTemplate,
   CreateWave as _CreateWave,
+  AddException as _AddException,
+  DeleteException as _DeleteException,
+  DeleteQuantitySplitRule as _DeleteQuantitySplitRule,
+  DeleteRule as _DeleteRule,
+  ListQuantitySplitRules as _ListQuantitySplitRules,
+  UpsertQuantitySplitRule as _UpsertQuantitySplitRule,
   ExportFactoryOrderFile as _ExportFactoryOrderFile,
   GenerateFactoryOrder as _GenerateFactoryOrder,
   GenerateWritebacks as _GenerateWritebacks,
@@ -63,6 +69,7 @@ import type {
   CarrierMapping,
   CustomerProfile,
   DuplicateObservation,
+  EntitlementException,
   EntitlementRule,
   ExportFileResult,
   FulfillmentResult,
@@ -79,6 +86,7 @@ import type {
   ProductAlias,
   ProductItem,
   ProductTotal,
+  QuantitySplitRule,
   RecipientAddress,
   ResultView,
   Shipment,
@@ -375,6 +383,42 @@ export async function listRules(waveID: number): Promise<EntitlementRule[]> {
   if (!isWailsRuntimeAvailable()) return []
   const res = await _ListRules(waveID)
   return (res ?? []) as unknown as EntitlementRule[]
+}
+
+/** Delete one rule and recompute the wave's entitlements. */
+export async function deleteRule(ruleID: number): Promise<void> {
+  assertWailsRuntime()
+  await _DeleteRule(ruleID)
+}
+
+/** Add a per-instance entitlement exception and recompute the wave. */
+export async function addException(input: Partial<EntitlementException>): Promise<void> {
+  assertWailsRuntime()
+  await _AddException(input as wailsDomain.EntitlementException)
+}
+
+/** Delete one entitlement exception and recompute the wave. */
+export async function deleteException(exceptionID: number): Promise<void> {
+  assertWailsRuntime()
+  await _DeleteException(exceptionID)
+}
+
+/** Store a wave quantity split (components replaced wholesale) and re-derive covered lines. */
+export async function upsertQuantitySplitRule(rule: Partial<QuantitySplitRule>): Promise<void> {
+  assertWailsRuntime()
+  await _UpsertQuantitySplitRule(rule as wailsDomain.QuantitySplitRule)
+}
+
+/** Remove a wave quantity split; covered lines fall back to plain alignment. */
+export async function deleteQuantitySplitRule(id: number): Promise<void> {
+  assertWailsRuntime()
+  await _DeleteQuantitySplitRule(id)
+}
+
+export async function listQuantitySplitRules(waveID: number): Promise<QuantitySplitRule[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  const res = await _ListQuantitySplitRules(waveID)
+  return (res ?? []) as unknown as QuantitySplitRule[]
 }
 
 export async function createGrant(
