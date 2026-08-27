@@ -103,6 +103,10 @@ func TestTransformNormalizePhone(t *testing.T) {
 		// Fullwidth separators strip like their ASCII twins: ideographic
 		// space, fullwidth hyphen, fullwidth parentheses.
 		{"+86　138－0013－（8000）", "13800138000"},
+		// Invisible spacing runes survive TrimSpace but still strip here:
+		// no-break space, zero-width space, zero-width non-joiner.
+		{"138\u00a00000\u200b0005", "13800000005"},
+		{"138\u200c0000\u00a00006", "13800000006"},
 	}
 	for _, c := range cases {
 		got, err := runChain(t, MappingConfig{}, "recipient.phone", c.in, "normalizePhone")

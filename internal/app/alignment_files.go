@@ -484,10 +484,14 @@ func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID uint, fi
 			// row with the reason recorded rather than landing Quantity=0.
 			qty := 0
 			if raw := row.Values["shipment.quantity"]; raw != "" {
-				parsed, err := parseShipmentQuantity(raw)
+				parsed, segIssues, err := parseShipmentQuantity(raw)
 				if err != nil {
 					skip(err.Error())
 					continue
+				}
+				for i := range segIssues {
+					segIssues[i].LineNo = row.LineNo
+					result.Issues = append(result.Issues, segIssues[i])
 				}
 				qty = parsed
 			}
@@ -538,30 +542,39 @@ func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID uint, fi
 // rouzao-style "规格&数量" blob: pipe-separated segments like
 // "206068021_标题 * 2", each contributing the positive integer after its last
 // '*' (defaulting to 1 when no multiplier is written). Multi-segment blobs are
-// one parcel carrying several products, so segment quantities sum.
-func parseShipmentQuantity(blob string) (int, error) {
+// one parcel carrying several products, so segment quantities sum. Segments
+// that carry text but no '*' multiplier still count as 1, but are reported as
+// issues so the operator sees the conservative default instead of a silent
+// guess.
+func parseShipmentQuantity(blob string) (int, []alignment.ParseIssue, error) {
 	blob = strings.TrimSpace(blob)
 	if blob == "" {
-		return 0, fmt.Errorf("shipment quantity: empty value")
+		return 0, nil, fmt.Errorf("shipment quantity: empty value")
 	}
+	var issues []alignment.ParseIssue
 	total := 0
 	for _, seg := range strings.Split(blob, "|") {
 		seg = strings.TrimSpace(seg)
 		if seg == "" {
-			return 0, fmt.Errorf("shipment quantity: blob %q has an empty segment", blob)
+			return 0, nil, fmt.Errorf("shipment quantity: blob %q has an empty segment", blob)
 		}
 		n := 1
 		if i := strings.LastIndex(seg, "*"); i >= 0 {
 			rawQty := strings.TrimSpace(seg[i+1:])
 			qty, err := strconv.Atoi(rawQty)
 			if err != nil || qty <= 0 {
-				return 0, fmt.Errorf("shipment quantity: segment %q has non-positive or non-numeric quantity %q", seg, rawQty)
+				return 0, nil, fmt.Errorf("shipment quantity: segment %q has non-positive or non-numeric quantity %q", seg, rawQty)
 			}
 			n = qty
+		} else {
+			issues = append(issues, alignment.ParseIssue{
+				Key:     "shipment.quantity",
+				Message: fmt.Sprintf("segment %q has no '*' multiplier; counting it as 1", seg),
+			})
 		}
 		total += n
 	}
-	return total, nil
+	return total, issues, nil
 }
 
 // resolveCarrierCode matches a carrier display name against the platform's

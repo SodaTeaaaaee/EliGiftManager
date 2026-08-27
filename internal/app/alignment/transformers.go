@@ -196,6 +196,10 @@ func transformNormalizePhone(_, value string) (string, error) {
 		case '\u3000', '\uff08', '\uff09', '\ufe35', '\ufe36', '\ufe59', '\ufe5a',
 			'\uff0d', '\u2013', '\u2014':
 			continue
+		// Invisible spacing runes that survive TrimSpace: no-break space and
+		// zero-width (non-)joiners pasted from chat apps and web pages.
+		case '\u00a0', '\u200b', '\u200c':
+			continue
 		default:
 			b.WriteRune(r)
 		}

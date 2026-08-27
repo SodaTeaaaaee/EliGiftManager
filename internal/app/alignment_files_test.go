@@ -372,23 +372,33 @@ func TestExportFactoryOrderFile_TemplateLayoutSnapshotsVersion(t *testing.T) {
 
 func TestParseShipmentQuantity(t *testing.T) {
 	cases := []struct {
-		in   string
-		want int
+		in        string
+		want      int
+		wantIssue bool
 	}{
-		{"111_x * 1", 1},
-		{"a * 2|b * 3", 5},
-		{"sku", 1},           // no multiplier defaults to 1
-		{"sku_x", 1},         // title blob without multiplier
-		{" a*2 | b * 3 ", 5}, // surrounding whitespace ignored
+		{"111_x * 1", 1, false},
+		{"a * 2|b * 3", 5, false},
+		{"sku", 1, true},            // no multiplier defaults to 1, with an issue
+		{"sku_x", 1, true},          // title blob without multiplier, with an issue
+		{" a*2 | b * 3 ", 5, false}, // surrounding whitespace ignored
+		{"a * 2|sku_x|b * 3", 6, true},
 	}
 	for _, c := range cases {
-		got, err := parseShipmentQuantity(c.in)
+		got, issues, err := parseShipmentQuantity(c.in)
 		if err != nil || got != c.want {
 			t.Fatalf("parseShipmentQuantity(%q) = %d, %v; want %d, nil", c.in, got, err, c.want)
 		}
+		if (len(issues) > 0) != c.wantIssue {
+			t.Fatalf("parseShipmentQuantity(%q) issues = %v, wantIssue = %v", c.in, issues, c.wantIssue)
+		}
+		for _, issue := range issues {
+			if issue.Key != "shipment.quantity" {
+				t.Fatalf("issue key = %q, want shipment.quantity", issue.Key)
+			}
+		}
 	}
 	for _, bad := range []string{"sku * bad", "sku * 0", "sku * -2", "sku * |x * 2", ""} {
-		if got, err := parseShipmentQuantity(bad); err == nil {
+		if got, _, err := parseShipmentQuantity(bad); err == nil {
 			t.Fatalf("parseShipmentQuantity(%q) = %d, want error", bad, got)
 		}
 	}
