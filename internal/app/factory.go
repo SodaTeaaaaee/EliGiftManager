@@ -253,18 +253,62 @@ func (ws *Workspace) ImportShipment(ctx context.Context, trackingID, trackingNo,
 	if retired {
 		return nil, ErrTrackingRetired
 	}
-	if _, err := ws.Store.GetSupplierOrderLineByTracking(ctx, trackingID); err != nil {
+	line, err := ws.Store.GetSupplierOrderLineByTracking(ctx, trackingID)
+	if err != nil {
 		if err == domain.ErrNotFound {
 			return nil, ErrUnknownTracking
 		}
 		return nil, err
 	}
+	// The factory return is a fact, so an overage is recorded on the shipment
+	// instead of blocking the import.
+	extra, err := shipmentOverageExtraData(ctx, ws.Store, *line, qty)
+	if err != nil {
+		return nil, err
+	}
 	now := ws.Now()
-	sh := &domain.Shipment{TrackingID: trackingID, TrackingNo: trackingNo, CarrierCode: carrierCode, CarrierName: carrierName, Quantity: qty, ShippedAt: &now}
+	sh := &domain.Shipment{TrackingID: trackingID, TrackingNo: trackingNo, CarrierCode: carrierCode, CarrierName: carrierName, Quantity: qty, ShippedAt: &now, ExtraData: extra}
 	if err := ws.Store.CreateShipment(ctx, sh); err != nil {
 		return nil, err
 	}
 	return sh, nil
+}
+
+// shipmentOverageExtraData reconciles one incoming parcel against the linked
+// order quantity: it sums the parcel with every shipment already recorded on
+// the tracking id and compares the total against the order line's execution
+// quantity links. A positive overage lands as {"overage": n} on the shipment's
+// extra data; a shipment within the ordered quantity carries no marker.
+// Every read goes through the explicit store argument so callers control which
+// transaction or connection the lookup joins.
+func shipmentOverageExtraData(ctx context.Context, store domain.Store, line domain.SupplierOrderLine, qty int) (string, error) {
+	links, err := store.ListLinksByOrderLine(ctx, line.ID)
+	if err != nil {
+		return "", err
+	}
+	linked := 0
+	for _, l := range links {
+		linked += l.Quantity
+	}
+	if linked == 0 {
+		linked = line.Quantity
+	}
+	existing, err := store.ListShipmentsByTracking(ctx, line.TrackingID)
+	if err != nil {
+		return "", err
+	}
+	shipped := qty
+	for _, sh := range existing {
+		shipped += sh.Quantity
+	}
+	if shipped <= linked {
+		return "", nil
+	}
+	b, err := json.Marshal(map[string]int{"overage": shipped - linked})
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 func (ws *Workspace) ListSupplierOrders(ctx context.Context, waveID uint) ([]domain.SupplierOrder, error) {

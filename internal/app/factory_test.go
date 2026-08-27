@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -138,5 +139,44 @@ func TestGenerateFactoryOrderLinesSortedByProduct(t *testing.T) {
 	}
 	if lines[0].FactorySKU != alpha.FactorySKU || lines[1].FactorySKU != zeta.FactorySKU {
 		t.Fatalf("order lines must be sorted by product name/sku, got [%s, %s]", lines[0].FactorySKU, lines[1].FactorySKU)
+	}
+}
+
+// TestImportShipmentOverageWarning pins the shipment-to-order reconciliation:
+// parcels within the linked order quantity carry no marker; once the running
+// total exceeds the linked quantity (sum of the execution quantity links) the
+// shipment records an overage warning in its extra data instead of blocking.
+func TestImportShipmentOverageWarning(t *testing.T) {
+	p := setupReadyRetailPath(t, "BILI-SKU-OVR")
+	ws, ctx := p.ws, p.ctx
+	// The retail line's quantity is 2, so the generated order line links 2.
+	order, lines, err := ws.GenerateFactoryOrder(ctx, p.wave.ID, p.factory.ID)
+	if err != nil {
+		t.Fatalf("GenerateFactoryOrder: %v", err)
+	}
+	links, err := ws.Store.ListLinksByOrderLine(ctx, lines[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 1 || links[0].Quantity != 2 {
+		t.Fatalf("links = %+v, want one link of quantity 2", links)
+	}
+	_ = order
+
+	normal, err := ws.ImportShipment(ctx, lines[0].TrackingID, "OVR-1", "SF", "顺丰速运", 2)
+	if err != nil {
+		t.Fatalf("ImportShipment normal: %v", err)
+	}
+	if normal.ExtraData != "" {
+		t.Fatalf("normal shipment ExtraData = %q, want empty", normal.ExtraData)
+	}
+
+	overage, err := ws.ImportShipment(ctx, lines[0].TrackingID, "OVR-2", "SF", "顺丰速运", 2)
+	if err != nil {
+		t.Fatalf("ImportShipment overage: %v", err)
+	}
+	// Running total 4 against linked 2 leaves an overage of 2.
+	if !strings.Contains(overage.ExtraData, `"overage":2`) {
+		t.Fatalf("overage shipment ExtraData = %q, want overage 2 marker", overage.ExtraData)
 	}
 }
