@@ -7,6 +7,7 @@ import {
   NForm,
   NFormItem,
   NInput,
+  NInputNumber,
   NModal,
   NSelect,
   NSpace,
@@ -16,8 +17,10 @@ import {
 } from 'naive-ui'
 import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
+import { useFeedback } from '@/shared/ui/feedback'
 import {
   createAlias,
+  createBundleComponent,
   createProduct,
   listAliases,
   listPlatforms,
@@ -26,6 +29,11 @@ import {
 import type { Platform, ProductAlias, ProductItem } from '@/entities/models'
 
 const { t } = useI18n()
+const feedback = useFeedback()
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -51,6 +59,51 @@ const aliasForm = ref({
   title: '',
   spec: '',
 })
+
+// ── Alias bundle components (CreateBundleComponent) ──
+
+// The backend exposes CreateBundleComponent only — no component-list binding
+// yet — so the drawer offers append-only component entry per alias.
+const showBundleComponentModal = ref(false)
+const bundleTargetAlias = ref<ProductAlias | null>(null)
+const bundleComponentForm = ref({
+  productItemId: null as number | null,
+  quantity: 1,
+})
+
+const productOptions = computed(() =>
+  products.value.map((p) => ({
+    label: `${p.Name} (${p.FactorySKU})`,
+    value: p.ID,
+  })),
+)
+
+function openBundleComponent(alias: ProductAlias) {
+  bundleTargetAlias.value = alias
+  bundleComponentForm.value = {
+    productItemId: products.value[0]?.ID ?? null,
+    quantity: 1,
+  }
+  showBundleComponentModal.value = true
+}
+
+async function handleSaveBundleComponent() {
+  if (!bundleTargetAlias.value || !bundleComponentForm.value.productItemId) return
+  actionLoading.value = true
+  try {
+    await createBundleComponent({
+      AliasID: bundleTargetAlias.value.ID,
+      ProductItemID: bundleComponentForm.value.productItemId,
+      Quantity: bundleComponentForm.value.quantity,
+    })
+    showBundleComponentModal.value = false
+    feedback.success(t('library.bundleComponentAdded'))
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
 
 async function loadData() {
   loading.value = true
@@ -233,6 +286,22 @@ const aliasColumns = [
     title: t('library.aliasSpec'),
     key: 'Spec',
   },
+  {
+    title: t('common.actions'),
+    key: 'actions',
+    width: 150,
+    render(row: ProductAlias) {
+      return h(
+        NButton,
+        {
+          size: 'tiny',
+          secondary: true,
+          onClick: () => openBundleComponent(row),
+        },
+        { default: () => t('library.bundleComponents') },
+      )
+    },
+  },
 ]
 </script>
 
@@ -364,6 +433,48 @@ const aliasColumns = [
         </NSpace>
       </template>
     </NModal>
+
+    <!-- Add Bundle Component Modal -->
+    <NModal
+      v-model:show="showBundleComponentModal"
+      preset="card"
+      :title="t('library.bundleComponents')"
+      style="width: 480px"
+    >
+      <p class="products-page__hint">
+        {{ t('library.bundleComponentHint') }}
+      </p>
+      <NForm label-placement="left" label-width="110">
+        <NFormItem :label="t('library.alias')">
+          <span class="products-page__alias-label">
+            {{ bundleTargetAlias ? `${bundleTargetAlias.ExternalProductID} - ${bundleTargetAlias.Title || '—'}` : '' }}
+          </span>
+        </NFormItem>
+        <NFormItem :label="t('library.productName')">
+          <NSelect
+            v-model:value="bundleComponentForm.productItemId"
+            :options="productOptions"
+            :placeholder="t('common.pleaseSelect')"
+          />
+        </NFormItem>
+        <NFormItem :label="t('inbox.quantity')">
+          <NInputNumber v-model:value="bundleComponentForm.quantity" :min="1" />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showBundleComponentModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!bundleComponentForm.productItemId"
+            @click="handleSaveBundleComponent"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -386,5 +497,16 @@ const aliasColumns = [
   margin-bottom: var(--space-3);
   display: flex;
   justify-content: flex-end;
+}
+
+.products-page__hint {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.products-page__alias-label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 </style>

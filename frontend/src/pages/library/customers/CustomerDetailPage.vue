@@ -16,7 +16,8 @@ import {
 } from 'naive-ui'
 import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
-import { createAddress, getCustomer, listAddresses } from '@/shared/api/bridge'
+import { useFeedback } from '@/shared/ui/feedback'
+import { createAddress, getCustomer, listAddresses, updateCustomer } from '@/shared/api/bridge'
 import type { CustomerProfile, RecipientAddress } from '@/entities/models'
 
 const props = defineProps<{
@@ -26,6 +27,11 @@ const props = defineProps<{
 const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
+const feedback = useFeedback()
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
 
 const customerId = computed(() => Number(props.id ?? route.params.id))
 const loading = ref(false)
@@ -45,6 +51,42 @@ const addressForm = ref({
   postalCode: '',
   isDefault: true,
 })
+
+// ── Edit customer (UpdateCustomer) ──
+
+const showEditModal = ref(false)
+const editForm = ref({
+  displayName: '',
+  notes: '',
+})
+
+function openEditCustomer() {
+  editForm.value = {
+    displayName: customer.value?.DisplayName ?? '',
+    notes: customer.value?.Notes ?? '',
+  }
+  showEditModal.value = true
+}
+
+async function handleSaveCustomer() {
+  if (!customer.value || !editForm.value.displayName.trim()) return
+  actionLoading.value = true
+  try {
+    await updateCustomer({
+      ID: customer.value.ID,
+      DisplayName: editForm.value.displayName.trim(),
+      Notes: editForm.value.notes.trim(),
+      ExtraData: customer.value.ExtraData ?? '',
+    })
+    showEditModal.value = false
+    feedback.success(t('library.customerUpdateSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
 
 async function loadData() {
   if (!customerId.value || isNaN(customerId.value)) return
@@ -109,7 +151,7 @@ async function handleSaveAddress() {
     showAddressModal.value = false
     await loadData()
   } catch (err) {
-    console.error('Failed to save address:', err)
+    feedback.error(t('feedback.error'), err instanceof Error ? err.message : String(err))
   } finally {
     actionLoading.value = false
   }
@@ -157,9 +199,14 @@ const addressColumns = [
   <div class="customer-detail-page">
     <SectionCard :title="customer ? `${customer.DisplayName} (#${customer.ID})` : t('common.details')">
       <template #actions>
-        <NButton size="small" @click="handleBack">
-          {{ t('common.back') }}
-        </NButton>
+        <NSpace>
+          <NButton size="small" @click="openEditCustomer">
+            {{ t('common.edit') }}
+          </NButton>
+          <NButton size="small" @click="handleBack">
+            {{ t('common.back') }}
+          </NButton>
+        </NSpace>
       </template>
 
       <NSpin :show="loading">
@@ -197,6 +244,36 @@ const addressColumns = [
         </div>
       </NSpin>
     </SectionCard>
+
+    <!-- Edit Customer Modal -->
+    <NModal
+      v-model:show="showEditModal"
+      preset="card"
+      :title="t('library.editCustomer')"
+      style="width: 480px"
+    >
+      <NForm label-placement="left" label-width="100">
+        <NFormItem :label="t('library.displayName')">
+          <NInput v-model:value="editForm.displayName" />
+        </NFormItem>
+        <NFormItem :label="t('library.notes')">
+          <NInput v-model:value="editForm.notes" type="textarea" />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showEditModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!editForm.displayName.trim()"
+            @click="handleSaveCustomer"
+          >
+            {{ t('common.save') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
 
     <!-- Create Address Modal -->
     <NModal

@@ -11,9 +11,11 @@ import {
   MoveLines as _MoveLines,
   CreateAddress as _CreateAddress,
   CreateAlias as _CreateAlias,
+  CreateBundleComponent as _CreateBundleComponent,
   CreateCarrierMapping as _CreateCarrierMapping,
   CreateCustomer as _CreateCustomer,
   CreateGrant as _CreateGrant,
+  CreatePlatform as _CreatePlatform,
   CreateProduct as _CreateProduct,
   CreateTemplate as _CreateTemplate,
   CreateWave as _CreateWave,
@@ -55,6 +57,7 @@ import {
   SemanticDictionary as _SemanticDictionary,
   SetResultAddress as _SetResultAddress,
   UpdateAlias as _UpdateAlias,
+  UpdateCustomer as _UpdateCustomer,
   UpsertRule as _UpsertRule,
   VoidFactoryOrder as _VoidFactoryOrder,
 } from '../../../wailsjs/go/controller/WorkspaceController'
@@ -84,6 +87,7 @@ import type {
   ParseIssue,
   Platform,
   ProductAlias,
+  ProductBundleComponent,
   ProductItem,
   ProductTotal,
   QuantitySplitRule,
@@ -131,6 +135,12 @@ export async function listPlatforms(): Promise<Platform[]> {
   return (res ?? []) as unknown as Platform[]
 }
 
+/** Register a new source/factory platform manually. */
+export async function createPlatform(input: Partial<Platform>): Promise<void> {
+  assertWailsRuntime()
+  await _CreatePlatform(input as wailsDomain.Platform)
+}
+
 // ── WorkspaceController: Customers & Addresses ──
 
 export async function createCustomer(name: string, notes = ''): Promise<CustomerProfile> {
@@ -149,6 +159,12 @@ export async function getCustomer(id: number): Promise<CustomerProfile> {
   assertWailsRuntime()
   const res = await _GetCustomer(id)
   return res as unknown as CustomerProfile
+}
+
+/** Persist edits to an existing customer profile. */
+export async function updateCustomer(input: Partial<CustomerProfile>): Promise<void> {
+  assertWailsRuntime()
+  await _UpdateCustomer(input as wailsDomain.CustomerProfile)
 }
 
 export async function createAddress(input: Partial<RecipientAddress>): Promise<RecipientAddress> {
@@ -192,6 +208,14 @@ export async function listAliases(productID: number): Promise<ProductAlias[]> {
 export async function updateAlias(aliasID: number, productItemID: number): Promise<void> {
   assertWailsRuntime()
   await _UpdateAlias(aliasID, productItemID)
+}
+
+/** Attach one internal product to an alias as a bundle component. */
+export async function createBundleComponent(
+  input: Partial<ProductBundleComponent>,
+): Promise<void> {
+  assertWailsRuntime()
+  await _CreateBundleComponent(input as wailsDomain.ProductBundleComponent)
 }
 
 // ── WorkspaceController: Templates & Carrier Mappings ──

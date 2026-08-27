@@ -5,6 +5,7 @@ import {
   NButton,
   NForm,
   NFormItem,
+  NInput,
   NInputNumber,
   NRadio,
   NRadioGroup,
@@ -15,7 +16,7 @@ import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard } from '@/shared/ui/cards'
 import { useFeedback } from '@/shared/ui/feedback'
 import { useThemeStore, type Density, type ThemePreference } from '@/shared/theme/theme'
-import { getDataDir, getSettings, revealInFolder, saveSettings } from '@/shared/api/bridge'
+import { createPlatform, getDataDir, getSettings, revealInFolder, saveSettings } from '@/shared/api/bridge'
 import type { AppSettings } from '@/entities/models'
 
 const { t, locale } = useI18n()
@@ -25,6 +26,37 @@ const themeStore = useThemeStore()
 const loading = ref(false)
 const saving = ref(false)
 const dataDir = ref('')
+
+// ── Manual platform registration (CreatePlatform) ──
+
+const creatingPlatform = ref(false)
+const platformForm = ref({
+  key: '',
+  name: '',
+  kind: 'source',
+})
+
+async function handleCreatePlatform() {
+  if (!platformForm.value.key.trim() || !platformForm.value.name.trim()) return
+  creatingPlatform.value = true
+  try {
+    await createPlatform({
+      Key: platformForm.value.key.trim(),
+      Name: platformForm.value.name.trim(),
+      Kind: platformForm.value.kind,
+      Notes: '',
+    })
+    feedback.success(t('settings.platformCreateSuccess'))
+    platformForm.value = { key: '', name: '', kind: 'source' }
+  } catch (err) {
+    feedback.error(
+      t('feedback.error'),
+      err instanceof Error ? err.message : String(err),
+    )
+  } finally {
+    creatingPlatform.value = false
+  }
+}
 
 const form = ref<AppSettings>({
   Locale: 'zh-CN',
@@ -168,6 +200,40 @@ async function handleRevealDataDir() {
               </NSpace>
             </NFormItem>
           </NForm>
+        </SectionCard>
+
+        <!-- Platform Registration Section -->
+        <SectionCard :title="t('settings.platforms')">
+          <p class="settings-page__hint">{{ t('settings.platformsHint') }}</p>
+          <NForm label-placement="left" label-width="140" :show-feedback="false">
+            <NFormItem :label="t('settings.platformKey')">
+              <NInput v-model:value="platformForm.key" :placeholder="t('settings.platformKeyPlaceholder')" />
+            </NFormItem>
+            <NFormItem :label="t('settings.platformName')">
+              <NInput v-model:value="platformForm.name" />
+            </NFormItem>
+            <NFormItem :label="t('settings.platformKind')">
+              <NRadioGroup v-model:value="platformForm.kind">
+                <NSpace>
+                  <NRadio value="source">
+                    {{ t('glossary.platformKind.source.label') }}
+                  </NRadio>
+                  <NRadio value="factory">
+                    {{ t('glossary.platformKind.factory.label') }}
+                  </NRadio>
+                </NSpace>
+              </NRadioGroup>
+            </NFormItem>
+          </NForm>
+          <NButton
+            size="small"
+            type="primary"
+            :loading="creatingPlatform"
+            :disabled="!platformForm.key.trim() || !platformForm.name.trim()"
+            @click="handleCreatePlatform"
+          >
+            {{ t('settings.createPlatform') }}
+          </NButton>
         </SectionCard>
 
         <!-- Data Directory Section -->
