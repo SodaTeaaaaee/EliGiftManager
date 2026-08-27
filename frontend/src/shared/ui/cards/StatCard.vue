@@ -4,7 +4,7 @@ import type { StatusTone } from '@/shared/i18n/glossary'
 
 /**
  * StatCard — label + big tabular-nums value + optional delta, the base
- * tile for the task-center action-card stream (plan 3.1) and the overview
+ * tile for the home action-card stream (plan 3.1) and the overview
  * six-bucket grouping (plan 3.3.1). When `clickable` (or a click listener is
  * bound) it renders as a real `<button>` for keyboard/AT access, otherwise
  * as a plain `<div>` — never a clickable-looking non-interactive element.

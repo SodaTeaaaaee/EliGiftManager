@@ -30,7 +30,7 @@
  * No illustrator assets: Dusk is a token-only reskin (illustrations are
  * out of scope per the plan). Its `src/skins/index.ts` registry entry
  * omits `assets` entirely, so every decorative slot (EmptyState
- * illustration, action-center hero, side-nav mascot) falls back to its
+ * illustration, home hero, side-nav mascot) falls back to its
  * built-in neutral placeholder — identical to how the default skin
  * behaves today.
  * ============================================================================

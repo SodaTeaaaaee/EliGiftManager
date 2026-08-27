@@ -2,7 +2,7 @@
 /**
  * PageHeader — the standard page-top block: small eyebrow "kicker", title,
  * optional description, and a right-aligned actions zone. Used at the top
- * of every top-level page (Task Center, Waves, Inbox, ...) and every wave-
+ * of every top-level page (Home, Waves, Inbox, ...) and every wave-
  * workspace step, so page structure reads consistently across the app.
  */
 withDefaults(

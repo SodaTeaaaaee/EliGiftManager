@@ -3,7 +3,7 @@
  *
  * A skin is a static asset bundle that overrides Layer 1/2 tokens (see
  * `shared/theme/tokens.css`) and optionally supplies decorative assets for
- * component-reserved slots (EmptyState illustration, task-center hero strip,
+ * component-reserved slots (EmptyState illustration, home hero strip,
  * side-nav corner mascot). A skin NEVER ships code — only CSS custom
  * property overrides + images — so mounting one is just "load this CSS,
  * point these slots at these asset URLs", no app rebuild required in
@@ -28,7 +28,7 @@ export interface SkinAssetSlots {
   /** EmptyState illustration, keyed by empty-state scene id (e.g.
    * "inbox", "search-no-results", "wave-empty"). */
   emptyState?: Record<string, string>;
-  /** Task-center / action-center page header decorative strip. */
+  /** Home (to-do home) page header decorative strip. */
   hero?: string;
   /** Side-nav footer corner mascot. */
   mascot?: string;

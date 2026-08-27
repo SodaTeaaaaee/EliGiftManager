@@ -42,7 +42,7 @@
  *     `[data-theme=...]`) — no component classes, no descendant selectors.
  *
  * DECORATIVE ASSETS
- *   Illustration slots (EmptyState scenes, task-center hero, side-nav
+ *   Illustration slots (EmptyState scenes, home hero, side-nav
  *   mascot) are NOT CSS — they are declared in this skin's entry in
  *   `src/skins/index.ts` (`SkinDefinition.assets`) as image URLs. The
  *   default skin deliberately ships none: components render their built-in
