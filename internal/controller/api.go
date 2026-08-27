@@ -252,6 +252,19 @@ func (c *WorkspaceController) GenerateFactoryOrder(waveID, factoryID uint) (*app
 	return &app.GenerateFactoryOrderResult{Order: *order, Lines: lines}, nil
 }
 
+// GenerateFactoryOrderForResults submits only the selected fulfillment
+// results; resultIDs nil or empty degrades to the whole-wave form.
+func (c *WorkspaceController) GenerateFactoryOrderForResults(waveID, factoryID uint, resultIDs []uint) (*app.GenerateFactoryOrderResult, error) {
+	order, lines, err := c.ws.GenerateFactoryOrderForResults(c.ctx(), waveID, factoryID, resultIDs)
+	if err != nil {
+		return nil, err
+	}
+	if lines == nil {
+		lines = []domain.SupplierOrderLine{}
+	}
+	return &app.GenerateFactoryOrderResult{Order: *order, Lines: lines}, nil
+}
+
 func (c *WorkspaceController) ExportFactoryOrder(orderID uint) (*domain.SupplierOrder, error) {
 	return c.ws.ExportFactoryOrder(c.ctx(), orderID)
 }

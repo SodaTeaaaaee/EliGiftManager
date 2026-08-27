@@ -336,6 +336,11 @@ export const enUS: AppMessageSchema = {
     groupNoProduct: 'No linked product',
     notInFactory: 'Not in factory',
     generateFactoryOrder: 'Generate Factory Order',
+    generateFactoryOrderSelected: 'Generate Factory Order ({n} selected)',
+    generateFactoryOrderScopeSelected:
+      'Aggregates and submits only the {n} selected results; unselected results stay untouched.',
+    generateFactoryOrderScopeAll:
+      'Aggregates and submits every submittable result in this wave.',
     exportOrder: 'Export Order File',
     voidOrder: 'Void Order',
     importShipment: 'Import Shipment',

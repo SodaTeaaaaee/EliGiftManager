@@ -98,6 +98,10 @@ export function GenerateFactoryOrder(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['GenerateFactoryOrder'](arg1, arg2);
 }
 
+export function GenerateFactoryOrderForResults(arg1, arg2, arg3) {
+  return window['go']['controller']['WorkspaceController']['GenerateFactoryOrderForResults'](arg1, arg2, arg3);
+}
+
 export function GenerateWritebacks(arg1) {
   return window['go']['controller']['WorkspaceController']['GenerateWritebacks'](arg1);
 }

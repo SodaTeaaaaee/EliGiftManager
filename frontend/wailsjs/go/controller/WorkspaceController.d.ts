@@ -52,6 +52,8 @@ export function ExportFactoryOrderFile(arg1:number):Promise<app.ExportFileResult
 
 export function GenerateFactoryOrder(arg1:number,arg2:number):Promise<app.GenerateFactoryOrderResult>;
 
+export function GenerateFactoryOrderForResults(arg1:number,arg2:number,arg3:Array<number>):Promise<app.GenerateFactoryOrderResult>;
+
 export function GenerateWritebacks(arg1:number):Promise<Array<domain.ChannelWritebackItem>>;
 
 export function GetCustomer(arg1:number):Promise<domain.CustomerProfile>;

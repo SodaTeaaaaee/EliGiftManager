@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -14,13 +15,25 @@ type GenerateFactoryOrderResult struct {
 	Lines []domain.SupplierOrderLine
 }
 
+// GenerateFactoryOrder submits every eligible result of the wave to the
+// factory platform. It is the whole-wave form of
+// GenerateFactoryOrderForResults.
 func (ws *Workspace) GenerateFactoryOrder(ctx context.Context, waveID, factoryID uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
+	return ws.GenerateFactoryOrderForResults(ctx, waveID, factoryID, nil)
+}
+
+// GenerateFactoryOrderForResults submits only the results whose ids appear in
+// resultIDs (nil or empty means the whole wave). Unselected results are left
+// untouched; the one-open-order-per-(wave, factory) slot constraint is
+// unchanged, so a partial submission blocks further submissions to the same
+// factory until that order is exported or voided.
+func (ws *Workspace) GenerateFactoryOrderForResults(ctx context.Context, waveID, factoryID uint, resultIDs []uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
 	var (
 		order *domain.SupplierOrder
 		lines []domain.SupplierOrderLine
 	)
 	if err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
-		o, l, err := ws.withStore(tx).generateFactoryOrder(ctx, waveID, factoryID)
+		o, l, err := ws.withStore(tx).generateFactoryOrderForResults(ctx, waveID, factoryID, resultIDs)
 		if err != nil {
 			return err
 		}
@@ -32,10 +45,11 @@ func (ws *Workspace) GenerateFactoryOrder(ctx context.Context, waveID, factoryID
 	return order, lines, nil
 }
 
-// generateFactoryOrder creates the supplier order, its lines, the execution
-// links, and freezes the covered results. It must run on a workspace bound to
-// the surrounding transaction so every write commits or rolls back together.
-func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
+// generateFactoryOrderForResults creates the supplier order, its lines, the
+// execution links, and freezes the covered results. resultIDs nil selects the
+// whole wave. It must run on a workspace bound to the surrounding transaction
+// so every write commits or rolls back together.
+func (ws *Workspace) generateFactoryOrderForResults(ctx context.Context, waveID, factoryID uint, resultIDs []uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
 	if _, err := ws.Store.FindOpenSupplierOrder(ctx, waveID, factoryID); err == nil {
 		return nil, nil, ErrOrderAlreadyOpen
 	} else if err != domain.ErrNotFound {
@@ -45,6 +59,13 @@ func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID
 	if err != nil {
 		return nil, nil, err
 	}
+	var selected map[uint]struct{}
+	if resultIDs != nil {
+		selected = make(map[uint]struct{}, len(resultIDs))
+		for _, id := range resultIDs {
+			selected[id] = struct{}{}
+		}
+	}
 	type group struct {
 		product domain.ProductItem
 		results []domain.FulfillmentResult
@@ -52,6 +73,11 @@ func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID
 	}
 	groups := map[uint]*group{}
 	for _, v := range views {
+		if selected != nil {
+			if _, ok := selected[v.Result.ID]; !ok {
+				continue
+			}
+		}
 		if v.Result.Frozen || v.WorkState != domain.WorkStateReady || v.Result.ProductItemID == nil {
 			continue
 		}
@@ -73,6 +99,19 @@ func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID
 	if len(groups) == 0 {
 		return nil, nil, ErrNothingToSubmit
 	}
+	// Iterate product groups in a stable order (name, then factory SKU) so the
+	// created order lines — and their tracking ids — do not shuffle between
+	// otherwise identical runs.
+	ordered := make([]*group, 0, len(groups))
+	for _, g := range groups {
+		ordered = append(ordered, g)
+	}
+	sort.Slice(ordered, func(i, j int) bool {
+		if ordered[i].product.Name != ordered[j].product.Name {
+			return ordered[i].product.Name < ordered[j].product.Name
+		}
+		return ordered[i].product.FactorySKU < ordered[j].product.FactorySKU
+	})
 	// Snapshot the factory order output template version into the execution
 	// links; 0 means no output template was configured.
 	configVersion := 0
@@ -84,7 +123,7 @@ func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID
 		return nil, nil, err
 	}
 	var lines []domain.SupplierOrderLine
-	for _, g := range groups {
+	for _, g := range ordered {
 		tid, err := ws.NewTrackingID()
 		if err != nil {
 			return nil, nil, err

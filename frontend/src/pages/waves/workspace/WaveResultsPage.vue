@@ -22,6 +22,7 @@ import { StatusBadge } from '@/shared/ui/status'
 import {
   exportFactoryOrderFile,
   generateFactoryOrder,
+  generateFactoryOrderForResults,
   generateWritebacks,
   importShipment,
   importShipmentFile,
@@ -324,7 +325,15 @@ async function handleGenerateFactoryOrder() {
   if (!selectedFactoryId.value) return
   actionLoading.value = true
   try {
-    await generateFactoryOrder(props.waveId, selectedFactoryId.value)
+    if (selectedResultKeys.value.length > 0) {
+      await generateFactoryOrderForResults(
+        props.waveId,
+        selectedFactoryId.value,
+        selectedResultKeys.value,
+      )
+    } else {
+      await generateFactoryOrder(props.waveId, selectedFactoryId.value)
+    }
     showFactoryOrderModal.value = false
     selectedResultKeys.value = []
     await loadData()
@@ -587,7 +596,11 @@ const columns = [
             class="wave-results-page__group-select"
           />
           <NButton size="small" type="primary" @click="openGenerateFactoryOrder">
-            {{ t('waveWorkspace.generateFactoryOrder') }}
+            {{
+              selectedResultKeys.length
+                ? t('waveWorkspace.generateFactoryOrderSelected', { n: selectedResultKeys.length })
+                : t('waveWorkspace.generateFactoryOrder')
+            }}
           </NButton>
           <NButton size="small" @click="openOrdersDrawer">
             {{ t('waveWorkspace.supplierOrders') }} ({{ supplierOrders.length }})
@@ -688,9 +701,20 @@ const columns = [
     <NModal
       v-model:show="showFactoryOrderModal"
       preset="card"
-      :title="t('waveWorkspace.generateFactoryOrder')"
+      :title="
+        selectedResultKeys.length
+          ? t('waveWorkspace.generateFactoryOrderSelected', { n: selectedResultKeys.length })
+          : t('waveWorkspace.generateFactoryOrder')
+      "
       style="width: 480px"
     >
+      <p class="wave-results-page__order-scope">
+        {{
+          selectedResultKeys.length
+            ? t('waveWorkspace.generateFactoryOrderScopeSelected', { n: selectedResultKeys.length })
+            : t('waveWorkspace.generateFactoryOrderScopeAll')
+        }}
+      </p>
       <NForm>
         <NFormItem :label="t('waveWorkspace.factory')">
           <NSelect
@@ -977,6 +1001,12 @@ const columns = [
 .wave-results-page__group-meta {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+.wave-results-page__order-scope {
+  margin: 0 0 var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
 }
 
 .wave-results-page__orders-list {

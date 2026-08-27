@@ -27,6 +27,7 @@ import {
   UpsertQuantitySplitRule as _UpsertQuantitySplitRule,
   ExportFactoryOrderFile as _ExportFactoryOrderFile,
   GenerateFactoryOrder as _GenerateFactoryOrder,
+  GenerateFactoryOrderForResults as _GenerateFactoryOrderForResults,
   GenerateWritebacks as _GenerateWritebacks,
   GetCustomer as _GetCustomer,
   GetSettings as _GetSettings,
@@ -481,6 +482,24 @@ export async function generateFactoryOrder(
 ): Promise<GenerateFactoryOrderResult> {
   assertWailsRuntime()
   const res = await _GenerateFactoryOrder(waveID, factoryID)
+  return {
+    Order: res.Order as unknown as SupplierOrder,
+    Lines: (res.Lines ?? []) as unknown as SupplierOrderLine[],
+  }
+}
+
+/**
+ * Partial submission: aggregate only the selected fulfillment results into
+ * the factory order. Unselected results are left untouched; the
+ * one-open-order slot per (wave, factory) still applies.
+ */
+export async function generateFactoryOrderForResults(
+  waveID: number,
+  factoryID: number,
+  resultIDs: number[],
+): Promise<GenerateFactoryOrderResult> {
+  assertWailsRuntime()
+  const res = await _GenerateFactoryOrderForResults(waveID, factoryID, resultIDs)
   return {
     Order: res.Order as unknown as SupplierOrder,
     Lines: (res.Lines ?? []) as unknown as SupplierOrderLine[],
