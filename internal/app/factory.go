@@ -116,7 +116,9 @@ func (ws *Workspace) generateFactoryOrderForResults(ctx context.Context, waveID,
 	// Snapshot the factory order output template version into the execution
 	// links; 0 means no output template was configured.
 	configVersion := 0
-	if tpl := findTemplate(ctx, ws.Store, factoryID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); tpl != nil {
+	if tpl, err := findTemplate(ctx, ws.Store, factoryID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); err != nil {
+		return nil, nil, err
+	} else if tpl != nil {
 		configVersion = tpl.Version
 	}
 	order := &domain.SupplierOrder{WaveID: waveID, FactoryPlatformID: factoryID, Status: string(domain.SupplierOrderGenerated)}
@@ -306,7 +308,9 @@ func generateWritebacks(ctx context.Context, store domain.Store, factID uint) ([
 	if err != nil {
 		return nil, err
 	}
-	if tpl := findTemplate(ctx, store, fact.PlatformID, domain.TemplateDirectionOutput, DocumentTypeWriteback); tpl != nil {
+	if tpl, err := findTemplate(ctx, store, fact.PlatformID, domain.TemplateDirectionOutput, DocumentTypeWriteback); err != nil {
+		return nil, err
+	} else if tpl != nil {
 		wbTplID, wbTplVersion = tpl.ID, tpl.Version
 	}
 	for _, w := range waves {

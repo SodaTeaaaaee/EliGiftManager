@@ -76,13 +76,14 @@ func DefaultShipmentReturnMapping() alignment.MappingConfig {
 }
 
 // findTemplate returns the newest template for a platform, direction, and
-// document type, or nil when none is configured. Every read goes through the
-// explicit store argument so callers control which transaction or connection
-// the lookup joins.
-func findTemplate(ctx context.Context, store domain.Store, platformID uint, direction domain.TemplateDirection, documentType string) *domain.TemplateConfig {
+// document type, or nil when none is configured. A store failure is returned
+// to the caller rather than silently falling back to the built-in defaults.
+// Every read goes through the explicit store argument so callers control
+// which transaction or connection the lookup joins.
+func findTemplate(ctx context.Context, store domain.Store, platformID uint, direction domain.TemplateDirection, documentType string) (*domain.TemplateConfig, error) {
 	templates, err := store.ListTemplates(ctx)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var best *domain.TemplateConfig
 	for i := range templates {
@@ -94,7 +95,7 @@ func findTemplate(ctx context.Context, store domain.Store, platformID uint, dire
 			best = &templates[i]
 		}
 	}
-	return best
+	return best, nil
 }
 
 func factKindForDocumentType(documentType string) string {
@@ -306,8 +307,12 @@ func (ws *Workspace) ExportFactoryOrderFile(ctx context.Context, orderID uint) (
 	layout := DefaultFactoryOrderLayout()
 	var tplID uint
 	var tplVersion int
-	if tpl := findTemplate(ctx, ws.Store, order.FactoryPlatformID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); tpl != nil {
-		if parsed, err := alignment.ParseLayoutConfig(tpl.LayoutJSON); err == nil && len(parsed.ColumnOrder) > 0 {
+	tpl, err := findTemplate(ctx, ws.Store, order.FactoryPlatformID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder)
+	if err != nil {
+		return nil, err
+	}
+	if tpl != nil {
+		if parsed, perr := alignment.ParseLayoutConfig(tpl.LayoutJSON); perr == nil && len(parsed.ColumnOrder) > 0 {
 			layout = parsed
 			tplID, tplVersion = tpl.ID, tpl.Version
 		}
@@ -452,8 +457,12 @@ func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID uint, fi
 		return nil, err
 	}
 	mapping := DefaultShipmentReturnMapping()
-	if tpl := findTemplate(ctx, ws.Store, platformID, domain.TemplateDirectionInput, DocumentTypeShipmentReturn); tpl != nil {
-		if parsed, err := alignment.ParseMappingConfig(tpl.MappingJSON); err == nil {
+	tpl, err := findTemplate(ctx, ws.Store, platformID, domain.TemplateDirectionInput, DocumentTypeShipmentReturn)
+	if err != nil {
+		return nil, err
+	}
+	if tpl != nil {
+		if parsed, perr := alignment.ParseMappingConfig(tpl.MappingJSON); perr == nil {
 			mapping = parsed
 		}
 	}
