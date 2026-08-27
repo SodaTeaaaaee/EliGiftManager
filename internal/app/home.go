@@ -29,7 +29,9 @@ func (ws *Workspace) Home(ctx context.Context) (HomeBuckets, error) {
 		return out, err
 	}
 	for _, r := range rows {
-		if !r.Assigned {
+		// Pending revision rows are not actionable assigns: their next action
+		// is apply or dismiss, so they must not surface as unassigned work.
+		if !r.Assigned && !r.RevisionPending {
 			out.Unassigned++
 		}
 		if r.Unaligned {

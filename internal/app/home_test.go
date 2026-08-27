@@ -59,3 +59,46 @@ func TestHomeBucketUnits(t *testing.T) {
 		t.Fatalf("PendingRevisions = %d, want 0", home.PendingRevisions)
 	}
 }
+
+// TestHomeUnassignedExcludesPendingRevisions pins the bucket combination: a
+// pending revision row is not actionable assign work, so while it is the only
+// unassigned inbox content the Unassigned bucket stays empty even though
+// PendingRevisions counts it.
+func TestHomeUnassignedExcludesPendingRevisions(t *testing.T) {
+	f := newRevisionFixture(t)
+	base := IngestFactInput{
+		Kind:             string(domain.InputFactKindRetailOrder),
+		StableExternalID: "HOME-REV-1",
+		IdentityType:     string(domain.IdentityTypePlatformUID),
+		IdentityValue:    "UID-HOME-REV",
+		Lines:            []IngestLine{{SourceLineNo: 1, ExternalSKU: "REV-ALIAS", Quantity: 2}},
+	}
+	f.ingest(t, base)
+	// The established fact's line is assigned, so the revision row is the
+	// only unassigned inbox content left.
+	facts := mustFactsByPlatform(t, f.ws, f.source.ID)
+	origLines, err := f.ws.Store.ListFactLines(f.ctx, facts[0].ID)
+	if err != nil || len(origLines) != 1 {
+		t.Fatalf("ListFactLines: %v (%d)", err, len(origLines))
+	}
+	if err := f.ws.AssignLines(f.ctx, f.wave.ID, []uint{origLines[0].ID}); err != nil {
+		t.Fatalf("AssignLines: %v", err)
+	}
+	revIn := base
+	revIn.Lines = []IngestLine{{SourceLineNo: 1, ExternalSKU: "REV-ALIAS", Quantity: 5}}
+	f.ingest(t, revIn)
+
+	home, err := f.ws.Home(f.ctx)
+	if err != nil {
+		t.Fatalf("Home: %v", err)
+	}
+	if home.PendingRevisions != 1 {
+		t.Fatalf("PendingRevisions = %d, want 1", home.PendingRevisions)
+	}
+	if home.Unassigned != 0 {
+		t.Fatalf("Unassigned = %d, want 0 while only pending-revision rows are unassigned", home.Unassigned)
+	}
+	if home.AlignmentConflict != 0 {
+		t.Fatalf("aligned revision rows must not count as alignment conflicts, got %d", home.AlignmentConflict)
+	}
+}
