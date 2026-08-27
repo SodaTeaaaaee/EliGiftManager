@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -91,43 +92,76 @@ func (ws *Workspace) ingestDocument(ctx context.Context, tx domain.Store, doc *d
 }
 
 func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *domain.InputDocument, in IngestFactInput, settings *domain.AppSettings) (*domain.DuplicateObservation, error) {
+	kind := in.Kind
+	if kind == "" {
+		kind = string(domain.InputFactKindRetailOrder)
+	}
 	if in.StableExternalID != "" {
 		existing, err := tx.FindFactByStableID(ctx, doc.PlatformID, in.StableExternalID)
 		if err == nil {
-			obs := &domain.DuplicateObservation{DocumentID: doc.ID, ExistingFactID: existing.ID, Verdict: string(domain.DuplicateRecordOnly), Reason: "stable_external_id", Decided: true}
-			if err := tx.CreateDuplicate(ctx, obs); err != nil {
-				return nil, err
-			}
-			return obs, nil
+			return ws.recordObservation(ctx, tx, doc, in, existing.ID, domain.DuplicateRecordOnly, "stable_external_id", true)
 		}
 		if err != domain.ErrNotFound {
 			return nil, err
 		}
 	} else if in.SourceCreatedAt != nil {
-		facts, err := tx.ListFactsByDocument(ctx, doc.ID)
+		// No stable external id: judge by content fingerprint against existing
+		// facts of the same platform and kind, then by the interval since the
+		// matched fact was recorded. Source data age alone says nothing about
+		// duplication, so it never drives the verdict.
+		existing, err := matchExistingFingerprint(ctx, tx, doc.PlatformID, kind, in.ingestFingerprints())
 		if err != nil {
 			return nil, err
 		}
-		_ = facts
-		age := ws.Now().Sub(*in.SourceCreatedAt)
-		recordWin := time.Duration(settings.DuplicateRecordMinutes) * time.Minute
-		askWin := time.Duration(settings.DuplicateAskDays) * 24 * time.Hour
-		if age >= 0 && age <= recordWin {
-			obs := &domain.DuplicateObservation{DocumentID: doc.ID, Verdict: string(domain.DuplicateRecordOnly), Reason: "within_record_window", Decided: true}
-			if err := tx.CreateDuplicate(ctx, obs); err != nil {
-				return nil, err
+		if existing != nil {
+			interval := ws.Now().Sub(existing.CreatedAt)
+			recordWin := time.Duration(settings.DuplicateRecordMinutes) * time.Minute
+			askWin := time.Duration(settings.DuplicateAskDays) * 24 * time.Hour
+			switch {
+			case interval >= 0 && interval <= recordWin:
+				return ws.recordObservation(ctx, tx, doc, in, existing.ID, domain.DuplicateRecordOnly, "within_record_window", true)
+			case interval >= 0 && interval <= askWin:
+				return ws.recordObservation(ctx, tx, doc, in, existing.ID, domain.DuplicateAskOperator, "within_ask_window", false)
 			}
-			return obs, nil
+			// Beyond both windows the matching content is old enough to count
+			// as a new responsibility; fall through to normal creation.
 		}
-		if age > recordWin && age <= askWin {
-			obs := &domain.DuplicateObservation{DocumentID: doc.ID, Verdict: string(domain.DuplicateAskOperator), Reason: "within_ask_window", Decided: false}
-			if err := tx.CreateDuplicate(ctx, obs); err != nil {
-				return nil, err
-			}
-			return obs, nil
-		}
+		// First-seen content is a new responsibility regardless of age.
 	}
+	if _, err := ws.createFactWithLines(ctx, tx, doc, in, kind); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
 
+// recordObservation stores one duplicate observation. Undecided observations
+// carry a JSON snapshot of the ingest input so a later operator decision can
+// replay the fact creation when a new responsibility is claimed.
+func (ws *Workspace) recordObservation(ctx context.Context, tx domain.Store, doc *domain.InputDocument, in IngestFactInput, existingFactID uint, verdict domain.DuplicateVerdict, reason string, decided bool) (*domain.DuplicateObservation, error) {
+	obs := &domain.DuplicateObservation{DocumentID: doc.ID, ExistingFactID: existingFactID, Verdict: string(verdict), Reason: reason, Decided: decided}
+	if !decided {
+		snap, err := json.Marshal(duplicateInputSnapshot{Fact: in})
+		if err != nil {
+			return nil, err
+		}
+		obs.ExtraData = string(snap)
+	}
+	if err := tx.CreateDuplicate(ctx, obs); err != nil {
+		return nil, err
+	}
+	return obs, nil
+}
+
+// duplicateInputSnapshot is the JSON payload stored on a duplicate
+// observation's ExtraData so DecideDuplicate can rebuild the original input.
+type duplicateInputSnapshot struct {
+	Fact IngestFactInput `json:"fact"`
+}
+
+// createFactWithLines materializes one ingest input as a fact with its
+// identity, lines, and alias-resolved product alignment. Every read and write
+// goes through the explicit store argument so callers control the transaction.
+func (ws *Workspace) createFactWithLines(ctx context.Context, tx domain.Store, doc *domain.InputDocument, in IngestFactInput, kind string) (*domain.InputFact, error) {
 	var identID *uint
 	if in.IdentityValue != "" {
 		typ := in.IdentityType
@@ -147,10 +181,6 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *do
 		identID = &ident.ID
 	}
 
-	kind := in.Kind
-	if kind == "" {
-		kind = string(domain.InputFactKindRetailOrder)
-	}
 	docID := doc.ID
 	fact := &domain.InputFact{
 		DocumentID:         &docID,
@@ -208,7 +238,7 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *do
 			return nil, err
 		}
 	}
-	return nil, nil
+	return fact, nil
 }
 
 func (ws *Workspace) AttachIdentity(ctx context.Context, identityID, customerID uint) error {

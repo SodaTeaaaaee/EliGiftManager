@@ -157,7 +157,9 @@ type InputFact struct {
 	MembershipLevel    string
 	SourceDocumentNo   string
 	SourceCreatedAt    *time.Time
-	ExtraData          string `gorm:"type:text"`
+	RevisesID          *uint      `gorm:"index"`
+	RevisionAppliedAt  *time.Time `gorm:"index"`
+	ExtraData          string     `gorm:"type:text"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }
@@ -187,7 +189,8 @@ type DuplicateObservation struct {
 	ExistingFactID uint   `gorm:"index;not null"`
 	Verdict        string `gorm:"not null"`
 	Reason         string
-	Decided        bool `gorm:"not null;default:false"`
+	Decided        bool   `gorm:"not null;default:false"`
+	ExtraData      string `gorm:"type:text"`
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }

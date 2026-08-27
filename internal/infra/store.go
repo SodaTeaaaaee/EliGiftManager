@@ -469,6 +469,22 @@ func (s *GormStore) ListFactsByDocument(ctx context.Context, documentID uint) ([
 	return out, nil
 }
 
+func (s *GormStore) ListFactsByPlatform(ctx context.Context, platformID uint) ([]domain.InputFact, error) {
+	var rows []persistence.InputFact
+	if err := s.db.WithContext(ctx).Where("platform_id = ?", platformID).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.InputFact, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, factToDomain(r))
+	}
+	return out, nil
+}
+
+func (s *GormStore) DeleteFact(ctx context.Context, id uint) error {
+	return s.db.WithContext(ctx).Delete(&persistence.InputFact{}, id).Error
+}
+
 func (s *GormStore) UpdateFact(ctx context.Context, f *domain.InputFact) error {
 	row := factFromDomain(*f)
 	row.ID = f.ID
@@ -551,8 +567,12 @@ func (s *GormStore) UpdateFactLine(ctx context.Context, l *domain.InputFactLine)
 	return s.db.WithContext(ctx).Save(&row).Error
 }
 
+func (s *GormStore) DeleteFactLine(ctx context.Context, id uint) error {
+	return s.db.WithContext(ctx).Delete(&persistence.InputFactLine{}, id).Error
+}
+
 func (s *GormStore) CreateDuplicate(ctx context.Context, d *domain.DuplicateObservation) error {
-	row := persistence.DuplicateObservation{DocumentID: d.DocumentID, ExistingFactID: d.ExistingFactID, Verdict: d.Verdict, Reason: d.Reason, Decided: d.Decided}
+	row := persistence.DuplicateObservation{DocumentID: d.DocumentID, ExistingFactID: d.ExistingFactID, Verdict: d.Verdict, Reason: d.Reason, Decided: d.Decided, ExtraData: d.ExtraData}
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 		return err
 	}
@@ -567,13 +587,17 @@ func (s *GormStore) ListOpenDuplicates(ctx context.Context) ([]domain.DuplicateO
 	}
 	out := make([]domain.DuplicateObservation, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.DuplicateObservation{ID: r.ID, DocumentID: r.DocumentID, ExistingFactID: r.ExistingFactID, Verdict: r.Verdict, Reason: r.Reason, Decided: r.Decided, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
+		out = append(out, duplicateToDomain(r))
 	}
 	return out, nil
 }
 
 func (s *GormStore) UpdateDuplicate(ctx context.Context, d *domain.DuplicateObservation) error {
-	return s.db.WithContext(ctx).Model(&persistence.DuplicateObservation{}).Where("id = ?", d.ID).Updates(map[string]any{"decided": d.Decided, "verdict": d.Verdict, "reason": d.Reason}).Error
+	return s.db.WithContext(ctx).Model(&persistence.DuplicateObservation{}).Where("id = ?", d.ID).Updates(map[string]any{"decided": d.Decided, "verdict": d.Verdict, "reason": d.Reason, "extra_data": d.ExtraData}).Error
+}
+
+func duplicateToDomain(r persistence.DuplicateObservation) domain.DuplicateObservation {
+	return domain.DuplicateObservation{ID: r.ID, DocumentID: r.DocumentID, ExistingFactID: r.ExistingFactID, Verdict: r.Verdict, Reason: r.Reason, Decided: r.Decided, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 
 func (s *GormStore) CreateWave(ctx context.Context, w *domain.Wave) error {
@@ -1089,10 +1113,10 @@ func docToDomain(r persistence.InputDocument) domain.InputDocument {
 	return domain.InputDocument{ID: r.ID, PlatformID: r.PlatformID, DocumentType: r.DocumentType, Direction: r.Direction, OriginalName: r.OriginalName, RawPayload: r.RawPayload, TemplateID: r.TemplateID, TemplateVersion: r.TemplateVersion, ImportedAt: r.ImportedAt, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func factFromDomain(f domain.InputFact) persistence.InputFact {
-	return persistence.InputFact{ID: f.ID, DocumentID: f.DocumentID, PlatformID: f.PlatformID, Kind: f.Kind, StableExternalID: f.StableExternalID, CustomerProfileID: f.CustomerProfileID, PlatformIdentityID: f.PlatformIdentityID, MembershipLevel: f.MembershipLevel, SourceDocumentNo: f.SourceDocumentNo, SourceCreatedAt: f.SourceCreatedAt, ExtraData: f.ExtraData, CreatedAt: f.CreatedAt, UpdatedAt: f.UpdatedAt}
+	return persistence.InputFact{ID: f.ID, DocumentID: f.DocumentID, PlatformID: f.PlatformID, Kind: f.Kind, StableExternalID: f.StableExternalID, CustomerProfileID: f.CustomerProfileID, PlatformIdentityID: f.PlatformIdentityID, MembershipLevel: f.MembershipLevel, SourceDocumentNo: f.SourceDocumentNo, SourceCreatedAt: f.SourceCreatedAt, RevisesID: f.RevisesID, RevisionAppliedAt: f.RevisionAppliedAt, ExtraData: f.ExtraData, CreatedAt: f.CreatedAt, UpdatedAt: f.UpdatedAt}
 }
 func factToDomain(r persistence.InputFact) domain.InputFact {
-	return domain.InputFact{ID: r.ID, DocumentID: r.DocumentID, PlatformID: r.PlatformID, Kind: r.Kind, StableExternalID: r.StableExternalID, CustomerProfileID: r.CustomerProfileID, PlatformIdentityID: r.PlatformIdentityID, MembershipLevel: r.MembershipLevel, SourceDocumentNo: r.SourceDocumentNo, SourceCreatedAt: r.SourceCreatedAt, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
+	return domain.InputFact{ID: r.ID, DocumentID: r.DocumentID, PlatformID: r.PlatformID, Kind: r.Kind, StableExternalID: r.StableExternalID, CustomerProfileID: r.CustomerProfileID, PlatformIdentityID: r.PlatformIdentityID, MembershipLevel: r.MembershipLevel, SourceDocumentNo: r.SourceDocumentNo, SourceCreatedAt: r.SourceCreatedAt, RevisesID: r.RevisesID, RevisionAppliedAt: r.RevisionAppliedAt, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func lineFromDomain(l domain.InputFactLine) persistence.InputFactLine {
 	return persistence.InputFactLine{ID: l.ID, FactID: l.FactID, SourceLineNo: l.SourceLineNo, ExternalSKU: l.ExternalSKU, ExternalTitle: l.ExternalTitle, ExternalSpec: l.ExternalSpec, ProductItemID: l.ProductItemID, Quantity: l.Quantity, WaveID: l.WaveID, ExtraData: l.ExtraData, CreatedAt: l.CreatedAt, UpdatedAt: l.UpdatedAt}

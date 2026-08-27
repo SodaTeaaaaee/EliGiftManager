@@ -154,9 +154,13 @@ type InputFact struct {
 	MembershipLevel    string
 	SourceDocumentNo   string
 	SourceCreatedAt    *time.Time
-	ExtraData          string
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	// RevisesID points at the fact this input revises; the revision starts
+	// pending (RevisionAppliedAt nil) and only enters waves once applied.
+	RevisesID         *uint
+	RevisionAppliedAt *time.Time
+	ExtraData         string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type InputFactLine struct {
@@ -181,8 +185,11 @@ type DuplicateObservation struct {
 	Verdict        string
 	Reason         string
 	Decided        bool
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// ExtraData carries a JSON snapshot of the original ingest input so a
+	// later operator decision can replay the fact creation.
+	ExtraData string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 type Wave struct {

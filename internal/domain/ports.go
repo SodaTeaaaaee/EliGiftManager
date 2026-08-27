@@ -62,7 +62,9 @@ type Store interface {
 	GetFact(ctx context.Context, id uint) (*InputFact, error)
 	FindFactByStableID(ctx context.Context, platformID uint, stableID string) (*InputFact, error)
 	ListFactsByDocument(ctx context.Context, documentID uint) ([]InputFact, error)
+	ListFactsByPlatform(ctx context.Context, platformID uint) ([]InputFact, error)
 	UpdateFact(ctx context.Context, f *InputFact) error
+	DeleteFact(ctx context.Context, id uint) error
 
 	CreateFactLine(ctx context.Context, l *InputFactLine) error
 	GetFactLine(ctx context.Context, id uint) (*InputFactLine, error)
@@ -71,6 +73,7 @@ type Store interface {
 	ListFactLinesByWave(ctx context.Context, waveID uint) ([]InputFactLine, error)
 	ListFactLinesByExternalSKU(ctx context.Context, platformID uint, sku string) ([]InputFactLine, error)
 	UpdateFactLine(ctx context.Context, l *InputFactLine) error
+	DeleteFactLine(ctx context.Context, id uint) error
 
 	CreateDuplicate(ctx context.Context, d *DuplicateObservation) error
 	ListOpenDuplicates(ctx context.Context) ([]DuplicateObservation, error)
