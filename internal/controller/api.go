@@ -321,6 +321,25 @@ func (c *WorkspaceController) MarkWritebackFailed(writebackID uint, errMsg strin
 	return c.ws.MarkWritebackFailed(c.ctx(), writebackID, errMsg)
 }
 
+// ListWritebacksByWave returns the writeback items behind the wave's facts,
+// ordered by item id.
+func (c *WorkspaceController) ListWritebacksByWave(waveID uint) ([]domain.ChannelWritebackItem, error) {
+	items, err := c.ws.ListWritebacksByWave(c.ctx(), waveID)
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []domain.ChannelWritebackItem{}
+	}
+	return items, nil
+}
+
+// ExportWritebackFile writes one writeback item's stored payload to the
+// exports directory and returns the absolute path.
+func (c *WorkspaceController) ExportWritebackFile(writebackID uint) (*app.WritebackFileResult, error) {
+	return c.ws.ExportWritebackFile(c.ctx(), writebackID)
+}
+
 func (c *WorkspaceController) Home() (app.HomeBuckets, error) {
 	return c.ws.Home(c.ctx())
 }

@@ -94,6 +94,10 @@ export function ExportFactoryOrderFile(arg1) {
   return window['go']['controller']['WorkspaceController']['ExportFactoryOrderFile'](arg1);
 }
 
+export function ExportWritebackFile(arg1) {
+  return window['go']['controller']['WorkspaceController']['ExportWritebackFile'](arg1);
+}
+
 export function GenerateFactoryOrder(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['GenerateFactoryOrder'](arg1, arg2);
 }
@@ -200,6 +204,10 @@ export function ListTemplates() {
 
 export function ListWaves() {
   return window['go']['controller']['WorkspaceController']['ListWaves']();
+}
+
+export function ListWritebacksByWave(arg1) {
+  return window['go']['controller']['WorkspaceController']['ListWritebacksByWave'](arg1);
 }
 
 export function MarkWritebackFailed(arg1, arg2) {

@@ -1,6 +1,9 @@
 package app
 
 import (
+	"encoding/base64"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -234,6 +237,123 @@ func TestGenerateWritebacks_PayloadCarriesExternalCarrierCode(t *testing.T) {
 	}
 	if strings.HasPrefix(mapped, "\uFEFF") != true {
 		t.Fatal("payload should keep the UTF-8 BOM like every rendered CSV")
+	}
+}
+
+// TestExportWritebackFile_WritesStoredPayload pins the export step: the file
+// lands under exports/writebacks and its bytes equal the payload snapshotted
+// at generation time (CSV verbatim, xlsx base64-decoded).
+func TestExportWritebackFile_WritesStoredPayload(t *testing.T) {
+	p, items := shippedRetailFact(t, "BILI-SKU-WB6")
+	ws, ctx := p.ws, p.ctx
+	ws.ResolveDataDir = func() (string, error) { return t.TempDir(), nil }
+
+	result, err := ws.ExportWritebackFile(ctx, items[0].ID)
+	if err != nil {
+		t.Fatalf("ExportWritebackFile: %v", err)
+	}
+	if !strings.Contains(result.Path, filepath.Join("exports", "writebacks")) || !strings.HasSuffix(result.Path, ".csv") {
+		t.Fatalf("path = %q", result.Path)
+	}
+	raw, err := os.ReadFile(result.Path)
+	if err != nil {
+		t.Fatalf("read export: %v", err)
+	}
+	if string(raw) != items[0].Payload {
+		t.Fatalf("file content = %q, want stored payload %q", raw, items[0].Payload)
+	}
+}
+
+// TestExportWritebackFile_XlsxPayloadDecodes checks the binary branch: an
+// xlsx writeback template stores the payload base64-prefixed, and the export
+// decodes it back into .xlsx bytes.
+func TestExportWritebackFile_XlsxPayloadDecodes(t *testing.T) {
+	p := setupReadyRetailPath(t, "BILI-SKU-WB7")
+	ws, ctx := p.ws, p.ctx
+	ws.ResolveDataDir = func() (string, error) { return t.TempDir(), nil }
+	layoutRaw, err := alignment.SerializeLayoutConfig(alignment.LayoutConfig{
+		Format:      alignment.FormatXLSX,
+		ColumnOrder: []string{"source.document_no"},
+		HeaderNames: map[string]string{"source.document_no": "订单号"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tpl := &domain.TemplateConfig{
+		PlatformID:   p.source.ID,
+		DocumentType: DocumentTypeWriteback,
+		Direction:    string(domain.TemplateDirectionOutput),
+		Name:         "bilibili writeback xlsx",
+		Version:      1,
+		LayoutJSON:   layoutRaw,
+	}
+	if err := ws.CreateTemplate(ctx, tpl); err != nil {
+		t.Fatal(err)
+	}
+	_, lines, err := ws.GenerateFactoryOrder(ctx, p.wave.ID, p.factory.ID)
+	if err != nil {
+		t.Fatalf("GenerateFactoryOrder: %v", err)
+	}
+	if _, err := ws.ImportShipment(ctx, lines[0].TrackingID, "SF-WB-XLSX", "SF", "顺丰速运", 1); err != nil {
+		t.Fatalf("ImportShipment: %v", err)
+	}
+	items, err := ws.GenerateWritebacks(ctx, p.fact.ID)
+	if err != nil {
+		t.Fatalf("GenerateWritebacks: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items = %d, want 1", len(items))
+	}
+	if !strings.HasPrefix(items[0].Payload, "base64:") {
+		t.Fatalf("xlsx payload should be base64-prefixed, got %q", items[0].Payload[:32])
+	}
+
+	result, err := ws.ExportWritebackFile(ctx, items[0].ID)
+	if err != nil {
+		t.Fatalf("ExportWritebackFile: %v", err)
+	}
+	if !strings.HasSuffix(result.Path, ".xlsx") {
+		t.Fatalf("path = %q, want .xlsx", result.Path)
+	}
+	raw, err := os.ReadFile(result.Path)
+	if err != nil {
+		t.Fatalf("read export: %v", err)
+	}
+	want, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(items[0].Payload, "base64:"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != string(want) {
+		t.Fatal("file content must equal the decoded stored payload")
+	}
+}
+
+// TestListWritebacksByWave_FollowsFactLineMembership pins the wave listing:
+// items surface through the wave's fact lines, not through results, and a
+// different wave's facts stay out.
+func TestListWritebacksByWave_FollowsFactLineMembership(t *testing.T) {
+	p, items := shippedRetailFact(t, "BILI-SKU-WB8")
+	ws, ctx := p.ws, p.ctx
+
+	other, err := ws.CreateWave(ctx, "other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := ws.ListWritebacksByWave(ctx, p.wave.ID)
+	if err != nil {
+		t.Fatalf("ListWritebacksByWave: %v", err)
+	}
+	if len(listed) != 1 || listed[0].ID != items[0].ID {
+		t.Fatalf("listed = %+v, want the wave's item %d", listed, items[0].ID)
+	}
+
+	empty, err := ws.ListWritebacksByWave(ctx, other.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("other wave listed = %+v, want none", empty)
 	}
 }
 

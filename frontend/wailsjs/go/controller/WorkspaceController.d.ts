@@ -50,6 +50,8 @@ export function ExportFactoryOrder(arg1:number):Promise<domain.SupplierOrder>;
 
 export function ExportFactoryOrderFile(arg1:number):Promise<app.ExportFileResult>;
 
+export function ExportWritebackFile(arg1:number):Promise<app.WritebackFileResult>;
+
 export function GenerateFactoryOrder(arg1:number,arg2:number):Promise<app.GenerateFactoryOrderResult>;
 
 export function GenerateFactoryOrderForResults(arg1:number,arg2:number,arg3:Array<number>):Promise<app.GenerateFactoryOrderResult>;
@@ -103,6 +105,8 @@ export function ListSupplierOrders(arg1:number):Promise<Array<domain.SupplierOrd
 export function ListTemplates():Promise<Array<domain.TemplateConfig>>;
 
 export function ListWaves():Promise<Array<domain.Wave>>;
+
+export function ListWritebacksByWave(arg1:number):Promise<Array<domain.ChannelWritebackItem>>;
 
 export function MarkWritebackFailed(arg1:number,arg2:string):Promise<void>;
 

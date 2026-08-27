@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/alignment"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -220,6 +222,73 @@ func (ws *Workspace) MarkWritebackFailed(ctx context.Context, writebackID uint, 
 		wb.ErrorMessage = truncateRunes(errMsg, maxWritebackErrorRunes)
 		return tx.UpdateWriteback(ctx, wb)
 	})
+}
+
+// ListWritebacksByWave returns every writeback item of the facts assigned to
+// the wave. Membership follows the fact lines' wave assignment — the same
+// language the inbox uses — so listed items survive entitlement recomputes.
+// Items are ordered by id for stable display.
+func (ws *Workspace) ListWritebacksByWave(ctx context.Context, waveID uint) ([]domain.ChannelWritebackItem, error) {
+	lines, err := ws.Store.ListFactLinesByWave(ctx, waveID)
+	if err != nil {
+		return nil, err
+	}
+	seenFact := make(map[uint]struct{}, len(lines))
+	var out []domain.ChannelWritebackItem
+	for _, l := range lines {
+		if _, ok := seenFact[l.FactID]; ok {
+			continue
+		}
+		seenFact[l.FactID] = struct{}{}
+		items, err := ws.Store.ListWritebacksByFact(ctx, l.FactID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, items...)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out, nil
+}
+
+// WritebackFileResult reports one writeback export: the written file's
+// absolute path.
+type WritebackFileResult struct {
+	Path string
+}
+
+// ExportWritebackFile writes one writeback item's stored payload to
+// <dataDir>/exports/writebacks/<id>-<timestamp>.<format> and returns the
+// path. The payload was rendered and snapshotted on the item at generation
+// time, so exporting is a pure bytes-to-file step: no re-render and no state
+// change (reaching the platform and marking sent/failed are separate steps).
+func (ws *Workspace) ExportWritebackFile(ctx context.Context, writebackID uint) (*WritebackFileResult, error) {
+	wb, err := ws.Store.GetWriteback(ctx, writebackID)
+	if err != nil {
+		return nil, err
+	}
+	payload, format, err := writebackPayloadBytes(wb.Payload)
+	if err != nil {
+		return nil, err
+	}
+	path, err := ws.writeExportFile(fmt.Sprintf("writebacks/%d-%s", wb.ID, ws.Now().Format("20060102-150405")), format, payload)
+	if err != nil {
+		return nil, err
+	}
+	return &WritebackFileResult{Path: path}, nil
+}
+
+// writebackPayloadBytes decodes the stored payload back into file bytes and
+// the file format: csv payloads are stored verbatim, xlsx payloads are stored
+// base64-prefixed like every binary export payload.
+func writebackPayloadBytes(stored string) ([]byte, string, error) {
+	if rest, ok := strings.CutPrefix(stored, "base64:"); ok {
+		data, err := base64.StdEncoding.DecodeString(rest)
+		if err != nil {
+			return nil, "", fmt.Errorf("writeback payload: decode xlsx: %w", err)
+		}
+		return data, alignment.FormatXLSX, nil
+	}
+	return []byte(stored), alignment.FormatCSV, nil
 }
 
 // truncateRunes shortens s to at most n runes without splitting a character.
