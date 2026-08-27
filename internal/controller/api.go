@@ -8,12 +8,10 @@ import (
 )
 
 // ctx returns the Wails application context captured at startup so backend
-// work is cancelled when the app shuts down; tests that never run startup
-// fall back to a background context.
+// work is cancelled when the app shuts down. The package initializer in
+// context_provider.go guarantees it is never nil, falling back to
+// context.Background() until startup runs.
 func (c *WorkspaceController) ctx() context.Context {
-	if appContext == nil {
-		return context.Background()
-	}
 	return appContext
 }
 

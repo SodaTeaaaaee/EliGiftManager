@@ -1001,8 +1001,9 @@ func (s *GormStore) UpdateWriteback(ctx context.Context, w *domain.ChannelWriteb
 }
 
 func (s *GormStore) GetSettings(ctx context.Context) (*domain.AppSettings, error) {
-	// FirstOrCreate closes the read-then-create race between two concurrent
-	// callers on an empty settings table; Attrs keep the legacy defaults.
+	// FirstOrCreate seeds the default settings row on first read. It is still
+	// two statements rather than one transaction, so a read-then-create race
+	// is only prevented by the single-connection store pool.
 	var row persistence.AppSettings
 	if err := s.db.WithContext(ctx).
 		Attrs(persistence.AppSettings{Locale: "zh-CN", Theme: "system", Density: "comfortable", DuplicateRecordMinutes: 10, DuplicateAskDays: 10}).
