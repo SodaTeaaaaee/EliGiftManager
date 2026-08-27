@@ -318,3 +318,29 @@ func TestMoveLinesRefusesFrozenLines(t *testing.T) {
 		t.Fatalf("MoveLines into closed wave = %v, want ErrWaveClosed", err)
 	}
 }
+
+func TestMoveLinesRefusesClosedSourceWave(t *testing.T) {
+	f := newMoveFixture(t)
+	// Wave C plays the open target; wave A gets closed as the source.
+	line := f.ingestRetail(t, "MOVE-SRC-CLOSED-1", 2)
+	if err := f.ws.AssignLines(f.ctx, f.waveA.ID, []uint{line.ID}); err != nil {
+		t.Fatalf("AssignLines: %v", err)
+	}
+	if err := f.ws.CloseWave(f.ctx, f.waveA.ID, string(domain.WaveCloseResultClean), ""); err != nil {
+		t.Fatalf("CloseWave: %v", err)
+	}
+
+	if err := f.ws.MoveLines(f.ctx, []uint{line.ID}, f.waveB.ID); !errors.Is(err, ErrWaveClosed) {
+		t.Fatalf("MoveLines out of closed wave = %v, want ErrWaveClosed", err)
+	}
+	after, err := f.ws.Store.GetFactLine(f.ctx, line.ID)
+	if err != nil {
+		t.Fatalf("GetFactLine: %v", err)
+	}
+	if after.WaveID == nil || *after.WaveID != f.waveA.ID {
+		t.Fatalf("line must stay in the closed source wave, got %+v", after.WaveID)
+	}
+	if results, err := f.ws.Store.ListResults(f.ctx, f.waveB.ID); err != nil || len(results) != 0 {
+		t.Fatalf("target wave must stay empty after the refused move, got %v (%d)", err, len(results))
+	}
+}

@@ -50,6 +50,27 @@ func (ws *Workspace) ApplyRevision(ctx context.Context, factID uint) error {
 			return err
 		}
 
+		// Applying a revision moves lines and rebuilds results inside the
+		// waves holding the original lines, so a closed wave refuses it: a
+		// late input must wait for an explicit wave reopen.
+		checkedWaves := map[uint]struct{}{}
+		for _, ln := range origLines {
+			if ln.WaveID == nil {
+				continue
+			}
+			if _, seen := checkedWaves[*ln.WaveID]; seen {
+				continue
+			}
+			checkedWaves[*ln.WaveID] = struct{}{}
+			wave, err := tx.GetWave(ctx, *ln.WaveID)
+			if err != nil {
+				return err
+			}
+			if wave.CloseResult != string(domain.WaveCloseResultOpen) {
+				return ErrWaveClosed
+			}
+		}
+
 		// The fact's header content follows the revision; the original fact
 		// id stays stable so existing results keep their InputFactID.
 		orig.PlatformIdentityID = rev.PlatformIdentityID

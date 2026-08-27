@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
@@ -294,5 +295,108 @@ func TestQuantitySplitScopedToWaveAndKey(t *testing.T) {
 	if err := f.ws.UpsertQuantitySplitRule(f.ctx, closed); err == nil {
 		t.Fatal("expected refusal on closed wave")
 	}
+	// Deletion is refused symmetrically with upsert.
+	if err := f.ws.DeleteQuantitySplitRule(f.ctx, rule.ID); !errors.Is(err, ErrWaveClosed) {
+		t.Fatalf("DeleteQuantitySplitRule on closed wave = %v, want ErrWaveClosed", err)
+	}
+	listed, err := f.ws.ListQuantitySplitRules(f.ctx, f.wave.ID)
+	if err != nil {
+		t.Fatalf("ListQuantitySplitRules after refused delete: %v", err)
+	}
+	found := 0
+	for _, r := range listed {
+		if r.ID == rule.ID {
+			found++
+		}
+	}
+	if found != 1 {
+		t.Fatalf("refused delete must leave the rule in place, got %d rows", found)
+	}
 	_ = otherWave
+}
+
+// TestQuantitySplitRejectsInvalidComponents pins the upsert validation: a
+// split rule never stores a component without a product or a non-positive
+// quantity.
+func TestQuantitySplitRejectsInvalidComponents(t *testing.T) {
+	f := newSplitFixture(t)
+	for name, comps := range map[string][]domain.QuantitySplitComponent{
+		"zero quantity":     {{ProductItemID: f.prodA.ID, Quantity: 0}},
+		"negative quantity": {{ProductItemID: f.prodA.ID, Quantity: -1}},
+		"missing product":   {{ProductItemID: 0, Quantity: 1}},
+	} {
+		rule := &domain.QuantitySplitRule{
+			WaveID: f.wave.ID, PlatformID: f.source.ID, ExternalKey: "SPLIT-SKU",
+			Components: comps,
+		}
+		if err := f.ws.UpsertQuantitySplitRule(f.ctx, rule); err == nil {
+			t.Fatalf("%s must be rejected", name)
+		}
+	}
+	if rules, err := f.ws.ListQuantitySplitRules(f.ctx, f.wave.ID); err != nil || len(rules) != 0 {
+		t.Fatalf("rejected upserts must persist nothing, got %v (%d)", err, len(rules))
+	}
+}
+
+// TestQuantitySplitWinsOverBundle pins the derivation order: the wave-scoped
+// split exception explains a specific line before the alias's global bundle
+// composition, so both mapping the same key coexist with the split winning.
+func TestQuantitySplitWinsOverBundle(t *testing.T) {
+	f := newSplitFixture(t)
+	alias := &domain.ProductAlias{ProductItemID: f.prodA.ID, PlatformID: f.source.ID, ExternalProductID: "COMBO-ALIAS"}
+	if err := f.ws.CreateAlias(f.ctx, alias); err != nil {
+		t.Fatalf("CreateAlias: %v", err)
+	}
+	for _, comp := range []domain.ProductBundleComponent{
+		{AliasID: alias.ID, ProductItemID: f.prodA.ID, Quantity: 2},
+		{AliasID: alias.ID, ProductItemID: f.prodB.ID, Quantity: 1},
+	} {
+		c := comp
+		if err := f.ws.CreateBundleComponent(f.ctx, &c); err != nil {
+			t.Fatalf("CreateBundleComponent: %v", err)
+		}
+	}
+	f.ingestSplitLine(t, "SPLIT-BUNDLE-1", "COMBO-ALIAS", 5)
+
+	// Before the split rule the bundle mapping expands the line.
+	views, err := f.ws.ListResultViews(f.ctx, f.wave.ID)
+	if err != nil {
+		t.Fatalf("ListResultViews bundle: %v", err)
+	}
+	if len(views) != 2 {
+		t.Fatalf("bundle alias must expand into 2 results, got %d", len(views))
+	}
+
+	// Same key, same wave: the split replaces the bundle derivation.
+	rule := &domain.QuantitySplitRule{
+		WaveID: f.wave.ID, PlatformID: f.source.ID, ExternalKey: "COMBO-ALIAS",
+		Components: []domain.QuantitySplitComponent{
+			{ProductItemID: f.prodB.ID, Quantity: 5},
+		},
+	}
+	if err := f.ws.UpsertQuantitySplitRule(f.ctx, rule); err != nil {
+		t.Fatalf("UpsertQuantitySplitRule: %v", err)
+	}
+	views, err = f.ws.ListResultViews(f.ctx, f.wave.ID)
+	if err != nil {
+		t.Fatalf("ListResultViews split: %v", err)
+	}
+	if len(views) != 1 {
+		t.Fatalf("split must win over the bundle, got %d results", len(views))
+	}
+	if views[0].Result.ProductItemID == nil || *views[0].Result.ProductItemID != f.prodB.ID || views[0].Result.Quantity != 5 {
+		t.Fatalf("split result must carry the split component, got %+v", views[0].Result)
+	}
+
+	// Removing the split falls back to the bundle mapping.
+	if err := f.ws.DeleteQuantitySplitRule(f.ctx, rule.ID); err != nil {
+		t.Fatalf("DeleteQuantitySplitRule: %v", err)
+	}
+	views, err = f.ws.ListResultViews(f.ctx, f.wave.ID)
+	if err != nil {
+		t.Fatalf("ListResultViews after delete: %v", err)
+	}
+	if len(views) != 2 {
+		t.Fatalf("bundle fallback must expand again, got %d results", len(views))
+	}
 }

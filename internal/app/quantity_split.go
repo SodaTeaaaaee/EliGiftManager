@@ -40,12 +40,20 @@ func (ws *Workspace) UpsertQuantitySplitRule(ctx context.Context, rule *domain.Q
 }
 
 // DeleteQuantitySplitRule removes a rule (and its components) and re-derives
-// the covered lines so they fall back to plain (or bundle) alignment.
+// the covered lines so they fall back to plain (or bundle) alignment. A
+// closed wave refuses the deletion, mirroring UpsertQuantitySplitRule.
 func (ws *Workspace) DeleteQuantitySplitRule(ctx context.Context, id uint) error {
 	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
 		rule, err := tx.GetQuantitySplitRule(ctx, id)
 		if err != nil {
 			return err
+		}
+		wave, err := tx.GetWave(ctx, rule.WaveID)
+		if err != nil {
+			return err
+		}
+		if wave.CloseResult != string(domain.WaveCloseResultOpen) {
+			return ErrWaveClosed
 		}
 		if err := tx.DeleteQuantitySplitRule(ctx, id); err != nil {
 			return err

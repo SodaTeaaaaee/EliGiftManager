@@ -286,9 +286,10 @@ func TestApplyRevisionRetargetsMembershipInstance(t *testing.T) {
 		t.Fatalf("UpsertRule: %v", err)
 	}
 
-	// The revision corrects the source document number (content change via
-	// a different line fingerprint is impossible for membership stubs, so
-	// the test revises quantity to keep the detection honest).
+	// The revision corrects the source document number and the stub line's
+	// quantity. Membership stubs have no SKU to vary, so the header-level
+	// order number (part of the fingerprint) plus the quantity keep the
+	// revision detection honest.
 	revIn := base
 	revIn.SourceDocumentNo = "REVISED-DOC-1"
 	revIn.Lines = []IngestLine{{SourceLineNo: 1, Quantity: 4}}
@@ -336,6 +337,60 @@ func TestApplyRevisionRetargetsMembershipInstance(t *testing.T) {
 	}
 	if results[0].CustomerProfileID == nil || *results[0].CustomerProfileID != f.cust.ID {
 		t.Fatalf("rebuilt result customer = %+v", results[0].CustomerProfileID)
+	}
+}
+
+func TestApplyRevisionRefusesClosedWave(t *testing.T) {
+	f := newRevisionFixture(t)
+	base := IngestFactInput{
+		Kind:             string(domain.InputFactKindRetailOrder),
+		StableExternalID: "REV-ORD-CLOSED",
+		IdentityType:     string(domain.IdentityTypePlatformUID),
+		IdentityValue:    "UID-REV-CLOSED",
+		Lines:            []IngestLine{{SourceLineNo: 1, ExternalSKU: "REV-ALIAS", Quantity: 2}},
+	}
+	f.ingest(t, base)
+	facts := mustFactsByPlatform(t, f.ws, f.source.ID)
+	origLines, err := f.ws.Store.ListFactLines(f.ctx, facts[0].ID)
+	if err != nil {
+		t.Fatalf("ListFactLines: %v", err)
+	}
+	if err := f.ws.AssignLines(f.ctx, f.wave.ID, []uint{origLines[0].ID}); err != nil {
+		t.Fatalf("AssignLines: %v", err)
+	}
+
+	revIn := base
+	revIn.Lines = []IngestLine{{SourceLineNo: 1, ExternalSKU: "REV-ALIAS", Quantity: 4}}
+	f.ingest(t, revIn)
+	revisions, err := f.ws.Store.ListRevisionFacts(f.ctx)
+	if err != nil || len(revisions) != 1 {
+		t.Fatalf("ListRevisionFacts: %v (%d)", err, len(revisions))
+	}
+
+	if err := f.ws.CloseWave(f.ctx, f.wave.ID, string(domain.WaveCloseResultClean), ""); err != nil {
+		t.Fatalf("CloseWave: %v", err)
+	}
+	if err := f.ws.ApplyRevision(f.ctx, revisions[0].ID); !errors.Is(err, ErrWaveClosed) {
+		t.Fatalf("ApplyRevision on closed wave = %v, want ErrWaveClosed", err)
+	}
+	// The refusal leaves everything in place: the revision stays pending and
+	// the original line keeps its assignment.
+	rev, err := f.ws.Store.GetFact(f.ctx, revisions[0].ID)
+	if err != nil {
+		t.Fatalf("GetFact revision: %v", err)
+	}
+	if rev.RevisionAppliedAt != nil {
+		t.Fatal("refused apply must leave the revision pending")
+	}
+	line, err := f.ws.Store.GetFactLine(f.ctx, origLines[0].ID)
+	if err != nil {
+		t.Fatalf("GetFactLine: %v", err)
+	}
+	if line.WaveID == nil || *line.WaveID != f.wave.ID {
+		t.Fatalf("original line must keep its wave assignment, got %+v", line.WaveID)
+	}
+	if line.Quantity != 2 {
+		t.Fatalf("original line must keep its pre-revision quantity, got %d", line.Quantity)
 	}
 }
 

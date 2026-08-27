@@ -179,6 +179,55 @@ func TestDuplicateWindowFourQuadrants(t *testing.T) {
 		}
 	})
 
+	t.Run("same content different order number is a new responsibility", func(t *testing.T) {
+		ws, gdb, source := setupDuplicateWindowWorkspace(t)
+		ws.Now = func() time.Time { return now }
+		ctx := context.Background()
+		day := now.Add(-24 * time.Hour)
+
+		base := IngestFactInput{
+			Kind:             string(domain.InputFactKindRetailOrder),
+			IdentityType:     string(domain.IdentityTypePlatformUID),
+			IdentityValue:    "UID-ORDNO",
+			SourceDocumentNo: "ORD-1001",
+			SourceCreatedAt:  &day,
+			Lines:            []IngestLine{{SourceLineNo: 1, ExternalSKU: "SKU-ORDNO", Quantity: 1}},
+		}
+		if _, dups, err := ws.IngestDocument(ctx, &domain.InputDocument{PlatformID: source.ID}, []IngestFactInput{base}); err != nil {
+			t.Fatalf("first ingest: %v", err)
+		} else if len(dups) != 0 {
+			t.Fatalf("first ingest produced duplicates: %v", dups)
+		}
+		facts := mustFactsByPlatform(t, ws, source.ID)
+		// Park the first fact inside the record window so a genuine content
+		// repeat would be swallowed as record_only.
+		rewindFactCreatedAt(t, gdb, facts[0].ID, now.Add(-time.Minute))
+
+		// Same person, product, quantity, and day, but a different order
+		// number: a second genuine order, not a swallowed duplicate.
+		second := base
+		second.SourceDocumentNo = "ORD-1002"
+		if _, dups, err := ws.IngestDocument(ctx, &domain.InputDocument{PlatformID: source.ID}, []IngestFactInput{second}); err != nil {
+			t.Fatalf("second ingest: %v", err)
+		} else if len(dups) != 0 {
+			t.Fatalf("a different order number must not be judged duplicate, got %+v", dups)
+		}
+		after := mustFactsByPlatform(t, ws, source.ID)
+		if len(after) != 2 {
+			t.Fatalf("expected 2 facts (one per real order), got %d", len(after))
+		}
+
+		// The same order number repeated still hits the window logic.
+		for _, fact := range after {
+			rewindFactCreatedAt(t, gdb, fact.ID, now.Add(-time.Minute))
+		}
+		if _, dups, err := ws.IngestDocument(ctx, &domain.InputDocument{PlatformID: source.ID}, []IngestFactInput{second}); err != nil {
+			t.Fatalf("repeat ingest: %v", err)
+		} else if len(dups) != 1 || dups[0].Verdict != string(domain.DuplicateRecordOnly) {
+			t.Fatalf("repeated order number must stay record_only, got %+v", dups)
+		}
+	})
+
 	t.Run("membership fingerprints identity and day", func(t *testing.T) {
 		ws, gdb, source := setupDuplicateWindowWorkspace(t)
 		ws.Now = func() time.Time { return now }

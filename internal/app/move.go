@@ -49,6 +49,17 @@ func (ws *Workspace) MoveLines(ctx context.Context, lineIDs []uint, targetWaveID
 			}
 			sourceWaveID := *line.WaveID
 
+			// A closed source wave refuses the move, mirroring the target
+			// check: lines may only leave an open wave. Late inputs wait for
+			// an explicit wave reopen.
+			sourceWave, err := tx.GetWave(ctx, sourceWaveID)
+			if err != nil {
+				return err
+			}
+			if sourceWave.CloseResult != string(domain.WaveCloseResultOpen) {
+				return ErrWaveClosed
+			}
+
 			// Revoke the line's results in the source wave; a frozen result
 			// means the line entered a factory order and cannot move.
 			results, err := tx.ListResults(ctx, sourceWaveID)
