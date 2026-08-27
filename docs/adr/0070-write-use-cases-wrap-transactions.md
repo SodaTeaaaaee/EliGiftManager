@@ -4,4 +4,6 @@
 
 嵌套靠两条机制防住。其一，recompute 等共享步骤接收显式 store 参数并由调用方传入 tx-Store，公开入口 `RecomputeEntitlements` 只是自带 WithTx 的便捷包装，用例内部从不调它。其二，单连接池（`SetMaxOpenConns(1)`）是天然护栏：在 WithTx 回调里误用外层 Store 会死等那条被事务占用的连接，测试基建同样单连接，hang 会在测试里当场暴露而不是溜进生产。`withStore` 把 Workspace 浅拷贝到 tx-Store 上，让事务内的复合步骤仍然复用用例代码。
 
+标题里的「写用例」指包含多个写步骤的复合用例；只含单个写步骤的用例不强制 WithTx 包裹——例如 ImportShipment 的单条回传落库、ExportFactoryOrder 的读后写：单连接池天然串行，单次写入自身已是原子，再包一层事务不增加正确性。
+
 审计字段由 FromDomain 映射拷贝保护：infra 的 `*FromDomain` 逐字段拷贝 CreatedAt/UpdatedAt，Save 全字段更新时不会用调用方结构体里的零值时间戳冲掉库里的创建时间；调用方从零构造编辑表单的场景（如规则编辑）由用例先回读旧记录回填再更新。

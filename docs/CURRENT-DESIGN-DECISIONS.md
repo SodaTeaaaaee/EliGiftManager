@@ -50,4 +50,4 @@
 
 ## 实现边界
 
-实体与基数、语义字典、画面与操作已经写在 [TARGET-DOMAIN-AND-PRODUCT-MODEL.md](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md)。实现时其余字段（时间戳、备注、扩展 JSON）跟实体走，不再单独拍板。当前代码不是目标。不按旧 Demand / FulfillmentLine 模型开工。
+实体与基数、语义字典、画面与操作已经写在 [TARGET-DOMAIN-AND-PRODUCT-MODEL.md](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md)。实现时其余字段（时间戳、备注、扩展 JSON）跟实体走，不再单独拍板。当前代码不是目标。不按旧 Demand / FulfillmentLine 模型开工。多写步骤用例的事务边界放在 app 层用例方法上，Store 即 UnitOfWork，controller 不碰事务；单写步骤用例不强制包事务，见 [ADR 0070](./adr/0070-write-use-cases-wrap-transactions.md)
