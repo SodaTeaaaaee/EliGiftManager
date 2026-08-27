@@ -97,6 +97,9 @@ func TestTransformNormalizePhone(t *testing.T) {
 		{"8613800000004", "13800000004"},
 		{"+4915112345678", "+4915112345678"}, // other country prefix survives
 		{" (021) 6543 ", "0216543"},
+		// Fullwidth separators strip like their ASCII twins: ideographic
+		// space, fullwidth hyphen, fullwidth parentheses.
+		{"+86　138－0013－（8000）", "13800138000"},
 	}
 	for _, c := range cases {
 		got, err := runChain(t, MappingConfig{}, "recipient.phone", c.in, "normalizePhone")
@@ -105,6 +108,34 @@ func TestTransformNormalizePhone(t *testing.T) {
 		}
 		if got != c.want {
 			t.Fatalf("normalizePhone(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+
+	// Known limitation: fullwidth digits pass through untouched instead of
+	// folding back to ASCII digits.
+	fullDigits := string([]rune{'\uff11', '\uff13', '\uff18', '\uff10', '\uff10', '\uff11', '\uff13', '\uff18', '\uff10', '\uff10', '\uff10', '\uff10'})
+	gotFull, errFull := runChain(t, MappingConfig{}, "recipient.phone", fullDigits, "normalizePhone")
+	if errFull != nil || gotFull != fullDigits {
+		t.Fatalf("fullwidth digits must pass through untouched, got %q err %v", gotFull, errFull)
+	}
+
+	// Halfwidth and fullwidth spellings of the same number must collapse to
+	// the exact same national number.
+	pairs := [][2]string{
+		{"+86 138-0013-(8000)", "+86　138－0013－（8000）"},
+		{"86 - 139 - 0000 - (0001)", "86\u3000－\u3000139\u3000—\u30000000\u3000（0001）"},
+	}
+	for _, p := range pairs {
+		half, err := runChain(t, MappingConfig{}, "recipient.phone", p[0], "normalizePhone")
+		if err != nil {
+			t.Fatalf("normalizePhone(%q): %v", p[0], err)
+		}
+		full, err := runChain(t, MappingConfig{}, "recipient.phone", p[1], "normalizePhone")
+		if err != nil {
+			t.Fatalf("normalizePhone(%q): %v", p[1], err)
+		}
+		if half == "" || half != full {
+			t.Fatalf("halfwidth %q -> %q, fullwidth %q -> %q; must match", p[0], half, p[1], full)
 		}
 	}
 }

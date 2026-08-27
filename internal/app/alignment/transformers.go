@@ -157,14 +157,25 @@ func mapEnumTransformer(cfg MappingConfig) Transformer {
 	}
 }
 
-// transformNormalizePhone strips spacing and punctuation and folds +86 / 86
-// country-code prefixes back to a bare 11-digit national number (keeping any
-// other leading + intact).
+// transformNormalizePhone strips spacing and punctuation (ASCII and CJK
+// fullwidth variants) and folds +86 / 86 country-code prefixes back to a bare
+// 11-digit national number (keeping any other leading + intact).
+//
+// Known limitation: fullwidth digits（１３８…）and other non-ASCII digit
+// forms are NOT folded back to ASCII digits; they pass through untouched so
+// downstream format checks, not this transformer, decide whether they are
+// usable phone data.
 func transformNormalizePhone(_, value string) (string, error) {
 	var b strings.Builder
 	for _, r := range value {
 		switch r {
 		case ' ', '\t', '-', '(', ')':
+			continue
+		// CJK fullwidth/typographic separators seen in Chinese exports:
+		// ideographic space, fullwidth parentheses, vertical/small parenthesis
+		// presentation forms, fullwidth hyphen-minus, en/em dash.
+		case '\u3000', '\uff08', '\uff09', '\ufe35', '\ufe36', '\ufe59', '\ufe5a',
+			'\uff0d', '\u2013', '\u2014':
 			continue
 		default:
 			b.WriteRune(r)
