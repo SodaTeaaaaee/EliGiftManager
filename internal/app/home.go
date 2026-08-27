@@ -72,6 +72,9 @@ func (ws *Workspace) Home(ctx context.Context) (HomeBuckets, error) {
 		out.RecentWaves = waves
 	}
 	for _, w := range waves {
+		// Only waves actually closed with residual count here. An open wave
+		// with unfrozen results is work in progress, not a pending-home
+		// concern.
 		if w.CloseResult == string(domain.WaveCloseResultResidual) {
 			out.ResidualClose++
 		}
@@ -82,19 +85,10 @@ func (ws *Workspace) Home(ctx context.Context) (HomeBuckets, error) {
 		if err != nil {
 			return out, err
 		}
-		blocked := 0
-		unfrozen := 0
 		for _, v := range views {
 			if v.WorkState == domain.WorkStateBlocked {
-				blocked++
+				out.BlockedResults++
 			}
-			if !v.Result.Frozen {
-				unfrozen++
-			}
-		}
-		out.BlockedResults += blocked
-		if unfrozen > 0 {
-			out.ResidualClose++
 		}
 	}
 	return out, nil
