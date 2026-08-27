@@ -205,6 +205,13 @@ func buildIngestFacts(kind string, rows []alignment.ParsedRow) []IngestFactInput
 				in.SourceDocumentNo = docNo
 				in.StableExternalID = docNo
 			} else {
+				// Known tradeoff: the "fp:" stable id embeds the template's
+				// Fingerprint key set at import time. Changing a template's
+				// Fingerprint keys makes future imports compute different
+				// "fp:" ids, so rows already imported under the old keys stop
+				// matching (duplicate detection misses them against old
+				// files). Accepted for now; do not retune template
+				// fingerprints casually.
 				in.StableExternalID = "fp:" + row.Fingerprint
 			}
 			if raw := row.Values["source.created_at"]; raw != "" {
