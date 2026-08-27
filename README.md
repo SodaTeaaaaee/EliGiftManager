@@ -10,9 +10,9 @@ The smallest workflow is input -> mapping -> output.
 
 Input enters the Inbox as input documents and input fact lines. Operators assign accepted facts into a Wave. A Wave resolves membership facts, retail orders, operational grants, product alignment, and addresses into source-level fulfillment results.
 
-The Wave workbench is a large editable responsibility list. Users can sort it or group it by work state, customer, product, or source. Grouping changes the view only. The leaf fulfillment results keep their source facts and quantities.
+The Wave workbench is a large editable responsibility list. Users can sort it or group it by work state, customer, product, source, or responsible factory (or ungroup it back to a flat list). Grouping changes the view only. The leaf fulfillment results keep their source facts and quantities.
 
-Supplier order export creates supplier order lines and internal tracking IDs. Factory shipment files map back through those tracking IDs. Source platforms receive writeback items, including multiple parcels for one source order when the platform supports it.
+Supplier order export creates supplier order lines and internal tracking IDs, writes the order-import file for the factory, and maps factory shipment files back through those tracking IDs. Source platforms receive writeback items — rendered per parcel, exportable as files, and trackable through sent/failed states with retry counts — including multiple parcels for one source order when needed.
 
 ## Core domain terms
 

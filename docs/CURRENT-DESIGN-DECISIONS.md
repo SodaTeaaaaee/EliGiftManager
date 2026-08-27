@@ -46,7 +46,7 @@
 
 ## 模板
 
-模板绑定「平台、文档类型、输入或输出方向」。承运商映射挂在平台上。映射目标来自第一期封闭语义字典和转换器清单，见目标模型文档。[ADR 0035](./adr/0035-template-bound-to-integration-document-direction.md) 至 [ADR 0043](./adr/0043-builtin-templates-are-read-only-and-copyable.md)、[ADR 0052](./adr/0052-platform-owns-templates-and-carrier-maps.md)、[ADR 0065](./adr/0065-closed-semantic-dictionary-v1.md)
+模板绑定「平台、文档类型、输入或输出方向」。承运商映射挂在平台上。映射目标来自第一期封闭语义字典和转换器清单，见目标模型文档。解析与渲染由 `internal/app/alignment` 纯函数引擎统一执行，模板测试用真实或样例数据驱动同一引擎。[ADR 0035](./adr/0035-template-bound-to-integration-document-direction.md) 至 [ADR 0043](./adr/0043-builtin-templates-are-read-only-and-copyable.md)、[ADR 0052](./adr/0052-platform-owns-templates-and-carrier-maps.md)、[ADR 0065](./adr/0065-closed-semantic-dictionary-v1.md)、[ADR 0069](./adr/0069-alignment-engine-and-template-schema-v3.md)
 
 ## 实现边界
 
