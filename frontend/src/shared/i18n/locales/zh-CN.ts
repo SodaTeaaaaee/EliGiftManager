@@ -268,7 +268,6 @@ export const zhCN = {
       stable_external_id: '稳定标识命中',
       within_record_window: '记录窗口内',
       within_ask_window: '待决策窗口内',
-      fingerprint: '内容指纹命中',
     },
     decideDuplicateSuccess: '重复判定已生效',
     revision: '修订',

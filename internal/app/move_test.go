@@ -321,7 +321,7 @@ func TestMoveLinesRefusesFrozenLines(t *testing.T) {
 
 func TestMoveLinesRefusesClosedSourceWave(t *testing.T) {
 	f := newMoveFixture(t)
-	// Wave C plays the open target; wave A gets closed as the source.
+	// Wave B plays the open target; wave A gets closed as the source.
 	line := f.ingestRetail(t, "MOVE-SRC-CLOSED-1", 2)
 	if err := f.ws.AssignLines(f.ctx, f.waveA.ID, []uint{line.ID}); err != nil {
 		t.Fatalf("AssignLines: %v", err)

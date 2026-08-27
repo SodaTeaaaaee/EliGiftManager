@@ -270,7 +270,6 @@ export const enUS: AppMessageSchema = {
       stable_external_id: 'Stable external id match',
       within_record_window: 'Within record window',
       within_ask_window: 'Within ask window',
-      fingerprint: 'Content fingerprint match',
     },
     decideDuplicateSuccess: 'Duplicate decision applied',
     revision: 'Revision',
