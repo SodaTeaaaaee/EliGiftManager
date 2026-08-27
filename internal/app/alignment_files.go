@@ -476,9 +476,18 @@ func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID uint, fi
 				skip("shipment already imported")
 				continue
 			}
+			// The 规格&数量 column is a "<sku>_<title> * n" blob, not a plain
+			// number; one parcel may bundle several products. Empty (unmapped
+			// column) falls back to 0 as before; an unparseable blob skips the
+			// row with the reason recorded rather than landing Quantity=0.
 			qty := 0
-			if n, err := strconv.Atoi(strings.TrimSpace(row.Values["shipment.quantity"])); err == nil {
-				qty = n
+			if raw := row.Values["shipment.quantity"]; raw != "" {
+				parsed, err := parseShipmentQuantity(raw)
+				if err != nil {
+					skip(err.Error())
+					continue
+				}
+				qty = parsed
 			}
 			var shippedAt *time.Time
 			if raw := row.Values["shipment.shipped_at"]; raw != "" {
@@ -521,6 +530,36 @@ func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID uint, fi
 		result.Issues = []alignment.ParseIssue{}
 	}
 	return result, nil
+}
+
+// parseShipmentQuantity sums the parcel's total shipped quantity out of a
+// rouzao-style "规格&数量" blob: pipe-separated segments like
+// "206068021_标题 * 2", each contributing the positive integer after its last
+// '*' (defaulting to 1 when no multiplier is written). Multi-segment blobs are
+// one parcel carrying several products, so segment quantities sum.
+func parseShipmentQuantity(blob string) (int, error) {
+	blob = strings.TrimSpace(blob)
+	if blob == "" {
+		return 0, fmt.Errorf("shipment quantity: empty value")
+	}
+	total := 0
+	for _, seg := range strings.Split(blob, "|") {
+		seg = strings.TrimSpace(seg)
+		if seg == "" {
+			return 0, fmt.Errorf("shipment quantity: blob %q has an empty segment", blob)
+		}
+		n := 1
+		if i := strings.LastIndex(seg, "*"); i >= 0 {
+			rawQty := strings.TrimSpace(seg[i+1:])
+			qty, err := strconv.Atoi(rawQty)
+			if err != nil || qty <= 0 {
+				return 0, fmt.Errorf("shipment quantity: segment %q has non-positive or non-numeric quantity %q", seg, rawQty)
+			}
+			n = qty
+		}
+		total += n
+	}
+	return total, nil
 }
 
 // resolveCarrierCode matches a carrier display name against the platform's

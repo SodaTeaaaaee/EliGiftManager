@@ -370,6 +370,30 @@ func TestExportFactoryOrderFile_TemplateLayoutSnapshotsVersion(t *testing.T) {
 	}
 }
 
+func TestParseShipmentQuantity(t *testing.T) {
+	cases := []struct {
+		in   string
+		want int
+	}{
+		{"111_x * 1", 1},
+		{"a * 2|b * 3", 5},
+		{"sku", 1},           // no multiplier defaults to 1
+		{"sku_x", 1},         // title blob without multiplier
+		{" a*2 | b * 3 ", 5}, // surrounding whitespace ignored
+	}
+	for _, c := range cases {
+		got, err := parseShipmentQuantity(c.in)
+		if err != nil || got != c.want {
+			t.Fatalf("parseShipmentQuantity(%q) = %d, %v; want %d, nil", c.in, got, err, c.want)
+		}
+	}
+	for _, bad := range []string{"sku * bad", "sku * 0", "sku * -2", "sku * |x * 2", ""} {
+		if got, err := parseShipmentQuantity(bad); err == nil {
+			t.Fatalf("parseShipmentQuantity(%q) = %d, want error", bad, got)
+		}
+	}
+}
+
 func TestImportShipmentFile_EndToEnd(t *testing.T) {
 	p := setupReadyRetailPath(t, "BILI-SKU-11")
 	ws, ctx := p.ws, p.ctx
@@ -388,7 +412,7 @@ func TestImportShipmentFile_EndToEnd(t *testing.T) {
 	trackingID := lines[0].TrackingID
 
 	// A rouzao-shaped return CSV pointing at the real tracking id.
-	path := writeTempFixture(t, "return.csv", "\uFEFF\"订单编号\",\"下单时间\",\"商品编码\",\"商品名称\",\"规格&数量\",\"应付金额\",\"收件人\",\"电话\",\"收件信息\",\"物流公司\",\"物流单号\",\"打印快递时间\",\"订单状态\"\n\""+trackingID+"\n\",\"2026-05-01 10:00:00\",\"SKU\",\"Name\",\"111_x * 1\",\"0.00\",\"Alice\",\"13800000000\",\" addr \",\"申通快递\",\"'YT888999000\",\"2026-05-10 09:17:20\",\"运输中\"\n")
+	path := writeTempFixture(t, "return.csv", "\uFEFF\"订单编号\",\"下单时间\",\"商品编码\",\"商品名称\",\"规格&数量\",\"应付金额\",\"收件人\",\"电话\",\"收件信息\",\"物流公司\",\"物流单号\",\"打印快递时间\",\"订单状态\"\n\""+trackingID+"\n\",\"2026-05-01 10:00:00\",\"SKU\",\"Name\",\"111_x * 1|222_y * 2\",\"0.00\",\"Alice\",\"13800000000\",\" addr \",\"申通快递\",\"'YT888999000\",\"2026-05-10 09:17:20\",\"运输中\"\n")
 	result, err := ws.ImportShipmentFile(ctx, p.factory.ID, path)
 	if err != nil {
 		t.Fatalf("ImportShipmentFile: %v", err)
@@ -399,6 +423,11 @@ func TestImportShipmentFile_EndToEnd(t *testing.T) {
 	sh := result.Shipments[0]
 	if sh.TrackingID != trackingID || sh.TrackingNo != "YT888999000" {
 		t.Fatalf("shipment = %+v", sh)
+	}
+	// The 规格&数量 blob "111_x * 1|222_y * 2" must land as the summed
+	// parcel quantity, not as a zero from a failed Atoi.
+	if sh.Quantity != 3 {
+		t.Fatalf("shipment quantity = %d, want 3", sh.Quantity)
 	}
 	if sh.CarrierName != "申通快递" || sh.CarrierCode != "sto" {
 		t.Fatalf("carrier = %q/%q", sh.CarrierName, sh.CarrierCode)
