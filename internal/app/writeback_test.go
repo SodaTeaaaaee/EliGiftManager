@@ -166,6 +166,11 @@ func TestGenerateWritebacks_NewParcelsAppendAndRerunIsIdempotent(t *testing.T) {
 	if len(first) != 1 || first[0].Quantity != 2 {
 		t.Fatalf("first run = %+v, want 1 item with quantity 2", first)
 	}
+	// This path has no configured output template, so the built-in fallback
+	// layout renders the payload and the template snapshot stays zero.
+	if first[0].TemplateID != 0 || first[0].TemplateVersion != 0 {
+		t.Fatalf("fallback snapshot = %d/%d, want 0/0", first[0].TemplateID, first[0].TemplateVersion)
+	}
 
 	if _, err := ws.ImportShipment(ctx, tracking, "SF-WB-0002", "SF", "顺丰速运", 3); err != nil {
 		t.Fatalf("ImportShipment 2: %v", err)

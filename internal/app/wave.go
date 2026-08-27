@@ -216,6 +216,10 @@ func instanceCustomerName(ctx context.Context, store domain.Store, inst domain.E
 	resolve := func(id uint) string {
 		c, err := store.GetCustomer(ctx, id)
 		if err != nil {
+			// Tradeoff: the name is a display field, so store failures degrade
+			// to an empty name instead of failing the whole listing; the other
+			// reads on these paths still fail hard at their callers
+			// (ListExceptions / ListEntitlementInstances).
 			return ""
 		}
 		return c.DisplayName
@@ -226,7 +230,7 @@ func instanceCustomerName(ctx context.Context, store domain.Store, inst domain.E
 	if inst.PlatformIdentityID != nil {
 		ident, err := store.GetIdentity(ctx, *inst.PlatformIdentityID)
 		if err != nil {
-			return ""
+			return "" // same display-field degradation as GetCustomer above
 		}
 		if ident.CustomerProfileID != nil {
 			return resolve(*ident.CustomerProfileID)
