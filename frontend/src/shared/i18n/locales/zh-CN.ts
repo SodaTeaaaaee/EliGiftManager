@@ -664,22 +664,88 @@ export const zhCN = {
     },
   },
   /**
-   * `intakeWizard.mapping` — copy for the field-mapping editor
-   * (shared/ui/field-mapping/**). Only the editor's own labels live here;
-   * the rest of the wizard copy returns when the wizard is rebuilt.
+   * `templateEditor` — copy owned by the MappingConfig v3 field-mapping
+   * editor (shared/ui/field-mapping/**). `semanticKeys` maps each backend
+   * semantic dictionary key to its display name; keys missing from the
+   * dictionary fall back to the raw key.
    */
-  intakeWizard: {
-    mapping: {
-      inputFormat: '识别格式',
-      sheetName: '工作表',
-      transformsLabel: '转换规则',
-      transformTrim: '去除首尾空白',
-      transformStripQuotes: '去除成对引号',
-      transformStripLeadingQuote: '去除前导单引号',
-      requiredLabel: '必填',
-      modeHeader: '按表头',
-      modePositional: '按列位置',
-      unmappedSourceColumns: '未映射来源列（不会被导入）：',
+  templateEditor: {
+    mode: '映射方式',
+    modeHeader: '按表头',
+    modePositional: '按列位置',
+    sheetName: '工作表',
+    sheetNamePlaceholder: '留空使用第一个工作表',
+    destColumn: '语义键',
+    srcColumn: '来源列 / 默认值 / 转换 / 开关',
+    unmapped: '未映射',
+    positionPlaceholder: '0 基列号',
+    fixedValuePlaceholder: '固定默认值（优先于来源列）',
+    transformsLabel: '转换规则',
+    requiredLabel: '必填',
+    fingerprintLabel: '指纹',
+    advanced: '高级配置（行拆分 / 合并列 / 枚举映射）',
+    splitSkuQuantity: '数量拆分列',
+    splitSkuQuantityPlaceholder: '选择管道拼接的多商品列',
+    joinSources: '合并来源列（joinAddress）',
+    joinSourcesAddKey: '添加合并键…',
+    joinSourcesRefsPlaceholder: '选择来源列引用',
+    enumMaps: '枚举映射（mapEnum）',
+    enumMapsAddKey: '添加枚举映射键…',
+    enumExternal: '外部值',
+    enumInternal: '内部值',
+    enumAddRow: '添加映射行',
+    remove: '移除',
+    unmappedSourceColumns: '未映射来源列（不会被导入）：',
+    previewTitle: '本地即时预览',
+    previewNote: '本地预览仅提示 trim / 去引号 / 合并列；完整解析（枚举映射、日期、行拆分、必填丢弃）请保存模板后用「测试模板」验证。',
+    transform: {
+      trim: '去除首尾空白',
+      strip_quotes: '去除成对引号',
+      parseDate: '解析日期',
+      mapEnum: '枚举映射',
+      normalizePhone: '规范化电话',
+      joinAddress: '合并地址列',
+    },
+    semanticKeys: {
+      customer: { display_name: '客户显示名' },
+      identity: {
+        platform: '身份平台',
+        value: '身份值',
+        type: '身份类型',
+      },
+      membership: { level: '会员等级' },
+      source: {
+        document_no: '来源单号',
+        line_no: '来源行号',
+        created_at: '来源时间',
+      },
+      product: {
+        alias_id: '别名 ID',
+        alias_title: '别名标题',
+        alias_spec: '别名规格',
+        factory_sku: '工厂 SKU',
+        name: '商品名称',
+      },
+      quantity: '数量',
+      recipient: {
+        name: '收件人姓名',
+        phone: '联系电话',
+        country: '国家/地区',
+        province: '省',
+        city: '市',
+        district: '区',
+        address_line1: '详细地址一',
+        address_line2: '详细地址二',
+        postal_code: '邮政编码',
+      },
+      tracking: { id: '追踪标识' },
+      shipment: {
+        tracking_no: '物流单号',
+        carrier_code: '承运商代号',
+        carrier_name: '承运商名称',
+        shipped_at: '发货时间',
+        quantity: '发货数量',
+      },
     },
   },
 }

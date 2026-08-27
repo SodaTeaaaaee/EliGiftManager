@@ -1,96 +1,106 @@
 <script setup lang="ts">
-import { computed, h } from 'vue'
+import { computed, h, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NSelect, NInput, NInputNumber, NRadioGroup, NRadioButton, NSwitch } from 'naive-ui'
+import {
+  NButton,
+  NCheckbox,
+  NInput,
+  NInputNumber,
+  NRadioButton,
+  NRadioGroup,
+  NSelect,
+  NSwitch,
+} from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { DataGrid, createColumns } from '@/shared/ui/data-grid'
 import type { FieldMappingDestField, FieldMappingMode, FieldMappingValue } from './types'
-import { applyMapping, validateDestFieldValue } from './previewTransform'
+import { applyMapping } from './previewTransform'
 
 /**
- * FieldMappingEditor — visual column/position mapping widget.
- * Supports MappingRules v2: mode header|positional, hasHeader, columnOrder.
- * Left column lists dest fields; right column binds each to a source header
- * (header mode) or 0-based cell index (positional mode), plus a fixed-value
- * input. Live preview of the first 5 sample rows re-renders on change.
+ * FieldMappingEditor — visual column/position mapping widget for MappingConfig
+ * v3. Left column lists semantic keys (built by the page from the backend
+ * semantic dictionary); the right side binds each to a source header name or
+ * 0-based cell position, a fixed default, a transform chain, a required flag,
+ * and a fingerprint flag. Collapsible advanced sections edit splitSkuQuantity,
+ * joinSources (joinAddress), and enumMaps (mapEnum). The live preview only
+ * mirrors the cheap local transforms; full parsing goes through the backend
+ * PreviewTemplate use case.
  */
 const props = withDefaults(
   defineProps<{
     destFields: FieldMappingDestField[]
-    /** Real parsed CSV headers (`CSVFilePreviewDTO.headers`). */
+    /** Real parsed source headers; empty list still allows typed header names. */
     sourceHeaders: string[]
     modelValue: FieldMappingValue
-    /** First N parsed CSV rows — only the first 5 are used for the preview. */
+    /** First N parsed source rows — the first 5 feed the local preview. */
     sampleRows: Record<string, string>[]
-    /** Already-resolved header for the destField list column. */
-    destColumnHeader: string
-    /** Already-resolved header for the source-header dropdown column. */
-    srcColumnHeader: string
-    /** Already-resolved title above the live preview table. */
-    previewTitle: string
-    /** Already-resolved placeholder for an unbound dropdown / unmapped preview cell. */
-    unmappedLabel: string
-    /** Already-resolved placeholder for the fixed-value input. */
-    fixedValuePlaceholder?: string
-    /** Labels for mode / hasHeader / columnOrder controls (already translated). */
-    modeLabel?: string
-    modeHeaderLabel?: string
-    modePositionalLabel?: string
-    hasHeaderLabel?: string
-    positionPlaceholder?: string
-    columnOrderLabel?: string
-    columnOrderPlaceholder?: string
-    /** Read-only review mode for template-driven imports. */
+    /** Read-only review mode. */
     readonly?: boolean
-    /** Optional detected source metadata. */
-    inputFormat?: string
-    sheetName?: string
-    /** Per-cell validator deciding the red-highlight. Defaults to the demand-intake rule. */
-    validate?: (destField: string, value: string) => string | undefined
   }>(),
   {
-    fixedValuePlaceholder: undefined,
-    modeLabel: undefined,
-    modeHeaderLabel: undefined,
-    modePositionalLabel: undefined,
-    hasHeaderLabel: undefined,
-    positionPlaceholder: undefined,
-    columnOrderLabel: undefined,
-    columnOrderPlaceholder: undefined,
     readonly: false,
-    inputFormat: undefined,
-    sheetName: undefined,
-    // Function prop defaults are used as-is (not as factories) — must be the validator itself.
-    validate: (destField: string, value: string) => validateDestFieldValue(destField, value),
   },
 )
 
 const { t } = useI18n({ useScope: 'global' })
-const resolvedModeHeaderLabel = computed(
-  () => props.modeHeaderLabel ?? t('intakeWizard.mapping.modeHeader'),
-)
-const resolvedModePositionalLabel = computed(
-  () => props.modePositionalLabel ?? t('intakeWizard.mapping.modePositional'),
-)
 
 const emit = defineEmits<{
   'update:modelValue': [FieldMappingValue]
 }>()
 
+const showAdvanced = ref(false)
+
 const mode = computed<FieldMappingMode>(() =>
   props.modelValue.mode === 'positional' ? 'positional' : 'header',
 )
 
-const hasHeader = computed(() => props.modelValue.hasHeader !== false)
+function patch(partial: Partial<FieldMappingValue>): void {
+  emit('update:modelValue', {
+    version: props.modelValue.version ?? 3,
+    mode: props.modelValue.mode ?? 'header',
+    hasHeader: (props.modelValue.mode ?? 'header') === 'header',
+    columns: props.modelValue.columns ?? {},
+    positions: props.modelValue.positions ?? {},
+    defaults: props.modelValue.defaults ?? {},
+    transforms: props.modelValue.transforms,
+    enumMaps: props.modelValue.enumMaps,
+    joinSources: props.modelValue.joinSources,
+    splitSkuQuantity: props.modelValue.splitSkuQuantity,
+    required: props.modelValue.required,
+    fingerprint: props.modelValue.fingerprint,
+    sheetName: props.modelValue.sheetName,
+    ...partial,
+  })
+}
+
+function handleModeChange(next: FieldMappingMode): void {
+  // Mode drives hasHeader in MappingConfig v3 (backend normalize()).
+  patch({ mode: next, hasHeader: next === 'header' })
+}
+
+function handleSheetNameChange(next: string): void {
+  patch({ sheetName: next.trim() !== '' ? next : undefined })
+}
 
 const sourceHeaderOptions = computed<SelectOption[]>(() =>
   props.sourceHeaders.map((header) => ({ label: header, value: header })),
 )
 
+/** joinSources refs: header names in header mode, decimal indexes otherwise. */
+const sourceRefOptions = computed<SelectOption[]>(() => {
+  if (mode.value === 'header') return sourceHeaderOptions.value
+  const sampleWidth = props.sampleRows[0] ? Object.keys(props.sampleRows[0]).length : 0
+  const width = Math.max(props.sourceHeaders.length, sampleWidth, 16)
+  return Array.from({ length: width }, (_, i) => ({ label: String(i), value: String(i) }))
+})
+
 const transformOptions = computed<SelectOption[]>(() => [
-  { label: t('intakeWizard.mapping.transformTrim'), value: 'trim' },
-  { label: t('intakeWizard.mapping.transformStripQuotes'), value: 'strip_quotes' },
-  { label: t('intakeWizard.mapping.transformStripLeadingQuote'), value: 'strip_leading_quote' },
+  { label: t('templateEditor.transform.trim'), value: 'trim' },
+  { label: t('templateEditor.transform.strip_quotes'), value: 'strip_quotes' },
+  { label: t('templateEditor.transform.parseDate'), value: 'parseDate' },
+  { label: t('templateEditor.transform.mapEnum'), value: 'mapEnum' },
+  { label: t('templateEditor.transform.normalizePhone'), value: 'normalizePhone' },
+  { label: t('templateEditor.transform.joinAddress'), value: 'joinAddress' },
 ])
 
 const mappedSourceHeaders = computed(() => new Set(Object.values(props.modelValue.columns ?? {})))
@@ -99,35 +109,6 @@ const unmappedSourceHeaders = computed(() =>
     ? props.sourceHeaders.filter((header) => !mappedSourceHeaders.value.has(header))
     : [],
 )
-
-function patch(partial: Partial<FieldMappingValue>): void {
-  emit('update:modelValue', {
-    version: props.modelValue.version ?? 2,
-    mode: props.modelValue.mode ?? 'header',
-    hasHeader: props.modelValue.hasHeader ?? true,
-    columns: props.modelValue.columns ?? {},
-    positions: props.modelValue.positions ?? {},
-    defaults: props.modelValue.defaults ?? {},
-    transforms: props.modelValue.transforms,
-    columnOrder: props.modelValue.columnOrder,
-    required: props.modelValue.required,
-    sheetName: props.modelValue.sheetName,
-    imageLayout: props.modelValue.imageLayout,
-    ...partial,
-  })
-}
-
-function handleModeChange(next: FieldMappingMode): void {
-  patch({ mode: next, version: 2 })
-}
-
-function handleHasHeaderChange(next: boolean): void {
-  patch({ hasHeader: next, version: 2 })
-}
-
-function handleSheetNameChange(next: string): void {
-  patch({ sheetName: next })
-}
 
 function columnValue(destField: string): string | null {
   return props.modelValue.columns[destField] ?? null
@@ -143,10 +124,15 @@ function defaultValue(destField: string): string {
 }
 
 function isUnmapped(destField: string): boolean {
-  if (mode.value === 'positional') {
-    return !(destField in (props.modelValue.positions ?? {})) && !(destField in props.modelValue.defaults)
-  }
-  return !(destField in props.modelValue.columns) && !(destField in props.modelValue.defaults)
+  const bound =
+    mode.value === 'positional'
+      ? destField in (props.modelValue.positions ?? {})
+      : destField in props.modelValue.columns
+  return (
+    !bound &&
+    !(destField in (props.modelValue.joinSources ?? {})) &&
+    !(destField in props.modelValue.defaults)
+  )
 }
 
 function handleColumnChange(destField: string, value: string | null): void {
@@ -163,7 +149,7 @@ function handlePositionChange(destField: string, value: number | null): void {
   } else {
     delete positions[destField]
   }
-  patch({ positions, version: 2 })
+  patch({ positions })
 }
 
 function handleDefaultChange(destField: string, value: string): void {
@@ -195,15 +181,119 @@ function handleRequiredChange(destField: string, value: boolean): void {
   patch({ required: [...required] })
 }
 
-const columnOrderText = computed(() => (props.modelValue.columnOrder ?? []).join(', '))
-
-function handleColumnOrderChange(value: string): void {
-  const parts = value
-    .split(/[,，\n]/)
-    .map((part) => part.trim())
-    .filter(Boolean)
-  patch({ columnOrder: parts, version: 2 })
+function isFingerprint(destField: string): boolean {
+  return (props.modelValue.fingerprint ?? []).includes(destField)
 }
+
+function handleFingerprintChange(destField: string, value: boolean): void {
+  const fingerprint = new Set(props.modelValue.fingerprint ?? [])
+  if (value) fingerprint.add(destField)
+  else fingerprint.delete(destField)
+  patch({ fingerprint: [...fingerprint] })
+}
+
+// ── Advanced: splitSkuQuantity / joinSources / enumMaps ──
+
+const destKeyOptions = computed<SelectOption[]>(() =>
+  props.destFields.map((field) => ({ label: field.label, value: field.key })),
+)
+
+function handleSplitSkuQuantityChange(value: string | null): void {
+  patch({ splitSkuQuantity: value ?? undefined })
+}
+
+const joinSourceEntries = computed(() =>
+  Object.keys(props.modelValue.joinSources ?? {}).sort().map((key) => ({
+    key,
+    field: props.destFields.find((f) => f.key === key),
+    refs: props.modelValue.joinSources?.[key] ?? [],
+  })),
+)
+
+const joinKeyToAdd = ref<string | null>(null)
+const joinKeyOptions = computed<SelectOption[]>(() => {
+  const taken = new Set(Object.keys(props.modelValue.joinSources ?? {}))
+  return destKeyOptions.value.filter((opt) => !taken.has(String(opt.value)))
+})
+
+function handleAddJoinKey(key: string | null): void {
+  if (!key) return
+  const joinSources = { ...(props.modelValue.joinSources ?? {}) }
+  if (!(key in joinSources)) joinSources[key] = []
+  patch({ joinSources })
+  joinKeyToAdd.value = null
+}
+
+function handleJoinRefsChange(key: string, refs: string[]): void {
+  const joinSources = { ...(props.modelValue.joinSources ?? {}) }
+  if (refs.length > 0) joinSources[key] = refs
+  else delete joinSources[key]
+  patch({ joinSources })
+}
+
+const enumMapEntries = computed(() =>
+  Object.keys(props.modelValue.enumMaps ?? {}).sort().map((key) => ({
+    key,
+    field: props.destFields.find((f) => f.key === key),
+    pairs: Object.entries(props.modelValue.enumMaps?.[key] ?? {}),
+  })),
+)
+
+const enumKeyToAdd = ref<string | null>(null)
+const enumKeyOptions = computed<SelectOption[]>(() => {
+  const taken = new Set(Object.keys(props.modelValue.enumMaps ?? {}))
+  return destKeyOptions.value.filter((opt) => !taken.has(String(opt.value)))
+})
+
+function handleAddEnumKey(key: string | null): void {
+  if (!key) return
+  const enumMaps = { ...(props.modelValue.enumMaps ?? {}) }
+  if (!(key in enumMaps)) enumMaps[key] = {}
+  patch({ enumMaps })
+  enumKeyToAdd.value = null
+}
+
+function handleRemoveEnumKey(key: string): void {
+  const enumMaps = { ...(props.modelValue.enumMaps ?? {}) }
+  delete enumMaps[key]
+  patch({ enumMaps })
+}
+
+function handleEnumPairChange(
+  key: string,
+  oldExternal: string,
+  nextExternal: string,
+  nextInternal: string,
+): void {
+  const enumMaps = { ...(props.modelValue.enumMaps ?? {}) }
+  const table = { ...(enumMaps[key] ?? {}) }
+  delete table[oldExternal]
+  // Keep the row visible while either side still has content; incomplete
+  // pairs are dropped again on serialize.
+  if (nextExternal !== '' || nextInternal !== '') table[nextExternal] = nextInternal
+  enumMaps[key] = table
+  patch({ enumMaps })
+}
+
+function handleAddEnumPair(key: string): void {
+  const enumMaps = { ...(props.modelValue.enumMaps ?? {}) }
+  const table = { ...(enumMaps[key] ?? {}) }
+  let index = 1
+  while (table[`__${index}`] !== undefined) index++
+  table[`__${index}`] = ''
+  enumMaps[key] = table
+  patch({ enumMaps })
+}
+
+function handleRemoveEnumPair(key: string, external: string): void {
+  const enumMaps = { ...(props.modelValue.enumMaps ?? {}) }
+  const table = { ...(enumMaps[key] ?? {}) }
+  delete table[external]
+  enumMaps[key] = table
+  patch({ enumMaps })
+}
+
+// ── Local preview ──
 
 interface PreviewRow {
   __previewRowIndex: number
@@ -211,7 +301,7 @@ interface PreviewRow {
 }
 
 const previewRows = computed<PreviewRow[]>(() => {
-  const mapped = applyMapping(props.sampleRows.slice(0, 5), props.modelValue, undefined, props.sourceHeaders)
+  const mapped = applyMapping(props.sampleRows.slice(0, 5), props.modelValue, props.sourceHeaders)
   return mapped.map((row, index) => ({ __previewRowIndex: index, ...row.values }))
 })
 
@@ -224,16 +314,21 @@ const previewColumns = computed(() =>
       sortable: false,
       render: (row: PreviewRow) => {
         if (isUnmapped(field.key)) {
-          return h('span', { class: 'field-mapping-editor__cell field-mapping-editor__cell--unmapped' }, props.unmappedLabel)
+          return h(
+            'span',
+            { class: 'field-mapping-editor__cell field-mapping-editor__cell--unmapped' },
+            t('templateEditor.unmapped'),
+          )
         }
         const value = (row[field.key] as string | undefined) ?? ''
-        const error = isRequired(field.key) && value.trim() === ''
-          ? 'required'
-          : props.validate(field.key, value)
+        const invalid = isRequired(field.key) && value.trim() === ''
         return h(
           'span',
           {
-            class: ['field-mapping-editor__cell', { 'field-mapping-editor__cell--invalid': !!error }],
+            class: [
+              'field-mapping-editor__cell',
+              { 'field-mapping-editor__cell--invalid': invalid },
+            ],
           },
           value,
         )
@@ -246,47 +341,37 @@ const previewColumns = computed(() =>
 <template>
   <div class="field-mapping-editor">
     <div class="field-mapping-editor__meta">
-      <div v-if="inputFormat || sheetName" class="field-mapping-editor__source-meta">
-        <span v-if="inputFormat">{{ t('intakeWizard.mapping.inputFormat') }}: {{ inputFormat }}</span>
-        <span v-if="sheetName">{{ t('intakeWizard.mapping.sheetName') }}: {{ sheetName }}</span>
-      </div>
-      <div
-        v-if="['XLS', 'XLSX'].includes((inputFormat ?? '').toUpperCase()) || modelValue.sheetName"
-        class="field-mapping-editor__meta-row"
-      >
-        <span class="field-mapping-editor__meta-label">{{ t('intakeWizard.mapping.sheetName') }}</span>
-        <NInput
-          :value="modelValue.sheetName ?? sheetName ?? ''"
+      <div class="field-mapping-editor__meta-row">
+        <span class="field-mapping-editor__meta-label">{{ t('templateEditor.mode') }}</span>
+        <NRadioGroup
+          :value="mode"
           :disabled="readonly"
-          @update:value="handleSheetNameChange"
-        />
-      </div>
-      <div v-if="modeLabel" class="field-mapping-editor__meta-row">
-        <span class="field-mapping-editor__meta-label">{{ modeLabel }}</span>
-        <NRadioGroup :value="mode" :disabled="readonly" @update:value="(v) => handleModeChange(v as FieldMappingMode)">
-          <NRadioButton value="header" :disabled="readonly">{{ resolvedModeHeaderLabel }}</NRadioButton>
-          <NRadioButton value="positional" :disabled="readonly">{{ resolvedModePositionalLabel }}</NRadioButton>
+          @update:value="(v) => handleModeChange(v as FieldMappingMode)"
+        >
+          <NRadioButton value="header" :disabled="readonly">
+            {{ t('templateEditor.modeHeader') }}
+          </NRadioButton>
+          <NRadioButton value="positional" :disabled="readonly">
+            {{ t('templateEditor.modePositional') }}
+          </NRadioButton>
         </NRadioGroup>
       </div>
-      <div v-if="hasHeaderLabel" class="field-mapping-editor__meta-row">
-        <span class="field-mapping-editor__meta-label">{{ hasHeaderLabel }}</span>
-        <NSwitch :value="hasHeader" :disabled="readonly" @update:value="handleHasHeaderChange" />
-      </div>
-      <div v-if="columnOrderLabel" class="field-mapping-editor__meta-row field-mapping-editor__meta-row--wide">
-        <span class="field-mapping-editor__meta-label">{{ columnOrderLabel }}</span>
+      <div class="field-mapping-editor__meta-row">
+        <span class="field-mapping-editor__meta-label">{{ t('templateEditor.sheetName') }}</span>
         <NInput
-          :value="columnOrderText"
-          :placeholder="columnOrderPlaceholder"
+          class="field-mapping-editor__sheet-input"
+          :value="modelValue.sheetName ?? ''"
+          :placeholder="t('templateEditor.sheetNamePlaceholder')"
           :disabled="readonly"
-          @update:value="handleColumnOrderChange"
+          @update:value="handleSheetNameChange"
         />
       </div>
     </div>
 
     <div class="field-mapping-editor__mapping">
       <div class="field-mapping-editor__mapping-header">
-        <span class="field-mapping-editor__mapping-header-cell">{{ destColumnHeader }}</span>
-        <span class="field-mapping-editor__mapping-header-cell">{{ srcColumnHeader }}</span>
+        <span class="field-mapping-editor__mapping-header-cell">{{ t('templateEditor.destColumn') }}</span>
+        <span class="field-mapping-editor__mapping-header-cell">{{ t('templateEditor.srcColumn') }}</span>
       </div>
       <div v-for="field in destFields" :key="field.key" class="field-mapping-editor__row">
         <div class="field-mapping-editor__field-label">
@@ -302,7 +387,7 @@ const previewColumns = computed(() =>
             clearable
             filterable
             :tag="!readonly"
-            :placeholder="unmappedLabel"
+            :placeholder="t('templateEditor.unmapped')"
             :disabled="readonly"
             @update:value="(value) => handleColumnChange(field.key, value)"
           />
@@ -312,7 +397,7 @@ const previewColumns = computed(() =>
             :value="positionValue(field.key)"
             :min="0"
             :precision="0"
-            :placeholder="positionPlaceholder ?? '0'"
+            :placeholder="t('templateEditor.positionPlaceholder')"
             clearable
             :disabled="readonly"
             @update:value="(value) => handlePositionChange(field.key, value)"
@@ -320,7 +405,7 @@ const previewColumns = computed(() =>
           <NInput
             class="field-mapping-editor__default-input"
             :value="defaultValue(field.key)"
-            :placeholder="fixedValuePlaceholder"
+            :placeholder="t('templateEditor.fixedValuePlaceholder')"
             :disabled="readonly"
             @update:value="(value) => handleDefaultChange(field.key, value)"
           />
@@ -331,28 +416,166 @@ const previewColumns = computed(() =>
             :disabled="readonly"
             multiple
             clearable
-            :placeholder="t('intakeWizard.mapping.transformsLabel')"
+            :placeholder="t('templateEditor.transformsLabel')"
             @update:value="(value) => handleTransformChange(field.key, value)"
           />
-          <label class="field-mapping-editor__required-control">
+          <label class="field-mapping-editor__flag-control">
             <NSwitch
               :value="isRequired(field.key)"
               :disabled="readonly"
               @update:value="(value) => handleRequiredChange(field.key, value)"
             />
-            <span>{{ t('intakeWizard.mapping.requiredLabel') }}</span>
+            <span>{{ t('templateEditor.requiredLabel') }}</span>
+          </label>
+          <label class="field-mapping-editor__flag-control">
+            <NCheckbox
+              :checked="isFingerprint(field.key)"
+              :disabled="readonly"
+              @update:checked="(value) => handleFingerprintChange(field.key, value)"
+            />
+            <span>{{ t('templateEditor.fingerprintLabel') }}</span>
           </label>
         </div>
       </div>
     </div>
 
+    <NButton
+      size="small"
+      quaternary
+      type="primary"
+      :disabled="readonly"
+      @click="showAdvanced = !showAdvanced"
+    >
+      {{ t('templateEditor.advanced') }}
+    </NButton>
+
+    <div v-if="showAdvanced" class="field-mapping-editor__advanced">
+      <div class="field-mapping-editor__advanced-row">
+        <span class="field-mapping-editor__meta-label">{{ t('templateEditor.splitSkuQuantity') }}</span>
+        <NSelect
+          class="field-mapping-editor__key-select"
+          :value="modelValue.splitSkuQuantity ?? null"
+          :options="destKeyOptions"
+          clearable
+          filterable
+          :placeholder="t('templateEditor.splitSkuQuantityPlaceholder')"
+          :disabled="readonly"
+          @update:value="(value) => handleSplitSkuQuantityChange(value)"
+        />
+      </div>
+
+      <div class="field-mapping-editor__advanced-section">
+        <h5 class="field-mapping-editor__advanced-title">{{ t('templateEditor.joinSources') }}</h5>
+        <div
+          v-for="entry in joinSourceEntries"
+          :key="`join-${entry.key}`"
+          class="field-mapping-editor__advanced-row"
+        >
+          <span class="field-mapping-editor__advanced-key">
+            {{ entry.field?.label ?? entry.key }}
+          </span>
+          <NSelect
+            class="field-mapping-editor__key-select"
+            :value="entry.refs"
+            :options="sourceRefOptions"
+            multiple
+            filterable
+            :tag="!readonly"
+            :placeholder="t('templateEditor.joinSourcesRefsPlaceholder')"
+            :disabled="readonly"
+            @update:value="(refs) => handleJoinRefsChange(entry.key, refs)"
+          />
+        </div>
+        <NSelect
+          class="field-mapping-editor__key-select"
+          :value="joinKeyToAdd"
+          :options="joinKeyOptions"
+          filterable
+          clearable
+          :placeholder="t('templateEditor.joinSourcesAddKey')"
+          :disabled="readonly || joinKeyOptions.length === 0"
+          @update:value="(key) => handleAddJoinKey(key)"
+        />
+      </div>
+
+      <div class="field-mapping-editor__advanced-section">
+        <h5 class="field-mapping-editor__advanced-title">{{ t('templateEditor.enumMaps') }}</h5>
+        <div
+          v-for="entry in enumMapEntries"
+          :key="`enum-${entry.key}`"
+          class="field-mapping-editor__enum-block"
+        >
+          <div class="field-mapping-editor__enum-header">
+            <span class="field-mapping-editor__advanced-key">
+              {{ entry.field?.label ?? entry.key }}
+            </span>
+            <NButton
+              size="tiny"
+              type="error"
+              quaternary
+              :disabled="readonly"
+              @click="handleRemoveEnumKey(entry.key)"
+            >
+              {{ t('templateEditor.remove') }}
+            </NButton>
+          </div>
+          <div
+            v-for="pair in entry.pairs"
+            :key="`enum-${entry.key}-${pair[0]}`"
+            class="field-mapping-editor__enum-row"
+          >
+            <NInput
+              :value="pair[0]"
+              :placeholder="t('templateEditor.enumExternal')"
+              :disabled="readonly"
+              @update:value="(v) => handleEnumPairChange(entry.key, pair[0], v, pair[1])"
+            />
+            <span class="field-mapping-editor__enum-arrow">→</span>
+            <NInput
+              :value="pair[1]"
+              :placeholder="t('templateEditor.enumInternal')"
+              :disabled="readonly"
+              @update:value="(v) => handleEnumPairChange(entry.key, pair[0], pair[0], v)"
+            />
+            <NButton
+              size="tiny"
+              quaternary
+              :disabled="readonly"
+              @click="handleRemoveEnumPair(entry.key, pair[0])"
+            >
+              {{ t('templateEditor.remove') }}
+            </NButton>
+          </div>
+          <NButton
+            size="tiny"
+            dashed
+            :disabled="readonly"
+            @click="handleAddEnumPair(entry.key)"
+          >
+            {{ t('templateEditor.enumAddRow') }}
+          </NButton>
+        </div>
+        <NSelect
+          class="field-mapping-editor__key-select"
+          :value="enumKeyToAdd"
+          :options="enumKeyOptions"
+          filterable
+          clearable
+          :placeholder="t('templateEditor.enumMapsAddKey')"
+          :disabled="readonly || enumKeyOptions.length === 0"
+          @update:value="(key) => handleAddEnumKey(key)"
+        />
+      </div>
+    </div>
+
     <div v-if="unmappedSourceHeaders.length" class="field-mapping-editor__unmapped-sources">
-      <strong>{{ t('intakeWizard.mapping.unmappedSourceColumns') }}</strong>
+      <strong>{{ t('templateEditor.unmappedSourceColumns') }}</strong>
       <span>{{ unmappedSourceHeaders.join(', ') }}</span>
     </div>
 
     <div class="field-mapping-editor__preview">
-      <h4 class="field-mapping-editor__preview-title">{{ previewTitle }}</h4>
+      <h4 class="field-mapping-editor__preview-title">{{ t('templateEditor.previewTitle') }}</h4>
+      <p class="field-mapping-editor__preview-note">{{ t('templateEditor.previewNote') }}</p>
       <DataGrid :columns="previewColumns" :rows="previewRows" row-key="__previewRowIndex" pagination="none" />
     </div>
   </div>
@@ -371,31 +594,10 @@ const previewColumns = computed(() =>
   gap: var(--space-3);
 }
 
-.field-mapping-editor__source-meta,
-.field-mapping-editor__unmapped-sources {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
-.field-mapping-editor__unmapped-sources {
-  padding: var(--space-3);
-  border-radius: var(--radius-sm);
-  background: var(--status-warning-bg);
-  color: var(--status-warning-fg);
-}
-
 .field-mapping-editor__meta-row {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-}
-
-.field-mapping-editor__meta-row--wide {
-  flex-direction: column;
-  align-items: stretch;
 }
 
 .field-mapping-editor__meta-label {
@@ -406,6 +608,11 @@ const previewColumns = computed(() =>
   min-width: 120px;
 }
 
+.field-mapping-editor__sheet-input,
+.field-mapping-editor__key-select {
+  max-width: 320px;
+}
+
 .field-mapping-editor__mapping {
   display: flex;
   flex-direction: column;
@@ -414,7 +621,7 @@ const previewColumns = computed(() =>
 
 .field-mapping-editor__mapping-header {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.4fr);
+  grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr);
   gap: var(--space-4);
   padding: 0 var(--space-1);
 }
@@ -430,14 +637,14 @@ const previewColumns = computed(() =>
 
 .field-mapping-editor__row {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(220px, 1.4fr);
+  grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr);
   align-items: center;
   gap: var(--space-4);
   padding: var(--space-2) var(--space-1);
   border-bottom: 1px solid var(--card-border-color);
 }
 
-.field-mapping-editor__row:last-child {
+.field-mapping-editor__row:last-of-type {
   border-bottom: none;
 }
 
@@ -475,24 +682,95 @@ const previewColumns = computed(() =>
 .field-mapping-editor__column-select,
 .field-mapping-editor__position-input {
   flex: 1;
-  min-width: 0;
+  min-width: 140px;
 }
 
 .field-mapping-editor__default-input {
   flex: 1;
-  min-width: 0;
+  min-width: 120px;
 }
 
 .field-mapping-editor__transform-select {
-  flex: 2 1 220px;
+  flex: 1.6 1 200px;
 }
 
-.field-mapping-editor__required-control {
+.field-mapping-editor__flag-control {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.field-mapping-editor__advanced {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.field-mapping-editor__advanced-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.field-mapping-editor__advanced-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.field-mapping-editor__advanced-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.field-mapping-editor__advanced-key {
+  min-width: 160px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.field-mapping-editor__enum-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+}
+
+.field-mapping-editor__enum-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.field-mapping-editor__enum-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.field-mapping-editor__enum-arrow {
+  color: var(--color-text-muted);
+}
+
+.field-mapping-editor__unmapped-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--status-warning-bg);
+  color: var(--status-warning-fg);
+  font-size: var(--font-size-sm);
 }
 
 .field-mapping-editor__preview-title {
@@ -501,6 +779,12 @@ const previewColumns = computed(() =>
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
+}
+
+.field-mapping-editor__preview-note {
+  margin: 0 0 var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 
 .field-mapping-editor__cell {

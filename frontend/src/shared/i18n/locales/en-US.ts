@@ -667,22 +667,88 @@ export const enUS: AppMessageSchema = {
     },
   },
   /**
-   * `intakeWizard.mapping` — copy for the field-mapping editor
-   * (shared/ui/field-mapping/**). Only the editor's own labels live here;
-   * the rest of the wizard copy returns when the wizard is rebuilt.
+   * `templateEditor` — copy owned by the MappingConfig v3 field-mapping
+   * editor (shared/ui/field-mapping/**). `semanticKeys` maps each backend
+   * semantic dictionary key to its display name; keys missing from the
+   * dictionary fall back to the raw key.
    */
-  intakeWizard: {
-    mapping: {
-      inputFormat: 'Detected format',
-      sheetName: 'Sheet',
-      transformsLabel: 'Transforms',
-      transformTrim: 'Trim whitespace',
-      transformStripQuotes: 'Strip surrounding quotes',
-      transformStripLeadingQuote: 'Strip leading apostrophe',
-      requiredLabel: 'Required',
-      modeHeader: 'By Header',
-      modePositional: 'By Position',
-      unmappedSourceColumns: 'Unmapped source columns (will not be imported):',
+  templateEditor: {
+    mode: 'Mapping mode',
+    modeHeader: 'By Header',
+    modePositional: 'By Position',
+    sheetName: 'Sheet',
+    sheetNamePlaceholder: 'Leave empty for the first sheet',
+    destColumn: 'Semantic key',
+    srcColumn: 'Source column / default / transforms / flags',
+    unmapped: 'Unmapped',
+    positionPlaceholder: '0-based column',
+    fixedValuePlaceholder: 'Fixed default (overrides source)',
+    transformsLabel: 'Transforms',
+    requiredLabel: 'Required',
+    fingerprintLabel: 'Fingerprint',
+    advanced: 'Advanced (row split / column join / enum maps)',
+    splitSkuQuantity: 'Quantity split column',
+    splitSkuQuantityPlaceholder: 'Pick the pipe-concatenated multi-product column',
+    joinSources: 'Joined source columns (joinAddress)',
+    joinSourcesAddKey: 'Add join key…',
+    joinSourcesRefsPlaceholder: 'Pick source column refs',
+    enumMaps: 'Enum maps (mapEnum)',
+    enumMapsAddKey: 'Add enum map key…',
+    enumExternal: 'External value',
+    enumInternal: 'Internal value',
+    enumAddRow: 'Add mapping row',
+    remove: 'Remove',
+    unmappedSourceColumns: 'Unmapped source columns (will not be imported):',
+    previewTitle: 'Local live preview',
+    previewNote: 'The local preview only hints trim / quote stripping / column joins; full parsing (enum maps, dates, row splitting, required drops) is verified with "Test template" after saving.',
+    transform: {
+      trim: 'Trim whitespace',
+      strip_quotes: 'Strip surrounding quotes',
+      parseDate: 'Parse date',
+      mapEnum: 'Map enum',
+      normalizePhone: 'Normalize phone',
+      joinAddress: 'Join address columns',
+    },
+    semanticKeys: {
+      customer: { display_name: 'Customer display name' },
+      identity: {
+        platform: 'Identity platform',
+        value: 'Identity value',
+        type: 'Identity type',
+      },
+      membership: { level: 'Membership level' },
+      source: {
+        document_no: 'Source document no',
+        line_no: 'Source line no',
+        created_at: 'Source created at',
+      },
+      product: {
+        alias_id: 'Alias ID',
+        alias_title: 'Alias title',
+        alias_spec: 'Alias spec',
+        factory_sku: 'Factory SKU',
+        name: 'Product name',
+      },
+      quantity: 'Quantity',
+      recipient: {
+        name: 'Recipient name',
+        phone: 'Phone',
+        country: 'Country',
+        province: 'Province',
+        city: 'City',
+        district: 'District',
+        address_line1: 'Address line 1',
+        address_line2: 'Address line 2',
+        postal_code: 'Postal code',
+      },
+      tracking: { id: 'Tracking ID' },
+      shipment: {
+        tracking_no: 'Tracking no',
+        carrier_code: 'Carrier code',
+        carrier_name: 'Carrier name',
+        shipped_at: 'Shipped at',
+        quantity: 'Shipment quantity',
+      },
     },
   },
 }
