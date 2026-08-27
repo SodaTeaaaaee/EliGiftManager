@@ -18,9 +18,13 @@ import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
+import { useFeedback } from '@/shared/ui/feedback'
+import DuplicateDecisionList from './DuplicateDecisionList.vue'
 import {
+  applyRevision,
   assignLines,
   attachIdentity,
+  dismissRevision,
   importFile,
   ingestDocument,
   listCustomers,
@@ -29,6 +33,7 @@ import {
   listProducts,
   listTemplates,
   listWaves,
+  moveLines,
   pickFile,
   updateAlias,
 } from '@/shared/api/bridge'
@@ -36,6 +41,7 @@ import { identityTypeValues, inputFactKindValues } from '@/shared/api/generated/
 import type {
   CustomerProfile,
   ImportFileResult,
+  IngestDocumentResult,
   InboxRow,
   Platform,
   ProductItem,
@@ -44,6 +50,11 @@ import type {
 } from '@/entities/models'
 
 const { t } = useI18n()
+const feedback = useFeedback()
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -75,6 +86,14 @@ const ingestForm = ref({
   externalTitle: '',
   quantity: 1,
 })
+const ingestResult = ref<IngestDocumentResult | null>(null)
+
+// ── Move-to-wave (MoveLines) ──
+
+const showMoveModal = ref(false)
+const moveTargetWaveId = ref<number | null>(null)
+const moveLineIds = ref<number[]>([])
+const moveExcludeWaveId = ref<number | null>(null)
 
 // ── File import (ImportFile) ──
 
@@ -150,6 +169,29 @@ const waveOptions = computed(() =>
   })),
 )
 
+const moveWaveOptions = computed(() =>
+  waves.value
+    .filter((w) => w.ID !== moveExcludeWaveId.value)
+    .map((w) => ({
+      label: `${w.WaveNo} - ${w.Name}`,
+      value: w.ID,
+    })),
+)
+
+/** Rows currently covered by the table's checkbox selection. */
+const selectedRows = computed(() => {
+  const ids = new Set(selectedLineKeys.value)
+  return rows.value.filter((r) => ids.has(r.Line.ID))
+})
+
+const selectedUnassignedKeys = computed(() =>
+  selectedRows.value.filter((r) => !r.Assigned).map((r) => r.Line.ID),
+)
+
+const selectedAssignedKeys = computed(() =>
+  selectedRows.value.filter((r) => r.Assigned).map((r) => r.Line.ID),
+)
+
 const customerOptions = computed(() =>
   customers.value.map((c) => ({
     label: `${c.DisplayName} (ID: ${c.ID})`,
@@ -189,18 +231,79 @@ const identityTypeOptions = identityTypeValues.map((type) => ({
 }))
 
 async function handleAssignWave() {
-  if (!selectedWaveId.value || selectedLineKeys.value.length === 0) return
+  if (!selectedWaveId.value || selectedUnassignedKeys.value.length === 0) return
   actionLoading.value = true
   try {
-    await assignLines(selectedWaveId.value, selectedLineKeys.value)
+    await assignLines(selectedWaveId.value, selectedUnassignedKeys.value)
     showAssignModal.value = false
     selectedLineKeys.value = []
     selectedWaveId.value = null
     await loadData()
   } catch (err) {
-    console.error('Failed to assign lines:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
+  }
+}
+
+// ── Move-to-wave flow ──
+
+function openMoveModal(lineIds: number[], excludeWaveId: number | null) {
+  if (!lineIds.length) return
+  moveLineIds.value = lineIds
+  moveExcludeWaveId.value = excludeWaveId
+  moveTargetWaveId.value = null
+  showMoveModal.value = true
+}
+
+async function handleMoveLines() {
+  if (!moveTargetWaveId.value || moveLineIds.value.length === 0) return
+  actionLoading.value = true
+  try {
+    await moveLines(moveLineIds.value, moveTargetWaveId.value)
+    showMoveModal.value = false
+    moveLineIds.value = []
+    moveExcludeWaveId.value = null
+    moveTargetWaveId.value = null
+    selectedLineKeys.value = []
+    feedback.success(t('inbox.moveSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// ── Revision decisions (ApplyRevision / DismissRevision) ──
+
+const revisionActingFactId = ref<number | null>(null)
+
+async function handleApplyRevision(row: InboxRow) {
+  if (revisionActingFactId.value !== null) return
+  revisionActingFactId.value = row.Fact.ID
+  try {
+    await applyRevision(row.Fact.ID)
+    feedback.success(t('inbox.applyRevisionSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    revisionActingFactId.value = null
+  }
+}
+
+async function handleDismissRevision(row: InboxRow) {
+  if (revisionActingFactId.value !== null) return
+  revisionActingFactId.value = row.Fact.ID
+  try {
+    await dismissRevision(row.Fact.ID)
+    feedback.success(t('inbox.dismissRevisionSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    revisionActingFactId.value = null
   }
 }
 
@@ -220,17 +323,22 @@ async function handleAttachIdentity() {
     selectedCustomerId.value = null
     await loadData()
   } catch (err) {
-    console.error('Failed to attach identity:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
+}
+
+function openIngestModal() {
+  ingestResult.value = null
+  showIngestModal.value = true
 }
 
 async function handleIngest() {
   if (!ingestForm.value.platformId) return
   actionLoading.value = true
   try {
-    await ingestDocument(
+    const res = await ingestDocument(
       {
         PlatformID: ingestForm.value.platformId,
         DocumentType: 'manual_ingest',
@@ -255,10 +363,15 @@ async function handleIngest() {
         },
       ],
     )
-    showIngestModal.value = false
+    if (res.Duplicates?.length) {
+      // Keep the modal open so the operator can decide the fresh asks.
+      ingestResult.value = res
+    } else {
+      showIngestModal.value = false
+    }
     await loadData()
   } catch (err) {
-    console.error('Failed to ingest document:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -307,13 +420,10 @@ async function handleImportFile() {
 
 // ── Align-to-product flow ──
 
-// TODO(wave-4): the backend InboxRow view carries no AliasID, so unaligned
-// rows cannot be aligned from here yet. The button stays disabled until the
-// row view exposes the alias id; the handler below is already wired so
-// enabling it is a one-line guard flip.
+/** The row view resolves ExternalSKU to an alias id; null rows cannot align. */
 function aliasIdForRow(row: InboxRow): number | null {
-  const candidate = (row as unknown as { AliasID?: number | null }).AliasID
-  return typeof candidate === 'number' && candidate > 0 ? candidate : null
+  const aliasID = row.AliasID
+  return typeof aliasID === 'number' && aliasID > 0 ? aliasID : null
 }
 
 async function openAlignModal(row: InboxRow) {
@@ -325,7 +435,7 @@ async function openAlignModal(row: InboxRow) {
     try {
       products.value = await listProducts()
     } catch (err) {
-      console.error('Failed to load products:', err)
+      feedback.error(t('feedback.error'), errMsg(err))
     }
   }
   showAlignModal.value = true
@@ -339,9 +449,10 @@ async function handleAlignToProduct() {
     showAlignModal.value = false
     targetAliasId.value = null
     selectedAlignProductId.value = null
+    feedback.success(t('inbox.alignSuccess'))
     await loadData()
   } catch (err) {
-    console.error('Failed to align alias:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -350,8 +461,11 @@ async function handleAlignToProduct() {
 const columns = [
   {
     type: 'selection' as const,
+    // Revision-pending facts must be applied or dismissed before they can
+    // enter a wave (the backend refuses the assignment). Already-assigned
+    // rows stay selectable for move-to-wave.
     disabled(row: InboxRow) {
-      return row.Assigned
+      return row.RevisionPending
     },
   },
   {
@@ -420,7 +534,6 @@ const columns = [
             type: 'warning',
             secondary: true,
             disabled: !aliasIdForRow(row),
-            title: t('inbox.alignUnavailableHint'),
             onClick: () => openAlignModal(row),
           },
           { default: () => t('inbox.alignToProduct') },
@@ -460,6 +573,72 @@ const columns = [
       return row.Document?.OriginalName || row.Fact.SourceDocumentNo || '—'
     },
   },
+  {
+    title: t('inbox.revision'),
+    key: 'RevisionPending',
+    width: 110,
+    render(row: InboxRow) {
+      if (!row.RevisionPending) return null
+      return h(
+        NTag,
+        { type: 'warning', size: 'small' },
+        { default: () => t('inbox.revisionPending') },
+      )
+    },
+  },
+  {
+    title: t('common.actions'),
+    key: 'actions',
+    width: 240,
+    render(row: InboxRow) {
+      const buttons = []
+      if (row.RevisionPending) {
+        buttons.push(
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              type: 'primary',
+              secondary: true,
+              loading: revisionActingFactId.value === row.Fact.ID,
+              disabled:
+                revisionActingFactId.value !== null &&
+                revisionActingFactId.value !== row.Fact.ID,
+              onClick: () => void handleApplyRevision(row),
+            },
+            { default: () => t('inbox.applyRevision') },
+          ),
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              type: 'warning',
+              secondary: true,
+              disabled: revisionActingFactId.value !== null,
+              onClick: () => void handleDismissRevision(row),
+            },
+            { default: () => t('inbox.dismissRevision') },
+          ),
+        )
+      }
+      if (row.Assigned) {
+        buttons.push(
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              secondary: true,
+              onClick: () =>
+                openMoveModal([row.Line.ID], row.Line.WaveID ?? null),
+            },
+            { default: () => t('inbox.moveToWave') },
+          ),
+        )
+      }
+      if (!buttons.length) return null
+      return h('span', { class: 'inbox-page__action-cell' }, buttons)
+    },
+  },
 ]
 </script>
 
@@ -468,7 +647,7 @@ const columns = [
     <PageHeader :title="t('inbox.title')" :description="t('inbox.subtitle')">
       <template #actions>
         <NSpace>
-          <NButton size="small" @click="showIngestModal = true">
+          <NButton size="small" @click="openIngestModal">
             {{ t('inbox.importDocument') }}
           </NButton>
           <NButton size="small" type="primary" @click="openImportFileModal">
@@ -477,10 +656,17 @@ const columns = [
           <NButton
             size="small"
             type="primary"
-            :disabled="selectedLineKeys.length === 0"
+            :disabled="selectedUnassignedKeys.length === 0"
             @click="showAssignModal = true"
           >
-            {{ t('inbox.assignToWave') }} ({{ selectedLineKeys.length }})
+            {{ t('inbox.assignToWave') }} ({{ selectedUnassignedKeys.length }})
+          </NButton>
+          <NButton
+            size="small"
+            :disabled="selectedAssignedKeys.length === 0"
+            @click="openMoveModal(selectedAssignedKeys, null)"
+          >
+            {{ t('inbox.moveToWave') }} ({{ selectedAssignedKeys.length }})
           </NButton>
           <NButton size="small" :loading="loading" @click="loadData">
             {{ t('common.refresh') }}
@@ -626,12 +812,10 @@ const columns = [
         <p class="inbox-page__receipt-hint">{{ t('inbox.duplicatesHint') }}</p>
         <div v-if="importResult.Duplicates.length" class="inbox-page__receipt-block">
           <div class="inbox-page__receipt-subtitle">{{ t('inbox.duplicates') }}</div>
-          <ul class="inbox-page__issue-list">
-            <li v-for="dup in importResult.Duplicates" :key="dup.ID" class="inbox-page__issue-row">
-              <StatusBadge dimension="duplicateVerdict" :value="dup.Verdict || 'record_only'" />
-              <span>{{ dup.Reason || '—' }}</span>
-            </li>
-          </ul>
+          <DuplicateDecisionList
+            :duplicates="importResult.Duplicates"
+            @decided="() => void loadData()"
+          />
         </div>
         <div v-if="importResult.Issues.length" class="inbox-page__receipt-block">
           <div class="inbox-page__receipt-subtitle">{{ t('inbox.issues') }}</div>
@@ -655,6 +839,37 @@ const columns = [
             @click="handleImportFile"
           >
             {{ t('common.import') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Move to Wave Modal -->
+    <NModal
+      v-model:show="showMoveModal"
+      preset="card"
+      :title="t('inbox.moveToWave')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('inbox.selectWave')">
+          <NSelect
+            v-model:value="moveTargetWaveId"
+            :options="moveWaveOptions"
+            :placeholder="t('inbox.selectWave')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showMoveModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!moveTargetWaveId"
+            @click="handleMoveLines"
+          >
+            {{ t('common.confirm') }}
           </NButton>
         </NSpace>
       </template>
@@ -726,6 +941,16 @@ const columns = [
           <NInputNumber v-model:value="ingestForm.quantity" :min="1" />
         </NFormItem>
       </NForm>
+
+      <div v-if="ingestResult && ingestResult.Duplicates.length" class="inbox-page__receipt">
+        <h5 class="inbox-page__receipt-title">{{ t('inbox.importResult') }}</h5>
+        <p class="inbox-page__receipt-hint">{{ t('inbox.duplicatesHint') }}</p>
+        <DuplicateDecisionList
+          :duplicates="ingestResult.Duplicates"
+          @decided="() => void loadData()"
+        />
+      </div>
+
       <template #footer>
         <NSpace justify="end">
           <NButton @click="showIngestModal = false">{{ t('common.cancel') }}</NButton>
@@ -764,7 +989,8 @@ const columns = [
   width: 100%;
 }
 
-.inbox-page__unaligned-cell {
+.inbox-page__unaligned-cell,
+.inbox-page__action-cell {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);

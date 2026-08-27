@@ -20,9 +20,11 @@ const buckets = ref<HomeBuckets>({
   DuplicateAsk: 0,
   AlignmentConflict: 0,
   IdentityUnattached: 0,
+  PendingRevisions: 0,
   BlockedResults: 0,
   WritebackFailed: 0,
   ResidualClose: 0,
+  RevisionFrozenConflicts: 0,
   RecentWaves: [],
 })
 

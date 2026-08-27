@@ -109,6 +109,27 @@ export interface ProductBundleComponent {
   UpdatedAt?: string
 }
 
+/** One split component of a wave-scoped quantity split rule. */
+export interface QuantitySplitComponent {
+  ID: number
+  RuleID: number
+  ProductItemID: number
+  Quantity: number
+  CreatedAt?: string
+  UpdatedAt?: string
+}
+
+/** Splits one (wave, platform, external key) quantity into internal products. */
+export interface QuantitySplitRule {
+  ID: number
+  WaveID: number
+  PlatformID: number
+  ExternalKey: string
+  Components: QuantitySplitComponent[]
+  CreatedAt?: string
+  UpdatedAt?: string
+}
+
 export interface TemplateConfig {
   ID: number
   PlatformID: number
@@ -225,6 +246,18 @@ export interface EntitlementRule {
   UpdatedAt?: string
 }
 
+/** One person's per-instance entitlement delta (internal/app EntitlementException). */
+export interface EntitlementException {
+  ID: number
+  WaveID: number
+  ProductID: number
+  InstanceID: number
+  Quantity: number
+  Note?: string
+  CreatedAt?: string
+  UpdatedAt?: string
+}
+
 export interface FulfillmentResult {
   ID: number
   WaveID: number
@@ -309,9 +342,11 @@ export interface HomeBuckets {
   DuplicateAsk: number
   AlignmentConflict: number
   IdentityUnattached: number
+  PendingRevisions: number
   BlockedResults: number
   WritebackFailed: number
   ResidualClose: number
+  RevisionFrozenConflicts: number
   RecentWaves: Wave[]
 }
 
@@ -322,6 +357,8 @@ export interface InboxRow {
   Assigned: boolean
   Unaligned: boolean
   Unattached: boolean
+  RevisionPending: boolean
+  AliasID?: number | null
 }
 
 export interface ResultView {

@@ -2,9 +2,13 @@
 // Never import from "wailsjs" directly outside this file.
 
 import {
+  ApplyRevision as _ApplyRevision,
   AssignLines as _AssignLines,
   AttachIdentity as _AttachIdentity,
   CloseWave as _CloseWave,
+  DecideDuplicate as _DecideDuplicate,
+  DismissRevision as _DismissRevision,
+  MoveLines as _MoveLines,
   CreateAddress as _CreateAddress,
   CreateAlias as _CreateAlias,
   CreateCarrierMapping as _CreateCarrierMapping,
@@ -296,6 +300,33 @@ export async function assignLines(waveID: number, lineIDs: number[]): Promise<vo
   await _AssignLines(waveID, lineIDs)
 }
 
+/**
+ * Decide one duplicate observation. `accept` keeps the record as-is (no new
+ * responsibility); rejecting replays the stored input as a new fact.
+ */
+export async function decideDuplicate(observationID: number, accept: boolean): Promise<void> {
+  assertWailsRuntime()
+  await _DecideDuplicate(observationID, accept)
+}
+
+/** Move fact lines into another open wave; frozen lines are refused. */
+export async function moveLines(lineIDs: number[], targetWaveID: number): Promise<void> {
+  assertWailsRuntime()
+  await _MoveLines(lineIDs, targetWaveID)
+}
+
+/** Apply a pending revision fact onto the fact it revises. */
+export async function applyRevision(factID: number): Promise<void> {
+  assertWailsRuntime()
+  await _ApplyRevision(factID)
+}
+
+/** Dismiss a pending revision fact without applying it. */
+export async function dismissRevision(factID: number): Promise<void> {
+  assertWailsRuntime()
+  await _DismissRevision(factID)
+}
+
 export async function listInboxRows(): Promise<InboxRow[]> {
   if (!isWailsRuntimeAvailable()) return []
   const res = await _ListInboxRows()
@@ -458,9 +489,11 @@ export async function getHomeBuckets(): Promise<HomeBuckets> {
       DuplicateAsk: 0,
       AlignmentConflict: 0,
       IdentityUnattached: 0,
+      PendingRevisions: 0,
       BlockedResults: 0,
       WritebackFailed: 0,
       ResidualClose: 0,
+      RevisionFrozenConflicts: 0,
       RecentWaves: [],
     }
   }
