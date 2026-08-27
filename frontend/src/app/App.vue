@@ -5,7 +5,7 @@
  */
 import { computed } from 'vue'
 import { RouterView } from 'vue-router'
-import { NConfigProvider } from 'naive-ui'
+import { NConfigProvider, enUS, zhCN } from 'naive-ui'
 import {
   GridOutline,
   FileTrayFullOutline,
@@ -19,9 +19,16 @@ import { AppShell } from '@/shared/ui/shell'
 import { FeedbackProvider, DisconnectedBanner, TopProgressBar } from '@/shared/ui/feedback'
 import { useNaiveTheme } from '@/shared/theme/naive-bridge'
 import { useGlobalViewHotkeys } from '@/shared/lib/view-hotkeys'
+import { useAppLocale } from '@/shared/i18n'
 
 const { theme, themeOverrides } = useNaiveTheme()
 useGlobalViewHotkeys()
+
+// Naive-rendered internals (NSelect placeholder, modal buttons, ...) follow
+// naive-ui's own English defaults unless the provider locale is bound to the
+// app i18n locale.
+const { locale } = useAppLocale()
+const naiveLocale = computed(() => (locale.value === 'zh-CN' ? zhCN : enUS))
 
 const navGroups = computed<NavGroupSpec[]>(() => {
   const groups: NavGroupSpec[] = [
@@ -55,7 +62,12 @@ const settingsItem: NavItemSpec = {
 </script>
 
 <template>
-  <NConfigProvider :theme="theme" :theme-overrides="themeOverrides" abstract>
+  <NConfigProvider
+    :locale="naiveLocale"
+    :theme="theme"
+    :theme-overrides="themeOverrides"
+    abstract
+  >
     <FeedbackProvider>
       <AppShell :groups="navGroups" :settings-item="settingsItem">
         <DisconnectedBanner />

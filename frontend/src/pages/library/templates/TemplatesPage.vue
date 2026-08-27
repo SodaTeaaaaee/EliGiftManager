@@ -497,7 +497,11 @@ const carrierColumns = [
     >
       <NForm label-placement="left" label-width="110">
         <NFormItem :label="t('library.factoryPlatform')">
-          <NSelect v-model:value="templateForm.platformId" :options="platformOptions" />
+          <NSelect
+            v-model:value="templateForm.platformId"
+            :options="platformOptions"
+            :placeholder="t('common.pleaseSelect')"
+          />
         </NFormItem>
         <NFormItem :label="t('library.templateName')">
           <NInput v-model:value="templateForm.name" />
@@ -506,6 +510,7 @@ const carrierColumns = [
           <NSelect
             v-model:value="templateForm.documentType"
             :options="documentTypeOptions.map((type) => ({ label: documentTypeLabel(type), value: type }))"
+            :placeholder="t('common.pleaseSelect')"
             tag
             filterable
           />

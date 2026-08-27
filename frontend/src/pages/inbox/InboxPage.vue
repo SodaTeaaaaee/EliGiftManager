@@ -591,6 +591,7 @@ const columns = [
           <NSelect
             v-model:value="importForm.platformId"
             :options="platformOptions"
+            :placeholder="t('common.pleaseSelect')"
             @update:value="handleImportPlatformChange"
           />
         </NFormItem>

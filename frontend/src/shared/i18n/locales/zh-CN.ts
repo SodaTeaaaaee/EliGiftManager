@@ -25,6 +25,7 @@ export const zhCN = {
     yes: '是',
     no: '否',
     actions: '操作',
+    pleaseSelect: '请选择',
     locales: {
       zhCN: '简体中文',
       enUS: 'English',

@@ -27,6 +27,7 @@ export const enUS: AppMessageSchema = {
     yes: 'Yes',
     no: 'No',
     actions: 'Actions',
+    pleaseSelect: 'Please select',
     locales: {
       zhCN: 'Simplified Chinese',
       enUS: 'English',
