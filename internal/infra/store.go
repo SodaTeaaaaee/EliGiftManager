@@ -1161,7 +1161,7 @@ func (s *GormStore) UpdateShipmentShippedAt(ctx context.Context, id uint, shippe
 }
 
 func (s *GormStore) CreateWriteback(ctx context.Context, w *domain.ChannelWritebackItem) error {
-	row := persistence.ChannelWritebackItem{InputFactID: w.InputFactID, ShipmentID: w.ShipmentID, TrackingNo: w.TrackingNo, CarrierCode: w.CarrierCode, Status: w.Status, TemplateID: w.TemplateID, TemplateVersion: w.TemplateVersion, ErrorMessage: w.ErrorMessage, Payload: w.Payload}
+	row := persistence.ChannelWritebackItem{InputFactID: w.InputFactID, ShipmentID: w.ShipmentID, TrackingNo: w.TrackingNo, CarrierCode: w.CarrierCode, Quantity: w.Quantity, Status: w.Status, TemplateID: w.TemplateID, TemplateVersion: w.TemplateVersion, RetryCount: w.RetryCount, ErrorMessage: w.ErrorMessage, Payload: w.Payload}
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
 		return err
 	}
@@ -1186,7 +1186,7 @@ func (s *GormStore) ListFailedWritebacks(ctx context.Context) ([]domain.ChannelW
 }
 
 func (s *GormStore) UpdateWriteback(ctx context.Context, w *domain.ChannelWritebackItem) error {
-	return s.db.WithContext(ctx).Model(&persistence.ChannelWritebackItem{}).Where("id = ?", w.ID).Updates(map[string]any{"status": w.Status, "error_message": w.ErrorMessage, "payload": w.Payload}).Error
+	return s.db.WithContext(ctx).Model(&persistence.ChannelWritebackItem{}).Where("id = ?", w.ID).Updates(map[string]any{"status": w.Status, "retry_count": w.RetryCount, "error_message": w.ErrorMessage, "payload": w.Payload}).Error
 }
 
 func (s *GormStore) GetSettings(ctx context.Context) (*domain.AppSettings, error) {
@@ -1322,7 +1322,7 @@ func linksToDomain(rows []persistence.ExecutionQuantityLink) []domain.ExecutionQ
 func writebacksToDomain(rows []persistence.ChannelWritebackItem) []domain.ChannelWritebackItem {
 	out := make([]domain.ChannelWritebackItem, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.ChannelWritebackItem{ID: r.ID, InputFactID: r.InputFactID, ShipmentID: r.ShipmentID, TrackingNo: r.TrackingNo, CarrierCode: r.CarrierCode, Status: r.Status, TemplateID: r.TemplateID, TemplateVersion: r.TemplateVersion, ErrorMessage: r.ErrorMessage, Payload: r.Payload, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
+		out = append(out, domain.ChannelWritebackItem{ID: r.ID, InputFactID: r.InputFactID, ShipmentID: r.ShipmentID, TrackingNo: r.TrackingNo, CarrierCode: r.CarrierCode, Quantity: r.Quantity, Status: r.Status, TemplateID: r.TemplateID, TemplateVersion: r.TemplateVersion, RetryCount: r.RetryCount, ErrorMessage: r.ErrorMessage, Payload: r.Payload, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
 	}
 	return out
 }

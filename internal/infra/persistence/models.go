@@ -368,10 +368,12 @@ type ChannelWritebackItem struct {
 	ShipmentID      uint `gorm:"index;not null"`
 	TrackingNo      string
 	CarrierCode     string
+	Quantity        int    `gorm:"not null;default:0"`
 	Status          string `gorm:"not null;default:'pending'"`
 	TemplateID      uint   `gorm:"not null;default:0"`
 	TemplateVersion int    `gorm:"not null;default:0"`
-	ErrorMessage    string
+	RetryCount      int    `gorm:"not null;default:0"`
+	ErrorMessage    string `gorm:"not null;default:''"`
 	Payload         string `gorm:"type:text"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time

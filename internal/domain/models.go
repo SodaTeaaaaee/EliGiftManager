@@ -345,15 +345,21 @@ type Shipment struct {
 	UpdatedAt   time.Time
 }
 
+// ChannelWritebackItem is one parcel of one source fact's external writeback.
+// Quantity mirrors the shipment's parcel quantity; RetryCount and ErrorMessage
+// together form the retry history (the error text is the error of the latest
+// attempt, kept even after a later success).
 type ChannelWritebackItem struct {
 	ID              uint
 	InputFactID     uint
 	ShipmentID      uint
 	TrackingNo      string
 	CarrierCode     string
+	Quantity        int
 	Status          string
 	TemplateID      uint
 	TemplateVersion int
+	RetryCount      int
 	ErrorMessage    string
 	Payload         string
 	CreatedAt       time.Time
