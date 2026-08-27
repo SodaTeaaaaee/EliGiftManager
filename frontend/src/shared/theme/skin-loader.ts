@@ -15,7 +15,6 @@ import { DEFAULT_SKIN_ID, getSkinById, type SkinAssetSlots } from "@/skins";
 
 const STYLE_ELEMENT_ID = "skin-tokens";
 
-let currentSkinId = DEFAULT_SKIN_ID;
 let currentAssets: SkinAssetSlots | undefined;
 
 function getOrCreateStyleElement(): HTMLStyleElement | null {
@@ -40,7 +39,6 @@ export async function applySkin(id: string): Promise<void> {
   const styleEl = getOrCreateStyleElement();
 
   if (!skin || !styleEl) {
-    currentSkinId = DEFAULT_SKIN_ID;
     currentAssets = undefined;
     return;
   }
@@ -50,7 +48,6 @@ export async function applySkin(id: string): Promise<void> {
     if (!response.ok) throw new Error(`skin fetch failed: ${response.status}`);
     const css = await response.text();
     styleEl.textContent = css;
-    currentSkinId = skin.id;
     currentAssets = skin.assets;
   } catch {
     // Network/build hiccup — leave the previous override in place rather
@@ -65,8 +62,4 @@ export async function applySkin(id: string): Promise<void> {
  * callers must render their built-in neutral placeholder in that case. */
 export function getCurrentSkinAssets(): SkinAssetSlots | undefined {
   return currentAssets;
-}
-
-export function getCurrentSkinId(): string {
-  return currentSkinId;
 }

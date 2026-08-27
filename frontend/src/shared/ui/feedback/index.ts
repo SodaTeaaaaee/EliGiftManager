@@ -14,7 +14,6 @@ export type {
   ReceiptEntry,
   ReceiptInput,
   ReceiptKind,
-  ToastErrorOptions,
   ToastKind,
   ToastRecord,
 } from './types'

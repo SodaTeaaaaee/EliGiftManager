@@ -1,7 +1,7 @@
 export { default as FilterBar } from './FilterBar.vue'
 export { default as SavedViews } from './SavedViews.vue'
 
-export { useUrlFilters, parseEnumMultiQuery, serializeEnumMultiQuery, parseKeywordQuery, serializeKeywordQuery } from './useUrlFilters'
+export { useUrlFilters } from './useUrlFilters'
 export type { UseUrlFiltersApi } from './useUrlFilters'
 
 export type {
