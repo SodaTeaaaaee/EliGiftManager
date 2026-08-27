@@ -1026,7 +1026,7 @@ func identityToDomain(r persistence.PlatformIdentity) domain.PlatformIdentity {
 	return domain.PlatformIdentity{ID: r.ID, CustomerProfileID: r.CustomerProfileID, PlatformID: r.PlatformID, IdentityType: r.IdentityType, IdentityValue: r.IdentityValue, NormalizedValue: r.NormalizedValue, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func addressFromDomain(a domain.RecipientAddress) persistence.RecipientAddress {
-	return persistence.RecipientAddress{ID: a.ID, CustomerProfileID: a.CustomerProfileID, Label: a.Label, RecipientName: a.RecipientName, Phone: a.Phone, Country: a.Country, Province: a.Province, City: a.City, District: a.District, AddressLine1: a.AddressLine1, AddressLine2: a.AddressLine2, PostalCode: a.PostalCode, IsDefault: a.IsDefault, ExtraData: a.ExtraData}
+	return persistence.RecipientAddress{ID: a.ID, CustomerProfileID: a.CustomerProfileID, Label: a.Label, RecipientName: a.RecipientName, Phone: a.Phone, Country: a.Country, Province: a.Province, City: a.City, District: a.District, AddressLine1: a.AddressLine1, AddressLine2: a.AddressLine2, PostalCode: a.PostalCode, IsDefault: a.IsDefault, ExtraData: a.ExtraData, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
 }
 func addressToDomain(r persistence.RecipientAddress) domain.RecipientAddress {
 	return domain.RecipientAddress{ID: r.ID, CustomerProfileID: r.CustomerProfileID, Label: r.Label, RecipientName: r.RecipientName, Phone: r.Phone, Country: r.Country, Province: r.Province, City: r.City, District: r.District, AddressLine1: r.AddressLine1, AddressLine2: r.AddressLine2, PostalCode: r.PostalCode, IsDefault: r.IsDefault, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
@@ -1038,7 +1038,7 @@ func aliasToDomain(r persistence.ProductAlias) domain.ProductAlias {
 	return domain.ProductAlias{ID: r.ID, ProductItemID: r.ProductItemID, PlatformID: r.PlatformID, ExternalProductID: r.ExternalProductID, Title: r.Title, Spec: r.Spec, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func templateFromDomain(t domain.TemplateConfig) persistence.TemplateConfig {
-	return persistence.TemplateConfig{ID: t.ID, PlatformID: t.PlatformID, DocumentType: t.DocumentType, Direction: t.Direction, Name: t.Name, Version: t.Version, Builtin: t.Builtin, MappingJSON: t.MappingJSON, LayoutJSON: t.LayoutJSON, Notes: t.Notes, ExtraData: t.ExtraData}
+	return persistence.TemplateConfig{ID: t.ID, PlatformID: t.PlatformID, DocumentType: t.DocumentType, Direction: t.Direction, Name: t.Name, Version: t.Version, Builtin: t.Builtin, MappingJSON: t.MappingJSON, LayoutJSON: t.LayoutJSON, Notes: t.Notes, ExtraData: t.ExtraData, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt}
 }
 func templateToDomain(r persistence.TemplateConfig) domain.TemplateConfig {
 	return domain.TemplateConfig{ID: r.ID, PlatformID: r.PlatformID, DocumentType: r.DocumentType, Direction: r.Direction, Name: r.Name, Version: r.Version, Builtin: r.Builtin, MappingJSON: r.MappingJSON, LayoutJSON: r.LayoutJSON, Notes: r.Notes, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
@@ -1050,19 +1050,19 @@ func docToDomain(r persistence.InputDocument) domain.InputDocument {
 	return domain.InputDocument{ID: r.ID, PlatformID: r.PlatformID, DocumentType: r.DocumentType, Direction: r.Direction, OriginalName: r.OriginalName, RawPayload: r.RawPayload, TemplateID: r.TemplateID, TemplateVersion: r.TemplateVersion, ImportedAt: r.ImportedAt, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func factFromDomain(f domain.InputFact) persistence.InputFact {
-	return persistence.InputFact{ID: f.ID, DocumentID: f.DocumentID, PlatformID: f.PlatformID, Kind: f.Kind, StableExternalID: f.StableExternalID, CustomerProfileID: f.CustomerProfileID, PlatformIdentityID: f.PlatformIdentityID, MembershipLevel: f.MembershipLevel, SourceDocumentNo: f.SourceDocumentNo, SourceCreatedAt: f.SourceCreatedAt, ExtraData: f.ExtraData}
+	return persistence.InputFact{ID: f.ID, DocumentID: f.DocumentID, PlatformID: f.PlatformID, Kind: f.Kind, StableExternalID: f.StableExternalID, CustomerProfileID: f.CustomerProfileID, PlatformIdentityID: f.PlatformIdentityID, MembershipLevel: f.MembershipLevel, SourceDocumentNo: f.SourceDocumentNo, SourceCreatedAt: f.SourceCreatedAt, ExtraData: f.ExtraData, CreatedAt: f.CreatedAt, UpdatedAt: f.UpdatedAt}
 }
 func factToDomain(r persistence.InputFact) domain.InputFact {
 	return domain.InputFact{ID: r.ID, DocumentID: r.DocumentID, PlatformID: r.PlatformID, Kind: r.Kind, StableExternalID: r.StableExternalID, CustomerProfileID: r.CustomerProfileID, PlatformIdentityID: r.PlatformIdentityID, MembershipLevel: r.MembershipLevel, SourceDocumentNo: r.SourceDocumentNo, SourceCreatedAt: r.SourceCreatedAt, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func lineFromDomain(l domain.InputFactLine) persistence.InputFactLine {
-	return persistence.InputFactLine{ID: l.ID, FactID: l.FactID, SourceLineNo: l.SourceLineNo, ExternalSKU: l.ExternalSKU, ExternalTitle: l.ExternalTitle, ExternalSpec: l.ExternalSpec, ProductItemID: l.ProductItemID, Quantity: l.Quantity, WaveID: l.WaveID, ExtraData: l.ExtraData}
+	return persistence.InputFactLine{ID: l.ID, FactID: l.FactID, SourceLineNo: l.SourceLineNo, ExternalSKU: l.ExternalSKU, ExternalTitle: l.ExternalTitle, ExternalSpec: l.ExternalSpec, ProductItemID: l.ProductItemID, Quantity: l.Quantity, WaveID: l.WaveID, ExtraData: l.ExtraData, CreatedAt: l.CreatedAt, UpdatedAt: l.UpdatedAt}
 }
 func lineToDomain(r persistence.InputFactLine) domain.InputFactLine {
 	return domain.InputFactLine{ID: r.ID, FactID: r.FactID, SourceLineNo: r.SourceLineNo, ExternalSKU: r.ExternalSKU, ExternalTitle: r.ExternalTitle, ExternalSpec: r.ExternalSpec, ProductItemID: r.ProductItemID, Quantity: r.Quantity, WaveID: r.WaveID, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func waveFromDomain(w domain.Wave) persistence.Wave {
-	return persistence.Wave{ID: w.ID, WaveNo: w.WaveNo, Name: w.Name, Notes: w.Notes, CloseResult: w.CloseResult, CloseNote: w.CloseNote, ClosedAt: w.ClosedAt, ReopenedAt: w.ReopenedAt, ExtraData: w.ExtraData}
+	return persistence.Wave{ID: w.ID, WaveNo: w.WaveNo, Name: w.Name, Notes: w.Notes, CloseResult: w.CloseResult, CloseNote: w.CloseNote, ClosedAt: w.ClosedAt, ReopenedAt: w.ReopenedAt, ExtraData: w.ExtraData, CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt}
 }
 func waveToDomain(r persistence.Wave) domain.Wave {
 	return domain.Wave{ID: r.ID, WaveNo: r.WaveNo, Name: r.Name, Notes: r.Notes, CloseResult: r.CloseResult, CloseNote: r.CloseNote, ClosedAt: r.ClosedAt, ReopenedAt: r.ReopenedAt, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
@@ -1072,7 +1072,7 @@ func ruleFromDomain(r domain.EntitlementRule) (persistence.EntitlementRule, erro
 	if err != nil {
 		return persistence.EntitlementRule{}, err
 	}
-	return persistence.EntitlementRule{ID: r.ID, WaveID: r.WaveID, ProductID: r.ProductID, SelectorJSON: string(b), Quantity: r.Quantity, Active: r.Active, ExtraData: r.ExtraData}, nil
+	return persistence.EntitlementRule{ID: r.ID, WaveID: r.WaveID, ProductID: r.ProductID, SelectorJSON: string(b), Quantity: r.Quantity, Active: r.Active, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
 }
 func ruleToDomain(r persistence.EntitlementRule) (domain.EntitlementRule, error) {
 	var sel domain.EntitlementSelector
@@ -1094,7 +1094,7 @@ func resultFromDomain(r domain.FulfillmentResult) (persistence.FulfillmentResult
 	if err != nil {
 		return persistence.FulfillmentResult{}, err
 	}
-	return persistence.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, AddressJSON: string(b), Frozen: r.Frozen, ExtraData: r.ExtraData}, nil
+	return persistence.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, AddressJSON: string(b), Frozen: r.Frozen, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
 }
 func resultToDomain(r persistence.FulfillmentResult) (domain.FulfillmentResult, error) {
 	var addr domain.AddressSnapshot
@@ -1106,13 +1106,13 @@ func resultToDomain(r persistence.FulfillmentResult) (domain.FulfillmentResult, 
 	return domain.FulfillmentResult{ID: r.ID, WaveID: r.WaveID, SourceKind: r.SourceKind, EntitlementInstanceID: r.EntitlementInstanceID, InputFactLineID: r.InputFactLineID, InputFactID: r.InputFactID, CustomerProfileID: r.CustomerProfileID, ProductItemID: r.ProductItemID, Quantity: r.Quantity, Address: addr, Frozen: r.Frozen, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}, nil
 }
 func orderFromDomain(o domain.SupplierOrder) persistence.SupplierOrder {
-	return persistence.SupplierOrder{ID: o.ID, WaveID: o.WaveID, FactoryPlatformID: o.FactoryPlatformID, Status: o.Status, ExportedAt: o.ExportedAt, VoidedAt: o.VoidedAt, ExportPayload: o.ExportPayload, ExtraData: o.ExtraData}
+	return persistence.SupplierOrder{ID: o.ID, WaveID: o.WaveID, FactoryPlatformID: o.FactoryPlatformID, Status: o.Status, ExportedAt: o.ExportedAt, VoidedAt: o.VoidedAt, ExportPayload: o.ExportPayload, ExtraData: o.ExtraData, CreatedAt: o.CreatedAt, UpdatedAt: o.UpdatedAt}
 }
 func orderToDomain(r persistence.SupplierOrder) domain.SupplierOrder {
 	return domain.SupplierOrder{ID: r.ID, WaveID: r.WaveID, FactoryPlatformID: r.FactoryPlatformID, Status: r.Status, ExportedAt: r.ExportedAt, VoidedAt: r.VoidedAt, ExportPayload: r.ExportPayload, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 func solFromDomain(l domain.SupplierOrderLine) persistence.SupplierOrderLine {
-	return persistence.SupplierOrderLine{ID: l.ID, SupplierOrderID: l.SupplierOrderID, ProductItemID: l.ProductItemID, FactorySKU: l.FactorySKU, Quantity: l.Quantity, TrackingID: l.TrackingID, TrackingRetired: l.TrackingRetired, ExtraData: l.ExtraData}
+	return persistence.SupplierOrderLine{ID: l.ID, SupplierOrderID: l.SupplierOrderID, ProductItemID: l.ProductItemID, FactorySKU: l.FactorySKU, Quantity: l.Quantity, TrackingID: l.TrackingID, TrackingRetired: l.TrackingRetired, ExtraData: l.ExtraData, CreatedAt: l.CreatedAt, UpdatedAt: l.UpdatedAt}
 }
 func solToDomain(r persistence.SupplierOrderLine) domain.SupplierOrderLine {
 	return domain.SupplierOrderLine{ID: r.ID, SupplierOrderID: r.SupplierOrderID, ProductItemID: r.ProductItemID, FactorySKU: r.FactorySKU, Quantity: r.Quantity, TrackingID: r.TrackingID, TrackingRetired: r.TrackingRetired, ExtraData: r.ExtraData, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
