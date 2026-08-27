@@ -101,7 +101,9 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
         : t('home.buckets.pendingRevisionsDesc'),
     tone:
       buckets.value.PendingRevisions === 0
-        ? 'neutral'
+        ? buckets.value.RevisionFrozenConflicts > 0
+          ? 'warning'
+          : 'neutral'
         : buckets.value.RevisionFrozenConflicts > 0
           ? 'error'
           : 'warning',

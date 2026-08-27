@@ -265,6 +265,12 @@ export const enUS: AppMessageSchema = {
     acceptDuplicate: 'Keep duplicate record',
     rejectDuplicate: 'New fulfillment responsibility',
     duplicateDecided: 'Decided',
+    duplicateReasons: {
+      stable_external_id: 'Stable external id match',
+      within_record_window: 'Within record window',
+      within_ask_window: 'Within ask window',
+      fingerprint: 'Content fingerprint match',
+    },
     decideDuplicateSuccess: 'Duplicate decision applied',
     revision: 'Revision',
     revisionPending: 'Revision pending',

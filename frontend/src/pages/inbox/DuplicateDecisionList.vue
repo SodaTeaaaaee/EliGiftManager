@@ -23,9 +23,20 @@ const emit = defineEmits<{
   decided: [observationID: number, accept: boolean]
 }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const feedback = useFeedback()
 const decidingId = ref<number | null>(null)
+
+/**
+ * Reasons arrive as stable snake_case codes from the backend; map them
+ * through the inbox.duplicateReasons.* entries and fall back to the raw
+ * code when no entry exists yet.
+ */
+function reasonLabel(reason?: string): string {
+  if (!reason) return '—'
+  const key = `inbox.duplicateReasons.${reason}`
+  return te(key) ? t(key) : reason
+}
 
 async function decide(dup: DuplicateObservation, accept: boolean) {
   if (decidingId.value !== null) return
@@ -52,7 +63,7 @@ async function decide(dup: DuplicateObservation, accept: boolean) {
       class="duplicate-decision-list__row"
     >
       <StatusBadge dimension="duplicateVerdict" :value="dup.Verdict || 'record_only'" />
-      <span class="duplicate-decision-list__reason">{{ dup.Reason || '—' }}</span>
+      <span class="duplicate-decision-list__reason">{{ reasonLabel(dup.Reason) }}</span>
       <span v-if="!dup.Decided" class="duplicate-decision-list__actions">
         <NButton
           size="tiny"
