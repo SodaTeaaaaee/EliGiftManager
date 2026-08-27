@@ -225,28 +225,6 @@ export interface EntitlementRule {
   UpdatedAt?: string
 }
 
-export interface EntitlementException {
-  ID: number
-  WaveID: number
-  ProductID: number
-  InstanceID: number
-  Quantity: number
-  Note?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface EntitlementInstance {
-  ID: number
-  WaveID: number
-  InputFactLineID: number
-  CustomerProfileID?: number | null
-  PlatformIdentityID?: number | null
-  MembershipLevel?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
 export interface FulfillmentResult {
   ID: number
   WaveID: number
@@ -262,14 +240,6 @@ export interface FulfillmentResult {
   ExtraData?: string
   CreatedAt?: string
   UpdatedAt?: string
-}
-
-export interface ExecutionQuantityLink {
-  ID: number
-  FulfillmentResultID: number
-  SupplierOrderLineID: number
-  Quantity: number
-  CreatedAt?: string
 }
 
 export interface SupplierOrder {

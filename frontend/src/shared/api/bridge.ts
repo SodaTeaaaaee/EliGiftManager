@@ -13,7 +13,6 @@ import {
   CreateProduct as _CreateProduct,
   CreateTemplate as _CreateTemplate,
   CreateWave as _CreateWave,
-  EnsureBuiltinPlatforms as _EnsureBuiltinPlatforms,
   ExportFactoryOrder as _ExportFactoryOrder,
   GenerateFactoryOrder as _GenerateFactoryOrder,
   GenerateWritebacks as _GenerateWritebacks,
@@ -103,11 +102,6 @@ function assertWailsRuntime(): void {
 }
 
 // ── WorkspaceController: Platforms & System ──
-
-export async function ensureBuiltinPlatforms(): Promise<void> {
-  if (!isWailsRuntimeAvailable()) return
-  await _EnsureBuiltinPlatforms()
-}
 
 export async function listPlatforms(): Promise<Platform[]> {
   if (!isWailsRuntimeAvailable()) return []
