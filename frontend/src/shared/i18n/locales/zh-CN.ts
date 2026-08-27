@@ -357,6 +357,43 @@ export const zhCN = {
     templateSuccess: '模板已保存',
     carrierSuccess: '承运商映射已保存',
   },
+  /**
+   * `templates` — copy for the Library templates page: mapping/layout
+   * editing inside the create modal and the backend-backed template test.
+   */
+  templates: {
+    test: '测试模板',
+    testTitle: '模板测试',
+    uploadSample: '上传样例文件',
+    changeSample: '更换样例文件',
+    previewRows: '解析预览（前 {n} 行）',
+    previewIssues: '解析问题（{n}）',
+    noRows: '没有解析出行，请检查映射配置',
+    noIssues: '没有解析问题',
+    testFailed: '模板测试失败：{message}',
+    mapping: '映射配置',
+    layout: '输出布局',
+    layoutFormat: '文件格式',
+    formatCsv: 'CSV',
+    formatXlsx: 'XLSX',
+    columnOrder: '列顺序',
+    columnOrderPlaceholder: '逗号分隔语义键，留空使用默认布局',
+    headerNames: '表头命名',
+    headerNameKey: '语义键',
+    headerNameValue: '显示表头',
+    addHeaderName: '添加表头命名',
+    mappingSummary: '{mode} · {count} 个语义键',
+    lineNo: '行号',
+    issueKey: '语义键',
+    issueMessage: '原因',
+    documentTypeOptions: {
+      membership_list: '会员名单导入',
+      order_export: '订单导出',
+      shipment_return: '发货回传',
+      factory_order: '工厂订单',
+      writeback: '渠道回写',
+    },
+  },
   settings: {
     title: '系统设置',
     subtitle: '本地外观偏好与重复判定窗口',

@@ -359,6 +359,43 @@ export const enUS: AppMessageSchema = {
     templateSuccess: 'Template saved',
     carrierSuccess: 'Carrier mapping saved',
   },
+  /**
+   * `templates` — copy for the Library templates page: mapping/layout
+   * editing inside the create modal and the backend-backed template test.
+   */
+  templates: {
+    test: 'Test Template',
+    testTitle: 'Template Test',
+    uploadSample: 'Upload Sample File',
+    changeSample: 'Change Sample File',
+    previewRows: 'Parsed preview (first {n} rows)',
+    previewIssues: 'Parse issues ({n})',
+    noRows: 'No rows parsed — check the mapping config',
+    noIssues: 'No parse issues',
+    testFailed: 'Template test failed: {message}',
+    mapping: 'Mapping Config',
+    layout: 'Output Layout',
+    layoutFormat: 'File Format',
+    formatCsv: 'CSV',
+    formatXlsx: 'XLSX',
+    columnOrder: 'Column Order',
+    columnOrderPlaceholder: 'Comma-separated semantic keys; empty uses the default layout',
+    headerNames: 'Header Names',
+    headerNameKey: 'Semantic key',
+    headerNameValue: 'Display header',
+    addHeaderName: 'Add header name',
+    mappingSummary: '{mode} · {count} semantic keys',
+    lineNo: 'Line No',
+    issueKey: 'Semantic key',
+    issueMessage: 'Reason',
+    documentTypeOptions: {
+      membership_list: 'Membership List Import',
+      order_export: 'Order Export',
+      shipment_return: 'Shipment Return',
+      factory_order: 'Factory Order',
+      writeback: 'Channel Writeback',
+    },
+  },
   settings: {
     title: 'Settings',
     subtitle: 'Local appearance preferences and deduplication windows',

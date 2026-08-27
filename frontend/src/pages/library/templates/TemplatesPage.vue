@@ -19,6 +19,13 @@ import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
 import {
+  FieldMappingEditor,
+  emptyFieldMapping,
+  parseMappingRules,
+  serializeMappingRules,
+} from '@/shared/ui/field-mapping'
+import type { FieldMappingValue } from '@/shared/ui/field-mapping'
+import {
   createCarrierMapping,
   createTemplate,
   getNamedTransformers,
@@ -26,10 +33,12 @@ import {
   listCarrierMappings,
   listPlatforms,
   listTemplates,
+  pickFile,
+  previewTemplate,
 } from '@/shared/api/bridge'
-import type { CarrierMapping, Platform, TemplateConfig } from '@/entities/models'
+import type { CarrierMapping, Platform, TemplateConfig, TemplatePreview } from '@/entities/models'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -41,16 +50,25 @@ const transformers = ref<string[]>([])
 const selectedPlatformForCarriers = ref<number | null>(null)
 const carrierMappings = ref<CarrierMapping[]>([])
 
+interface LayoutFormState {
+  format: 'csv' | 'xlsx'
+  columnOrder: string
+  headerNames: { key: string; value: string }[]
+}
+
 const showCreateTemplateModal = ref(false)
 const templateForm = ref({
   platformId: null as number | null,
-  documentType: 'import_membership',
+  documentType: 'membership_list',
   direction: 'input',
   name: '',
-  version: 1,
-  mappingJson: '{}',
-  layoutJson: '{}',
   notes: '',
+  mapping: emptyFieldMapping('header') as FieldMappingValue,
+  layout: {
+    format: 'csv',
+    columnOrder: '',
+    headerNames: [],
+  } as LayoutFormState,
 })
 
 const showCreateCarrierModal = ref(false)
@@ -59,6 +77,16 @@ const carrierForm = ref({
   internalCode: 'SF',
   internalName: '顺丰速运',
 })
+
+// ── Template testing (backend PreviewTemplate) ──
+
+const sampleFileFilters = [{ displayName: 'CSV / Excel', pattern: '*.csv;*.xlsx;*.xls' }]
+const showTestModal = ref(false)
+const testLoading = ref(false)
+const testTemplate = ref<TemplateConfig | null>(null)
+const testFilePath = ref('')
+const testPreview = ref<TemplatePreview | null>(null)
+const testError = ref('')
 
 async function loadData() {
   loading.value = true
@@ -108,32 +136,82 @@ const platformOptions = computed(() =>
   })),
 )
 
+/** Semantic dictionary keys rendered with their localized display names. */
+const destFields = computed(() =>
+  dictionary.value.map((key) => {
+    const labelKey = `templateEditor.semanticKeys.${key}`
+    return {
+      key,
+      label: te(labelKey) ? t(labelKey) : key,
+      tooltip: key,
+    }
+  }),
+)
+
+const documentTypeOptions = [
+  'membership_list',
+  'order_export',
+  'shipment_return',
+  'factory_order',
+  'writeback',
+]
+
+function documentTypeLabel(type: string): string {
+  const key = `templates.documentTypeOptions.${type}`
+  return te(key) ? t(key) : type
+}
+
 function openCreateTemplate() {
   templateForm.value = {
     platformId: platformOptions.value[0]?.value ?? null,
-    documentType: 'import_membership',
+    documentType: 'membership_list',
     direction: 'input',
     name: '',
-    version: 1,
-    mappingJson: '{}',
-    layoutJson: '{}',
     notes: '',
+    mapping: emptyFieldMapping('header'),
+    layout: {
+      format: 'csv',
+      columnOrder: '',
+      headerNames: [],
+    },
   }
   showCreateTemplateModal.value = true
+}
+
+function handleAddHeaderName() {
+  templateForm.value.layout.headerNames.push({ key: '', value: '' })
+}
+
+function handleRemoveHeaderName(index: number) {
+  templateForm.value.layout.headerNames.splice(index, 1)
 }
 
 async function handleSaveTemplate() {
   if (!templateForm.value.platformId || !templateForm.value.name.trim()) return
   actionLoading.value = true
   try {
+    const headerNames: Record<string, string> = {}
+    for (const entry of templateForm.value.layout.headerNames) {
+      if (entry.key.trim() !== '' && entry.value.trim() !== '') {
+        headerNames[entry.key.trim()] = entry.value.trim()
+      }
+    }
+    const layoutJSON = JSON.stringify({
+      version: 1,
+      format: templateForm.value.layout.format,
+      columnOrder: templateForm.value.layout.columnOrder
+        .split(/[,，\n]/)
+        .map((part) => part.trim())
+        .filter(Boolean),
+      headerNames,
+    })
     await createTemplate({
       PlatformID: templateForm.value.platformId,
       DocumentType: templateForm.value.documentType,
       Direction: templateForm.value.direction,
       Name: templateForm.value.name.trim(),
-      Version: templateForm.value.version,
-      MappingJSON: templateForm.value.mappingJson,
-      LayoutJSON: templateForm.value.layoutJson,
+      MappingJSON: serializeMappingRules(templateForm.value.mapping),
+      LayoutJSON: layoutJSON,
       Notes: templateForm.value.notes.trim(),
     })
     showCreateTemplateModal.value = false
@@ -144,6 +222,62 @@ async function handleSaveTemplate() {
     actionLoading.value = false
   }
 }
+
+// ── Template test flow ──
+
+function openTestTemplate(row: TemplateConfig) {
+  testTemplate.value = row
+  testFilePath.value = ''
+  testPreview.value = null
+  testError.value = ''
+  showTestModal.value = true
+}
+
+async function handlePickSampleFile() {
+  const path = await pickFile(sampleFileFilters)
+  if (!path) return
+  testFilePath.value = path
+  await runTemplateTest()
+}
+
+async function runTemplateTest() {
+  if (!testTemplate.value || !testFilePath.value) return
+  testLoading.value = true
+  testError.value = ''
+  try {
+    testPreview.value = await previewTemplate(testTemplate.value.ID, testFilePath.value, 10)
+  } catch (err) {
+    testPreview.value = null
+    testError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    testLoading.value = false
+  }
+}
+
+const testRowKeys = computed(() => {
+  const keys: string[] = []
+  for (const row of testPreview.value?.Rows ?? []) {
+    for (const key of Object.keys(row)) {
+      if (!keys.includes(key)) keys.push(key)
+    }
+  }
+  return keys
+})
+
+function testColumnTitle(key: string): string {
+  const labelKey = `templateEditor.semanticKeys.${key}`
+  return te(labelKey) ? t(labelKey) : key
+}
+
+const testPreviewColumns = computed(() =>
+  testRowKeys.value.map((key) => ({
+    title: testColumnTitle(key),
+    key,
+    render(row: Record<string, string>) {
+      return row[key] ?? '—'
+    },
+  })),
+)
 
 function openCreateCarrier() {
   carrierForm.value = {
@@ -173,6 +307,20 @@ async function handleSaveCarrier() {
   }
 }
 
+/** Read-only mapping summary for the template list (no editor without an UpdateTemplate port). */
+function mappingSummary(row: TemplateConfig): string {
+  const mapping = parseMappingRules(row.MappingJSON)
+  const count =
+    mapping.mode === 'positional'
+      ? Object.keys(mapping.positions ?? {}).length
+      : Object.keys(mapping.columns).length
+  const modeLabel =
+    mapping.mode === 'positional'
+      ? t('templateEditor.modePositional')
+      : t('templateEditor.modeHeader')
+  return t('templates.mappingSummary', { mode: modeLabel, count })
+}
+
 const templateColumns = [
   {
     title: '#',
@@ -197,11 +345,14 @@ const templateColumns = [
   {
     title: t('library.documentType'),
     key: 'DocumentType',
+    render(row: TemplateConfig) {
+      return documentTypeLabel(row.DocumentType)
+    },
   },
   {
     title: t('library.direction'),
     key: 'Direction',
-    width: 120,
+    width: 110,
     render(row: TemplateConfig) {
       return h(StatusBadge, {
         dimension: 'templateDirection',
@@ -210,11 +361,35 @@ const templateColumns = [
     },
   },
   {
+    title: t('templates.mapping'),
+    key: 'MappingJSON',
+    render(row: TemplateConfig) {
+      return mappingSummary(row)
+    },
+  },
+  {
     title: t('library.version'),
     key: 'Version',
-    width: 90,
+    width: 70,
     render(row: TemplateConfig) {
       return `v${row.Version}`
+    },
+  },
+  {
+    title: t('common.actions'),
+    key: 'actions',
+    width: 90,
+    render(row: TemplateConfig) {
+      return h(
+        NButton,
+        {
+          size: 'tiny',
+          quaternary: true,
+          type: 'primary',
+          onClick: () => openTestTemplate(row),
+        },
+        { default: () => t('templates.test') },
+      )
     },
   },
 ]
@@ -318,7 +493,7 @@ const carrierColumns = [
       v-model:show="showCreateTemplateModal"
       preset="card"
       :title="t('library.createTemplate')"
-      style="width: 520px"
+      class="templates-page__create-modal"
     >
       <NForm label-placement="left" label-width="110">
         <NFormItem :label="t('library.factoryPlatform')">
@@ -328,7 +503,12 @@ const carrierColumns = [
           <NInput v-model:value="templateForm.name" />
         </NFormItem>
         <NFormItem :label="t('library.documentType')">
-          <NInput v-model:value="templateForm.documentType" />
+          <NSelect
+            v-model:value="templateForm.documentType"
+            :options="documentTypeOptions.map((type) => ({ label: documentTypeLabel(type), value: type }))"
+            tag
+            filterable
+          />
         </NFormItem>
         <NFormItem :label="t('library.direction')">
           <NRadioGroup v-model:value="templateForm.direction">
@@ -342,6 +522,61 @@ const carrierColumns = [
           <NInput v-model:value="templateForm.notes" type="textarea" />
         </NFormItem>
       </NForm>
+
+      <h5 class="templates-page__section-title">{{ t('templates.mapping') }}</h5>
+      <FieldMappingEditor
+        v-model="templateForm.mapping"
+        :dest-fields="destFields"
+        :source-headers="[]"
+        :sample-rows="[]"
+      />
+
+      <h5 class="templates-page__section-title">{{ t('templates.layout') }}</h5>
+      <NForm label-placement="left" label-width="110">
+        <NFormItem :label="t('templates.layoutFormat')">
+          <NRadioGroup v-model:value="templateForm.layout.format">
+            <NSpace>
+              <NRadio value="csv">{{ t('templates.formatCsv') }}</NRadio>
+              <NRadio value="xlsx">{{ t('templates.formatXlsx') }}</NRadio>
+            </NSpace>
+          </NRadioGroup>
+        </NFormItem>
+        <NFormItem :label="t('templates.columnOrder')">
+          <NInput
+            v-model:value="templateForm.layout.columnOrder"
+            :placeholder="t('templates.columnOrderPlaceholder')"
+          />
+        </NFormItem>
+      </NForm>
+      <div class="templates-page__header-names">
+        <div class="templates-page__header-names-title">{{ t('templates.headerNames') }}</div>
+        <div
+          v-for="(entry, index) in templateForm.layout.headerNames"
+          :key="index"
+          class="templates-page__header-name-row"
+        >
+          <NInput
+            v-model:value="entry.key"
+            :placeholder="t('templates.headerNameKey')"
+          />
+          <NInput
+            v-model:value="entry.value"
+            :placeholder="t('templates.headerNameValue')"
+          />
+          <NButton
+            size="tiny"
+            quaternary
+            type="error"
+            @click="handleRemoveHeaderName(index)"
+          >
+            {{ t('templateEditor.remove') }}
+          </NButton>
+        </div>
+        <NButton size="tiny" dashed @click="handleAddHeaderName">
+          {{ t('templates.addHeaderName') }}
+        </NButton>
+      </div>
+
       <template #footer>
         <NSpace justify="end">
           <NButton @click="showCreateTemplateModal = false">{{ t('common.cancel') }}</NButton>
@@ -355,6 +590,58 @@ const carrierColumns = [
           </NButton>
         </NSpace>
       </template>
+    </NModal>
+
+    <!-- Template Test Modal -->
+    <NModal
+      v-model:show="showTestModal"
+      preset="card"
+      :title="t('templates.testTitle')"
+      class="templates-page__test-modal"
+    >
+      <NSpin :show="testLoading">
+        <div class="templates-page__test-file">
+          <NButton type="primary" size="small" @click="handlePickSampleFile">
+            {{ testFilePath ? t('templates.changeSample') : t('templates.uploadSample') }}
+          </NButton>
+          <span v-if="testFilePath" class="templates-page__test-path">{{ testFilePath }}</span>
+        </div>
+
+        <p v-if="testError" class="templates-page__test-error">
+          {{ t('templates.testFailed', { message: testError }) }}
+        </p>
+
+        <template v-if="testPreview">
+          <h5 class="templates-page__section-title">
+            {{ t('templates.previewRows', { n: testPreview.Rows.length }) }}
+          </h5>
+          <div v-if="!testPreview.Rows.length" class="templates-page__empty">
+            <EmptyState :title="t('templates.noRows')" size="sm" />
+          </div>
+          <div v-else class="templates-page__table">
+            <NDataTable
+              :columns="testPreviewColumns"
+              :data="testPreview.Rows"
+              :row-key="(row: Record<string, string>) => testPreview?.Rows.indexOf(row) ?? 0"
+              size="small"
+            />
+          </div>
+
+          <h5 class="templates-page__section-title">
+            {{ t('templates.previewIssues', { n: testPreview.Issues.length }) }}
+          </h5>
+          <div v-if="!testPreview.Issues.length" class="templates-page__test-hint">
+            {{ t('templates.noIssues') }}
+          </div>
+          <ul v-else class="templates-page__issue-list">
+            <li v-for="(issue, index) in testPreview.Issues" :key="index">
+              <span class="templates-page__issue-line">#{{ issue.LineNo }}</span>
+              <span class="templates-page__issue-key">{{ testColumnTitle(issue.Key) }}</span>
+              <span>{{ issue.Message }}</span>
+            </li>
+          </ul>
+        </template>
+      </NSpin>
     </NModal>
 
     <!-- Create Carrier Modal -->
@@ -417,5 +704,92 @@ const carrierColumns = [
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.templates-page__create-modal {
+  width: min(960px, 92vw);
+}
+
+.templates-page__create-modal :deep(.n-card__content) {
+  max-height: 68vh;
+  overflow-y: auto;
+}
+
+.templates-page__section-title {
+  margin: var(--space-5) 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.templates-page__header-names {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.templates-page__header-names-title {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.templates-page__header-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.templates-page__test-modal {
+  width: min(860px, 92vw);
+}
+
+.templates-page__test-file {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.templates-page__test-path {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  word-break: break-all;
+}
+
+.templates-page__test-error {
+  margin: 0 0 var(--space-2);
+  color: var(--status-error-fg);
+  font-size: var(--font-size-sm);
+}
+
+.templates-page__test-hint {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.templates-page__issue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.templates-page__issue-line {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  min-width: 48px;
+  display: inline-block;
+}
+
+.templates-page__issue-key {
+  color: var(--color-text-secondary);
+  margin-right: var(--space-2);
 }
 </style>
