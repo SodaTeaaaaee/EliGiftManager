@@ -8,6 +8,16 @@ describe('mapping preview contract', () => {
     expect(applyPreviewTransforms('"a b"', ['strip_quotes', 'trim'])).toBe('a b')
   })
 
+  test('strip_quotes mirrors the backend: leading apostrophe and CR/LF noise', () => {
+    // Spreadsheet text-forcing apostrophe without a closing quote.
+    expect(applyPreviewTransforms("'435167587794147", ['strip_quotes'])).toBe('435167587794147')
+    // Excel-style CR/LF noise inside identifier cells is dropped everywhere.
+    expect(applyPreviewTransforms('4351\r\n6758\r7794', ['strip_quotes'])).toBe('435167587794')
+    // Paired quotes strip first; the remaining leading apostrophe still peels.
+    expect(applyPreviewTransforms("''4351'", ['strip_quotes'])).toBe('4351')
+    expect(applyPreviewTransforms('"4351\r\n"', ['strip_quotes'])).toBe('4351')
+  })
+
   test('context-dependent transformers pass through the local preview', () => {
     expect(applyPreviewTransforms('2024/1/5', ['parseDate'])).toBe('2024/1/5')
     expect(applyPreviewTransforms('普通会员', ['mapEnum'])).toBe('普通会员')

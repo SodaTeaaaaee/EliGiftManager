@@ -111,6 +111,9 @@ export function applyPreviewTransforms(value: string, transforms: string[] | und
     if (transform === 'trim') {
       next = next.trim()
     } else if (transform === 'strip_quotes') {
+      // Mirrors the backend's transformStripQuotes: one layer of paired
+      // quotes, then a leading spreadsheet text-forcing apostrophe, then
+      // CR/LF noise dropped everywhere (identifiers never carry newlines).
       if (
         next.length >= 2 &&
         ((next.startsWith('"') && next.endsWith('"')) ||
@@ -118,6 +121,10 @@ export function applyPreviewTransforms(value: string, transforms: string[] | und
       ) {
         next = next.slice(1, -1)
       }
+      if (next.startsWith("'")) {
+        next = next.slice(1)
+      }
+      next = next.replaceAll('\r', '').replaceAll('\n', '')
     } else if (transform === 'joinAddress') {
       const parts = next.split(JOIN_ADDRESS_PART).map((p) => p.trim()).filter((p) => p !== '')
       next = parts.join('')

@@ -170,6 +170,42 @@ function handleTransformChange(destField: string, value: string[]): void {
   patch({ transforms })
 }
 
+/**
+ * Transforms run as an ordered chain on the backend, so the editor manages
+ * them as an ordered list: one chip per selected transform with move-up /
+ * move-down / remove, plus a single-select "append" picker fed by the
+ * not-yet-selected names (each name makes sense at most once per chain).
+ */
+function transformDisplayName(name: string): string {
+  const opt = transformOptions.value.find((o) => o.value === name)
+  return opt ? String(opt.label) : name
+}
+
+function remainingTransformOptions(destField: string): SelectOption[] {
+  const selected = new Set(transformValue(destField))
+  return transformOptions.value.filter((o) => !selected.has(String(o.value)))
+}
+
+function handleTransformAdd(destField: string, value: string | number | null): void {
+  if (value == null) return
+  handleTransformChange(destField, [...transformValue(destField), String(value)])
+}
+
+function handleTransformMove(destField: string, index: number, delta: -1 | 1): void {
+  const chain = [...transformValue(destField)]
+  const target = index + delta
+  if (target < 0 || target >= chain.length) return
+  ;[chain[index], chain[target]] = [chain[target], chain[index]]
+  handleTransformChange(destField, chain)
+}
+
+function handleTransformRemove(destField: string, index: number): void {
+  handleTransformChange(
+    destField,
+    transformValue(destField).filter((_, i) => i !== index),
+  )
+}
+
 function isRequired(destField: string): boolean {
   return (props.modelValue.required ?? []).includes(destField)
 }
@@ -409,16 +445,50 @@ const previewColumns = computed(() =>
             :disabled="readonly"
             @update:value="(value) => handleDefaultChange(field.key, value)"
           />
-          <NSelect
-            class="field-mapping-editor__transform-select"
-            :value="transformValue(field.key)"
-            :options="transformOptions"
-            :disabled="readonly"
-            multiple
-            clearable
-            :placeholder="t('templateEditor.transformsLabel')"
-            @update:value="(value) => handleTransformChange(field.key, value)"
-          />
+          <div
+            class="field-mapping-editor__transform-box"
+            :title="t('templateEditor.transformsLabel')"
+          >
+            <span
+              v-for="(name, index) in transformValue(field.key)"
+              :key="`${field.key}-${name}`"
+              class="field-mapping-editor__transform-chip"
+            >
+              <span class="field-mapping-editor__transform-name">
+                {{ transformDisplayName(name) }}
+              </span>
+              <span class="field-mapping-editor__transform-ops">
+                <button
+                  type="button"
+                  class="field-mapping-editor__chip-op"
+                  :disabled="readonly || index === 0"
+                  :aria-label="t('common.actions')"
+                  @click="handleTransformMove(field.key, index, -1)"
+                >↑</button>
+                <button
+                  type="button"
+                  class="field-mapping-editor__chip-op"
+                  :disabled="readonly || index === transformValue(field.key).length - 1"
+                  @click="handleTransformMove(field.key, index, 1)"
+                >↓</button>
+                <button
+                  type="button"
+                  class="field-mapping-editor__chip-op"
+                  :disabled="readonly"
+                  @click="handleTransformRemove(field.key, index)"
+                >×</button>
+              </span>
+            </span>
+            <NSelect
+              class="field-mapping-editor__transform-add"
+              :value="null"
+              :options="remainingTransformOptions(field.key)"
+              size="small"
+              :placeholder="t('templateEditor.transformAdd')"
+              :disabled="readonly"
+              @update:value="(value) => handleTransformAdd(field.key, value)"
+            />
+          </div>
           <label class="field-mapping-editor__flag-control">
             <NSwitch
               :value="isRequired(field.key)"
@@ -690,8 +760,58 @@ const previewColumns = computed(() =>
   min-width: 120px;
 }
 
-.field-mapping-editor__transform-select {
+.field-mapping-editor__transform-box {
   flex: 1.6 1 200px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-wrap: wrap;
+}
+
+.field-mapping-editor__transform-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-1);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: var(--card-bg, transparent);
+}
+
+.field-mapping-editor__transform-name {
+  white-space: nowrap;
+}
+
+.field-mapping-editor__transform-ops {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.field-mapping-editor__chip-op {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--color-text-muted);
+}
+
+.field-mapping-editor__chip-op:hover:not(:disabled) {
+  color: var(--color-text-primary);
+}
+
+.field-mapping-editor__chip-op:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.field-mapping-editor__transform-add {
+  flex: 1 1 120px;
+  min-width: 110px;
 }
 
 .field-mapping-editor__flag-control {
