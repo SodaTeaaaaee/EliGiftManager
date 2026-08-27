@@ -160,8 +160,13 @@ func formatDateLike(t time.Time) string {
 }
 
 // mapEnumTransformer builds a transformer that resolves values through the
-// config's EnumMaps table for the semantic key. Unknown values are errors so
-// silent passthrough cannot smuggle external vocabulary into internal enums.
+// config's EnumMaps table for the semantic key. A missing table or an
+// unmapped value is an error — but a per-row issue, not a parse failure: the
+// transform chain stops at the failure, the row keeps its raw pre-transform
+// value, and it still lands with its issue (ingest stores failed-transform
+// rows rather than dropping them) unless a Required key drops the row. The
+// flagged issue is what stops an unmapped external vocabulary from slipping
+// in silently.
 func mapEnumTransformer(cfg MappingConfig) Transformer {
 	return func(key, value string) (string, error) {
 		table, ok := cfg.EnumMaps[key]

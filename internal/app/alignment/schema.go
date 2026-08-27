@@ -34,7 +34,9 @@ const (
 //   - trim, strip_quotes, parseDate, mapEnum, normalizePhone are plain value
 //     transformers listed in Transforms chains.
 //   - mapEnum reads its mapping table from EnumMaps[semantic key]; a value
-//     missing from the table is an error, not a passthrough.
+//     missing from the table fails that key's transform chain for the row:
+//     the row keeps the raw value and carries a per-row issue instead of a
+//     silently rewritten one.
 //   - joinAddress merges several source columns: JoinSources feeds the
 //     raw parts joined with the \x1f unit separator and joinAddress splits,
 //     trims, drops empties, and concatenates them. Defining JoinSources for a
@@ -150,6 +152,12 @@ func (cfg *MappingConfig) normalize() error {
 	}
 	if cfg.Mode == ModeHeader && len(cfg.Columns) == 0 && len(cfg.Positions) == 0 && len(cfg.JoinSources) == 0 {
 		return fmt.Errorf("alignment: mapping config has no column mappings")
+	}
+	// Positional configs address columns by index, so Columns entries (a
+	// header-mode concept the parser ignores here) cannot stand in for an
+	// empty Positions map.
+	if cfg.Mode == ModePositional && len(cfg.Positions) == 0 && len(cfg.JoinSources) == 0 {
+		return fmt.Errorf("alignment: mapping config has no positions mappings")
 	}
 	for key, chain := range cfg.Transforms {
 		for _, name := range chain {

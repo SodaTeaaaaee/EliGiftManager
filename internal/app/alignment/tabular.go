@@ -63,6 +63,10 @@ func ReadRows(data []byte, format, sheetName string) ([][]string, error) {
 	}
 }
 
+// readCSV decodes UTF-8 CSV only; a leading UTF-8 BOM is tolerated and
+// stripped. Known limitation: files in other encodings (GBK, BIG5, ...) are
+// not transcoded and must be re-saved as UTF-8 before import, otherwise the
+// bytes garble into invalid header and value text.
 func readCSV(data []byte) ([][]string, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	r := csv.NewReader(bytes.NewReader(data))

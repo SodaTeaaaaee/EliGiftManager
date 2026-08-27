@@ -58,6 +58,15 @@ func TestParseMappingConfigErrors(t *testing.T) {
 	if _, err := ParseMappingConfig(`{"version":3,"mode":"header"}`); err == nil {
 		t.Fatal("header mode without any column mapping must error")
 	}
+	if _, err := ParseMappingConfig(`{"version":3,"mode":"positional"}`); err == nil {
+		t.Fatal("positional mode without positions must error")
+	}
+	if _, err := ParseMappingConfig(`{"version":3,"mode":"positional","columns":{"quantity":"数量"}}`); err == nil {
+		t.Fatal("positional mode with only header-style columns must error: columns are ignored without a header row")
+	}
+	if _, err := ParseMappingConfig(`{"version":3,"mode":"positional","joinSources":{"recipient.address_line1":["0","1"]}}`); err != nil {
+		t.Fatalf("positional mode with join sources is a valid mapping: %v", err)
+	}
 }
 
 func TestParseMappingConfig_ModeNormalizesHasHeader(t *testing.T) {
