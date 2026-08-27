@@ -50,6 +50,8 @@ interface HomeBucketCard {
   caption: string
   tone: StatusTone
   to: string
+  /** Extra warning line rendered in the card footer (empty = none). */
+  warning: string
 }
 
 const bucketCards = computed<HomeBucketCard[]>(() => [
@@ -60,6 +62,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     caption: t('home.buckets.unassignedDesc'),
     tone: buckets.value.Unassigned > 0 ? 'warning' : 'neutral',
     to: '/inbox',
+    warning: '',
   },
   {
     key: 'duplicateAsk',
@@ -68,6 +71,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     caption: t('home.buckets.duplicateAskDesc'),
     tone: buckets.value.DuplicateAsk > 0 ? 'warning' : 'neutral',
     to: '/inbox',
+    warning: '',
   },
   {
     key: 'alignmentConflict',
@@ -76,6 +80,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     caption: t('home.buckets.alignmentConflictDesc'),
     tone: buckets.value.AlignmentConflict > 0 ? 'error' : 'neutral',
     to: '/inbox',
+    warning: '',
   },
   {
     key: 'identityUnattached',
@@ -84,6 +89,29 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     caption: t('home.buckets.identityUnattachedDesc'),
     tone: buckets.value.IdentityUnattached > 0 ? 'error' : 'neutral',
     to: '/inbox',
+    warning: '',
+  },
+  {
+    key: 'pendingRevisions',
+    label: t('home.buckets.pendingRevisions'),
+    value: String(buckets.value.PendingRevisions),
+    caption:
+      buckets.value.RevisionFrozenConflicts > 0
+        ? t('home.buckets.revisionFrozenConflictDesc')
+        : t('home.buckets.pendingRevisionsDesc'),
+    tone:
+      buckets.value.PendingRevisions === 0
+        ? 'neutral'
+        : buckets.value.RevisionFrozenConflicts > 0
+          ? 'error'
+          : 'warning',
+    to: '/inbox',
+    warning:
+      buckets.value.RevisionFrozenConflicts > 0
+        ? t('home.buckets.revisionFrozenConflict', {
+            n: buckets.value.RevisionFrozenConflicts,
+          })
+        : '',
   },
   {
     key: 'blockedResults',
@@ -92,6 +120,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     caption: t('home.buckets.blockedResultsDesc'),
     tone: buckets.value.BlockedResults > 0 ? 'error' : 'neutral',
     to: '/waves',
+    warning: '',
   },
   {
     key: 'writebackFailed',
@@ -100,6 +129,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     caption: t('home.buckets.writebackFailedDesc'),
     tone: buckets.value.WritebackFailed > 0 ? 'error' : 'neutral',
     to: '/waves',
+    warning: '',
   },
   {
     key: 'residualClose',
@@ -108,6 +138,7 @@ const bucketCards = computed<HomeBucketCard[]>(() => [
     caption: t('home.buckets.residualCloseDesc'),
     tone: buckets.value.ResidualClose > 0 ? 'info' : 'neutral',
     to: '/waves',
+    warning: '',
   },
 ])
 
@@ -186,7 +217,16 @@ const waveColumns = [
           :tone="b.tone"
           :clickable="true"
           @click="navigateTo(b.to)"
-        />
+        >
+          <template v-if="b.warning" #footer>
+            <span
+              class="home-page__bucket-warning"
+              :title="t('home.buckets.revisionFrozenConflictHint')"
+            >
+              {{ b.warning }}
+            </span>
+          </template>
+        </StatCard>
       </div>
 
       <SectionCard :title="t('home.recentWaves')">
@@ -226,5 +266,10 @@ const waveColumns = [
 
 .home-page__table {
   width: 100%;
+}
+
+.home-page__bucket-warning {
+  color: var(--status-error-fg);
+  font-weight: var(--font-weight-medium);
 }
 </style>

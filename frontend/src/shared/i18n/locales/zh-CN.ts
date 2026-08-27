@@ -218,6 +218,12 @@ export const zhCN = {
       alignmentConflictDesc: '未能对齐到统一商品事实的输入行',
       identityUnattached: '身份未挂靠',
       identityUnattachedDesc: '平台身份未绑定至客户档案',
+      pendingRevisions: '待处理修订',
+      pendingRevisionsDesc: '等待应用或忽略的修订事实',
+      revisionFrozenConflict: '冻结冲突 {n} 项',
+      revisionFrozenConflictDesc: '存在已进厂订单的修订，需人工复核',
+      revisionFrozenConflictHint:
+        '部分修订覆盖的行已有冻结（进厂）履约结果：应用修订不会改写执行历史，请人工核对工厂侧安排。',
       blockedResults: '阻塞的履约结果',
       blockedResultsDesc: '存在阻塞原因无法进入工厂订单',
       writebackFailed: '回写失败',

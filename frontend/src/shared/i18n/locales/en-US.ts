@@ -220,6 +220,12 @@ export const enUS: AppMessageSchema = {
       alignmentConflictDesc: 'Input lines unaligned with product catalog',
       identityUnattached: 'Unattached Identities',
       identityUnattachedDesc: 'Platform identities not attached to customer profile',
+      pendingRevisions: 'Pending Revisions',
+      pendingRevisionsDesc: 'Revision facts awaiting apply or dismiss',
+      revisionFrozenConflict: '{n} frozen conflict(s)',
+      revisionFrozenConflictDesc: 'Revisions covering lines already in a factory order',
+      revisionFrozenConflictHint:
+        'Some revisions cover lines with frozen (factory) results: applying them does not rewrite execution history — review factory-side arrangements manually.',
       blockedResults: 'Blocked Results',
       blockedResultsDesc: 'Fulfillment results blocked by missing info',
       writebackFailed: 'Writeback Failed',
