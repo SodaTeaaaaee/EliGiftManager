@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/alignment"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
@@ -96,6 +97,18 @@ func (c *WorkspaceController) CreateCarrierMapping(m domain.CarrierMapping) (*do
 
 func (c *WorkspaceController) ListCarrierMappings(platformID uint) ([]domain.CarrierMapping, error) {
 	return c.ws.ListCarrierMappings(c.ctx(), platformID)
+}
+
+func (c *WorkspaceController) UpdateAlias(aliasID, productItemID uint) error {
+	return c.ws.UpdateAlias(c.ctx(), aliasID, productItemID)
+}
+
+func (c *WorkspaceController) ImportFile(platformID, templateID uint, filePath string) (*app.ImportFileResult, error) {
+	return c.ws.ImportFile(c.ctx(), platformID, templateID, filePath)
+}
+
+func (c *WorkspaceController) PreviewTemplate(templateID uint, filePath string, limit int) (alignment.TemplatePreview, error) {
+	return c.ws.PreviewTemplate(c.ctx(), templateID, filePath, limit)
 }
 
 func (c *WorkspaceController) GetSettings() (*domain.AppSettings, error) {
@@ -205,6 +218,14 @@ func (c *WorkspaceController) ListSupplierOrderLines(orderID uint) ([]domain.Sup
 
 func (c *WorkspaceController) ImportShipment(trackingID, trackingNo, carrierCode, carrierName string, qty int) (*domain.Shipment, error) {
 	return c.ws.ImportShipment(c.ctx(), trackingID, trackingNo, carrierCode, carrierName, qty)
+}
+
+func (c *WorkspaceController) ImportShipmentFile(platformID uint, filePath string) (*app.ImportShipmentFileResult, error) {
+	return c.ws.ImportShipmentFile(c.ctx(), platformID, filePath)
+}
+
+func (c *WorkspaceController) ExportFactoryOrderFile(orderID uint) (*app.ExportFileResult, error) {
+	return c.ws.ExportFactoryOrderFile(c.ctx(), orderID)
 }
 
 func (c *WorkspaceController) GenerateWritebacks(factID uint) ([]domain.ChannelWritebackItem, error) {

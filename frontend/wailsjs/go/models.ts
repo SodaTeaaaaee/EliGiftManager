@@ -1,5 +1,92 @@
+export namespace alignment {
+	
+	export class ParseIssue {
+	    LineNo: number;
+	    Key: string;
+	    Message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ParseIssue(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.LineNo = source["LineNo"];
+	        this.Key = source["Key"];
+	        this.Message = source["Message"];
+	    }
+	}
+	export class TemplatePreview {
+	    Rows: any[];
+	    Issues: ParseIssue[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TemplatePreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Rows = source["Rows"];
+	        this.Issues = this.convertValues(source["Issues"], ParseIssue);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace app {
 	
+	export class ExportFileResult {
+	    Order: domain.SupplierOrder;
+	    Path: string;
+	    Rows: any[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ExportFileResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Order = this.convertValues(source["Order"], domain.SupplierOrder);
+	        this.Path = source["Path"];
+	        this.Rows = source["Rows"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class GenerateFactoryOrderResult {
 	    Order: domain.SupplierOrder;
 	    Lines: domain.SupplierOrderLine[];
@@ -56,6 +143,96 @@ export namespace app {
 	        this.WritebackFailed = source["WritebackFailed"];
 	        this.ResidualClose = source["ResidualClose"];
 	        this.RecentWaves = this.convertValues(source["RecentWaves"], domain.Wave);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportFileResult {
+	    Document: domain.InputDocument;
+	    FactsCreated: number;
+	    LinesCreated: number;
+	    Duplicates: domain.DuplicateObservation[];
+	    Issues: alignment.ParseIssue[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportFileResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Document = this.convertValues(source["Document"], domain.InputDocument);
+	        this.FactsCreated = source["FactsCreated"];
+	        this.LinesCreated = source["LinesCreated"];
+	        this.Duplicates = this.convertValues(source["Duplicates"], domain.DuplicateObservation);
+	        this.Issues = this.convertValues(source["Issues"], alignment.ParseIssue);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SkippedShipment {
+	    LineNo: number;
+	    TrackingID: string;
+	    Reason: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SkippedShipment(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.LineNo = source["LineNo"];
+	        this.TrackingID = source["TrackingID"];
+	        this.Reason = source["Reason"];
+	    }
+	}
+	export class ImportShipmentFileResult {
+	    Imported: number;
+	    Skipped: SkippedShipment[];
+	    Shipments: domain.Shipment[];
+	    Issues: alignment.ParseIssue[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportShipmentFileResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Imported = source["Imported"];
+	        this.Skipped = this.convertValues(source["Skipped"], SkippedShipment);
+	        this.Shipments = this.convertValues(source["Shipments"], domain.Shipment);
+	        this.Issues = this.convertValues(source["Issues"], alignment.ParseIssue);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -178,6 +355,7 @@ export namespace app {
 	    // Go type: time
 	    SourceCreatedAt?: any;
 	    CustomerProfileID?: number;
+	    ExtraData: string;
 	    Lines: IngestLine[];
 	
 	    static createFrom(source: any = {}) {
@@ -194,6 +372,7 @@ export namespace app {
 	        this.SourceDocumentNo = source["SourceDocumentNo"];
 	        this.SourceCreatedAt = this.convertValues(source["SourceCreatedAt"], null);
 	        this.CustomerProfileID = source["CustomerProfileID"];
+	        this.ExtraData = source["ExtraData"];
 	        this.Lines = this.convertValues(source["Lines"], IngestLine);
 	    }
 	
@@ -401,6 +580,8 @@ export namespace domain {
 	    TrackingNo: string;
 	    CarrierCode: string;
 	    Status: string;
+	    TemplateID: number;
+	    TemplateVersion: number;
 	    ErrorMessage: string;
 	    Payload: string;
 	    // Go type: time
@@ -420,6 +601,8 @@ export namespace domain {
 	        this.TrackingNo = source["TrackingNo"];
 	        this.CarrierCode = source["CarrierCode"];
 	        this.Status = source["Status"];
+	        this.TemplateID = source["TemplateID"];
+	        this.TemplateVersion = source["TemplateVersion"];
 	        this.ErrorMessage = source["ErrorMessage"];
 	        this.Payload = source["Payload"];
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
@@ -611,6 +794,7 @@ export namespace domain {
 	    Quantity: number;
 	    Address: AddressSnapshot;
 	    Frozen: boolean;
+	    AddressPinned: boolean;
 	    ExtraData: string;
 	    // Go type: time
 	    CreatedAt: any;
@@ -634,6 +818,7 @@ export namespace domain {
 	        this.Quantity = source["Quantity"];
 	        this.Address = this.convertValues(source["Address"], AddressSnapshot);
 	        this.Frozen = source["Frozen"];
+	        this.AddressPinned = source["AddressPinned"];
 	        this.ExtraData = source["ExtraData"];
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
 	        this.UpdatedAt = this.convertValues(source["UpdatedAt"], null);
@@ -1081,6 +1266,8 @@ export namespace domain {
 	    WaveID: number;
 	    FactoryPlatformID: number;
 	    Status: string;
+	    TemplateID: number;
+	    TemplateVersion: number;
 	    // Go type: time
 	    ExportedAt?: any;
 	    // Go type: time
@@ -1102,6 +1289,8 @@ export namespace domain {
 	        this.WaveID = source["WaveID"];
 	        this.FactoryPlatformID = source["FactoryPlatformID"];
 	        this.Status = source["Status"];
+	        this.TemplateID = source["TemplateID"];
+	        this.TemplateVersion = source["TemplateVersion"];
 	        this.ExportedAt = this.convertValues(source["ExportedAt"], null);
 	        this.VoidedAt = this.convertValues(source["VoidedAt"], null);
 	        this.ExportPayload = source["ExportPayload"];

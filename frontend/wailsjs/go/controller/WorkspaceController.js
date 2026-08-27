@@ -54,6 +54,10 @@ export function ExportFactoryOrder(arg1) {
   return window['go']['controller']['WorkspaceController']['ExportFactoryOrder'](arg1);
 }
 
+export function ExportFactoryOrderFile(arg1) {
+  return window['go']['controller']['WorkspaceController']['ExportFactoryOrderFile'](arg1);
+}
+
 export function GenerateFactoryOrder(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['GenerateFactoryOrder'](arg1, arg2);
 }
@@ -78,8 +82,16 @@ export function Home() {
   return window['go']['controller']['WorkspaceController']['Home']();
 }
 
+export function ImportFile(arg1, arg2, arg3) {
+  return window['go']['controller']['WorkspaceController']['ImportFile'](arg1, arg2, arg3);
+}
+
 export function ImportShipment(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['controller']['WorkspaceController']['ImportShipment'](arg1, arg2, arg3, arg4, arg5);
+}
+
+export function ImportShipmentFile(arg1, arg2) {
+  return window['go']['controller']['WorkspaceController']['ImportShipmentFile'](arg1, arg2);
 }
 
 export function IngestDocument(arg1, arg2) {
@@ -142,6 +154,10 @@ export function NamedTransformers() {
   return window['go']['controller']['WorkspaceController']['NamedTransformers']();
 }
 
+export function PreviewTemplate(arg1, arg2, arg3) {
+  return window['go']['controller']['WorkspaceController']['PreviewTemplate'](arg1, arg2, arg3);
+}
+
 export function ProductTotals(arg1) {
   return window['go']['controller']['WorkspaceController']['ProductTotals'](arg1);
 }
@@ -160,6 +176,10 @@ export function SemanticDictionary() {
 
 export function SetResultAddress(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['SetResultAddress'](arg1, arg2);
+}
+
+export function UpdateAlias(arg1, arg2) {
+  return window['go']['controller']['WorkspaceController']['UpdateAlias'](arg1, arg2);
 }
 
 export function UpsertRule(arg1) {
