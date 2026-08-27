@@ -2,6 +2,7 @@ package infra
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -595,11 +596,17 @@ func (s *GormStore) UpdateWave(ctx context.Context, w *domain.Wave) error {
 }
 
 func (s *GormStore) NextWaveNo(ctx context.Context) (string, error) {
-	var count int64
-	if err := s.db.WithContext(ctx).Model(&persistence.Wave{}).Count(&count).Error; err != nil {
+	// Derive from the highest numeric suffix instead of COUNT(*)+1 so deleted
+	// waves never lead to re-issued (colliding) wave numbers.
+	var maxNo sql.NullInt64
+	if err := s.db.WithContext(ctx).Raw("SELECT MAX(CAST(SUBSTR(wave_no, 3) AS INTEGER)) FROM waves").Scan(&maxNo).Error; err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("W-%06d", count+1), nil
+	next := int64(1)
+	if maxNo.Valid && maxNo.Int64 >= next {
+		next = maxNo.Int64 + 1
+	}
+	return fmt.Sprintf("W-%06d", next), nil
 }
 
 func (s *GormStore) CreateRule(ctx context.Context, r *domain.EntitlementRule) error {
