@@ -15,6 +15,27 @@ type GenerateFactoryOrderResult struct {
 }
 
 func (ws *Workspace) GenerateFactoryOrder(ctx context.Context, waveID, factoryID uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
+	var (
+		order *domain.SupplierOrder
+		lines []domain.SupplierOrderLine
+	)
+	if err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		o, l, err := ws.withStore(tx).generateFactoryOrder(ctx, waveID, factoryID)
+		if err != nil {
+			return err
+		}
+		order, lines = o, l
+		return nil
+	}); err != nil {
+		return nil, nil, err
+	}
+	return order, lines, nil
+}
+
+// generateFactoryOrder creates the supplier order, its lines, the execution
+// links, and freezes the covered results. It must run on a workspace bound to
+// the surrounding transaction so every write commits or rolls back together.
+func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID uint) (*domain.SupplierOrder, []domain.SupplierOrderLine, error) {
 	if _, err := ws.Store.FindOpenSupplierOrder(ctx, waveID, factoryID); err == nil {
 		return nil, nil, ErrOrderAlreadyOpen
 	} else if err != domain.ErrNotFound {
@@ -117,6 +138,15 @@ func (ws *Workspace) ExportFactoryOrder(ctx context.Context, orderID uint) (*dom
 }
 
 func (ws *Workspace) VoidFactoryOrder(ctx context.Context, orderID uint) error {
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		return ws.withStore(tx).voidFactoryOrder(ctx, orderID)
+	})
+}
+
+// voidFactoryOrder unfreezes the linked results, retires tracking IDs, drops
+// the links, and marks the order voided. It must run on a workspace bound to
+// the surrounding transaction so every write commits or rolls back together.
+func (ws *Workspace) voidFactoryOrder(ctx context.Context, orderID uint) error {
 	order, err := ws.Store.GetSupplierOrder(ctx, orderID)
 	if err != nil {
 		return err

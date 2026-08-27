@@ -22,6 +22,14 @@ func NewWorkspace(store domain.Store) *Workspace {
 	}
 }
 
+// withStore returns a shallow copy of the workspace bound to another store
+// (typically a transaction). The store pool is limited to a single connection,
+// so inside a WithTx callback every read and write must go through the
+// transaction-backed workspace, never through the outer one.
+func (ws *Workspace) withStore(s domain.Store) *Workspace {
+	return &Workspace{Store: s, Now: ws.Now, NewTrackingID: ws.NewTrackingID}
+}
+
 func RandomTrackingID() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {

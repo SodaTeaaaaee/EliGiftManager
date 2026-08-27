@@ -69,23 +69,25 @@ func (ws *Workspace) UpsertRule(ctx context.Context, rule *domain.EntitlementRul
 	if err := validateSelector(rule.Selector); err != nil {
 		return err
 	}
-	wave, err := ws.Store.GetWave(ctx, rule.WaveID)
-	if err != nil {
-		return err
-	}
-	if wave.CloseResult != string(domain.WaveCloseResultOpen) {
-		return ErrWaveClosed
-	}
-	if rule.ID == 0 {
-		if err := ws.Store.CreateRule(ctx, rule); err != nil {
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		wave, err := tx.GetWave(ctx, rule.WaveID)
+		if err != nil {
 			return err
 		}
-	} else {
-		if err := ws.Store.UpdateRule(ctx, rule); err != nil {
-			return err
+		if wave.CloseResult != string(domain.WaveCloseResultOpen) {
+			return ErrWaveClosed
 		}
-	}
-	return ws.RecomputeEntitlements(ctx, rule.WaveID)
+		if rule.ID == 0 {
+			if err := tx.CreateRule(ctx, rule); err != nil {
+				return err
+			}
+		} else {
+			if err := tx.UpdateRule(ctx, rule); err != nil {
+				return err
+			}
+		}
+		return ws.withStore(tx).recompute(ctx, tx, rule.WaveID)
+	})
 }
 
 func (ws *Workspace) DeleteRule(ctx context.Context, id uint) error {
@@ -93,51 +95,63 @@ func (ws *Workspace) DeleteRule(ctx context.Context, id uint) error {
 	if err != nil {
 		return err
 	}
-	if err := ws.Store.DeleteRule(ctx, id); err != nil {
-		return err
-	}
-	return ws.RecomputeEntitlements(ctx, rule.WaveID)
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		if err := tx.DeleteRule(ctx, id); err != nil {
+			return err
+		}
+		return ws.withStore(tx).recompute(ctx, tx, rule.WaveID)
+	})
 }
 
 func (ws *Workspace) AddException(ctx context.Context, e *domain.EntitlementException) error {
 	if e.InstanceID == 0 {
 		return fmt.Errorf("exception must name an entitlement instance")
 	}
-	if err := ws.Store.CreateException(ctx, e); err != nil {
-		return err
-	}
-	return ws.RecomputeEntitlements(ctx, e.WaveID)
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		if err := tx.CreateException(ctx, e); err != nil {
+			return err
+		}
+		return ws.withStore(tx).recompute(ctx, tx, e.WaveID)
+	})
 }
 
 func (ws *Workspace) CreateGrant(ctx context.Context, waveID, customerID, productID uint, qty int) (*domain.FulfillmentResult, error) {
-	wave, err := ws.Store.GetWave(ctx, waveID)
-	if err != nil {
-		return nil, err
-	}
-	if wave.CloseResult != string(domain.WaveCloseResultOpen) {
-		return nil, ErrWaveClosed
-	}
-	fact := &domain.InputFact{Kind: string(domain.InputFactKindOperatorGrant), CustomerProfileID: &customerID}
-	if err := ws.Store.CreateFact(ctx, fact); err != nil {
-		return nil, err
-	}
-	line := &domain.InputFactLine{FactID: fact.ID, SourceLineNo: 1, ProductItemID: &productID, Quantity: qty, WaveID: &waveID}
-	if err := ws.Store.CreateFactLine(ctx, line); err != nil {
-		return nil, err
-	}
-	if err := ws.ensureGrantResult(ctx, waveID, fact, line); err != nil {
-		return nil, err
-	}
-	results, err := ws.Store.ListResults(ctx, waveID)
-	if err != nil {
-		return nil, err
-	}
-	for i := range results {
-		if results[i].InputFactLineID != nil && *results[i].InputFactLineID == line.ID {
-			return &results[i], nil
+	var grant *domain.FulfillmentResult
+	err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		wave, err := tx.GetWave(ctx, waveID)
+		if err != nil {
+			return err
 		}
+		if wave.CloseResult != string(domain.WaveCloseResultOpen) {
+			return ErrWaveClosed
+		}
+		fact := &domain.InputFact{Kind: string(domain.InputFactKindOperatorGrant), CustomerProfileID: &customerID}
+		if err := tx.CreateFact(ctx, fact); err != nil {
+			return err
+		}
+		line := &domain.InputFactLine{FactID: fact.ID, SourceLineNo: 1, ProductItemID: &productID, Quantity: qty, WaveID: &waveID}
+		if err := tx.CreateFactLine(ctx, line); err != nil {
+			return err
+		}
+		if err := ws.withStore(tx).ensureGrantResult(ctx, waveID, fact, line); err != nil {
+			return err
+		}
+		results, err := tx.ListResults(ctx, waveID)
+		if err != nil {
+			return err
+		}
+		for i := range results {
+			if results[i].InputFactLineID != nil && *results[i].InputFactLineID == line.ID {
+				grant = &results[i]
+				return nil
+			}
+		}
+		return fmt.Errorf("grant result not created")
+	})
+	if err != nil {
+		return nil, err
 	}
-	return nil, fmt.Errorf("grant result not created")
+	return grant, nil
 }
 
 func validateSelector(sel domain.EntitlementSelector) error {
@@ -160,24 +174,34 @@ func validateSelector(sel domain.EntitlementSelector) error {
 }
 
 func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) error {
-	old, err := ws.Store.ListUnfrozenEntitlementResults(ctx, waveID)
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		return ws.withStore(tx).recompute(ctx, tx, waveID)
+	})
+}
+
+// recompute deletes and rebuilds the unfrozen entitlement results of a wave.
+// It must be invoked on a workspace bound to `store` (see withStore) so every
+// statement shares the caller's transaction; public entry points wrap it in
+// their own WithTx instead of nesting RecomputeEntitlements.
+func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID uint) error {
+	old, err := store.ListUnfrozenEntitlementResults(ctx, waveID)
 	if err != nil {
 		return err
 	}
 	for _, r := range old {
-		if err := ws.Store.DeleteResult(ctx, r.ID); err != nil {
+		if err := store.DeleteResult(ctx, r.ID); err != nil {
 			return err
 		}
 	}
-	instances, err := ws.Store.ListInstances(ctx, waveID)
+	instances, err := store.ListInstances(ctx, waveID)
 	if err != nil {
 		return err
 	}
-	rules, err := ws.Store.ListRules(ctx, waveID)
+	rules, err := store.ListRules(ctx, waveID)
 	if err != nil {
 		return err
 	}
-	exceptions, err := ws.Store.ListExceptions(ctx, waveID)
+	exceptions, err := store.ListExceptions(ctx, waveID)
 	if err != nil {
 		return err
 	}
@@ -187,7 +211,7 @@ func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) err
 	}
 	qty := map[key]int{}
 	cust := map[uint]*uint{}
-	existing, err := ws.Store.ListResults(ctx, waveID)
+	existing, err := store.ListResults(ctx, waveID)
 	if err != nil {
 		return err
 	}
@@ -201,7 +225,7 @@ func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) err
 	for _, inst := range instances {
 		customerID := inst.CustomerProfileID
 		if customerID == nil && inst.PlatformIdentityID != nil {
-			if ident, err := ws.Store.GetIdentity(ctx, *inst.PlatformIdentityID); err == nil && ident.CustomerProfileID != nil {
+			if ident, err := store.GetIdentity(ctx, *inst.PlatformIdentityID); err == nil && ident.CustomerProfileID != nil {
 				customerID = ident.CustomerProfileID
 			}
 		}
@@ -248,9 +272,9 @@ func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) err
 			Quantity:              n,
 			Address:               addr,
 		}
-		if inst, err := ws.Store.GetInstance(ctx, instID); err == nil {
-			if line, err := ws.Store.GetFactLine(ctx, inst.InputFactLineID); err == nil {
-				fact, ferr := ws.Store.GetFact(ctx, line.FactID)
+		if inst, err := store.GetInstance(ctx, instID); err == nil {
+			if line, err := store.GetFactLine(ctx, inst.InputFactLineID); err == nil {
+				fact, ferr := store.GetFact(ctx, line.FactID)
 				if ferr == nil {
 					fid := fact.ID
 					res.InputFactID = &fid
@@ -259,7 +283,7 @@ func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) err
 				}
 			}
 		}
-		if err := ws.Store.CreateResult(ctx, res); err != nil {
+		if err := store.CreateResult(ctx, res); err != nil {
 			return err
 		}
 	}

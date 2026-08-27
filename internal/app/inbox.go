@@ -200,6 +200,19 @@ func (ws *Workspace) AttachIdentity(ctx context.Context, identityID, customerID 
 }
 
 func (ws *Workspace) AssignLines(ctx context.Context, waveID uint, lineIDs []uint) error {
+	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		tws := ws.withStore(tx)
+		if err := tws.assignLines(ctx, waveID, lineIDs); err != nil {
+			return err
+		}
+		return tws.recompute(ctx, tx, waveID)
+	})
+}
+
+// assignLines assigns fact lines into a wave and creates the matching
+// instances and source results. It must run on a workspace bound to the
+// surrounding transaction; the caller recompute runs in the same transaction.
+func (ws *Workspace) assignLines(ctx context.Context, waveID uint, lineIDs []uint) error {
 	wave, err := ws.Store.GetWave(ctx, waveID)
 	if err != nil {
 		return err
@@ -251,7 +264,7 @@ func (ws *Workspace) AssignLines(ctx context.Context, waveID uint, lineIDs []uin
 			}
 		}
 	}
-	return ws.RecomputeEntitlements(ctx, waveID)
+	return nil
 }
 
 func (ws *Workspace) ensureRetailResult(ctx context.Context, waveID uint, fact *domain.InputFact, line *domain.InputFactLine) error {
