@@ -49,6 +49,7 @@ import type {
   SupplierOrderLine,
   Wave,
 } from '@/entities/models'
+import { fulfillmentSourceKindValues, workStateValues } from '@/shared/api/generated/enums'
 
 const props = defineProps<{
   waveId: number
@@ -67,6 +68,132 @@ const platforms = ref<Platform[]>([])
 const supplierOrders = ref<SupplierOrder[]>([])
 
 const filterProduct = ref<string>('all')
+
+// ── Grouping (view-only; grouping never changes the leaf facts) ──
+
+type GroupDimension = 'workState' | 'none' | 'customer' | 'product' | 'source' | 'factory'
+
+const groupBy = ref<GroupDimension>('workState')
+
+const groupOptions = computed(() => [
+  { label: t('waveWorkspace.groupWorkState'), value: 'workState' },
+  { label: t('waveWorkspace.groupNone'), value: 'none' },
+  { label: t('waveWorkspace.groupCustomer'), value: 'customer' },
+  { label: t('waveWorkspace.groupProduct'), value: 'product' },
+  { label: t('waveWorkspace.groupSource'), value: 'source' },
+  { label: t('waveWorkspace.groupFactory'), value: 'factory' },
+])
+
+interface ResultGroup {
+  key: string
+  title: string
+  /** Optional glossary badge rendered instead of the plain title. */
+  badge?: { dimension: 'workState' | 'fulfillmentSourceKind'; value: string }
+  rows: ResultView[]
+  qty: number
+  order: number
+}
+
+function productLabel(productId: number | null | undefined): string {
+  if (productId == null) return t('waveWorkspace.groupNoProduct')
+  const prod = products.value.find((p) => p.ID === productId)
+  return prod ? `${prod.Name} (${prod.FactorySKU})` : `#${productId}`
+}
+
+/** Factory dimension: committed results group under their product's factory
+ * platform; everything not yet in a factory order falls into one bucket. */
+function factoryGroupKey(row: ResultView): { key: string; title: string; order: number } {
+  if (row.InFactory && row.Result.ProductItemID != null) {
+    const prod = products.value.find((p) => p.ID === row.Result.ProductItemID)
+    const factory = prod ? platforms.value.find((p) => p.ID === prod.FactoryPlatformID) : undefined
+    if (factory) {
+      return { key: `factory-${factory.ID}`, title: factory.Name, order: 1 }
+    }
+  }
+  return { key: 'factory-none', title: t('waveWorkspace.notInFactory'), order: 0 }
+}
+
+const groupedResults = computed<ResultGroup[]>(() => {
+  if (groupBy.value === 'none') return []
+  const groups = new Map<string, ResultGroup>()
+  for (const row of filteredResults.value) {
+    let key = ''
+    let title = ''
+    let badge: ResultGroup['badge'] = undefined
+    let order = 0
+    switch (groupBy.value) {
+      case 'workState': {
+        const state = row.WorkState || 'ready'
+        key = `state-${state}`
+        badge = { dimension: 'workState', value: state }
+        order = workStateValues.indexOf(state as (typeof workStateValues)[number])
+        break
+      }
+      case 'customer': {
+        const custId = row.Result.CustomerProfileID
+        key = custId == null ? 'customer-none' : `customer-${custId}`
+        title =
+          custId == null
+            ? t('waveWorkspace.groupNoCustomer')
+            : customers.value.find((c) => c.ID === custId)?.DisplayName ?? `#${custId}`
+        order = 1
+        break
+      }
+      case 'product': {
+        const pid = row.Result.ProductItemID
+        key = pid == null ? 'product-none' : `product-${pid}`
+        title = productLabel(pid)
+        order = 1
+        break
+      }
+      case 'source': {
+        const kind = row.Result.SourceKind || 'entitlement_instance'
+        key = `source-${kind}`
+        badge = { dimension: 'fulfillmentSourceKind', value: kind }
+        order = fulfillmentSourceKindValues.indexOf(
+          kind as (typeof fulfillmentSourceKindValues)[number],
+        )
+        break
+      }
+      case 'factory': {
+        const g = factoryGroupKey(row)
+        key = g.key
+        title = g.title
+        order = g.order
+        break
+      }
+    }
+    let group = groups.get(key)
+    if (!group) {
+      group = { key, title, badge, rows: [], qty: 0, order }
+      groups.set(key, group)
+    }
+    group.rows.push(row)
+    group.qty += row.Result.Quantity
+  }
+  const list = [...groups.values()].filter((g) => g.rows.length > 0)
+  list.sort((a, b) => {
+    if (a.order !== b.order) return a.order - b.order
+    return a.title.localeCompare(b.title, undefined, { numeric: true })
+  })
+  return list
+})
+
+// ── Row selection (shared across grouped tables) ──
+
+const selectedResultKeys = ref<number[]>([])
+
+function groupCheckedKeys(group: ResultGroup): number[] {
+  const ids = new Set(group.rows.map((r) => r.Result.ID))
+  return selectedResultKeys.value.filter((id) => ids.has(id))
+}
+
+function handleGroupChecked(group: ResultGroup, keys: Array<number | string>): void {
+  const ids = new Set(group.rows.map((r) => r.Result.ID))
+  const kept = selectedResultKeys.value.filter((id) => !ids.has(id))
+  const incoming = keys.filter((k): k is number => typeof k === 'number')
+  selectedResultKeys.value = [...kept, ...incoming]
+}
 
 const showAddressModal = ref(false)
 const targetResultId = ref<number | null>(null)
@@ -199,6 +326,7 @@ async function handleGenerateFactoryOrder() {
   try {
     await generateFactoryOrder(props.waveId, selectedFactoryId.value)
     showFactoryOrderModal.value = false
+    selectedResultKeys.value = []
     await loadData()
   } catch (err) {
     console.error('Failed to generate factory order:', err)
@@ -324,6 +452,14 @@ async function handleGenerateWritebacks() {
 
 const columns = [
   {
+    type: 'selection' as const,
+    // Frozen results are already committed to a factory order and can never
+    // re-enter submission, so partial selection skips them.
+    disabled(row: ResultView) {
+      return row.Result.Frozen
+    },
+  },
+  {
     title: '#',
     key: 'ID',
     width: 70,
@@ -444,6 +580,12 @@ const columns = [
     <SectionCard :title="t('waveWorkspace.resultsTable')">
       <template #actions>
         <NSpace align="center">
+          <NSelect
+            v-model:value="groupBy"
+            :options="groupOptions"
+            size="small"
+            class="wave-results-page__group-select"
+          />
           <NButton size="small" type="primary" @click="openGenerateFactoryOrder">
             {{ t('waveWorkspace.generateFactoryOrder') }}
           </NButton>
@@ -465,11 +607,44 @@ const columns = [
         </div>
         <div v-else class="wave-results-page__table">
           <NDataTable
+            v-if="groupBy === 'none'"
+            v-model:checked-row-keys="selectedResultKeys"
             :columns="columns"
             :data="filteredResults"
             :row-key="(row: ResultView) => row.Result.ID"
             size="small"
           />
+          <template v-else>
+            <div
+              v-for="group in groupedResults"
+              :key="group.key"
+              class="wave-results-page__group"
+            >
+              <div class="wave-results-page__group-header">
+                <StatusBadge
+                  v-if="group.badge"
+                  :dimension="group.badge.dimension"
+                  :value="group.badge.value"
+                />
+                <span v-else class="wave-results-page__group-title">{{ group.title }}</span>
+                <span class="wave-results-page__group-meta">
+                  {{ t('waveWorkspace.groupRowCount', { n: group.rows.length }) }}
+                  ·
+                  {{ t('waveWorkspace.groupQtySum', { n: group.qty }) }}
+                </span>
+              </div>
+              <NDataTable
+                :columns="columns"
+                :data="group.rows"
+                :row-key="(row: ResultView) => row.Result.ID"
+                :checked-row-keys="groupCheckedKeys(group)"
+                size="small"
+                @update:checked-row-keys="
+                  (keys: Array<number | string>) => handleGroupChecked(group, keys)
+                "
+              />
+            </div>
+          </template>
         </div>
       </NSpin>
     </SectionCard>
@@ -772,6 +947,36 @@ const columns = [
 
 .wave-results-page__table {
   width: 100%;
+}
+
+.wave-results-page__group-select {
+  width: 160px;
+}
+
+.wave-results-page__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wave-results-page__group + .wave-results-page__group {
+  margin-top: var(--space-4);
+}
+
+.wave-results-page__group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.wave-results-page__group-title {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.wave-results-page__group-meta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 
 .wave-results-page__orders-list {
