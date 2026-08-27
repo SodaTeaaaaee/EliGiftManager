@@ -111,13 +111,13 @@ async function handleRevealDataDir() {
               <NRadioGroup v-model:value="form.Theme">
                 <NSpace>
                   <NRadio value="system">
-                    {{ t('designLab.controls.themeOptions.system') }}
+                    {{ t('settings.themeOptions.system') }}
                   </NRadio>
                   <NRadio value="light">
-                    {{ t('designLab.controls.themeOptions.light') }}
+                    {{ t('settings.themeOptions.light') }}
                   </NRadio>
                   <NRadio value="dark">
-                    {{ t('designLab.controls.themeOptions.dark') }}
+                    {{ t('settings.themeOptions.dark') }}
                   </NRadio>
                 </NSpace>
               </NRadioGroup>
@@ -127,10 +127,10 @@ async function handleRevealDataDir() {
               <NRadioGroup v-model:value="form.Density">
                 <NSpace>
                   <NRadio value="comfortable">
-                    {{ t('designLab.controls.densityOptions.comfortable') }}
+                    {{ t('settings.densityOptions.comfortable') }}
                   </NRadio>
                   <NRadio value="compact">
-                    {{ t('designLab.controls.densityOptions.compact') }}
+                    {{ t('settings.densityOptions.compact') }}
                   </NRadio>
                 </NSpace>
               </NRadioGroup>

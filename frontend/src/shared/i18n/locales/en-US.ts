@@ -62,15 +62,6 @@ export const enUS: AppMessageSchema = {
       density: 'Density',
       locale: 'Language',
       skin: 'Skin',
-      themeOptions: {
-        system: 'System',
-        light: 'Light',
-        dark: 'Dark',
-      },
-      densityOptions: {
-        comfortable: 'Comfortable',
-        compact: 'Compact',
-      },
     },
     toc: {
       title: 'Component Tour',
@@ -373,7 +364,16 @@ export const enUS: AppMessageSchema = {
     subtitle: 'Local appearance preferences and deduplication windows',
     appearance: 'Appearance & Locale',
     theme: 'Theme',
+    themeOptions: {
+      system: 'System',
+      light: 'Light',
+      dark: 'Dark',
+    },
     density: 'Density',
+    densityOptions: {
+      comfortable: 'Comfortable',
+      compact: 'Compact',
+    },
     locale: 'Language',
     deduplication: 'Deduplication Windows',
     duplicateRecordMinutes: 'Record-only window (minutes)',

@@ -60,15 +60,6 @@ export const zhCN = {
       density: '密度',
       locale: '语言',
       skin: '皮肤',
-      themeOptions: {
-        system: '跟随系统',
-        light: '浅色',
-        dark: '深色',
-      },
-      densityOptions: {
-        comfortable: '宽松',
-        compact: '紧凑',
-      },
     },
     toc: {
       title: '组件速览',
@@ -371,7 +362,16 @@ export const zhCN = {
     subtitle: '本地外观偏好与重复判定窗口',
     appearance: '外观与语言',
     theme: '界面主题',
+    themeOptions: {
+      system: '跟随系统',
+      light: '浅色',
+      dark: '深色',
+    },
     density: '排版密度',
+    densityOptions: {
+      comfortable: '宽松',
+      compact: '紧凑',
+    },
     locale: '显示语言',
     deduplication: '重复导入判定窗口',
     duplicateRecordMinutes: '仅记录观察窗口（分钟）',
