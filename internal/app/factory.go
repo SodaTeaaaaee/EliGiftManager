@@ -221,6 +221,24 @@ func (ws *Workspace) ImportShipment(ctx context.Context, trackingID, trackingNo,
 }
 
 func (ws *Workspace) GenerateWritebacks(ctx context.Context, factID uint) ([]domain.ChannelWritebackItem, error) {
+	var created []domain.ChannelWritebackItem
+	if err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		items, err := ws.withStore(tx).generateWritebacks(ctx, factID)
+		if err != nil {
+			return err
+		}
+		created = items
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return created, nil
+}
+
+// generateWritebacks collects the shipments behind a source fact and records
+// one writeback item per shipment. It must run on a workspace bound to the
+// surrounding transaction so every write commits or rolls back together.
+func (ws *Workspace) generateWritebacks(ctx context.Context, factID uint) ([]domain.ChannelWritebackItem, error) {
 	existing, err := ws.Store.ListWritebacksByFact(ctx, factID)
 	if err != nil {
 		return nil, err

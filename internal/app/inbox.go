@@ -43,7 +43,29 @@ type IngestDocumentResult struct {
 }
 
 func (ws *Workspace) IngestDocument(ctx context.Context, doc *domain.InputDocument, facts []IngestFactInput) (*domain.InputDocument, []domain.DuplicateObservation, error) {
-	settings, err := ws.Store.GetSettings(ctx)
+	var (
+		outDoc *domain.InputDocument
+		dups   []domain.DuplicateObservation
+	)
+	if err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		d, obs, err := ws.withStore(tx).ingestDocument(ctx, tx, doc, facts)
+		if err != nil {
+			return err
+		}
+		outDoc, dups = d, obs
+		return nil
+	}); err != nil {
+		return nil, nil, err
+	}
+	return outDoc, dups, nil
+}
+
+// ingestDocument creates the document together with its identities, facts,
+// fact lines, and duplicate observations. Every read and write goes through
+// the explicit store argument, so the whole import commits or rolls back as
+// one unit.
+func (ws *Workspace) ingestDocument(ctx context.Context, tx domain.Store, doc *domain.InputDocument, facts []IngestFactInput) (*domain.InputDocument, []domain.DuplicateObservation, error) {
+	settings, err := tx.GetSettings(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -51,12 +73,12 @@ func (ws *Workspace) IngestDocument(ctx context.Context, doc *domain.InputDocume
 	if doc.Direction == "" {
 		doc.Direction = string(domain.TemplateDirectionInput)
 	}
-	if err := ws.Store.CreateDocument(ctx, doc); err != nil {
+	if err := tx.CreateDocument(ctx, doc); err != nil {
 		return nil, nil, err
 	}
 	var dups []domain.DuplicateObservation
 	for _, in := range facts {
-		obs, err := ws.ingestOneFact(ctx, doc, in, settings)
+		obs, err := ws.ingestOneFact(ctx, tx, doc, in, settings)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -67,12 +89,12 @@ func (ws *Workspace) IngestDocument(ctx context.Context, doc *domain.InputDocume
 	return doc, dups, nil
 }
 
-func (ws *Workspace) ingestOneFact(ctx context.Context, doc *domain.InputDocument, in IngestFactInput, settings *domain.AppSettings) (*domain.DuplicateObservation, error) {
+func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *domain.InputDocument, in IngestFactInput, settings *domain.AppSettings) (*domain.DuplicateObservation, error) {
 	if in.StableExternalID != "" {
-		existing, err := ws.Store.FindFactByStableID(ctx, doc.PlatformID, in.StableExternalID)
+		existing, err := tx.FindFactByStableID(ctx, doc.PlatformID, in.StableExternalID)
 		if err == nil {
 			obs := &domain.DuplicateObservation{DocumentID: doc.ID, ExistingFactID: existing.ID, Verdict: string(domain.DuplicateRecordOnly), Reason: "stable_external_id", Decided: true}
-			if err := ws.Store.CreateDuplicate(ctx, obs); err != nil {
+			if err := tx.CreateDuplicate(ctx, obs); err != nil {
 				return nil, err
 			}
 			return obs, nil
@@ -81,7 +103,7 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, doc *domain.InputDocumen
 			return nil, err
 		}
 	} else if in.SourceCreatedAt != nil {
-		facts, err := ws.Store.ListFactsByDocument(ctx, doc.ID)
+		facts, err := tx.ListFactsByDocument(ctx, doc.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -91,14 +113,14 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, doc *domain.InputDocumen
 		askWin := time.Duration(settings.DuplicateAskDays) * 24 * time.Hour
 		if age >= 0 && age <= recordWin {
 			obs := &domain.DuplicateObservation{DocumentID: doc.ID, Verdict: string(domain.DuplicateRecordOnly), Reason: "within_record_window", Decided: true}
-			if err := ws.Store.CreateDuplicate(ctx, obs); err != nil {
+			if err := tx.CreateDuplicate(ctx, obs); err != nil {
 				return nil, err
 			}
 			return obs, nil
 		}
 		if age > recordWin && age <= askWin {
 			obs := &domain.DuplicateObservation{DocumentID: doc.ID, Verdict: string(domain.DuplicateAskOperator), Reason: "within_ask_window", Decided: false}
-			if err := ws.Store.CreateDuplicate(ctx, obs); err != nil {
+			if err := tx.CreateDuplicate(ctx, obs); err != nil {
 				return nil, err
 			}
 			return obs, nil
@@ -112,10 +134,10 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, doc *domain.InputDocumen
 			typ = string(domain.IdentityTypePlatformUID)
 		}
 		norm := NormalizeIdentity(in.IdentityValue)
-		ident, err := ws.Store.FindIdentity(ctx, doc.PlatformID, typ, norm)
+		ident, err := tx.FindIdentity(ctx, doc.PlatformID, typ, norm)
 		if err == domain.ErrNotFound {
 			ident = &domain.PlatformIdentity{PlatformID: doc.PlatformID, IdentityType: typ, IdentityValue: in.IdentityValue, NormalizedValue: norm}
-			if err := ws.Store.CreateIdentity(ctx, ident); err != nil {
+			if err := tx.CreateIdentity(ctx, ident); err != nil {
 				return nil, err
 			}
 		} else if err != nil {
@@ -141,13 +163,13 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, doc *domain.InputDocumen
 		SourceCreatedAt:    in.SourceCreatedAt,
 	}
 	if identID != nil {
-		ident, err := ws.Store.GetIdentity(ctx, *identID)
+		ident, err := tx.GetIdentity(ctx, *identID)
 		if err != nil {
 			return nil, err
 		}
 		fact.CustomerProfileID = ident.CustomerProfileID
 	}
-	if err := ws.Store.CreateFact(ctx, fact); err != nil {
+	if err := tx.CreateFact(ctx, fact); err != nil {
 		return nil, err
 	}
 	lines := in.Lines
@@ -173,14 +195,14 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, doc *domain.InputDocumen
 			Quantity:      qty,
 		}
 		if ln.ExternalSKU != "" {
-			if alias, err := ws.Store.FindAlias(ctx, doc.PlatformID, ln.ExternalSKU); err == nil {
+			if alias, err := tx.FindAlias(ctx, doc.PlatformID, ln.ExternalSKU); err == nil {
 				id := alias.ProductItemID
 				line.ProductItemID = &id
 			} else if err != domain.ErrNotFound {
 				return nil, err
 			}
 		}
-		if err := ws.Store.CreateFactLine(ctx, line); err != nil {
+		if err := tx.CreateFactLine(ctx, line); err != nil {
 			return nil, err
 		}
 	}
