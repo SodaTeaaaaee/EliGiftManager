@@ -14,13 +14,16 @@ import {
   CreateTemplate as _CreateTemplate,
   CreateWave as _CreateWave,
   ExportFactoryOrder as _ExportFactoryOrder,
+  ExportFactoryOrderFile as _ExportFactoryOrderFile,
   GenerateFactoryOrder as _GenerateFactoryOrder,
   GenerateWritebacks as _GenerateWritebacks,
   GetCustomer as _GetCustomer,
   GetSettings as _GetSettings,
   GetWave as _GetWave,
   Home as _Home,
+  ImportFile as _ImportFile,
   ImportShipment as _ImportShipment,
+  ImportShipmentFile as _ImportShipmentFile,
   IngestDocument as _IngestDocument,
   ListAddresses as _ListAddresses,
   ListAliases as _ListAliases,
@@ -37,10 +40,12 @@ import {
   ListWaves as _ListWaves,
   NamedTransformers as _NamedTransformers,
   ProductTotals as _ProductTotals,
+  PreviewTemplate as _PreviewTemplate,
   ReopenWave as _ReopenWave,
   SaveSettings as _SaveSettings,
   SemanticDictionary as _SemanticDictionary,
   SetResultAddress as _SetResultAddress,
+  UpdateAlias as _UpdateAlias,
   UpsertRule as _UpsertRule,
   VoidFactoryOrder as _VoidFactoryOrder,
 } from '../../../wailsjs/go/controller/WorkspaceController'
@@ -56,13 +61,17 @@ import type {
   CustomerProfile,
   DuplicateObservation,
   EntitlementRule,
+  ExportFileResult,
   FulfillmentResult,
   GenerateFactoryOrderResult,
   HomeBuckets,
+  ImportFileResult,
+  ImportShipmentFileResult,
   InboxRow,
   IngestDocumentResult,
   IngestFactInput,
   InputDocument,
+  ParseIssue,
   Platform,
   ProductAlias,
   ProductItem,
@@ -70,9 +79,11 @@ import type {
   RecipientAddress,
   ResultView,
   Shipment,
+  SkippedShipment,
   SupplierOrder,
   SupplierOrderLine,
   TemplateConfig,
+  TemplatePreview,
   Wave,
   ChannelWritebackItem,
 } from '@/entities/models'
@@ -167,6 +178,11 @@ export async function listAliases(productID: number): Promise<ProductAlias[]> {
   return (res ?? []) as unknown as ProductAlias[]
 }
 
+export async function updateAlias(aliasID: number, productItemID: number): Promise<void> {
+  assertWailsRuntime()
+  await _UpdateAlias(aliasID, productItemID)
+}
+
 // ── WorkspaceController: Templates & Carrier Mappings ──
 
 export async function createTemplate(input: Partial<TemplateConfig>): Promise<TemplateConfig> {
@@ -191,6 +207,37 @@ export async function getNamedTransformers(): Promise<string[]> {
   if (!isWailsRuntimeAvailable()) return []
   const res = await _NamedTransformers()
   return res ?? []
+}
+
+/** Parse a sample file through a template's mapping config without ingesting. */
+export async function previewTemplate(
+  templateID: number,
+  filePath: string,
+  limit: number,
+): Promise<TemplatePreview> {
+  assertWailsRuntime()
+  const res = await _PreviewTemplate(templateID, filePath, limit)
+  return {
+    Rows: (res?.Rows ?? []) as Record<string, string>[],
+    Issues: (res?.Issues ?? []) as unknown as ParseIssue[],
+  }
+}
+
+/** Import a platform export file through a template into inbox facts. */
+export async function importFile(
+  platformID: number,
+  templateID: number,
+  filePath: string,
+): Promise<ImportFileResult> {
+  assertWailsRuntime()
+  const res = await _ImportFile(platformID, templateID, filePath)
+  return {
+    Document: res.Document as unknown as InputDocument,
+    FactsCreated: res.FactsCreated ?? 0,
+    LinesCreated: res.LinesCreated ?? 0,
+    Duplicates: (res.Duplicates ?? []) as unknown as DuplicateObservation[],
+    Issues: (res.Issues ?? []) as unknown as ParseIssue[],
+  }
 }
 
 export async function createCarrierMapping(input: Partial<CarrierMapping>): Promise<CarrierMapping> {
@@ -377,6 +424,32 @@ export async function importShipment(
   return res as unknown as Shipment
 }
 
+/** Render a factory order into its export file and return the written path. */
+export async function exportFactoryOrderFile(orderID: number): Promise<ExportFileResult> {
+  assertWailsRuntime()
+  const res = await _ExportFactoryOrderFile(orderID)
+  return {
+    Order: res.Order as unknown as SupplierOrder,
+    Path: res.Path ?? '',
+    Rows: (res.Rows ?? []) as Record<string, string>[],
+  }
+}
+
+/** Import a factory shipment-return file (one row per parcel). */
+export async function importShipmentFile(
+  platformID: number,
+  filePath: string,
+): Promise<ImportShipmentFileResult> {
+  assertWailsRuntime()
+  const res = await _ImportShipmentFile(platformID, filePath)
+  return {
+    Imported: res.Imported ?? 0,
+    Skipped: (res.Skipped ?? []) as unknown as SkippedShipment[],
+    Shipments: (res.Shipments ?? []) as unknown as Shipment[],
+    Issues: (res.Issues ?? []) as unknown as ParseIssue[],
+  }
+}
+
 export async function generateWritebacks(factID: number): Promise<ChannelWritebackItem[]> {
   assertWailsRuntime()
   const res = await _GenerateWritebacks(factID)
@@ -400,6 +473,35 @@ export async function getHomeBuckets(): Promise<HomeBuckets> {
   }
   const res = await _Home()
   return res as unknown as HomeBuckets
+}
+
+// ── Wails runtime: native dialogs ──
+
+/** Minimal mirror of the Wails v2 runtime OpenFileDialog options. */
+interface WailsFileDialogFilter {
+  displayName: string
+  pattern: string
+}
+
+interface WailsRuntimeDialogApi {
+  OpenFileDialog?: (options?: { title?: string; filters?: WailsFileDialogFilter[] }) => Promise<string>
+}
+
+/**
+ * Open a native single-file picker through the Wails runtime dialog API.
+ * The committed copy of wailsjs/runtime predates the generated dialog
+ * wrappers, so the runtime object Wails injects on `window` is called
+ * directly — still only ever from inside the bridge. Returns null when the
+ * runtime (or dialog) is unavailable or the user cancels.
+ */
+export async function pickFile(
+  filters?: WailsFileDialogFilter[],
+): Promise<string | null> {
+  if (!isWailsRuntimeAvailable()) return null
+  const runtime = (window as unknown as { runtime?: WailsRuntimeDialogApi }).runtime
+  if (!runtime?.OpenFileDialog) return null
+  const path = await runtime.OpenFileDialog(filters ? { filters } : undefined)
+  return path && path.trim() !== '' ? path : null
 }
 
 // ── FileSystemController ──

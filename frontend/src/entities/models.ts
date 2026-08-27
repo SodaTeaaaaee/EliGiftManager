@@ -368,3 +368,42 @@ export interface GenerateFactoryOrderResult {
   Order: SupplierOrder
   Lines: SupplierOrderLine[]
 }
+
+/** One non-fatal parse problem (alignment.ParseIssue). */
+export interface ParseIssue {
+  LineNo: number
+  Key: string
+  Message: string
+}
+
+export interface ImportFileResult {
+  Document: InputDocument
+  FactsCreated: number
+  LinesCreated: number
+  Duplicates: DuplicateObservation[]
+  Issues: ParseIssue[]
+}
+
+export interface TemplatePreview {
+  Rows: Record<string, string>[]
+  Issues: ParseIssue[]
+}
+
+export interface ExportFileResult {
+  Order: SupplierOrder
+  Path: string
+  Rows: Record<string, string>[]
+}
+
+export interface SkippedShipment {
+  LineNo: number
+  TrackingID: string
+  Reason: string
+}
+
+export interface ImportShipmentFileResult {
+  Imported: number
+  Skipped: SkippedShipment[]
+  Shipments: Shipment[]
+  Issues: ParseIssue[]
+}
