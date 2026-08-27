@@ -72,7 +72,7 @@ func TestUniqueKeysAndWaveNo(t *testing.T) {
 		t.Fatal("expected unique input fact platform+stable id")
 	}
 
-	order := &domain.SupplierOrder{WaveID: w.ID, FactoryPlatformID: factory.ID, Status: string(domain.SupplierOrderDraft)}
+	order := &domain.SupplierOrder{WaveID: w.ID, FactoryPlatformID: factory.ID, Status: string(domain.SupplierOrderGenerated)}
 	if err := store.CreateSupplierOrder(ctx, order); err != nil {
 		t.Fatalf("create supplier order: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestOpenSupplierOrderUniquePerWaveFactory(t *testing.T) {
 	if err := store.CreateWave(ctx, w); err != nil {
 		t.Fatalf("wave: %v", err)
 	}
-	if err := store.CreateSupplierOrder(ctx, &domain.SupplierOrder{WaveID: w.ID, FactoryPlatformID: factory.ID, Status: string(domain.SupplierOrderDraft)}); err != nil {
+	if err := store.CreateSupplierOrder(ctx, &domain.SupplierOrder{WaveID: w.ID, FactoryPlatformID: factory.ID, Status: string(domain.SupplierOrderGenerated)}); err != nil {
 		t.Fatalf("first order: %v", err)
 	}
 	err := store.CreateSupplierOrder(ctx, &domain.SupplierOrder{WaveID: w.ID, FactoryPlatformID: factory.ID, Status: string(domain.SupplierOrderGenerated)})

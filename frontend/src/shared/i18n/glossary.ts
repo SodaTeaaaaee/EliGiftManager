@@ -130,7 +130,6 @@ export const blockReasonGlossary: GlossaryTable<'blockReason'> = {
 }
 
 export const supplierOrderStatusGlossary: GlossaryTable<'supplierOrderStatus'> = {
-  draft: entry('supplierOrderStatus', 'draft', 'neutral'),
   generated: entry('supplierOrderStatus', 'generated', 'info'),
   exported: entry('supplierOrderStatus', 'exported', 'progress'),
   voided: entry('supplierOrderStatus', 'voided', 'error'),

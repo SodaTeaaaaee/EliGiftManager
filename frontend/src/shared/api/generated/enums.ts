@@ -66,7 +66,6 @@ export const blockReasonValues = [
 export type BlockReason = (typeof blockReasonValues)[number]
 
 export const supplierOrderStatusValues = [
-  'draft',
   'generated',
   'exported',
   'voided',

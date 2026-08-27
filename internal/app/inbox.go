@@ -219,9 +219,6 @@ func (ws *Workspace) AssignLines(ctx context.Context, waveID uint, lineIDs []uin
 		if err != nil {
 			return err
 		}
-		if fact.Kind == string(domain.InputFactKindMembership) && line.WaveID != nil && *line.WaveID != waveID {
-			return ErrMembershipBound
-		}
 		wid := waveID
 		line.WaveID = &wid
 		if err := ws.Store.UpdateFactLine(ctx, line); err != nil {

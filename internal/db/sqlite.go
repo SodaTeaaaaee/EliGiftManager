@@ -28,7 +28,7 @@ func AutoMigrateAll(db *gorm.DB) error {
 	}
 	statements := []string{
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_input_facts_stable ON input_facts (platform_id, stable_external_id) WHERE stable_external_id != ''`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_supplier_orders_wave_factory_open ON supplier_orders (wave_id, factory_platform_id) WHERE status IN ('draft','generated')`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_supplier_orders_wave_factory_open ON supplier_orders (wave_id, factory_platform_id) WHERE status = 'generated'`,
 	}
 	for _, sql := range statements {
 		if err := db.Exec(sql).Error; err != nil {

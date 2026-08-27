@@ -283,7 +283,7 @@ type SupplierOrder struct {
 	ID                uint   `gorm:"primaryKey"`
 	WaveID            uint   `gorm:"index;not null"`
 	FactoryPlatformID uint   `gorm:"index;not null"`
-	Status            string `gorm:"not null;default:'draft'"`
+	Status            string `gorm:"not null;default:'generated'"`
 	ExportedAt        *time.Time
 	VoidedAt          *time.Time
 	ExportPayload     string `gorm:"type:text"`

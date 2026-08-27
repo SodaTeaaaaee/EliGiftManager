@@ -170,7 +170,6 @@ export const enUS: AppMessageSchema = {
       quantity_split_not_summing: { label: 'Quantity Split Mismatch', desc: 'Split quantities do not sum to source quantity.' },
     },
     supplierOrderStatus: {
-      draft: { label: 'Draft', desc: 'Factory order draft.' },
       generated: { label: 'Generated', desc: 'Factory order generated with tracking IDs.' },
       exported: { label: 'Exported', desc: 'Factory order exported to file.' },
       voided: { label: 'Voided', desc: 'Unexported factory order voided.' },

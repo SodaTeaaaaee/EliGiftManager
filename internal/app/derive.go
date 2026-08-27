@@ -7,11 +7,11 @@ import (
 )
 
 type ResultView struct {
-	Result     domain.FulfillmentResult
-	WorkState  domain.WorkState
-	Blocks     []domain.BlockReason
-	InFactory  bool
-	Shipped    bool
+	Result          domain.FulfillmentResult
+	WorkState       domain.WorkState
+	Blocks          []domain.BlockReason
+	InFactory       bool
+	Shipped         bool
 	WritebackFailed bool
 }
 

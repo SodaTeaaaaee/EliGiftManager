@@ -852,7 +852,7 @@ func (s *GormStore) GetSupplierOrder(ctx context.Context, id uint) (*domain.Supp
 
 func (s *GormStore) FindOpenSupplierOrder(ctx context.Context, waveID, factoryID uint) (*domain.SupplierOrder, error) {
 	var row persistence.SupplierOrder
-	if err := first(s.db.WithContext(ctx).Where("wave_id = ? AND factory_platform_id = ? AND status IN ?", waveID, factoryID, []string{string(domain.SupplierOrderDraft), string(domain.SupplierOrderGenerated)}), &row); err != nil {
+	if err := first(s.db.WithContext(ctx).Where("wave_id = ? AND factory_platform_id = ? AND status = ?", waveID, factoryID, string(domain.SupplierOrderGenerated)), &row); err != nil {
 		return nil, err
 	}
 	d := orderToDomain(row)

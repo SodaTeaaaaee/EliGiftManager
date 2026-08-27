@@ -168,7 +168,6 @@ export const zhCN = {
       quantity_split_not_summing: { label: '数量拆分未凑满', desc: '拆分映射分配的数量之和不等于来源数量。' },
     },
     supplierOrderStatus: {
-      draft: { label: '草稿', desc: '工厂订单草稿，尚未生成提交。' },
       generated: { label: '已生成', desc: '工厂订单已生成并绑定追踪标识，履约已冻结。' },
       exported: { label: '已导出', desc: '工厂订单已成功导出文件。' },
       voided: { label: '已作废', desc: '尚未导出的工厂订单已被作废并解冻履约。' },

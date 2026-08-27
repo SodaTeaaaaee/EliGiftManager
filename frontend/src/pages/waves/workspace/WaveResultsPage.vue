@@ -495,7 +495,7 @@ const columns = [
               <span class="wave-results-page__order-title">
                 {{ t('waveWorkspace.orderID') }} #{{ order.ID }}
               </span>
-              <StatusBadge dimension="supplierOrderStatus" :value="order.Status || 'draft'" />
+              <StatusBadge dimension="supplierOrderStatus" :value="order.Status || 'generated'" />
             </div>
 
             <div v-if="selectedOrderLines[order.ID]" class="wave-results-page__order-lines">

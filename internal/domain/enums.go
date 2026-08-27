@@ -67,7 +67,6 @@ const (
 type SupplierOrderStatus string
 
 const (
-	SupplierOrderDraft     SupplierOrderStatus = "draft"
 	SupplierOrderGenerated SupplierOrderStatus = "generated"
 	SupplierOrderExported  SupplierOrderStatus = "exported"
 	SupplierOrderVoided    SupplierOrderStatus = "voided"

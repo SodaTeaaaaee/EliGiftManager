@@ -7,14 +7,14 @@ import (
 )
 
 type HomeBuckets struct {
-	Unassigned           int
-	DuplicateAsk         int
-	AlignmentConflict    int
-	IdentityUnattached   int
-	BlockedResults       int
-	WritebackFailed      int
-	ResidualClose        int
-	RecentWaves          []domain.Wave
+	Unassigned         int
+	DuplicateAsk       int
+	AlignmentConflict  int
+	IdentityUnattached int
+	BlockedResults     int
+	WritebackFailed    int
+	ResidualClose      int
+	RecentWaves        []domain.Wave
 }
 
 func (ws *Workspace) Home(ctx context.Context) (HomeBuckets, error) {

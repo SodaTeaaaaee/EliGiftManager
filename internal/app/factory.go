@@ -124,7 +124,7 @@ func (ws *Workspace) VoidFactoryOrder(ctx context.Context, orderID uint) error {
 	if order.Status == string(domain.SupplierOrderExported) || order.ExportedAt != nil {
 		return ErrOrderExported
 	}
-	if order.Status != string(domain.SupplierOrderGenerated) && order.Status != string(domain.SupplierOrderDraft) {
+	if order.Status != string(domain.SupplierOrderGenerated) {
 		return ErrOrderNotGenerated
 	}
 	lines, err := ws.Store.ListSupplierOrderLines(ctx, order.ID)
