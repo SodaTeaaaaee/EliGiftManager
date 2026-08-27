@@ -26,6 +26,7 @@ import {
   ListQuantitySplitRules as _ListQuantitySplitRules,
   UpsertQuantitySplitRule as _UpsertQuantitySplitRule,
   ExportFactoryOrderFile as _ExportFactoryOrderFile,
+  ExportWritebackFile as _ExportWritebackFile,
   GenerateFactoryOrder as _GenerateFactoryOrder,
   GenerateFactoryOrderForResults as _GenerateFactoryOrderForResults,
   GenerateWritebacks as _GenerateWritebacks,
@@ -41,6 +42,8 @@ import {
   ListAliases as _ListAliases,
   ListCarrierMappings as _ListCarrierMappings,
   ListCustomers as _ListCustomers,
+  ListEntitlementInstances as _ListEntitlementInstances,
+  ListExceptions as _ListExceptions,
   ListInboxRows as _ListInboxRows,
   ListPlatforms as _ListPlatforms,
   ListProducts as _ListProducts,
@@ -50,6 +53,9 @@ import {
   ListSupplierOrders as _ListSupplierOrders,
   ListTemplates as _ListTemplates,
   ListWaves as _ListWaves,
+  ListWritebacksByWave as _ListWritebacksByWave,
+  MarkWritebackFailed as _MarkWritebackFailed,
+  MarkWritebackSent as _MarkWritebackSent,
   NamedTransformers as _NamedTransformers,
   ProductTotals as _ProductTotals,
   PreviewTemplate as _PreviewTemplate,
@@ -71,10 +77,12 @@ import {
 import type {
   AppSettings,
   CarrierMapping,
+  ChannelWritebackItem,
   CustomerProfile,
   DuplicateObservation,
   EntitlementException,
   EntitlementRule,
+  ExceptionView,
   ExportFileResult,
   FulfillmentResult,
   GenerateFactoryOrderResult,
@@ -85,6 +93,7 @@ import type {
   IngestDocumentResult,
   IngestFactInput,
   InputDocument,
+  InstanceView,
   ParseIssue,
   Platform,
   ProductAlias,
@@ -101,7 +110,6 @@ import type {
   TemplateConfig,
   TemplatePreview,
   Wave,
-  ChannelWritebackItem,
 } from '@/entities/models'
 
 import type { app as wailsApp, domain as wailsDomain } from '../../../wailsjs/go/models'
@@ -428,6 +436,20 @@ export async function deleteException(exceptionID: number): Promise<void> {
   await _DeleteException(exceptionID)
 }
 
+/** List the wave's exceptions joined with customer and product display names. */
+export async function listExceptions(waveID: number): Promise<ExceptionView[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  const res = await _ListExceptions(waveID)
+  return (res ?? []) as unknown as ExceptionView[]
+}
+
+/** List the wave's membership instances with display fields for pickers. */
+export async function listEntitlementInstances(waveID: number): Promise<InstanceView[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  const res = await _ListEntitlementInstances(waveID)
+  return (res ?? []) as unknown as InstanceView[]
+}
+
 /** Store a wave quantity split (components replaced wholesale) and re-derive covered lines. */
 export async function upsertQuantitySplitRule(rule: Partial<QuantitySplitRule>): Promise<void> {
   assertWailsRuntime()
@@ -565,6 +587,32 @@ export async function generateWritebacks(factID: number): Promise<ChannelWriteba
   assertWailsRuntime()
   const res = await _GenerateWritebacks(factID)
   return (res ?? []) as unknown as ChannelWritebackItem[]
+}
+
+/** List every writeback item behind the wave's fact lines, ordered by id. */
+export async function listWritebacksByWave(waveID: number): Promise<ChannelWritebackItem[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  const res = await _ListWritebacksByWave(waveID)
+  return (res ?? []) as unknown as ChannelWritebackItem[]
+}
+
+/** Record a successful channel writeback for one parcel. */
+export async function markWritebackSent(writebackID: number): Promise<void> {
+  assertWailsRuntime()
+  await _MarkWritebackSent(writebackID)
+}
+
+/** Record a failed channel writeback attempt (retry counter advances). */
+export async function markWritebackFailed(writebackID: number, errMsg: string): Promise<void> {
+  assertWailsRuntime()
+  await _MarkWritebackFailed(writebackID, errMsg)
+}
+
+/** Write one writeback item's stored payload to the exports dir; returns the path. */
+export async function exportWritebackFile(writebackID: number): Promise<string> {
+  assertWailsRuntime()
+  const res = await _ExportWritebackFile(writebackID)
+  return res?.Path ?? ''
 }
 
 // ── WorkspaceController: Home ──

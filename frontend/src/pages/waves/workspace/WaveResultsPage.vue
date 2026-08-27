@@ -14,6 +14,7 @@ import {
   NSpace,
   NSpin,
   NTag,
+  NTooltip,
   NDrawer,
   NDrawerContent,
 } from 'naive-ui'
@@ -23,6 +24,7 @@ import { StatusBadge } from '@/shared/ui/status'
 import { useFeedback } from '@/shared/ui/feedback'
 import {
   exportFactoryOrderFile,
+  exportWritebackFile,
   generateFactoryOrder,
   generateFactoryOrderForResults,
   generateWritebacks,
@@ -35,12 +37,16 @@ import {
   listResultViews,
   listSupplierOrderLines,
   listSupplierOrders,
+  listWritebacksByWave,
+  markWritebackFailed,
+  markWritebackSent,
   pickFile,
   revealInFolder,
   setResultAddress,
   voidFactoryOrder,
 } from '@/shared/api/bridge'
 import type {
+  ChannelWritebackItem,
   CustomerProfile,
   ExportFileResult,
   ImportShipmentFileResult,
@@ -75,6 +81,7 @@ const products = ref<ProductItem[]>([])
 const customers = ref<CustomerProfile[]>([])
 const platforms = ref<Platform[]>([])
 const supplierOrders = ref<SupplierOrder[]>([])
+const writebackItems = ref<ChannelWritebackItem[]>([])
 
 const filterProduct = ref<string>('all')
 
@@ -241,22 +248,33 @@ const shipmentForm = ref({
 const showWritebackModal = ref(false)
 const writebackFactId = ref<number | null>(null)
 
+// ── Channel writebacks drawer (per-wave item list + state machine) ──
+
+const showWritebacksDrawer = ref(false)
+const showWritebackFailModal = ref(false)
+const failTargetId = ref<number | null>(null)
+const failReason = ref('')
+const showWritebackReceiptModal = ref(false)
+const writebackExportPath = ref('')
+
 async function loadData() {
   if (!props.waveId) return
   loading.value = true
   try {
-    const [resViews, prods, custs, plats, orders] = await Promise.all([
+    const [resViews, prods, custs, plats, orders, writebacks] = await Promise.all([
       listResultViews(props.waveId),
       listProducts(),
       listCustomers(),
       listPlatforms(),
       listSupplierOrders(props.waveId),
+      listWritebacksByWave(props.waveId),
     ])
     results.value = resViews
     products.value = prods
     customers.value = custs
     platforms.value = plats
     supplierOrders.value = orders
+    writebackItems.value = writebacks
   } catch (err) {
     console.error('Failed to load wave results:', err)
   } finally {
@@ -337,9 +355,48 @@ async function handleSaveAddress() {
   }
 }
 
+// ── Partial submission scope: cross-factory guard ──
+
+/** The result's responsible factory platform, null when unaligned/unknown. */
+function rowFactoryId(row: ResultView): number | null {
+  const prod = products.value.find((p) => p.ID === row.Result.ProductItemID)
+  return prod ? prod.FactoryPlatformID : null
+}
+
+/** True while the partial-submit modal is open with a live selection: the
+ * factory is pinned, so checkboxes of results bound to another factory (or
+ * to no product) must not be checkable. */
+const factoryScopeActive = computed(
+  () => showFactoryOrderModal.value && selectedResultKeys.value.length > 0,
+)
+
+/** Drop checked rows that do not belong to the selected factory, so the
+ * stale checks cannot ride along into a foreign factory's order. */
+function pruneSelectionToFactory() {
+  if (!selectedFactoryId.value) return
+  selectedResultKeys.value = selectedResultKeys.value.filter((id) => {
+    const row = results.value.find((r) => r.Result.ID === id)
+    return row != null && rowFactoryId(row) === selectedFactoryId.value
+  })
+}
+
+/** Selected rows that will actually land in the selected factory's order. */
+const factoryScopedSelectionCount = computed(() =>
+  selectedResultKeys.value.filter((id) => {
+    const row = results.value.find((r) => r.Result.ID === id)
+    return row != null && rowFactoryId(row) === selectedFactoryId.value
+  }).length,
+)
+
 function openGenerateFactoryOrder() {
   selectedFactoryId.value = factoryPlatformOptions.value[0]?.value ?? null
+  pruneSelectionToFactory()
   showFactoryOrderModal.value = true
+}
+
+function handleFactoryScopeChange(value: number) {
+  selectedFactoryId.value = value
+  pruneSelectionToFactory()
 }
 
 async function handleGenerateFactoryOrder() {
@@ -485,14 +542,20 @@ async function handleGenerateWritebacks() {
   }
 }
 
-const columns = [
+const columns = computed(() => [
   {
     type: 'selection' as const,
     // Keep checkbox availability aligned with backend submission eligibility:
-    // frozen results are already committed to a factory order, and results
-    // outside the ready work state can never enter submission.
+    // frozen results are already committed to a factory order, results outside
+    // the ready work state can never enter submission, and while the partial
+    // submit modal pins a factory, results responsible to a different factory
+    // (or to no aligned product) are locked out of this submission.
     disabled(row: ResultView) {
-      return row.Result.Frozen || (row.WorkState || 'ready') !== 'ready'
+      if (row.Result.Frozen || (row.WorkState || 'ready') !== 'ready') return true
+      if (factoryScopeActive.value && selectedFactoryId.value != null) {
+        return rowFactoryId(row) !== selectedFactoryId.value
+      }
+      return false
     },
   },
   {
@@ -608,7 +671,179 @@ const columns = [
       return null
     },
   },
-]
+])
+
+// ── Channel writeback item actions ──
+
+const writebackColumns = computed(() => [
+  {
+    title: '#',
+    key: 'ID',
+    width: 60,
+    render(row: ChannelWritebackItem) {
+      return `#${row.ID}`
+    },
+  },
+  {
+    title: t('waveWorkspace.factID'),
+    key: 'Fact',
+    width: 110,
+    render(row: ChannelWritebackItem) {
+      return `#${row.InputFactID}`
+    },
+  },
+  {
+    title: t('waveWorkspace.trackingNo'),
+    key: 'TrackingNo',
+    render(row: ChannelWritebackItem) {
+      return row.TrackingNo || '—'
+    },
+  },
+  {
+    title: t('waveWorkspace.carrier'),
+    key: 'CarrierCode',
+    width: 90,
+    render(row: ChannelWritebackItem) {
+      return row.CarrierCode || '—'
+    },
+  },
+  {
+    title: t('waveWorkspace.quantity'),
+    key: 'Quantity',
+    width: 70,
+    render(row: ChannelWritebackItem) {
+      return row.Quantity
+    },
+  },
+  {
+    title: t('waves.status'),
+    key: 'Status',
+    width: 90,
+    render(row: ChannelWritebackItem) {
+      return h(StatusBadge, { dimension: 'writebackStatus', value: row.Status || 'pending' })
+    },
+  },
+  {
+    title: t('waveWorkspace.writebacks.retryCount'),
+    key: 'RetryCount',
+    width: 80,
+    render(row: ChannelWritebackItem) {
+      return row.RetryCount > 0 ? String(row.RetryCount) : '—'
+    },
+  },
+  {
+    title: t('waveWorkspace.writebacks.lastError'),
+    key: 'Error',
+    render(row: ChannelWritebackItem) {
+      if (!row.ErrorMessage) return '—'
+      return h(
+        NTooltip,
+        { trigger: 'hover' },
+        {
+          trigger: () =>
+            h('span', { class: 'wave-results-page__writeback-error' }, row.ErrorMessage!),
+          default: () => row.ErrorMessage,
+        },
+      )
+    },
+  },
+  {
+    title: t('common.actions'),
+    key: 'actions',
+    width: 220,
+    render(row: ChannelWritebackItem) {
+      return h(NSpace, { size: 'small' }, () => [
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            secondary: true,
+            disabled: actionLoading.value,
+            onClick: () => void handleExportWritebackFile(row),
+          },
+          { default: () => t('waveWorkspace.writebacks.exportFile') },
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'success',
+            secondary: true,
+            disabled: actionLoading.value,
+            onClick: () => void handleMarkWritebackSent(row),
+          },
+          { default: () => t('waveWorkspace.writebacks.markSent') },
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'error',
+            secondary: true,
+            disabled: actionLoading.value,
+            onClick: () => openMarkWritebackFailed(row),
+          },
+          { default: () => t('waveWorkspace.writebacks.markFailed') },
+        ),
+      ])
+    },
+  },
+])
+
+async function handleExportWritebackFile(item: ChannelWritebackItem) {
+  actionLoading.value = true
+  try {
+    writebackExportPath.value = await exportWritebackFile(item.ID)
+    showWritebackReceiptModal.value = true
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+function handleRevealWritebackFile() {
+  if (writebackExportPath.value) void revealInFolder(writebackExportPath.value)
+}
+
+async function handleMarkWritebackSent(item: ChannelWritebackItem) {
+  actionLoading.value = true
+  try {
+    await markWritebackSent(item.ID)
+    feedback.success(t('waveWorkspace.writebacks.markSentSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+function openMarkWritebackFailed(item: ChannelWritebackItem) {
+  failTargetId.value = item.ID
+  failReason.value = ''
+  showWritebackFailModal.value = true
+}
+
+async function handleMarkWritebackFailed() {
+  if (!failTargetId.value) return
+  const reason = failReason.value.trim()
+  if (!reason) {
+    feedback.error(t('feedback.error'), t('waveWorkspace.writebacks.failReasonRequired'))
+    return
+  }
+  actionLoading.value = true
+  try {
+    await markWritebackFailed(failTargetId.value, reason)
+    showWritebackFailModal.value = false
+    feedback.success(t('waveWorkspace.writebacks.markFailedSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -639,6 +874,9 @@ const columns = [
           </NButton>
           <NButton size="small" @click="openOrdersDrawer">
             {{ t('waveWorkspace.supplierOrders') }} ({{ supplierOrders.length }})
+          </NButton>
+          <NButton size="small" @click="showWritebacksDrawer = true">
+            {{ t('waveWorkspace.writebacks.title') }} ({{ writebackItems.length }})
           </NButton>
           <NButton size="small" @click="openShipmentModal">
             {{ t('waveWorkspace.importShipment') }}
@@ -746,15 +984,18 @@ const columns = [
       <p class="wave-results-page__order-scope">
         {{
           selectedResultKeys.length
-            ? t('waveWorkspace.generateFactoryOrderScopeSelected', { n: selectedResultKeys.length })
+            ? t('waveWorkspace.generateFactoryOrderScopeSelected', {
+                n: factoryScopedSelectionCount,
+              })
             : t('waveWorkspace.generateFactoryOrderScopeAll')
         }}
       </p>
       <NForm>
         <NFormItem :label="t('waveWorkspace.factory')">
           <NSelect
-            v-model:value="selectedFactoryId"
+            :value="selectedFactoryId"
             :options="factoryPlatformOptions"
+            @update:value="(value: number) => handleFactoryScopeChange(value)"
           />
         </NFormItem>
       </NForm>
@@ -990,6 +1231,75 @@ const columns = [
         </NSpace>
       </template>
     </NModal>
+
+    <!-- Channel Writebacks Drawer -->
+    <NDrawer v-model:show="showWritebacksDrawer" width="760" placement="right">
+      <NDrawerContent :title="t('waveWorkspace.writebacks.title')">
+        <div v-if="!writebackItems.length" class="wave-results-page__empty">
+          <EmptyState :title="t('waveWorkspace.writebacks.empty')" size="sm" />
+        </div>
+        <div v-else>
+          <NDataTable
+            :columns="writebackColumns"
+            :data="writebackItems"
+            :row-key="(row: ChannelWritebackItem) => row.ID"
+            size="small"
+          />
+        </div>
+      </NDrawerContent>
+    </NDrawer>
+
+    <!-- Mark Writeback Failed Modal -->
+    <NModal
+      v-model:show="showWritebackFailModal"
+      preset="card"
+      :title="t('waveWorkspace.writebacks.markFailed')"
+      style="width: 440px"
+    >
+      <NForm>
+        <NFormItem :label="t('waveWorkspace.writebacks.failReason')">
+          <NInput
+            v-model:value="failReason"
+            type="textarea"
+            :placeholder="t('waveWorkspace.writebacks.failReasonPlaceholder')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showWritebackFailModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="error"
+            :loading="actionLoading"
+            :disabled="!failReason.trim()"
+            @click="handleMarkWritebackFailed"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Writeback Export Receipt Modal -->
+    <NModal
+      v-model:show="showWritebackReceiptModal"
+      preset="card"
+      :title="t('waveWorkspace.writebacks.exportSuccess')"
+      style="width: 520px"
+    >
+      <div class="wave-results-page__export-receipt">
+        <div class="wave-results-page__export-path-label">{{ t('waveWorkspace.exportFilePath') }}</div>
+        <div class="wave-results-page__export-path">{{ writebackExportPath }}</div>
+        <NButton size="small" @click="handleRevealWritebackFile">
+          {{ t('waveWorkspace.revealInFolder') }}
+        </NButton>
+      </div>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showWritebackReceiptModal = false">{{ t('common.close') }}</NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -1190,5 +1500,16 @@ const columns = [
 
 .wave-results-page__manual-toggle {
   margin-top: var(--space-3);
+}
+
+.wave-results-page__writeback-error {
+  display: inline-block;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  font-size: var(--font-size-xs);
+  color: var(--status-error-fg);
 }
 </style>

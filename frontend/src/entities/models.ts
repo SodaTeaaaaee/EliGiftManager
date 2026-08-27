@@ -320,11 +320,34 @@ export interface ChannelWritebackItem {
   ShipmentID: number
   TrackingNo: string
   CarrierCode: string
+  Quantity: number
   Status: WritebackStatus | string
+  TemplateID?: number
+  TemplateVersion?: number
+  RetryCount: number
   ErrorMessage?: string
   Payload?: string
   CreatedAt?: string
   UpdatedAt?: string
+}
+
+/** One entitlement exception joined with customer and product display names (internal/app ExceptionView). */
+export interface ExceptionView {
+  ID: number
+  InstanceID: number
+  CustomerName: string
+  ProductItemID: number
+  ProductName: string
+  Quantity: number
+  Note?: string
+}
+
+/** One entitlement instance with member-facing display fields (internal/app InstanceView). */
+export interface InstanceView {
+  ID: number
+  CustomerName: string
+  PlatformIdentity: string
+  MembershipLevel?: string
 }
 
 export interface AppSettings {
