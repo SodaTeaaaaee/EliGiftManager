@@ -143,12 +143,18 @@ func (ws *Workspace) ImportFile(ctx context.Context, platformID, tplID uint, fil
 		return nil, err
 	}
 
+	// Binary xlsx originals are stored base64-prefixed like exported xlsx
+	// payloads; csv/xls stay verbatim. Nothing decodes the audit copy.
+	rawPayload := string(data)
+	if format == alignment.FormatXLSX {
+		rawPayload = "base64:" + base64.StdEncoding.EncodeToString(data)
+	}
 	doc := &domain.InputDocument{
 		PlatformID:      platformID,
 		DocumentType:    tpl.DocumentType,
 		Direction:       tpl.Direction,
 		OriginalName:    filepath.Base(filePath),
-		RawPayload:      string(data),
+		RawPayload:      rawPayload,
 		TemplateID:      &tplID,
 		TemplateVersion: tpl.Version,
 	}

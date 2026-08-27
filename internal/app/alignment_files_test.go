@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -745,5 +747,72 @@ func TestExportFactoryOrderFile_WriteFailureKeepsOrderGenerated(t *testing.T) {
 	}
 	if after.Status != string(domain.SupplierOrderGenerated) || after.ExportedAt != nil || after.ExportPayload != "" {
 		t.Fatalf("order = %+v, want still generated with no export payload", after)
+	}
+}
+
+// TestImportFile_XlsxRawPayloadBase64Prefix checks that imported xlsx
+// originals are stored base64-prefixed (mirroring the export side) instead of
+// raw binary bytes in a text column.
+func TestImportFile_XlsxRawPayloadBase64Prefix(t *testing.T) {
+	ws := newTestWorkspace(t)
+	ctx := context.Background()
+	if err := ws.EnsureBuiltinPlatforms(ctx); err != nil {
+		t.Fatal(err)
+	}
+	source := platformByKind(t, ws, domain.PlatformKindSource)
+
+	tpl := &domain.TemplateConfig{
+		PlatformID:   source.ID,
+		DocumentType: DocumentTypeMembershipList,
+		Direction:    string(domain.TemplateDirectionInput),
+		Name:         "bilibili membership xlsx",
+		Version:      1,
+		MappingJSON: mustSerializeMapping(t, alignment.MappingConfig{
+			Mode: alignment.ModeHeader,
+			Columns: map[string]string{
+				"membership.level":      "等级",
+				"identity.value":        "UID",
+				"customer.display_name": "昵称",
+			},
+			Required:    []string{"identity.value"},
+			Fingerprint: []string{"identity.value"},
+		}),
+	}
+	if err := ws.CreateTemplate(ctx, tpl); err != nil {
+		t.Fatal(err)
+	}
+
+	xlsxBytes, err := alignment.Render([]map[string]string{
+		{"membership.level": "captain", "identity.value": "uid-x1", "customer.display_name": "Xena"},
+	}, alignment.LayoutConfig{
+		Format:      alignment.FormatXLSX,
+		ColumnOrder: []string{"membership.level", "identity.value", "customer.display_name"},
+		HeaderNames: map[string]string{"membership.level": "等级", "identity.value": "UID", "customer.display_name": "昵称"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := writeTempFixture(t, "members.xlsx", string(xlsxBytes))
+
+	result, err := ws.ImportFile(ctx, source.ID, tpl.ID, path)
+	if err != nil {
+		t.Fatalf("ImportFile: %v", err)
+	}
+	if result.FactsCreated != 1 {
+		t.Fatalf("facts created = %d, want 1", result.FactsCreated)
+	}
+	stored, err := ws.Store.GetDocument(ctx, result.Document.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(stored.RawPayload, "base64:") {
+		t.Fatalf("raw payload prefix = %q, want base64:", stored.RawPayload[:16])
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(stored.RawPayload, "base64:"))
+	if err != nil {
+		t.Fatalf("stored payload is not valid base64: %v", err)
+	}
+	if !bytes.Equal(decoded, xlsxBytes) {
+		t.Fatal("decoded audit copy must round-trip to the original file bytes")
 	}
 }
