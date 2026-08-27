@@ -502,20 +502,86 @@ function collectGlossaryDynamicKeys(glossarySource: string): Set<string> {
 /** Matches a t(...) call whose first argument is a plain string literal. */
 const T_LITERAL_CALL_RE = /\bt\(\s*(['"])((?:\\.|(?!\1).)*)\1/g;
 
+/**
+ * A statically checkable message key: full dotted path of word characters
+ * (`a.b.c`). Anything else (a truncated concatenation fragment like `a.`, a
+ * key with interpolation markers, a bare single word) is treated as a dynamic
+ * key and skipped by no-missing-locale-key.
+ */
+const CHECKABLE_KEY_RE = /^\w+(\.\w+)+$/;
+
+/** Masks `<!-- ... -->` HTML comments with spaces (length-preserving). */
+function maskHtmlComments(content: string): string {
+  return content.replace(/<!--[\s\S]*?-->/g, (m) => " ".repeat(m.length));
+}
+
+/**
+ * Masks JS line/block comments with spaces so t('...') literals that only
+ * appear inside comments cannot produce false positives for
+ * no-missing-locale-key. Length-preserving, so the offsets used for
+ * file:line reporting stay valid. Comment markers inside string literals
+ * ("https://..." and friends) are tracked and left untouched. Only applied
+ * to script blocks and .ts sources — never to <template> text, where a stray
+ * apostrophe in copy would derail the quote tracking.
+ */
+function maskJsComments(content: string): string {
+  const chars = content.split("");
+  const n = chars.length;
+  let i = 0;
+  const blankUntil = (stop: number): void => {
+    for (let k = i; k < stop; k++) {
+      if (chars[k] !== "\n") chars[k] = " ";
+    }
+  };
+  while (i < n) {
+    const c = chars[i];
+    if (c === '"' || c === "'" || c === "`") {
+      i++;
+      while (i < n && chars[i] !== c) {
+        if (chars[i] === "\\") i++; // skip the escaped character
+        i++;
+      }
+      i++;
+      continue;
+    }
+    if (c === "/" && chars[i + 1] === "/") {
+      while (i < n && chars[i] !== "\n") {
+        chars[i] = " ";
+        i++;
+      }
+      continue; // keep the newline itself
+    }
+    if (c === "/" && chars[i + 1] === "*") {
+      const end = content.indexOf("*/", i + 2);
+      const stop = end === -1 ? n : end + 2;
+      blankUntil(stop);
+      i = stop;
+      continue;
+    }
+    i++;
+  }
+  return chars.join("");
+}
+
 function checkLocaleKeyLiterals(
   content: string,
   contentStartOffset: number,
   fileContent: string,
   relFile: string,
   knownKeys: Set<string>,
+  maskComments: (s: string) => string,
 ): void {
+  const scanned = maskComments(content);
   let m: RegExpExecArray | null;
   T_LITERAL_CALL_RE.lastIndex = 0;
-  while ((m = T_LITERAL_CALL_RE.exec(content)) !== null) {
+  while ((m = T_LITERAL_CALL_RE.exec(scanned)) !== null) {
     const key = m[2];
     // Dynamic/partial keys (template-literal composition happens elsewhere)
     // cannot be statically resolved and are skipped.
     if (key.includes("${")) continue;
+    // Concatenation defense: a fragment that is not a full dotted shape
+    // (e.g. the `'designLab.'` half of `t('designLab.' + x)`) is dynamic.
+    if (!CHECKABLE_KEY_RE.test(key)) continue;
     if (knownKeys.has(key)) continue;
     const line = indexToLine(fileContent, contentStartOffset + m.index);
     violations.push({
@@ -547,6 +613,7 @@ function scanLocaleKeys(files: string[], knownKeys: Set<string>): void {
           fileContent,
           file,
           knownKeys,
+          maskHtmlComments,
         );
       }
       for (const script of extractScriptBlocks(fileContent)) {
@@ -556,10 +623,18 @@ function scanLocaleKeys(files: string[], knownKeys: Set<string>): void {
           fileContent,
           file,
           knownKeys,
+          maskJsComments,
         );
       }
     } else {
-      checkLocaleKeyLiterals(fileContent, 0, fileContent, file, knownKeys);
+      checkLocaleKeyLiterals(
+        fileContent,
+        0,
+        fileContent,
+        file,
+        knownKeys,
+        maskJsComments,
+      );
     }
   }
 }
