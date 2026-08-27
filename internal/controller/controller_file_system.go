@@ -13,7 +13,7 @@ import (
 
 // FileSystemController exposes a single "reveal a file in its containing
 // folder" Wails binding. Self-contained: pure OS call, no repo/DB dependency,
-// mirroring the other single-purpose controllers (e.g. ActionCenterController).
+// mirroring the other single-purpose controllers (e.g. WorkspaceController).
 type FileSystemController struct {
 	resolveDataDir func() (string, error)
 	startReveal    func(goos, absPath string) error

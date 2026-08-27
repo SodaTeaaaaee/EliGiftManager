@@ -441,7 +441,7 @@ export const zhCN = {
       appShellGroupTitle: 'AppShell + SideNav（一级导航）',
       appShellHint: '折叠状态会持久化到本地存储；下方是一个高度受限的预览容器，方便在设计实验室里查看。',
       nav: {
-        sectionActionCenter: '行动中心',
+        sectionHome: '待处理',
         sectionFulfillment: '履约工作流',
         sectionMasterData: '主数据',
         home: '待处理',

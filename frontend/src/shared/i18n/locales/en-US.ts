@@ -443,7 +443,7 @@ export const enUS: AppMessageSchema = {
       appShellGroupTitle: 'AppShell + SideNav (top-level nav)',
       appShellHint: 'Collapse state persists to local storage; below is a height-constrained preview box for the design lab.',
       nav: {
-        sectionActionCenter: 'Action Center',
+        sectionHome: 'Home',
         sectionFulfillment: 'Fulfillment',
         sectionMasterData: 'Master Data',
         home: 'To Do',
