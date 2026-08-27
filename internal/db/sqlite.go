@@ -26,8 +26,14 @@ func AutoMigrateAll(db *gorm.DB) error {
 	if err := db.Exec(`DROP INDEX IF EXISTS idx_supplier_orders_wave_factory_open`).Error; err != nil {
 		return fmt.Errorf("drop open-order unique index: %w", err)
 	}
+	// Recreate for the same reason: revision facts share the stable external
+	// id of the fact they revise; the unique slot belongs to established
+	// facts only (revises_id IS NULL).
+	if err := db.Exec(`DROP INDEX IF EXISTS idx_input_facts_stable`).Error; err != nil {
+		return fmt.Errorf("drop stable-id unique index: %w", err)
+	}
 	statements := []string{
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_input_facts_stable ON input_facts (platform_id, stable_external_id) WHERE stable_external_id != ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_input_facts_stable ON input_facts (platform_id, stable_external_id) WHERE stable_external_id != '' AND revises_id IS NULL`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_supplier_orders_wave_factory_open ON supplier_orders (wave_id, factory_platform_id) WHERE status = 'generated'`,
 	}
 	for _, sql := range statements {

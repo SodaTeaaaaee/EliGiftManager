@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
@@ -11,10 +12,14 @@ type HomeBuckets struct {
 	DuplicateAsk       int
 	AlignmentConflict  int
 	IdentityUnattached int
+	PendingRevisions   int
 	BlockedResults     int
 	WritebackFailed    int
 	ResidualClose      int
-	RecentWaves        []domain.Wave
+	// RevisionFrozenConflicts warns that applied revisions replaced lines
+	// whose results were already frozen into factory orders.
+	RevisionFrozenConflicts int
+	RecentWaves             []domain.Wave
 }
 
 func (ws *Workspace) Home(ctx context.Context) (HomeBuckets, error) {
@@ -39,12 +44,18 @@ func (ws *Workspace) Home(ctx context.Context) (HomeBuckets, error) {
 		return out, err
 	}
 	out.DuplicateAsk = len(dups)
-	idents, err := ws.Store.ListUnattachedIdentities(ctx)
+	revisions, err := ws.Store.ListRevisionFacts(ctx)
 	if err != nil {
 		return out, err
 	}
-	if len(idents) > out.IdentityUnattached {
-		out.IdentityUnattached = len(idents)
+	for _, rev := range revisions {
+		if rev.RevisionAppliedAt == nil {
+			out.PendingRevisions++
+			continue
+		}
+		if strings.Contains(rev.ExtraData, revisionFrozenMarker) {
+			out.RevisionFrozenConflicts++
+		}
 	}
 	failed, err := ws.Store.ListFailedWritebacks(ctx)
 	if err != nil {

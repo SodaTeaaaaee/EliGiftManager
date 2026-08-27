@@ -74,6 +74,7 @@ type Store interface {
 	ListFactLinesByExternalSKU(ctx context.Context, platformID uint, sku string) ([]InputFactLine, error)
 	UpdateFactLine(ctx context.Context, l *InputFactLine) error
 	DeleteFactLine(ctx context.Context, id uint) error
+	ListRevisionFacts(ctx context.Context) ([]InputFact, error)
 
 	CreateDuplicate(ctx context.Context, d *DuplicateObservation) error
 	ListOpenDuplicates(ctx context.Context) ([]DuplicateObservation, error)
@@ -100,6 +101,8 @@ type Store interface {
 	GetInstance(ctx context.Context, id uint) (*EntitlementInstance, error)
 	GetInstanceByLine(ctx context.Context, waveID, lineID uint) (*EntitlementInstance, error)
 	ListInstances(ctx context.Context, waveID uint) ([]EntitlementInstance, error)
+	UpdateInstance(ctx context.Context, i *EntitlementInstance) error
+	DeleteInstance(ctx context.Context, id uint) error
 
 	CreateResult(ctx context.Context, r *FulfillmentResult) error
 	GetResult(ctx context.Context, id uint) (*FulfillmentResult, error)

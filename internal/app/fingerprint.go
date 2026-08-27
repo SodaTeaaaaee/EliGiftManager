@@ -41,9 +41,12 @@ func factFingerprint(identityType, normalizedIdentity, aliasSKU string, qty int,
 
 // ingestFingerprints returns one fingerprint per effective fact line, applying
 // the same single-line default and quantity floor the line creation applies.
+// An empty identity value hashes without a type: the type default is a
+// creation-time convenience, not content, and stored identity-less facts
+// hash the same way.
 func (in IngestFactInput) ingestFingerprints() []string {
 	typ := in.IdentityType
-	if typ == "" {
+	if typ == "" && in.IdentityValue != "" {
 		typ = string(domain.IdentityTypePlatformUID)
 	}
 	norm := NormalizeIdentity(in.IdentityValue)
@@ -119,4 +122,27 @@ func matchExistingFingerprint(ctx context.Context, store domain.Store, platformI
 		}
 	}
 	return nil, nil
+}
+
+// sameContentFingerprints reports whether a stored fact's line fingerprints
+// form the same set as fps — the boundary between "same content again"
+// (duplicate) and "corrected content" (revision).
+func sameContentFingerprints(ctx context.Context, store domain.Store, fact domain.InputFact, fps []string) (bool, error) {
+	existing, err := factLineFingerprints(ctx, store, fact)
+	if err != nil {
+		return false, err
+	}
+	if len(existing) != len(fps) {
+		return false, nil
+	}
+	set := make(map[string]struct{}, len(existing))
+	for _, fp := range existing {
+		set[fp] = struct{}{}
+	}
+	for _, fp := range fps {
+		if _, ok := set[fp]; !ok {
+			return false, nil
+		}
+	}
+	return true, nil
 }

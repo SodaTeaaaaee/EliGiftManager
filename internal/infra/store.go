@@ -481,6 +481,18 @@ func (s *GormStore) ListFactsByPlatform(ctx context.Context, platformID uint) ([
 	return out, nil
 }
 
+func (s *GormStore) ListRevisionFacts(ctx context.Context) ([]domain.InputFact, error) {
+	var rows []persistence.InputFact
+	if err := s.db.WithContext(ctx).Where("revises_id IS NOT NULL").Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.InputFact, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, factToDomain(r))
+	}
+	return out, nil
+}
+
 func (s *GormStore) DeleteFact(ctx context.Context, id uint) error {
 	return s.db.WithContext(ctx).Delete(&persistence.InputFact{}, id).Error
 }
@@ -778,6 +790,20 @@ func (s *GormStore) ListInstances(ctx context.Context, waveID uint) ([]domain.En
 		out = append(out, instanceToDomain(r))
 	}
 	return out, nil
+}
+
+func (s *GormStore) UpdateInstance(ctx context.Context, i *domain.EntitlementInstance) error {
+	return s.db.WithContext(ctx).Model(&persistence.EntitlementInstance{}).Where("id = ?", i.ID).Updates(map[string]any{
+		"wave_id":              i.WaveID,
+		"input_fact_line_id":   i.InputFactLineID,
+		"customer_profile_id":  i.CustomerProfileID,
+		"platform_identity_id": i.PlatformIdentityID,
+		"membership_level":     i.MembershipLevel,
+	}).Error
+}
+
+func (s *GormStore) DeleteInstance(ctx context.Context, id uint) error {
+	return s.db.WithContext(ctx).Delete(&persistence.EntitlementInstance{}, id).Error
 }
 
 func (s *GormStore) CreateResult(ctx context.Context, r *domain.FulfillmentResult) error {

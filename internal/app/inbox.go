@@ -37,6 +37,12 @@ type InboxRow struct {
 	Assigned   bool
 	Unaligned  bool
 	Unattached bool
+	// RevisionPending marks rows of a revision fact awaiting an apply or
+	// dismiss decision; they are visible but not assignable.
+	RevisionPending bool
+	// AliasID resolves the line's external SKU to its product alias, when
+	// one exists, so alignment actions can target it.
+	AliasID *uint
 }
 
 type IngestDocumentResult struct {
@@ -99,6 +105,27 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *do
 	if in.StableExternalID != "" {
 		existing, err := tx.FindFactByStableID(ctx, doc.PlatformID, in.StableExternalID)
 		if err == nil {
+			// Same stable id: identical content is a duplicate, different
+			// content is a revision of the established fact.
+			inFps := in.ingestFingerprints()
+			same, err := sameContentFingerprints(ctx, tx, *existing, inFps)
+			if err != nil {
+				return nil, err
+			}
+			exFps, _ := factLineFingerprints(ctx, tx, *existing)
+			println("DEBUG verdict", existing.ID, same)
+			for _, f := range exFps {
+				println("  ex ", f)
+			}
+			for _, f := range inFps {
+				println("  in ", f)
+			}
+			if !same {
+				if _, err := ws.createFactWithLines(ctx, tx, doc, in, kind, &existing.ID); err != nil {
+					return nil, err
+				}
+				return nil, nil
+			}
 			return ws.recordObservation(ctx, tx, doc, in, existing.ID, domain.DuplicateRecordOnly, "stable_external_id", true)
 		}
 		if err != domain.ErrNotFound {
@@ -128,7 +155,7 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *do
 		}
 		// First-seen content is a new responsibility regardless of age.
 	}
-	if _, err := ws.createFactWithLines(ctx, tx, doc, in, kind); err != nil {
+	if _, err := ws.createFactWithLines(ctx, tx, doc, in, kind, nil); err != nil {
 		return nil, err
 	}
 	return nil, nil
@@ -159,9 +186,11 @@ type duplicateInputSnapshot struct {
 }
 
 // createFactWithLines materializes one ingest input as a fact with its
-// identity, lines, and alias-resolved product alignment. Every read and write
+// identity, lines, and alias-resolved product alignment. A non-nil revisesID
+// marks the new fact as a revision of the established fact (which shares the
+// stable external id, so it must be set at insert time). Every read and write
 // goes through the explicit store argument so callers control the transaction.
-func (ws *Workspace) createFactWithLines(ctx context.Context, tx domain.Store, doc *domain.InputDocument, in IngestFactInput, kind string) (*domain.InputFact, error) {
+func (ws *Workspace) createFactWithLines(ctx context.Context, tx domain.Store, doc *domain.InputDocument, in IngestFactInput, kind string, revisesID *uint) (*domain.InputFact, error) {
 	var identID *uint
 	if in.IdentityValue != "" {
 		typ := in.IdentityType
@@ -192,6 +221,7 @@ func (ws *Workspace) createFactWithLines(ctx context.Context, tx domain.Store, d
 		MembershipLevel:    in.MembershipLevel,
 		SourceDocumentNo:   in.SourceDocumentNo,
 		SourceCreatedAt:    in.SourceCreatedAt,
+		RevisesID:          revisesID,
 		ExtraData:          in.ExtraData,
 	}
 	if identID != nil {
@@ -285,6 +315,9 @@ func (ws *Workspace) assignLines(ctx context.Context, waveID uint, lineIDs []uin
 		fact, err := ws.Store.GetFact(ctx, line.FactID)
 		if err != nil {
 			return err
+		}
+		if fact.RevisesID != nil && fact.RevisionAppliedAt == nil {
+			return ErrRevisionPending
 		}
 		wid := waveID
 		line.WaveID = &wid
@@ -464,8 +497,27 @@ func (ws *Workspace) ListInboxRows(ctx context.Context) ([]InboxRow, error) {
 				}
 				unattached = ident.CustomerProfileID == nil
 			}
+			revisionPending := f.RevisesID != nil && f.RevisionAppliedAt == nil
 			for _, ln := range lines {
-				row := InboxRow{Line: ln, Fact: f, Document: &docCopy, Assigned: ln.WaveID != nil, Unaligned: ln.ProductItemID == nil && f.Kind != string(domain.InputFactKindMembership), Unattached: unattached}
+				var aliasID *uint
+				if ln.ExternalSKU != "" {
+					if alias, err := ws.Store.FindAlias(ctx, f.PlatformID, ln.ExternalSKU); err == nil {
+						id := alias.ID
+						aliasID = &id
+					} else if err != domain.ErrNotFound {
+						return nil, err
+					}
+				}
+				row := InboxRow{
+					Line:            ln,
+					Fact:            f,
+					Document:        &docCopy,
+					Assigned:        ln.WaveID != nil,
+					Unaligned:       ln.ProductItemID == nil && f.Kind != string(domain.InputFactKindMembership),
+					Unattached:      unattached,
+					RevisionPending: revisionPending,
+					AliasID:         aliasID,
+				}
 				rows = append(rows, row)
 			}
 		}
