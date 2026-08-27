@@ -364,18 +364,21 @@ func (ws *Workspace) ensureRetailResult(ctx context.Context, waveID uint, fact *
 			return nil
 		}
 	}
-	custID := fact.CustomerProfileID
-	if custID == nil && fact.PlatformIdentityID != nil {
-		if ident, err := ws.Store.GetIdentity(ctx, *fact.PlatformIdentityID); err == nil && ident.CustomerProfileID != nil {
-			custID = ident.CustomerProfileID
-		}
-	}
+	custID := retailCustomerID(ctx, ws.Store, fact)
 	addr, err := defaultSnapshot(ctx, ws.Store, custID)
 	if err != nil {
 		return err
 	}
 	fid := fact.ID
 	lid := line.ID
+
+	// Wave-scoped split exception wins over the alias's global bundle
+	// composition: it explains this specific line in this wave.
+	if handled, err := ws.applyQuantitySplit(ctx, waveID, fact, line); err != nil {
+		return err
+	} else if handled {
+		return nil
+	}
 
 	// Bundle mapping: when the line's alias expands into components, emit one
 	// result per component with quantity = line quantity x component quantity.
@@ -413,6 +416,20 @@ func (ws *Workspace) ensureRetailResult(ctx context.Context, waveID uint, fact *
 		Address:           addr,
 	}
 	return ws.Store.CreateResult(ctx, res)
+}
+
+// retailCustomerID resolves the customer behind a fact: the fact's own link
+// first, then the identity's attachment.
+func retailCustomerID(ctx context.Context, store domain.Store, fact *domain.InputFact) *uint {
+	if fact.CustomerProfileID != nil {
+		return fact.CustomerProfileID
+	}
+	if fact.PlatformIdentityID != nil {
+		if ident, err := store.GetIdentity(ctx, *fact.PlatformIdentityID); err == nil && ident.CustomerProfileID != nil {
+			return ident.CustomerProfileID
+		}
+	}
+	return nil
 }
 
 // bundleComponentsForLine resolves the line's external SKU to its alias and

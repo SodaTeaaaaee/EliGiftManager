@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
@@ -17,7 +18,14 @@ type ResultView struct {
 
 func (ws *Workspace) inspectResult(ctx context.Context, r domain.FulfillmentResult) (ResultView, error) {
 	view := ResultView{Result: r}
-	if r.ProductItemID == nil {
+	// A not-summing split placeholder is blocked for exactly one reason: the
+	// wave's quantity split does not add up to the line quantity. The missing
+	// product alignment is a symptom of that, not an extra block.
+	notSumming := strings.Contains(r.ExtraData, `"quantity_split_not_summing":true`)
+	if notSumming {
+		view.Blocks = append(view.Blocks, domain.BlockQuantitySplitNotSumming)
+	}
+	if r.ProductItemID == nil && !notSumming {
 		view.Blocks = append(view.Blocks, domain.BlockUnalignedProduct)
 	}
 	if !r.Address.Usable() {

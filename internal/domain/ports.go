@@ -46,6 +46,12 @@ type Store interface {
 	CreateBundleComponent(ctx context.Context, c *ProductBundleComponent) error
 	ListBundleComponents(ctx context.Context, aliasID uint) ([]ProductBundleComponent, error)
 
+	UpsertQuantitySplitRule(ctx context.Context, r *QuantitySplitRule) error
+	GetQuantitySplitRule(ctx context.Context, id uint) (*QuantitySplitRule, error)
+	FindQuantitySplitRule(ctx context.Context, waveID, platformID uint, externalKey string) (*QuantitySplitRule, error)
+	ListQuantitySplitRules(ctx context.Context, waveID uint) ([]QuantitySplitRule, error)
+	DeleteQuantitySplitRule(ctx context.Context, id uint) error
+
 	CreateTemplate(ctx context.Context, t *TemplateConfig) error
 	GetTemplate(ctx context.Context, id uint) (*TemplateConfig, error)
 	ListTemplates(ctx context.Context) ([]TemplateConfig, error)

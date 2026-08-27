@@ -102,6 +102,29 @@ type ProductBundleComponent struct {
 	UpdatedAt     time.Time
 }
 
+// QuantitySplitRule is the advanced exception that spreads one input fact
+// line's quantity over several unified product facts for one wave and one
+// source line (platform + external key). Components carry the absolute
+// quantity apportioned to each product; they must sum to the line quantity.
+type QuantitySplitRule struct {
+	ID          uint
+	WaveID      uint
+	PlatformID  uint
+	ExternalKey string
+	Components  []QuantitySplitComponent
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type QuantitySplitComponent struct {
+	ID            uint
+	RuleID        uint
+	ProductItemID uint
+	Quantity      int
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 type TemplateConfig struct {
 	ID           uint
 	PlatformID   uint

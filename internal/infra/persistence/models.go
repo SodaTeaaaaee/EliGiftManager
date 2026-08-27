@@ -99,6 +99,28 @@ type ProductBundleComponent struct {
 
 func (ProductBundleComponent) TableName() string { return "product_bundle_components" }
 
+type QuantitySplitRule struct {
+	ID          uint   `gorm:"primaryKey"`
+	WaveID      uint   `gorm:"uniqueIndex:idx_qsplit_wave_platform_key,priority:1;not null"`
+	PlatformID  uint   `gorm:"uniqueIndex:idx_qsplit_wave_platform_key,priority:2;not null"`
+	ExternalKey string `gorm:"uniqueIndex:idx_qsplit_wave_platform_key,priority:3;not null"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (QuantitySplitRule) TableName() string { return "quantity_split_rules" }
+
+type QuantitySplitComponent struct {
+	ID            uint `gorm:"primaryKey"`
+	RuleID        uint `gorm:"index;not null"`
+	ProductItemID uint `gorm:"not null"`
+	Quantity      int  `gorm:"not null"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (QuantitySplitComponent) TableName() string { return "quantity_split_components" }
+
 type TemplateConfig struct {
 	ID           uint   `gorm:"primaryKey"`
 	PlatformID   uint   `gorm:"index;not null"`
@@ -378,6 +400,8 @@ func AllModels() []any {
 		&ProductItem{},
 		&ProductAlias{},
 		&ProductBundleComponent{},
+		&QuantitySplitRule{},
+		&QuantitySplitComponent{},
 		&TemplateConfig{},
 		&CarrierMapping{},
 		&InputDocument{},

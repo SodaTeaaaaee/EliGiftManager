@@ -343,6 +343,99 @@ func (s *GormStore) ListBundleComponents(ctx context.Context, aliasID uint) ([]d
 	return out, nil
 }
 
+func (s *GormStore) UpsertQuantitySplitRule(ctx context.Context, r *domain.QuantitySplitRule) error {
+	var row persistence.QuantitySplitRule
+	err := s.db.WithContext(ctx).Where("wave_id = ? AND platform_id = ? AND external_key = ?", r.WaveID, r.PlatformID, r.ExternalKey).First(&row).Error
+	switch {
+	case err == nil:
+		row.UpdatedAt = time.Now()
+		if err := s.db.WithContext(ctx).Save(&row).Error; err != nil {
+			return err
+		}
+		r.ID = row.ID
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		row = persistence.QuantitySplitRule{WaveID: r.WaveID, PlatformID: r.PlatformID, ExternalKey: r.ExternalKey}
+		if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
+			return err
+		}
+		r.ID = row.ID
+	default:
+		return err
+	}
+	// Components are replaced wholesale.
+	if err := s.db.WithContext(ctx).Where("rule_id = ?", r.ID).Delete(&persistence.QuantitySplitComponent{}).Error; err != nil {
+		return err
+	}
+	r.Components = append([]domain.QuantitySplitComponent(nil), r.Components...)
+	for i := range r.Components {
+		r.Components[i].ID = 0
+		r.Components[i].RuleID = r.ID
+		comp := persistence.QuantitySplitComponent{RuleID: r.ID, ProductItemID: r.Components[i].ProductItemID, Quantity: r.Components[i].Quantity}
+		if err := s.db.WithContext(ctx).Create(&comp).Error; err != nil {
+			return err
+		}
+		r.Components[i].ID = comp.ID
+		r.Components[i].CreatedAt, r.Components[i].UpdatedAt = comp.CreatedAt, comp.UpdatedAt
+	}
+	stored, err := s.GetQuantitySplitRule(ctx, r.ID)
+	if err != nil {
+		return err
+	}
+	*r = *stored
+	return nil
+}
+
+func (s *GormStore) GetQuantitySplitRule(ctx context.Context, id uint) (*domain.QuantitySplitRule, error) {
+	var row persistence.QuantitySplitRule
+	if err := first(s.db.WithContext(ctx).Where("id = ?", id), &row); err != nil {
+		return nil, err
+	}
+	return quantitySplitToDomain(s, ctx, row)
+}
+
+func (s *GormStore) FindQuantitySplitRule(ctx context.Context, waveID, platformID uint, externalKey string) (*domain.QuantitySplitRule, error) {
+	var row persistence.QuantitySplitRule
+	if err := first(s.db.WithContext(ctx).Where("wave_id = ? AND platform_id = ? AND external_key = ?", waveID, platformID, externalKey), &row); err != nil {
+		return nil, err
+	}
+	return quantitySplitToDomain(s, ctx, row)
+}
+
+func (s *GormStore) ListQuantitySplitRules(ctx context.Context, waveID uint) ([]domain.QuantitySplitRule, error) {
+	var rows []persistence.QuantitySplitRule
+	if err := s.db.WithContext(ctx).Where("wave_id = ?", waveID).Order("id").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]domain.QuantitySplitRule, 0, len(rows))
+	for _, r := range rows {
+		rule, err := quantitySplitToDomain(s, ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *rule)
+	}
+	return out, nil
+}
+
+func (s *GormStore) DeleteQuantitySplitRule(ctx context.Context, id uint) error {
+	if err := s.db.WithContext(ctx).Where("rule_id = ?", id).Delete(&persistence.QuantitySplitComponent{}).Error; err != nil {
+		return err
+	}
+	return s.db.WithContext(ctx).Delete(&persistence.QuantitySplitRule{}, id).Error
+}
+
+func quantitySplitToDomain(s *GormStore, ctx context.Context, row persistence.QuantitySplitRule) (*domain.QuantitySplitRule, error) {
+	var comps []persistence.QuantitySplitComponent
+	if err := s.db.WithContext(ctx).Where("rule_id = ?", row.ID).Order("id").Find(&comps).Error; err != nil {
+		return nil, err
+	}
+	rule := &domain.QuantitySplitRule{ID: row.ID, WaveID: row.WaveID, PlatformID: row.PlatformID, ExternalKey: row.ExternalKey, CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
+	for _, c := range comps {
+		rule.Components = append(rule.Components, domain.QuantitySplitComponent{ID: c.ID, RuleID: c.RuleID, ProductItemID: c.ProductItemID, Quantity: c.Quantity, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt})
+	}
+	return rule, nil
+}
+
 func (s *GormStore) CreateTemplate(ctx context.Context, t *domain.TemplateConfig) error {
 	row := templateFromDomain(*t)
 	if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
