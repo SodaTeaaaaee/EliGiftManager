@@ -88,11 +88,15 @@ func (ws *Workspace) inspectResult(ctx context.Context, r domain.FulfillmentResu
 	return view, nil
 }
 
-func (ws *Workspace) defaultSnapshot(ctx context.Context, customerID *uint) (domain.AddressSnapshot, error) {
+// defaultSnapshot derives the address snapshot a new result starts from: the
+// customer's default address, or the first one when no default is flagged.
+// Every read goes through the explicit store argument so callers control
+// which transaction or connection the lookup joins.
+func defaultSnapshot(ctx context.Context, store domain.Store, customerID *uint) (domain.AddressSnapshot, error) {
 	if customerID == nil {
 		return domain.AddressSnapshot{}, nil
 	}
-	addrs, err := ws.Store.ListAddresses(ctx, *customerID)
+	addrs, err := store.ListAddresses(ctx, *customerID)
 	if err != nil {
 		return domain.AddressSnapshot{}, err
 	}

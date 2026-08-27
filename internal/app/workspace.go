@@ -25,7 +25,9 @@ func NewWorkspace(store domain.Store) *Workspace {
 // withStore returns a shallow copy of the workspace bound to another store
 // (typically a transaction). The store pool is limited to a single connection,
 // so inside a WithTx callback every read and write must go through the
-// transaction-backed workspace, never through the outer one.
+// transaction-backed workspace, never through the outer one. Helpers that take
+// an explicit domain.Store argument (recompute, defaultSnapshot,
+// selectorMatches) follow the same rule: they must be handed the transaction.
 func (ws *Workspace) withStore(s domain.Store) *Workspace {
 	return &Workspace{Store: s, Now: ws.Now, NewTrackingID: ws.NewTrackingID}
 }

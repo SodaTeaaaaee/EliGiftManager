@@ -227,7 +227,7 @@ func (ws *Workspace) AssignLines(ctx context.Context, waveID uint, lineIDs []uin
 		if err := tws.assignLines(ctx, waveID, lineIDs); err != nil {
 			return err
 		}
-		return tws.recompute(ctx, tx, waveID)
+		return recompute(ctx, tx, waveID)
 	})
 }
 
@@ -305,7 +305,7 @@ func (ws *Workspace) ensureRetailResult(ctx context.Context, waveID uint, fact *
 			custID = ident.CustomerProfileID
 		}
 	}
-	addr, err := ws.defaultSnapshot(ctx, custID)
+	addr, err := defaultSnapshot(ctx, ws.Store, custID)
 	if err != nil {
 		return err
 	}
@@ -334,7 +334,7 @@ func (ws *Workspace) ensureGrantResult(ctx context.Context, waveID uint, fact *d
 			return nil
 		}
 	}
-	addr, err := ws.defaultSnapshot(ctx, fact.CustomerProfileID)
+	addr, err := defaultSnapshot(ctx, ws.Store, fact.CustomerProfileID)
 	if err != nil {
 		return err
 	}

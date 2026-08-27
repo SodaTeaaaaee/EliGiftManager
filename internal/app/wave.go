@@ -82,24 +82,32 @@ func (ws *Workspace) UpsertRule(ctx context.Context, rule *domain.EntitlementRul
 				return err
 			}
 		} else {
+			old, err := tx.GetRule(ctx, rule.ID)
+			if err != nil {
+				return err
+			}
+			// Callers may hand in a rule built from scratch (e.g. an edit
+			// form), so backfill the audit timestamps before the full-field
+			// Save in UpdateRule clobbers them with zero values.
+			rule.CreatedAt, rule.UpdatedAt = old.CreatedAt, old.UpdatedAt
 			if err := tx.UpdateRule(ctx, rule); err != nil {
 				return err
 			}
 		}
-		return ws.withStore(tx).recompute(ctx, tx, rule.WaveID)
+		return recompute(ctx, tx, rule.WaveID)
 	})
 }
 
 func (ws *Workspace) DeleteRule(ctx context.Context, id uint) error {
-	rule, err := ws.Store.GetRule(ctx, id)
-	if err != nil {
-		return err
-	}
 	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
+		rule, err := tx.GetRule(ctx, id)
+		if err != nil {
+			return err
+		}
 		if err := tx.DeleteRule(ctx, id); err != nil {
 			return err
 		}
-		return ws.withStore(tx).recompute(ctx, tx, rule.WaveID)
+		return recompute(ctx, tx, rule.WaveID)
 	})
 }
 
@@ -111,7 +119,7 @@ func (ws *Workspace) AddException(ctx context.Context, e *domain.EntitlementExce
 		if err := tx.CreateException(ctx, e); err != nil {
 			return err
 		}
-		return ws.withStore(tx).recompute(ctx, tx, e.WaveID)
+		return recompute(ctx, tx, e.WaveID)
 	})
 }
 
@@ -175,15 +183,15 @@ func validateSelector(sel domain.EntitlementSelector) error {
 
 func (ws *Workspace) RecomputeEntitlements(ctx context.Context, waveID uint) error {
 	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
-		return ws.withStore(tx).recompute(ctx, tx, waveID)
+		return recompute(ctx, tx, waveID)
 	})
 }
 
 // recompute deletes and rebuilds the unfrozen entitlement results of a wave.
-// It must be invoked on a workspace bound to `store` (see withStore) so every
-// statement shares the caller's transaction; public entry points wrap it in
-// their own WithTx instead of nesting RecomputeEntitlements.
-func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID uint) error {
+// Every read and write goes through the explicit store argument, so callers
+// hand it the transaction they opened; public entry points wrap it in their
+// own WithTx instead of nesting RecomputeEntitlements.
+func recompute(ctx context.Context, store domain.Store, waveID uint) error {
 	type key struct {
 		inst uint
 		prod uint
@@ -243,7 +251,7 @@ func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID u
 			if !rule.Active {
 				continue
 			}
-			ok, err := ws.selectorMatches(ctx, rule.Selector, inst)
+			ok, err := selectorMatches(ctx, store, rule.Selector, inst)
 			if err != nil {
 				return err
 			}
@@ -268,7 +276,7 @@ func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID u
 		}
 		instID := k.inst
 		prodID := k.prod
-		addr, err := ws.defaultSnapshot(ctx, cust[k.inst])
+		addr, err := defaultSnapshot(ctx, store, cust[k.inst])
 		if err != nil {
 			return err
 		}
@@ -305,7 +313,10 @@ func (ws *Workspace) recompute(ctx context.Context, store domain.Store, waveID u
 	return nil
 }
 
-func (ws *Workspace) selectorMatches(ctx context.Context, sel domain.EntitlementSelector, inst domain.EntitlementInstance) (bool, error) {
+// selectorMatches reports whether an entitlement instance falls under a rule
+// selector. Every read goes through the explicit store argument so callers
+// control which transaction or connection the lookup joins.
+func selectorMatches(ctx context.Context, store domain.Store, sel domain.EntitlementSelector, inst domain.EntitlementInstance) (bool, error) {
 	switch sel.Type {
 	case string(domain.SelectorWaveAll):
 		return true, nil
@@ -318,7 +329,7 @@ func (ws *Workspace) selectorMatches(ctx context.Context, sel domain.Entitlement
 		if inst.PlatformIdentityID == nil {
 			return false, nil
 		}
-		ident, err := ws.Store.GetIdentity(ctx, *inst.PlatformIdentityID)
+		ident, err := store.GetIdentity(ctx, *inst.PlatformIdentityID)
 		if err != nil {
 			return false, err
 		}
