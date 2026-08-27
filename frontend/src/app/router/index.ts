@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory } from 'vue-router'
+import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 import { useRouteProgressStore } from '@/shared/model/route-progress'
 
 declare module 'vue-router' {
@@ -6,6 +6,17 @@ declare module 'vue-router' {
     navTitleKey?: string
   }
 }
+
+// design-lab is a dev-only playground; production builds skip its route.
+const devOnlyRoutes: RouteRecordRaw[] = import.meta.env.DEV
+  ? [
+    {
+      path: '/design-lab',
+      name: 'design-lab',
+      component: () => import('@/pages/design-lab/DesignLabPage.vue'),
+    },
+  ]
+  : []
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -93,11 +104,7 @@ const router = createRouter({
       component: () => import('@/pages/settings/SettingsPage.vue'),
       meta: { navTitleKey: 'nav.settings' },
     },
-    {
-      path: '/design-lab',
-      name: 'design-lab',
-      component: () => import('@/pages/design-lab/DesignLabPage.vue'),
-    },
+    ...devOnlyRoutes,
   ],
 })
 

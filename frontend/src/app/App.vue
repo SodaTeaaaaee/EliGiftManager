@@ -14,7 +14,8 @@ import {
   SettingsOutline,
   FlaskOutline,
 } from '@vicons/ionicons5'
-import { AppShell, type NavGroupSpec, type NavItemSpec } from '@/shared/ui/shell'
+import type { NavGroupSpec, NavItemSpec } from '@/shared/ui/shell'
+import { AppShell } from '@/shared/ui/shell'
 import { FeedbackProvider, DisconnectedBanner, TopProgressBar } from '@/shared/ui/feedback'
 import { useNaiveTheme } from '@/shared/theme/naive-bridge'
 import { useGlobalViewHotkeys } from '@/shared/lib/view-hotkeys'
@@ -22,22 +23,28 @@ import { useGlobalViewHotkeys } from '@/shared/lib/view-hotkeys'
 const { theme, themeOverrides } = useNaiveTheme()
 useGlobalViewHotkeys()
 
-const navGroups = computed<NavGroupSpec[]>(() => [
-  {
-    key: 'primary',
-    items: [
-      { key: 'home', labelKey: 'nav.home', icon: GridOutline, to: { name: 'home' } },
-      { key: 'inbox', labelKey: 'nav.inbox', icon: FileTrayFullOutline, to: { name: 'inbox' } },
-      { key: 'waves', labelKey: 'nav.waves', icon: LayersOutline, to: { name: 'waves' } },
-      { key: 'library', labelKey: 'nav.library', icon: LibraryOutline, to: { name: 'library-customers' } },
-    ],
-  },
-  {
-    key: 'dev',
-    labelKey: 'nav.devSectionLabel',
-    items: [{ key: 'design-lab', labelKey: 'designLab.title', icon: FlaskOutline, to: { name: 'design-lab' } }],
-  },
-])
+const navGroups = computed<NavGroupSpec[]>(() => {
+  const groups: NavGroupSpec[] = [
+    {
+      key: 'primary',
+      items: [
+        { key: 'home', labelKey: 'nav.home', icon: GridOutline, to: { name: 'home' } },
+        { key: 'inbox', labelKey: 'nav.inbox', icon: FileTrayFullOutline, to: { name: 'inbox' } },
+        { key: 'waves', labelKey: 'nav.waves', icon: LayersOutline, to: { name: 'waves' } },
+        { key: 'library', labelKey: 'nav.library', icon: LibraryOutline, to: { name: 'library-customers' } },
+      ],
+    },
+  ]
+  // The dev-tools group (design-lab) only exists in dev builds.
+  if (import.meta.env.DEV) {
+    groups.push({
+      key: 'dev',
+      labelKey: 'nav.devSectionLabel',
+      items: [{ key: 'design-lab', labelKey: 'designLab.title', icon: FlaskOutline, to: { name: 'design-lab' } }],
+    })
+  }
+  return groups
+})
 
 const settingsItem: NavItemSpec = {
   key: 'settings',
