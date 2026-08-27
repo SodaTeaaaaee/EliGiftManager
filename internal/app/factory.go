@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
@@ -266,102 +265,6 @@ func (ws *Workspace) ImportShipment(ctx context.Context, trackingID, trackingNo,
 		return nil, err
 	}
 	return sh, nil
-}
-
-func (ws *Workspace) GenerateWritebacks(ctx context.Context, factID uint) ([]domain.ChannelWritebackItem, error) {
-	var created []domain.ChannelWritebackItem
-	if err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
-		items, err := generateWritebacks(ctx, tx, factID)
-		if err != nil {
-			return err
-		}
-		created = items
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return created, nil
-}
-
-// generateWritebacks collects the shipments behind a source fact and records
-// one writeback item per shipment. Every read and write goes through the
-// explicit store argument, so callers hand it the transaction they opened;
-// every write commits or rolls back together.
-func generateWritebacks(ctx context.Context, store domain.Store, factID uint) ([]domain.ChannelWritebackItem, error) {
-	existing, err := store.ListWritebacksByFact(ctx, factID)
-	if err != nil {
-		return nil, err
-	}
-	if len(existing) > 0 {
-		return existing, nil
-	}
-	waves, err := store.ListWaves(ctx)
-	if err != nil {
-		return nil, err
-	}
-	seenShipment := map[uint]struct{}{}
-	var created []domain.ChannelWritebackItem
-	// Snapshot the writeback output template (0 when none is configured).
-	var wbTplID uint
-	var wbTplVersion int
-	fact, err := store.GetFact(ctx, factID)
-	if err != nil {
-		return nil, err
-	}
-	if tpl, err := findTemplate(ctx, store, fact.PlatformID, domain.TemplateDirectionOutput, DocumentTypeWriteback); err != nil {
-		return nil, err
-	} else if tpl != nil {
-		wbTplID, wbTplVersion = tpl.ID, tpl.Version
-	}
-	for _, w := range waves {
-		results, err := store.ListResults(ctx, w.ID)
-		if err != nil {
-			return nil, err
-		}
-		for _, r := range results {
-			if r.InputFactID == nil || *r.InputFactID != factID {
-				continue
-			}
-			links, err := store.ListLinksByResult(ctx, r.ID)
-			if err != nil {
-				return nil, err
-			}
-			for _, link := range links {
-				line, err := store.GetSupplierOrderLine(ctx, link.SupplierOrderLineID)
-				if err != nil {
-					return nil, err
-				}
-				if line.TrackingRetired {
-					continue
-				}
-				ships, err := store.ListShipmentsByTracking(ctx, line.TrackingID)
-				if err != nil {
-					return nil, err
-				}
-				for _, sh := range ships {
-					if _, ok := seenShipment[sh.ID]; ok {
-						continue
-					}
-					seenShipment[sh.ID] = struct{}{}
-					item := &domain.ChannelWritebackItem{
-						InputFactID:     factID,
-						ShipmentID:      sh.ID,
-						TrackingNo:      sh.TrackingNo,
-						CarrierCode:     sh.CarrierCode,
-						Status:          string(domain.WritebackPending),
-						TemplateID:      wbTplID,
-						TemplateVersion: wbTplVersion,
-						Payload:         strings.Join([]string{sh.TrackingNo, sh.CarrierCode}, ","),
-					}
-					if err := store.CreateWriteback(ctx, item); err != nil {
-						return nil, err
-					}
-					created = append(created, *item)
-				}
-			}
-		}
-	}
-	return created, nil
 }
 
 func (ws *Workspace) ListSupplierOrders(ctx context.Context, waveID uint) ([]domain.SupplierOrder, error) {
