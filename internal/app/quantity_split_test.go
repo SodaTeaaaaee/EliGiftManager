@@ -61,11 +61,11 @@ func newSplitFixture(t *testing.T) *splitFixture {
 func (f *splitFixture) ingestSplitLine(t *testing.T, stableID, sku string, qty int) uint {
 	t.Helper()
 	in := IngestFactInput{
-		Kind:            string(domain.InputFactKindRetailOrder),
+		Kind:             string(domain.InputFactKindRetailOrder),
 		StableExternalID: stableID,
-		IdentityType:    string(domain.IdentityTypePlatformUID),
-		IdentityValue:   "UID-" + stableID,
-		Lines:           []IngestLine{{SourceLineNo: 1, ExternalSKU: sku, Quantity: qty}},
+		IdentityType:     string(domain.IdentityTypePlatformUID),
+		IdentityValue:    "UID-" + stableID,
+		Lines:            []IngestLine{{SourceLineNo: 1, ExternalSKU: sku, Quantity: qty}},
 	}
 	doc := &domain.InputDocument{PlatformID: f.source.ID, DocumentType: "retail"}
 	if _, dups, err := f.ws.IngestDocument(f.ctx, doc, []IngestFactInput{in}); err != nil {
