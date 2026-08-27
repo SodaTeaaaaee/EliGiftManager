@@ -1001,14 +1001,12 @@ func (s *GormStore) UpdateWriteback(ctx context.Context, w *domain.ChannelWriteb
 }
 
 func (s *GormStore) GetSettings(ctx context.Context) (*domain.AppSettings, error) {
+	// FirstOrCreate closes the read-then-create race between two concurrent
+	// callers on an empty settings table; Attrs keep the legacy defaults.
 	var row persistence.AppSettings
-	err := s.db.WithContext(ctx).First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		row = persistence.AppSettings{Locale: "zh-CN", Theme: "system", Density: "comfortable", DuplicateRecordMinutes: 10, DuplicateAskDays: 10}
-		if err := s.db.WithContext(ctx).Create(&row).Error; err != nil {
-			return nil, err
-		}
-	} else if err != nil {
+	if err := s.db.WithContext(ctx).
+		Attrs(persistence.AppSettings{Locale: "zh-CN", Theme: "system", Density: "comfortable", DuplicateRecordMinutes: 10, DuplicateAskDays: 10}).
+		FirstOrCreate(&row).Error; err != nil {
 		return nil, err
 	}
 	d := domain.AppSettings{ID: row.ID, Locale: row.Locale, Theme: row.Theme, Density: row.Density, DuplicateRecordMinutes: row.DuplicateRecordMinutes, DuplicateAskDays: row.DuplicateAskDays, UpdatedAt: row.UpdatedAt}
