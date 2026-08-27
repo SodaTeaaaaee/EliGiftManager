@@ -80,6 +80,10 @@ export function ListCarrierMappings(arg1:number):Promise<Array<domain.CarrierMap
 
 export function ListCustomers():Promise<Array<domain.CustomerProfile>>;
 
+export function ListEntitlementInstances(arg1:number):Promise<Array<app.InstanceView>>;
+
+export function ListExceptions(arg1:number):Promise<Array<app.ExceptionView>>;
+
 export function ListInboxRows():Promise<Array<app.InboxRow>>;
 
 export function ListPlatforms():Promise<Array<domain.Platform>>;

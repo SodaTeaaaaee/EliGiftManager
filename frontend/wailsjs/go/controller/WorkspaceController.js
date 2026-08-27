@@ -154,6 +154,14 @@ export function ListCustomers() {
   return window['go']['controller']['WorkspaceController']['ListCustomers']();
 }
 
+export function ListEntitlementInstances(arg1) {
+  return window['go']['controller']['WorkspaceController']['ListEntitlementInstances'](arg1);
+}
+
+export function ListExceptions(arg1) {
+  return window['go']['controller']['WorkspaceController']['ListExceptions'](arg1);
+}
+
 export function ListInboxRows() {
   return window['go']['controller']['WorkspaceController']['ListInboxRows']();
 }

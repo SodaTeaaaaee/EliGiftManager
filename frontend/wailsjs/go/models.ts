@@ -53,6 +53,30 @@ export namespace alignment {
 
 export namespace app {
 	
+	export class ExceptionView {
+	    ID: number;
+	    InstanceID: number;
+	    CustomerName: string;
+	    ProductItemID: number;
+	    ProductName: string;
+	    Quantity: number;
+	    Note: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ExceptionView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.InstanceID = source["InstanceID"];
+	        this.CustomerName = source["CustomerName"];
+	        this.ProductItemID = source["ProductItemID"];
+	        this.ProductName = source["ProductName"];
+	        this.Quantity = source["Quantity"];
+	        this.Note = source["Note"];
+	    }
+	}
 	export class ExportFileResult {
 	    Order: domain.SupplierOrder;
 	    Path: string;
@@ -403,6 +427,24 @@ export namespace app {
 		}
 	}
 	
+	export class InstanceView {
+	    ID: number;
+	    CustomerName: string;
+	    PlatformIdentity: string;
+	    MembershipLevel: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new InstanceView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.CustomerName = source["CustomerName"];
+	        this.PlatformIdentity = source["PlatformIdentity"];
+	        this.MembershipLevel = source["MembershipLevel"];
+	    }
+	}
 	export class ProductTotal {
 	    ProductID: number;
 	    Name: string;

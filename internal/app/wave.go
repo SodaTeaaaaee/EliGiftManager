@@ -136,6 +136,105 @@ func (ws *Workspace) DeleteException(ctx context.Context, id uint) error {
 	})
 }
 
+// ExceptionView is one entitlement exception joined with the display fields
+// the wave screen needs: the member behind the instance and the product the
+// exception grants.
+type ExceptionView struct {
+	ID            uint
+	InstanceID    uint
+	CustomerName  string
+	ProductItemID uint
+	ProductName   string
+	Quantity      int
+	Note          string
+}
+
+// ListExceptions returns the wave's entitlement exceptions with customer and
+// product display names resolved, so the UI never has to hand-type instance
+// or product ids.
+func (ws *Workspace) ListExceptions(ctx context.Context, waveID uint) ([]ExceptionView, error) {
+	excs, err := ws.Store.ListExceptions(ctx, waveID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ExceptionView, 0, len(excs))
+	for _, e := range excs {
+		view := ExceptionView{ID: e.ID, InstanceID: e.InstanceID, ProductItemID: e.ProductID, Quantity: e.Quantity, Note: e.Note}
+		inst, err := ws.Store.GetInstance(ctx, e.InstanceID)
+		if err != nil {
+			return nil, err
+		}
+		view.CustomerName = instanceCustomerName(ctx, ws.Store, *inst)
+		p, err := ws.Store.GetProduct(ctx, e.ProductID)
+		if err != nil {
+			return nil, err
+		}
+		view.ProductName = p.Name
+		out = append(out, view)
+	}
+	return out, nil
+}
+
+// InstanceView is one entitlement instance with the member-facing display
+// fields: customer name and a platform identity summary.
+type InstanceView struct {
+	ID               uint
+	CustomerName     string
+	PlatformIdentity string
+	MembershipLevel  string
+}
+
+// ListEntitlementInstances returns the wave's membership instances with
+// customer and identity display fields resolved.
+func (ws *Workspace) ListEntitlementInstances(ctx context.Context, waveID uint) ([]InstanceView, error) {
+	insts, err := ws.Store.ListInstances(ctx, waveID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]InstanceView, 0, len(insts))
+	for _, inst := range insts {
+		view := InstanceView{ID: inst.ID, MembershipLevel: inst.MembershipLevel}
+		view.CustomerName = instanceCustomerName(ctx, ws.Store, inst)
+		if inst.PlatformIdentityID != nil {
+			ident, err := ws.Store.GetIdentity(ctx, *inst.PlatformIdentityID)
+			if err != nil {
+				return nil, err
+			}
+			view.PlatformIdentity = ident.IdentityType + ":" + ident.IdentityValue
+		}
+		out = append(out, view)
+	}
+	return out, nil
+}
+
+// instanceCustomerName resolves the member behind an instance: the instance's
+// own customer link first, then the identity's attachment. Instances without
+// either resolve to an empty name. Every read goes through the explicit store
+// argument so callers control which transaction or connection the lookup
+// joins.
+func instanceCustomerName(ctx context.Context, store domain.Store, inst domain.EntitlementInstance) string {
+	resolve := func(id uint) string {
+		c, err := store.GetCustomer(ctx, id)
+		if err != nil {
+			return ""
+		}
+		return c.DisplayName
+	}
+	if inst.CustomerProfileID != nil {
+		return resolve(*inst.CustomerProfileID)
+	}
+	if inst.PlatformIdentityID != nil {
+		ident, err := store.GetIdentity(ctx, *inst.PlatformIdentityID)
+		if err != nil {
+			return ""
+		}
+		if ident.CustomerProfileID != nil {
+			return resolve(*ident.CustomerProfileID)
+		}
+	}
+	return ""
+}
+
 func (ws *Workspace) CreateGrant(ctx context.Context, waveID, customerID, productID uint, qty int) (*domain.FulfillmentResult, error) {
 	var grant *domain.FulfillmentResult
 	err := ws.Store.WithTx(ctx, func(tx domain.Store) error {

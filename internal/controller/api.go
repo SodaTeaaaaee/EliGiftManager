@@ -213,6 +213,18 @@ func (c *WorkspaceController) DeleteException(id uint) error {
 	return c.ws.DeleteException(c.ctx(), id)
 }
 
+// ListExceptions returns the wave's entitlement exceptions joined with
+// customer and product display names.
+func (c *WorkspaceController) ListExceptions(waveID uint) ([]app.ExceptionView, error) {
+	return c.ws.ListExceptions(c.ctx(), waveID)
+}
+
+// ListEntitlementInstances returns the wave's membership instances with
+// customer name and platform identity summary.
+func (c *WorkspaceController) ListEntitlementInstances(waveID uint) ([]app.InstanceView, error) {
+	return c.ws.ListEntitlementInstances(c.ctx(), waveID)
+}
+
 func (c *WorkspaceController) UpsertQuantitySplitRule(rule domain.QuantitySplitRule) error {
 	return c.ws.UpsertQuantitySplitRule(c.ctx(), &rule)
 }
