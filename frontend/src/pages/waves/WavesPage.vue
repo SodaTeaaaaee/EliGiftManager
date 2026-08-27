@@ -9,8 +9,6 @@ import {
   NFormItem,
   NInput,
   NModal,
-  NRadio,
-  NRadioGroup,
   NSpace,
   NSpin,
   NTag,
@@ -20,13 +18,13 @@ import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
 import {
-  closeWave,
   createWave,
   listResultViews,
   listWaves,
   reopenWave,
 } from '@/shared/api/bridge'
 import type { Wave } from '@/entities/models'
+import WaveCloseDialog from './WaveCloseDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -41,7 +39,6 @@ const createForm = ref({ name: '', notes: '' })
 
 const showCloseModal = ref(false)
 const targetCloseWave = ref<Wave | null>(null)
-const closeForm = ref({ result: 'clean', note: '' })
 
 // ── Home deep-link filter (?filter=blocked|writebackFailed|residual) ──
 
@@ -156,23 +153,7 @@ async function handleCreate() {
 
 function openCloseModal(wave: Wave) {
   targetCloseWave.value = wave
-  closeForm.value = { result: 'clean', note: '' }
   showCloseModal.value = true
-}
-
-async function handleClose() {
-  if (!targetCloseWave.value) return
-  actionLoading.value = true
-  try {
-    await closeWave(targetCloseWave.value.ID, closeForm.value.result, closeForm.value.note)
-    showCloseModal.value = false
-    targetCloseWave.value = null
-    await loadData()
-  } catch (err) {
-    console.error('Failed to close wave:', err)
-  } finally {
-    actionLoading.value = false
-  }
 }
 
 async function handleReopen(wave: Wave) {
@@ -344,39 +325,12 @@ const columns = [
       </template>
     </NModal>
 
-    <!-- Close Wave Modal -->
-    <NModal
+    <!-- Close Wave Modal (shared) -->
+    <WaveCloseDialog
       v-model:show="showCloseModal"
-      preset="card"
-      :title="t('waves.close')"
-      style="width: 480px"
-    >
-      <NForm>
-        <NFormItem :label="t('waves.status')">
-          <NRadioGroup v-model:value="closeForm.result">
-            <NSpace>
-              <NRadio value="clean">{{ t('waves.cleanClose') }}</NRadio>
-              <NRadio value="residual">{{ t('waves.residualClose') }}</NRadio>
-            </NSpace>
-          </NRadioGroup>
-        </NFormItem>
-        <NFormItem :label="t('waves.closeNote')">
-          <NInput
-            v-model:value="closeForm.note"
-            type="textarea"
-            :placeholder="t('waves.closeNote')"
-          />
-        </NFormItem>
-      </NForm>
-      <template #footer>
-        <NSpace justify="end">
-          <NButton @click="showCloseModal = false">{{ t('common.cancel') }}</NButton>
-          <NButton type="primary" :loading="actionLoading" @click="handleClose">
-            {{ t('common.confirm') }}
-          </NButton>
-        </NSpace>
-      </template>
-    </NModal>
+      :wave="targetCloseWave"
+      @closed="loadData"
+    />
   </div>
 </template>
 
