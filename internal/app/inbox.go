@@ -25,6 +25,7 @@ type IngestFactInput struct {
 	SourceDocumentNo  string
 	SourceCreatedAt   *time.Time
 	CustomerProfileID *uint
+	ExtraData         string
 	Lines             []IngestLine
 }
 
@@ -161,6 +162,7 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *do
 		MembershipLevel:    in.MembershipLevel,
 		SourceDocumentNo:   in.SourceDocumentNo,
 		SourceCreatedAt:    in.SourceCreatedAt,
+		ExtraData:          in.ExtraData,
 	}
 	if identID != nil {
 		ident, err := tx.GetIdentity(ctx, *identID)
@@ -311,6 +313,32 @@ func (ws *Workspace) ensureRetailResult(ctx context.Context, waveID uint, fact *
 	}
 	fid := fact.ID
 	lid := line.ID
+
+	// Bundle mapping: when the line's alias expands into components, emit one
+	// result per component with quantity = line quantity x component quantity.
+	if comps, ok, err := ws.bundleComponentsForLine(ctx, fact, line); err != nil {
+		return err
+	} else if ok {
+		for _, comp := range comps {
+			pid := comp.ProductItemID
+			res := &domain.FulfillmentResult{
+				WaveID:            waveID,
+				SourceKind:        string(domain.SourceRetailLine),
+				InputFactLineID:   &lid,
+				InputFactID:       &fid,
+				CustomerProfileID: custID,
+				ProductItemID:     &pid,
+				Quantity:          line.Quantity * comp.Quantity,
+				Address:           addr,
+				ExtraData:         fmt.Sprintf(`{"bundle_alias_line":%d}`, line.ID),
+			}
+			if err := ws.Store.CreateResult(ctx, res); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	res := &domain.FulfillmentResult{
 		WaveID:            waveID,
 		SourceKind:        string(domain.SourceRetailLine),
@@ -322,6 +350,30 @@ func (ws *Workspace) ensureRetailResult(ctx context.Context, waveID uint, fact *
 		Address:           addr,
 	}
 	return ws.Store.CreateResult(ctx, res)
+}
+
+// bundleComponentsForLine resolves the line's external SKU to its alias and
+// returns the alias's bundle components, if any. ok=false means the alias is
+// not a bundle (plain alignment applies).
+func (ws *Workspace) bundleComponentsForLine(ctx context.Context, fact *domain.InputFact, line *domain.InputFactLine) ([]domain.ProductBundleComponent, bool, error) {
+	if line.ExternalSKU == "" {
+		return nil, false, nil
+	}
+	alias, err := ws.Store.FindAlias(ctx, fact.PlatformID, line.ExternalSKU)
+	if err == domain.ErrNotFound {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	comps, err := ws.Store.ListBundleComponents(ctx, alias.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(comps) == 0 {
+		return nil, false, nil
+	}
+	return comps, true, nil
 }
 
 func (ws *Workspace) ensureGrantResult(ctx context.Context, waveID uint, fact *domain.InputFact, line *domain.InputFactLine) error {
