@@ -20,10 +20,11 @@ import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
 import {
-  exportFactoryOrder,
+  exportFactoryOrderFile,
   generateFactoryOrder,
   generateWritebacks,
   importShipment,
+  importShipmentFile,
   listAddresses,
   listCustomers,
   listPlatforms,
@@ -31,11 +32,15 @@ import {
   listResultViews,
   listSupplierOrderLines,
   listSupplierOrders,
+  pickFile,
+  revealInFolder,
   setResultAddress,
   voidFactoryOrder,
 } from '@/shared/api/bridge'
 import type {
   CustomerProfile,
+  ExportFileResult,
+  ImportShipmentFileResult,
   Platform,
   ProductItem,
   RecipientAddress,
@@ -74,7 +79,20 @@ const selectedFactoryId = ref<number | null>(null)
 const showOrdersDrawer = ref(false)
 const selectedOrderLines = ref<Record<number, SupplierOrderLine[]>>({})
 
+// ── File-based export (ExportFactoryOrderFile) ──
+
+const showExportReceiptModal = ref(false)
+const exportResult = ref<ExportFileResult | null>(null)
+
+// ── Shipment return import (ImportShipmentFile + manual fallback) ──
+
+const shipmentFileFilters = [{ displayName: 'CSV / Excel', pattern: '*.csv;*.xlsx;*.xls' }]
 const showShipmentModal = ref(false)
+const shipmentPlatformId = ref<number | null>(null)
+const shipmentFilePath = ref('')
+const shipmentResult = ref<ImportShipmentFileResult | null>(null)
+const shipmentError = ref('')
+const showManualShipment = ref(false)
 const shipmentForm = ref({
   trackingId: '',
   trackingNo: '',
@@ -192,13 +210,18 @@ async function handleGenerateFactoryOrder() {
 async function handleExportOrder(orderId: number) {
   actionLoading.value = true
   try {
-    await exportFactoryOrder(orderId)
+    exportResult.value = await exportFactoryOrderFile(orderId)
+    showExportReceiptModal.value = true
     await loadData()
   } catch (err) {
     console.error('Failed to export order:', err)
   } finally {
     actionLoading.value = false
   }
+}
+
+function handleRevealExportFile() {
+  if (exportResult.value?.Path) void revealInFolder(exportResult.value.Path)
 }
 
 async function handleVoidOrder(orderId: number) {
@@ -223,6 +246,45 @@ async function openOrdersDrawer() {
         console.error('Failed to load order lines:', err)
       }
     }
+  }
+}
+
+function openShipmentModal() {
+  shipmentPlatformId.value = factoryPlatformOptions.value[0]?.value ?? null
+  shipmentFilePath.value = ''
+  shipmentResult.value = null
+  shipmentError.value = ''
+  showManualShipment.value = false
+  shipmentForm.value = {
+    trackingId: '',
+    trackingNo: '',
+    carrierCode: 'SF',
+    carrierName: '顺丰速运',
+    quantity: 1,
+  }
+  showShipmentModal.value = true
+}
+
+async function handlePickShipmentFile() {
+  const path = await pickFile(shipmentFileFilters)
+  if (path) shipmentFilePath.value = path
+}
+
+async function handleImportShipmentFile() {
+  if (!shipmentPlatformId.value || !shipmentFilePath.value) return
+  actionLoading.value = true
+  shipmentError.value = ''
+  try {
+    shipmentResult.value = await importShipmentFile(
+      shipmentPlatformId.value,
+      shipmentFilePath.value,
+    )
+    await loadData()
+  } catch (err) {
+    shipmentResult.value = null
+    shipmentError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    actionLoading.value = false
   }
 }
 
@@ -388,7 +450,7 @@ const columns = [
           <NButton size="small" @click="openOrdersDrawer">
             {{ t('waveWorkspace.supplierOrders') }} ({{ supplierOrders.length }})
           </NButton>
-          <NButton size="small" @click="showShipmentModal = true">
+          <NButton size="small" @click="openShipmentModal">
             {{ t('waveWorkspace.importShipment') }}
           </NButton>
           <NButton size="small" :loading="loading" @click="loadData">
@@ -536,14 +598,101 @@ const columns = [
       </NDrawerContent>
     </NDrawer>
 
-    <!-- Import Shipment Modal -->
+    <!-- Export File Receipt Modal -->
+    <NModal
+      v-model:show="showExportReceiptModal"
+      preset="card"
+      :title="t('waveWorkspace.exportFileSuccess')"
+      style="width: 520px"
+    >
+      <div v-if="exportResult" class="wave-results-page__export-receipt">
+        <div class="wave-results-page__export-stats">
+          <span>{{ t('waveWorkspace.orderID') }}: #{{ exportResult.Order.ID }}</span>
+          <span>{{ t('waveWorkspace.exportRows', { n: exportResult.Rows.length }) }}</span>
+        </div>
+        <div class="wave-results-page__export-path-label">{{ t('waveWorkspace.exportFilePath') }}</div>
+        <div class="wave-results-page__export-path">{{ exportResult.Path }}</div>
+        <NButton size="small" @click="handleRevealExportFile">
+          {{ t('waveWorkspace.revealInFolder') }}
+        </NButton>
+      </div>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showExportReceiptModal = false">{{ t('common.close') }}</NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Import Shipment Modal (file-based, manual as advanced fallback) -->
     <NModal
       v-model:show="showShipmentModal"
       preset="card"
       :title="t('waveWorkspace.importShipment')"
-      style="width: 480px"
+      style="width: 560px"
     >
       <NForm label-placement="left" label-width="110">
+        <NFormItem :label="t('waveWorkspace.factory')">
+          <NSelect v-model:value="shipmentPlatformId" :options="factoryPlatformOptions" />
+        </NFormItem>
+        <NFormItem :label="t('inbox.filePath')">
+          <div class="wave-results-page__file-row">
+            <NButton size="small" @click="handlePickShipmentFile">
+              {{ shipmentFilePath ? t('inbox.changeFile') : t('inbox.pickFile') }}
+            </NButton>
+            <span v-if="shipmentFilePath" class="wave-results-page__file-path">{{ shipmentFilePath }}</span>
+            <span v-else class="wave-results-page__file-hint">{{ t('inbox.noFileSelected') }}</span>
+          </div>
+        </NFormItem>
+      </NForm>
+
+      <p v-if="shipmentError" class="wave-results-page__import-error">{{ shipmentError }}</p>
+
+      <div v-if="shipmentResult" class="wave-results-page__shipment-receipt">
+        <div class="wave-results-page__export-stats">
+          <span>{{ t('waveWorkspace.shipmentImported', { n: shipmentResult.Imported }) }}</span>
+          <span>{{ t('waveWorkspace.shipmentSkipped', { n: shipmentResult.Skipped.length }) }}</span>
+        </div>
+        <div v-if="shipmentResult.Skipped.length" class="wave-results-page__receipt-block">
+          <div class="wave-results-page__receipt-subtitle">{{ t('waveWorkspace.skippedRows') }}</div>
+          <ul class="wave-results-page__issue-list">
+            <li
+              v-for="skip in shipmentResult.Skipped"
+              :key="`${skip.LineNo}-${skip.TrackingID}`"
+              class="wave-results-page__issue-row"
+            >
+              <span class="wave-results-page__issue-line">#{{ skip.LineNo }}</span>
+              <span class="wave-results-page__issue-key">{{ skip.TrackingID }}</span>
+              <span>{{ skip.Reason }}</span>
+            </li>
+          </ul>
+        </div>
+        <div v-if="shipmentResult.Issues.length" class="wave-results-page__receipt-block">
+          <div class="wave-results-page__receipt-subtitle">{{ t('inbox.issues') }}</div>
+          <ul class="wave-results-page__issue-list">
+            <li
+              v-for="(issue, index) in shipmentResult.Issues"
+              :key="index"
+              class="wave-results-page__issue-row"
+            >
+              <span class="wave-results-page__issue-line">#{{ issue.LineNo }}</span>
+              <span class="wave-results-page__issue-key">{{ issue.Key }}</span>
+              <span>{{ issue.Message }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <NButton
+        size="small"
+        quaternary
+        type="primary"
+        class="wave-results-page__manual-toggle"
+        @click="showManualShipment = !showManualShipment"
+      >
+        {{ t('waveWorkspace.manualShipment') }}
+      </NButton>
+
+      <NForm v-if="showManualShipment" label-placement="left" label-width="110">
         <NFormItem :label="t('waveWorkspace.trackingID')">
           <NInput v-model:value="shipmentForm.trackingId" />
         </NFormItem>
@@ -557,16 +706,25 @@ const columns = [
           <NInputNumber v-model:value="shipmentForm.quantity" :min="1" />
         </NFormItem>
       </NForm>
+
       <template #footer>
         <NSpace justify="end">
           <NButton @click="showShipmentModal = false">{{ t('common.cancel') }}</NButton>
           <NButton
-            type="primary"
+            v-if="showManualShipment"
             :loading="actionLoading"
             :disabled="!shipmentForm.trackingId || !shipmentForm.trackingNo"
             @click="handleImportShipment"
           >
-            {{ t('common.confirm') }}
+            {{ t('waveWorkspace.manualShipmentImport') }}
+          </NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!shipmentPlatformId || !shipmentFilePath"
+            @click="handleImportShipmentFile"
+          >
+            {{ t('common.import') }}
           </NButton>
         </NSpace>
       </template>
@@ -659,5 +817,108 @@ const columns = [
   display: flex;
   justify-content: flex-end;
   margin-top: var(--space-2);
+}
+
+.wave-results-page__export-receipt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.wave-results-page__export-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.wave-results-page__export-path-label {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.wave-results-page__export-path {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-primary);
+  word-break: break-all;
+}
+
+.wave-results-page__file-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.wave-results-page__file-path {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  word-break: break-all;
+}
+
+.wave-results-page__file-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.wave-results-page__import-error {
+  margin: 0;
+  color: var(--status-error-fg);
+  font-size: var(--font-size-sm);
+}
+
+.wave-results-page__shipment-receipt {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.wave-results-page__receipt-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wave-results-page__receipt-subtitle {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.wave-results-page__issue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.wave-results-page__issue-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.wave-results-page__issue-line {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  min-width: 40px;
+}
+
+.wave-results-page__issue-key {
+  color: var(--color-text-secondary);
+}
+
+.wave-results-page__manual-toggle {
+  margin-top: var(--space-3);
 }
 </style>

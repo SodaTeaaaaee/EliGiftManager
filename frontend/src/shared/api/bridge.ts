@@ -13,7 +13,6 @@ import {
   CreateProduct as _CreateProduct,
   CreateTemplate as _CreateTemplate,
   CreateWave as _CreateWave,
-  ExportFactoryOrder as _ExportFactoryOrder,
   ExportFactoryOrderFile as _ExportFactoryOrderFile,
   GenerateFactoryOrder as _GenerateFactoryOrder,
   GenerateWritebacks as _GenerateWritebacks,
@@ -387,12 +386,6 @@ export async function generateFactoryOrder(
     Order: res.Order as unknown as SupplierOrder,
     Lines: (res.Lines ?? []) as unknown as SupplierOrderLine[],
   }
-}
-
-export async function exportFactoryOrder(orderID: number): Promise<SupplierOrder> {
-  assertWailsRuntime()
-  const res = await _ExportFactoryOrder(orderID)
-  return res as unknown as SupplierOrder
 }
 
 export async function voidFactoryOrder(orderID: number): Promise<void> {
