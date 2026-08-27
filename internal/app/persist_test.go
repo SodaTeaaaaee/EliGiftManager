@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 )
 
 func TestUniqueKeysAndWaveNo(t *testing.T) {
@@ -147,4 +148,57 @@ func isConstraint(err error) bool {
 	}
 	msg := strings.ToLower(err.Error())
 	return strings.Contains(msg, "unique") || strings.Contains(msg, "constraint") || errors.Is(err, domain.ErrNotFound)
+}
+
+// TestFindFactByStableIDAnchorsEstablishedFact pins the lookup to the partial
+// unique index semantics: revision facts share the stable external id of the
+// fact they revise, and only the established fact (revises_id IS NULL) owns
+// the anchor slot — with concurrent pending revisions and regardless of the
+// revision chain's id ordering.
+func TestFindFactByStableIDAnchorsEstablishedFact(t *testing.T) {
+	ctx := context.Background()
+	gdb := openTestDB(t)
+	store := infra.NewGormStore(gdb)
+
+	src := &domain.Platform{Key: "bilibili", Name: "Bilibili", Kind: string(domain.PlatformKindSource)}
+	if err := store.CreatePlatform(ctx, src); err != nil {
+		t.Fatalf("create source platform: %v", err)
+	}
+
+	orig := &domain.InputFact{PlatformID: src.ID, Kind: string(domain.InputFactKindRetailOrder), StableExternalID: "ANCHOR-1"}
+	if err := store.CreateFact(ctx, orig); err != nil {
+		t.Fatalf("create original: %v", err)
+	}
+	// Two pending revisions of the same established fact share its stable id.
+	for i := 0; i < 2; i++ {
+		rev := &domain.InputFact{PlatformID: src.ID, Kind: string(domain.InputFactKindRetailOrder), StableExternalID: "ANCHOR-1", RevisesID: &orig.ID}
+		if err := store.CreateFact(ctx, rev); err != nil {
+			t.Fatalf("create revision %d: %v", i, err)
+		}
+	}
+	found, err := store.FindFactByStableID(ctx, src.ID, "ANCHOR-1")
+	if err != nil {
+		t.Fatalf("FindFactByStableID: %v", err)
+	}
+	if found.ID != orig.ID {
+		t.Fatalf("lookup must anchor the established fact %d, got %d", orig.ID, found.ID)
+	}
+
+	// Reorder the chain so a revision carries a lower id than the original:
+	// the anchor must not move. (Only the revision's own id changes, so the
+	// revises_id reference stays intact.)
+	var revID uint
+	if err := gdb.Raw("SELECT id FROM input_facts WHERE revises_id = ? ORDER BY id LIMIT 1", orig.ID).Scan(&revID).Error; err != nil {
+		t.Fatalf("pick revision: %v", err)
+	}
+	if err := gdb.Exec("UPDATE input_facts SET id = 0 WHERE id = ?", revID).Error; err != nil {
+		t.Fatalf("reorder revision id: %v", err)
+	}
+	found, err = store.FindFactByStableID(ctx, src.ID, "ANCHOR-1")
+	if err != nil {
+		t.Fatalf("FindFactByStableID after reorder: %v", err)
+	}
+	if found.ID != orig.ID || found.RevisesID != nil {
+		t.Fatalf("lookup must still anchor the established fact %d, got fact %d (revises %v)", orig.ID, found.ID, found.RevisesID)
+	}
 }

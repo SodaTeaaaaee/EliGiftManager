@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,6 +120,66 @@ func TestDecideDuplicateReplaysNewResponsibility(t *testing.T) {
 	}
 	if snap.Fact.IdentityValue != "UID-DECIDE" {
 		t.Fatalf("snapshot identity = %q", snap.Fact.IdentityValue)
+	}
+}
+
+// TestDecideDuplicateRefusesZeroLineReplay pins the replay defense: an ask
+// observation whose snapshot carries no lines cannot rebuild a meaningful
+// retail fact, so claiming a new responsibility from it is refused instead of
+// creating a zero-line fact. Membership (and grant) inputs legitimately carry
+// no lines and still replay through the single-line stub.
+func TestDecideDuplicateRefusesZeroLineReplay(t *testing.T) {
+	ws, _, source := setupDuplicateWindowWorkspace(t)
+	ctx := context.Background()
+	doc := &domain.InputDocument{PlatformID: source.ID, DocumentType: "retail", OriginalName: "zero.csv"}
+	if err := ws.Store.CreateDocument(ctx, doc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+
+	mkObs := func(kind string) uint {
+		t.Helper()
+		snap, err := json.Marshal(duplicateInputSnapshot{Fact: IngestFactInput{Kind: kind, IdentityValue: "UID-ZERO"}})
+		if err != nil {
+			t.Fatalf("marshal snapshot: %v", err)
+		}
+		obs := &domain.DuplicateObservation{
+			DocumentID:     doc.ID,
+			ExistingFactID: 1,
+			Verdict:        string(domain.DuplicateAskOperator),
+			Reason:         "within_ask_window",
+			ExtraData:      string(snap),
+		}
+		if err := ws.Store.CreateDuplicate(ctx, obs); err != nil {
+			t.Fatalf("CreateDuplicate: %v", err)
+		}
+		return obs.ID
+	}
+
+	retailID := mkObs(string(domain.InputFactKindRetailOrder))
+	err := ws.DecideDuplicate(ctx, retailID, false)
+	if err == nil || !strings.Contains(err.Error(), "zero-line") {
+		t.Fatalf("zero-line retail replay must be refused by the zero-line guard, got %v", err)
+	}
+	if facts := mustFactsByPlatform(t, ws, source.ID); len(facts) != 0 {
+		t.Fatalf("refused replay must not create a fact, got %d", len(facts))
+	}
+	// The observation stays undecided so the operator is not silently past it.
+	open, oerr := ws.Store.ListOpenDuplicates(ctx)
+	if oerr != nil || len(open) != 1 {
+		t.Fatalf("open duplicates after refusal: %v (%d)", oerr, len(open))
+	}
+
+	memID := mkObs(string(domain.InputFactKindMembership))
+	if err := ws.DecideDuplicate(ctx, memID, false); err != nil {
+		t.Fatalf("membership zero-line replay must still work: %v", err)
+	}
+	facts := mustFactsByPlatform(t, ws, source.ID)
+	if len(facts) != 1 || facts[0].Kind != string(domain.InputFactKindMembership) {
+		t.Fatalf("membership replay must create one membership fact, got %+v", facts)
+	}
+	lines, err := ws.Store.ListFactLines(ctx, facts[0].ID)
+	if err != nil || len(lines) != 1 {
+		t.Fatalf("membership replay must derive the single stub line, got %v (%d)", err, len(lines))
 	}
 }
 

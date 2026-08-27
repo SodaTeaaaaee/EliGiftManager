@@ -112,14 +112,6 @@ func (ws *Workspace) ingestOneFact(ctx context.Context, tx domain.Store, doc *do
 			if err != nil {
 				return nil, err
 			}
-			exFps, _ := factLineFingerprints(ctx, tx, *existing)
-			println("DEBUG verdict", existing.ID, same)
-			for _, f := range exFps {
-				println("  ex ", f)
-			}
-			for _, f := range inFps {
-				println("  in ", f)
-			}
 			if !same {
 				if _, err := ws.createFactWithLines(ctx, tx, doc, in, kind, &existing.ID); err != nil {
 					return nil, err
@@ -610,6 +602,14 @@ func (ws *Workspace) DecideDuplicate(ctx context.Context, id uint, accept bool) 
 				kind := snap.Fact.Kind
 				if kind == "" {
 					kind = string(domain.InputFactKindRetailOrder)
+				}
+				// Membership and grant inputs legitimately carry no lines (a
+				// single stub line is derived at creation); any other kind
+				// with zero lines would replay into a fact without content,
+				// so the replay is refused instead.
+				if len(snap.Fact.Lines) == 0 &&
+					kind != string(domain.InputFactKindMembership) && kind != string(domain.InputFactKindOperatorGrant) {
+					return fmt.Errorf("duplicate decision replay: observation %d snapshot carries no lines, refusing to build a zero-line fact", obs.ID)
 				}
 				if _, err := ws.withStore(tx).createFactWithLines(ctx, tx, doc, snap.Fact, kind, nil); err != nil {
 					return err

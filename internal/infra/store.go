@@ -543,7 +543,11 @@ func (s *GormStore) GetFact(ctx context.Context, id uint) (*domain.InputFact, er
 
 func (s *GormStore) FindFactByStableID(ctx context.Context, platformID uint, stableID string) (*domain.InputFact, error) {
 	var row persistence.InputFact
-	if err := first(s.db.WithContext(ctx).Where("platform_id = ? AND stable_external_id = ? AND stable_external_id <> ''", platformID, stableID), &row); err != nil {
+	// The revises_id IS NULL filter mirrors the partial unique index
+	// idx_input_facts_stable: revision facts share the stable external id of
+	// the fact they revise, and the anchor slot belongs to the established
+	// fact only, whatever insert order the revision chain arrived in.
+	if err := first(s.db.WithContext(ctx).Where("platform_id = ? AND stable_external_id = ? AND stable_external_id <> '' AND revises_id IS NULL", platformID, stableID), &row); err != nil {
 		return nil, err
 	}
 	d := factToDomain(row)
