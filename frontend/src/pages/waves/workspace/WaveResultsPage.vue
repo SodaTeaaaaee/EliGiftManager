@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
   NButton,
@@ -13,12 +13,14 @@ import {
   NSelect,
   NSpace,
   NSpin,
+  NTag,
   NDrawer,
   NDrawerContent,
 } from 'naive-ui'
 import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
+import { useFeedback } from '@/shared/ui/feedback'
 import {
   exportFactoryOrderFile,
   generateFactoryOrder,
@@ -59,6 +61,12 @@ const props = defineProps<{
 
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
+const feedback = useFeedback()
+
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
 
 const loading = ref(false)
 const actionLoading = ref(false)
@@ -101,17 +109,18 @@ function productLabel(productId: number | null | undefined): string {
   return prod ? `${prod.Name} (${prod.FactorySKU})` : `#${productId}`
 }
 
-/** Factory dimension: committed results group under their product's factory
- * platform; everything not yet in a factory order falls into one bucket. */
+/** Factory dimension: rows with an aligned product group under the product's
+ * responsible factory platform regardless of submission state; only rows
+ * without an aligned product fact fall into the residual bucket. */
 function factoryGroupKey(row: ResultView): { key: string; title: string; order: number } {
-  if (row.InFactory && row.Result.ProductItemID != null) {
+  if (row.Result.ProductItemID != null) {
     const prod = products.value.find((p) => p.ID === row.Result.ProductItemID)
     const factory = prod ? platforms.value.find((p) => p.ID === prod.FactoryPlatformID) : undefined
     if (factory) {
       return { key: `factory-${factory.ID}`, title: factory.Name, order: 1 }
     }
   }
-  return { key: 'factory-none', title: t('waveWorkspace.notInFactory'), order: 0 }
+  return { key: 'factory-none', title: t('waveWorkspace.groupNoProduct'), order: 0 }
 }
 
 const groupedResults = computed<ResultGroup[]>(() => {
@@ -287,6 +296,18 @@ const filteredResults = computed(() => {
   return list
 })
 
+/** Label for the closable ?product= deep-link tag (jumped from the rules tab). */
+const activeProductFilterLabel = computed(() => {
+  if (filterProduct.value === 'all') return ''
+  const prod = products.value.find((p) => p.ID === Number(filterProduct.value))
+  return prod ? `${prod.Name} (${prod.FactorySKU})` : `#${filterProduct.value}`
+})
+
+function clearProductFilter() {
+  filterProduct.value = 'all'
+  void router.replace({ query: { ...route.query, product: undefined } })
+}
+
 async function openAddressModal(result: ResultView) {
   if (result.Result.Frozen || !result.Result.CustomerProfileID) return
   targetResultId.value = result.Result.ID
@@ -296,7 +317,7 @@ async function openAddressModal(result: ResultView) {
     selectedAddressId.value = availableAddresses.value[0]?.ID ?? null
     showAddressModal.value = true
   } catch (err) {
-    console.error('Failed to list addresses:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -310,7 +331,7 @@ async function handleSaveAddress() {
     showAddressModal.value = false
     await loadData()
   } catch (err) {
-    console.error('Failed to set address:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -338,7 +359,7 @@ async function handleGenerateFactoryOrder() {
     selectedResultKeys.value = []
     await loadData()
   } catch (err) {
-    console.error('Failed to generate factory order:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -351,7 +372,7 @@ async function handleExportOrder(orderId: number) {
     showExportReceiptModal.value = true
     await loadData()
   } catch (err) {
-    console.error('Failed to export order:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -367,7 +388,7 @@ async function handleVoidOrder(orderId: number) {
     await voidFactoryOrder(orderId)
     await loadData()
   } catch (err) {
-    console.error('Failed to void order:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -375,14 +396,19 @@ async function handleVoidOrder(orderId: number) {
 
 async function openOrdersDrawer() {
   showOrdersDrawer.value = true
+  let loadFailures = 0
   for (const order of supplierOrders.value) {
     if (!selectedOrderLines.value[order.ID]) {
       try {
         selectedOrderLines.value[order.ID] = await listSupplierOrderLines(order.ID)
       } catch (err) {
+        loadFailures++
         console.error('Failed to load order lines:', err)
       }
     }
+  }
+  if (loadFailures > 0) {
+    feedback.error(t('feedback.error'), t('waveWorkspace.orderLinesLoadFailed', { n: loadFailures }))
   }
 }
 
@@ -439,7 +465,7 @@ async function handleImportShipment() {
     showShipmentModal.value = false
     await loadData()
   } catch (err) {
-    console.error('Failed to import shipment:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -453,7 +479,7 @@ async function handleGenerateWritebacks() {
     showWritebackModal.value = false
     await loadData()
   } catch (err) {
-    console.error('Failed to generate writebacks:', err)
+    feedback.error(t('feedback.error'), errMsg(err))
   } finally {
     actionLoading.value = false
   }
@@ -462,10 +488,11 @@ async function handleGenerateWritebacks() {
 const columns = [
   {
     type: 'selection' as const,
-    // Frozen results are already committed to a factory order and can never
-    // re-enter submission, so partial selection skips them.
+    // Keep checkbox availability aligned with backend submission eligibility:
+    // frozen results are already committed to a factory order, and results
+    // outside the ready work state can never enter submission.
     disabled(row: ResultView) {
-      return row.Result.Frozen
+      return row.Result.Frozen || (row.WorkState || 'ready') !== 'ready'
     },
   },
   {
@@ -589,6 +616,14 @@ const columns = [
     <SectionCard :title="t('waveWorkspace.resultsTable')">
       <template #actions>
         <NSpace align="center">
+          <NTag
+            v-if="activeProductFilterLabel"
+            closable
+            size="small"
+            @close="clearProductFilter"
+          >
+            {{ t('common.deepLinkFilter', { filter: activeProductFilterLabel }) }}
+          </NTag>
           <NSelect
             v-model:value="groupBy"
             :options="groupOptions"
