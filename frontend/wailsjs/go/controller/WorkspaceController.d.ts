@@ -100,6 +100,10 @@ export function ListTemplates():Promise<Array<domain.TemplateConfig>>;
 
 export function ListWaves():Promise<Array<domain.Wave>>;
 
+export function MarkWritebackFailed(arg1:number,arg2:string):Promise<void>;
+
+export function MarkWritebackSent(arg1:number):Promise<void>;
+
 export function MoveLines(arg1:Array<number>,arg2:number):Promise<void>;
 
 export function NamedTransformers():Promise<Array<string>>;

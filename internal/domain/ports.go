@@ -144,6 +144,7 @@ type Store interface {
 	UpdateShipmentShippedAt(ctx context.Context, id uint, shippedAt *time.Time) error
 
 	CreateWriteback(ctx context.Context, w *ChannelWritebackItem) error
+	GetWriteback(ctx context.Context, id uint) (*ChannelWritebackItem, error)
 	ListWritebacksByFact(ctx context.Context, factID uint) ([]ChannelWritebackItem, error)
 	ListFailedWritebacks(ctx context.Context) ([]ChannelWritebackItem, error)
 	UpdateWriteback(ctx context.Context, w *ChannelWritebackItem) error

@@ -1169,6 +1169,15 @@ func (s *GormStore) CreateWriteback(ctx context.Context, w *domain.ChannelWriteb
 	return nil
 }
 
+func (s *GormStore) GetWriteback(ctx context.Context, id uint) (*domain.ChannelWritebackItem, error) {
+	var row persistence.ChannelWritebackItem
+	if err := first(s.db.WithContext(ctx).Where("id = ?", id), &row); err != nil {
+		return nil, err
+	}
+	items := writebacksToDomain([]persistence.ChannelWritebackItem{row})
+	return &items[0], nil
+}
+
 func (s *GormStore) ListWritebacksByFact(ctx context.Context, factID uint) ([]domain.ChannelWritebackItem, error) {
 	var rows []persistence.ChannelWritebackItem
 	if err := s.db.WithContext(ctx).Where("input_fact_id = ?", factID).Order("id").Find(&rows).Error; err != nil {

@@ -298,6 +298,17 @@ func (c *WorkspaceController) GenerateWritebacks(factID uint) ([]domain.ChannelW
 	return c.ws.GenerateWritebacks(c.ctx(), factID)
 }
 
+// MarkWritebackSent records a successful channel writeback for one parcel.
+func (c *WorkspaceController) MarkWritebackSent(writebackID uint) error {
+	return c.ws.MarkWritebackSent(c.ctx(), writebackID)
+}
+
+// MarkWritebackFailed records a failed channel writeback attempt for one
+// parcel; the retry counter advances and the error text is kept (truncated).
+func (c *WorkspaceController) MarkWritebackFailed(writebackID uint, errMsg string) error {
+	return c.ws.MarkWritebackFailed(c.ctx(), writebackID, errMsg)
+}
+
 func (c *WorkspaceController) Home() (app.HomeBuckets, error) {
 	return c.ws.Home(c.ctx())
 }

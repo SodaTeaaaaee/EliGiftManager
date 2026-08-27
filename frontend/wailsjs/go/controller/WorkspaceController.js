@@ -194,6 +194,14 @@ export function ListWaves() {
   return window['go']['controller']['WorkspaceController']['ListWaves']();
 }
 
+export function MarkWritebackFailed(arg1, arg2) {
+  return window['go']['controller']['WorkspaceController']['MarkWritebackFailed'](arg1, arg2);
+}
+
+export function MarkWritebackSent(arg1) {
+  return window['go']['controller']['WorkspaceController']['MarkWritebackSent'](arg1);
+}
+
 export function MoveLines(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['MoveLines'](arg1, arg2);
 }

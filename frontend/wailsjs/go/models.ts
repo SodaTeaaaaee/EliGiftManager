@@ -587,9 +587,11 @@ export namespace domain {
 	    ShipmentID: number;
 	    TrackingNo: string;
 	    CarrierCode: string;
+	    Quantity: number;
 	    Status: string;
 	    TemplateID: number;
 	    TemplateVersion: number;
+	    RetryCount: number;
 	    ErrorMessage: string;
 	    Payload: string;
 	    // Go type: time
@@ -608,9 +610,11 @@ export namespace domain {
 	        this.ShipmentID = source["ShipmentID"];
 	        this.TrackingNo = source["TrackingNo"];
 	        this.CarrierCode = source["CarrierCode"];
+	        this.Quantity = source["Quantity"];
 	        this.Status = source["Status"];
 	        this.TemplateID = source["TemplateID"];
 	        this.TemplateVersion = source["TemplateVersion"];
+	        this.RetryCount = source["RetryCount"];
 	        this.ErrorMessage = source["ErrorMessage"];
 	        this.Payload = source["Payload"];
 	        this.CreatedAt = this.convertValues(source["CreatedAt"], null);
