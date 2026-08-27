@@ -7,11 +7,9 @@ export const zhCN = {
     cancel: '取消',
     refresh: '刷新',
     create: '新建',
-    delete: '删除',
     close: '关闭',
     back: '返回',
     confirm: '确认',
-    search: '搜索',
     edit: '编辑',
     submit: '提交',
     clear: '清空',
@@ -42,7 +40,6 @@ export const zhCN = {
     libraryTemplates: '模板',
     settings: '设置',
     devSectionLabel: '开发工具',
-    placeholderDescription: '此区域正在开发中。',
   },
   wave: {
     rules: '规则',
@@ -125,6 +122,33 @@ export const zhCN = {
     topProgressBar: {
       loadingLabel: '页面加载中…',
     },
+    demo: {
+      title: '反馈系统',
+      subtitle: 'Toast、操作记录、错误横幅与断线提示的完整示例',
+      toastGroupTitle: 'Toast 提示',
+      triggerSuccess: '触发成功提示',
+      triggerError: '触发错误提示',
+      triggerInfo: '触发信息提示',
+      successMessage: '波次 W-2024-11-Aki 已成功生成工厂订单',
+      infoMessage: '客户 佐藤あかり 的地址正在等待补充',
+      errorMessage: '渠道回写失败，波次 W-2024-11-Yui 未能完成回写',
+      errorDetail: 'ChannelSyncJob#8821 request timeout after 30000ms — endpoint https://api.example-shop.com/v2/fulfillments/8821/tracking',
+      receiptGroupTitle: '操作记录',
+      logUndo: '记录一次撤销',
+      logRedo: '记录一次重做',
+      logAction: '记录一次操作',
+      sampleUndo: '撤销：将 铃木 ひなた 从波次 W-2024-11-Aki 移除',
+      sampleRedo: '重做：为波次 W-2024-12-Sora 生成工厂订单',
+      sampleAction: '批量导入 32 条输入事实行到收件箱',
+      bannerGroupTitle: '错误横幅',
+      bannerMessage: '波次 W-2024-11-Yui 的工厂订单生成失败，部分行未能提交',
+      bannerDetail: 'SupplierOrder#5502 validation error: missing recipient postal code for 3 lines',
+      disconnectedGroupTitle: '断线横幅',
+      toggleDisconnected: '模拟后端断开',
+      toggleConnected: '恢复连接模拟',
+      liveDisconnectedGroupTitle: '真实桥接状态',
+      liveDisconnectedHint: '下方横幅读取真实的 useBridgeHealth() 状态；在 Wails 运行时之外预览时，会一直显示为已断开。',
+    },
   },
   glossary: {
     identityType: {
@@ -191,7 +215,7 @@ export const zhCN = {
     },
   },
   home: {
-    title: '待处理中心',
+    title: '待处理',
     subtitle: '跨波次待处理事项与最近波次',
     buckets: {
       unassigned: '未归属',
@@ -211,9 +235,6 @@ export const zhCN = {
     },
     recentWaves: '最近波次',
     noWaves: '暂无波次',
-    allGood: '当前所有事项运转顺畅，没有阻塞项。',
-    openInbox: '前往收件箱',
-    openWaves: '前往波次列表',
   },
   inbox: {
     title: '收件箱',
@@ -221,9 +242,7 @@ export const zhCN = {
     importDocument: '导入文档',
     assignToWave: '归入波次',
     attachIdentity: '身份挂靠',
-    selectedCount: '已选 {count} 项',
     allDocuments: '全部文档',
-    filterDocument: '文档过滤',
     selectWave: '选择目标波次',
     selectCustomer: '选择目标客户',
     empty: '收件箱暂无未处理事实行',
@@ -235,13 +254,11 @@ export const zhCN = {
     unaligned: '商品对齐',
     unattached: '身份状态',
     documentNo: '来源单号',
-    importSuccess: '文档导入成功',
-    assignSuccess: '已成功归入波次',
-    attachSuccess: '身份挂靠成功',
   },
   waves: {
     title: '波次管理',
-    subtitle: '管理实物周边履约波次生命周期',
+    subtitle: '管理实物周边履约波次',
+    actions: '操作',
     createWave: '新建波次',
     waveNo: '波次编号',
     name: '波次名称',
@@ -254,8 +271,6 @@ export const zhCN = {
     cleanClose: '完整关闭',
     residualClose: '带残留关闭',
     closeNote: '关闭说明',
-    closeConfirm: '确认关闭波次 {name} 吗？',
-    reopenConfirm: '确认重新开启波次 {name} 吗？',
     empty: '暂无波次记录',
     createSuccess: '波次创建成功',
     closeSuccess: '波次已关闭',
@@ -365,6 +380,307 @@ export const zhCN = {
     duplicateAskDaysDesc: '在此时间窗口内再次导入相同外部事实，系统提示运营人工复核判定（默认 10 天）。超过此窗口默认新增责任。',
     dataDirectory: '数据目录',
     saveSuccess: '设置已成功保存',
+  },
+  /**
+   * `statusKit` — copy owned by the status rendering kit
+   * (`shared/ui/status/**`). `dimensionNames` maps each glossary dimension
+   * to its display name for legends and filter labels.
+   */
+  statusKit: {
+    badge: {
+      ariaLabel: '{label}：{desc}',
+    },
+    legend: {
+      title: '{dimension} 图例',
+      empty: '暂无状态可显示',
+    },
+    dimensionNames: {
+      identityType: '身份类型',
+      platformKind: '平台类型',
+      inputFactKind: '输入事实类型',
+      templateDirection: '模板方向',
+      waveCloseResult: '波次关闭结果',
+      entitlementSelectorType: '权益选择器',
+      fulfillmentSourceKind: '结果来源',
+      blockReason: '阻塞原因',
+      supplierOrderStatus: '工厂订单状态',
+      duplicateVerdict: '重复判定',
+      writebackStatus: '回写状态',
+      workState: '工作态',
+    },
+  },
+  /**
+   * `shellKit` — copy owned by the app shell / navigation kit
+   * (`shared/ui/shell/**`: AppShell, SideNav, WorkspaceNav, NavBadge,
+   * ContentErrorBoundary, PageHeader). `demo` holds only design-lab
+   * showcase copy, never used by real pages.
+   */
+  shellKit: {
+    sideNav: {
+      rootAriaLabel: '主导航',
+      brandName: 'EliGiftManager',
+      itemAriaLabelWithCount: '{label}（{count} 项待处理）',
+      collapse: '收起侧边栏',
+      expand: '展开侧边栏',
+    },
+    workspaceNav: {
+      rootAriaLabel: '工作区导航',
+      itemAriaLabelWithCount: '{label}（{count} 项）',
+    },
+    errorBoundary: {
+      title: '这块内容出错了',
+      description: '导航仍然可用，你可以重试，或复制错误详情反馈给开发者。',
+      retry: '重试',
+      copyDetails: '复制错误详情',
+      copied: '已复制',
+      stackToggle: '查看技术细节',
+    },
+    demo: {
+      title: '应用壳与导航',
+      subtitle: 'SideNav / WorkspaceNav / ContentErrorBoundary / PageHeader / NavBadge —— 双层导航与内容区骨架的完整示例',
+      appShellGroupTitle: 'AppShell + SideNav（一级导航）',
+      appShellHint: '折叠状态会持久化到本地存储；下方是一个高度受限的预览容器，方便在设计实验室里查看。',
+      nav: {
+        sectionActionCenter: '行动中心',
+        sectionFulfillment: '履约工作流',
+        sectionMasterData: '主数据',
+        home: '待处理',
+        waves: '波次',
+        inbox: '收件箱',
+        customers: '客户',
+        products: '商品',
+        integrations: '接入',
+        settings: '设置',
+      },
+      contentTitle: '内容区示例',
+      contentBody: '这里是路由视图会渲染的位置——AppShell 只提供壳，页面内容由 `<slot />` 传入。',
+      workspaceNavGroupTitle: 'WorkspaceNav（二级导航）',
+      workspaceNavHint: '这里只演示视觉语言与状态点/计数的呈现。',
+      workspace: {
+        waveKicker: '波次工作区',
+        waveName: '2026-07 会员波 · July Membership Wave',
+        waveMeta: 'W-2026-0710 · 处理中',
+        sectionOverview: '总览',
+        overview: '总览 Overview',
+        sectionPrep: '准备',
+        intake: '输入接入 Intake',
+        allocation: '归属 Allocation',
+        sectionReview: '审查',
+        lines: '履约结果 Lines',
+        readiness: '就绪检查 Readiness',
+        sectionExecution: '执行',
+        factory: '工厂订单 Factory',
+        shipments: '发货回传 Shipments',
+        closure: '回写收尾 Closure',
+      },
+      pageHeaderGroupTitle: 'PageHeader',
+      pageHeader: {
+        kicker: '波次工作区 · 2026-07 会员波',
+        title: '履约结果工作台',
+        description: '多维状态组合筛选与批量推进的示例页面。',
+        actionExport: '导出 CSV',
+        actionAdjust: '批量调整',
+      },
+      navBadgeGroupTitle: 'NavBadge',
+      navBadgeHint: '徽章色彩查状态 token，数量超过 99 时显示 "99+"。',
+      errorBoundaryGroupTitle: 'ContentErrorBoundary',
+      errorBoundaryHint: '点击"触发错误"模拟子组件渲染崩溃；错误面板出现后，侧边栏 / 本页其余内容都不受影响。',
+      triggerError: '触发错误',
+      contentOk: '内容正常渲染 —— 波次 2026-07 会员波 共 128 行，其中 12 行缺地址。',
+    },
+  },
+  /**
+   * `uiKit` — copy owned by the shared/ui component kits (cards, empty
+   * states, funnel, guidance, drawer, ...). Sub-namespaced per kit so each
+   * kit's strings stay easy to find; the `*Demo` sub-namespaces hold only
+   * design-lab showcase copy, never used by real pages.
+   */
+  uiKit: {
+    funnel: {
+      groupLabel: '履约漏斗',
+      segmentAriaLabel: '{label}：{count} 行',
+    },
+    cardsDemo: {
+      heading: '波次总览示例',
+      subheading: '组合 StatCard / FunnelBar / GuidanceCard / CalloutBar / EmptyState / DetailDrawer 拼出的总览页观感',
+      stats: {
+        totalLines: '总行数',
+        addressReady: '地址就绪',
+        submittedToSupplier: '已提交工厂',
+        closureFailed: '回写失败',
+        deltaCaption: '较上周',
+      },
+      funnel: {
+        totalLines: '总行数',
+        addressReady: '地址就绪',
+        submittedToSupplier: '已提交工厂',
+        shipmentSynced: '已获物流',
+        syncedBack: '已回写',
+        manualClosure: '人工收尾',
+      },
+      guidance: {
+        title: '建议下一步',
+        reason: '「三月会员波」还有 12 行缺收件地址，先补全地址即可让波次继续推进。',
+        primary: '前往就绪检查',
+        secondaryFix: '改为跳过这些行',
+        secondaryRule: '调整归属规则',
+      },
+      callout: {
+        message: '本波次存在少量待复查的重复判定信号，建议先查看详情再提交工厂。',
+        action: '查看重复判定详情',
+      },
+      emptyState: {
+        title: '暂无需要处理的阻塞项',
+        description: '所有进行中的波次都在正常推进，待处理首页没有紧急待办。',
+        action: '刷新待处理首页',
+      },
+      flatCard: {
+        title: '嵌套小节示例',
+        description: '这是一张 flat 变体的 SectionCard，用于在另一张卡片内部再分组内容。',
+      },
+      variants: {
+        totalLines: '总行数',
+        addressReady: '地址就绪',
+        addressBlocked: '地址阻塞',
+        closureFailed: '回写失败',
+        clickableTile: '可点击卡片',
+        vsLastWeek: '较上周',
+        toneNames: {
+          success: '成功',
+          warning: '警告',
+          error: '错误',
+          info: '信息',
+          progress: '进行中',
+          neutral: '中性',
+        },
+      },
+      reviewGrids: {
+        statCardTitle: 'StatCard 变体',
+        statCardDescription: '标签 + 表格数字大字号数值，可选增量与说明，覆盖全部 6 种状态色调',
+        calloutBarTitle: 'CalloutBar 变体',
+        emptyStateTitle: 'EmptyState 变体',
+        emptyStateDescription: 'md / sm 两种尺寸，默认几何图案与自定义图标插槽对比',
+      },
+      drawer: {
+        openLabel: '查看波次详情',
+        title: '波次总览详情',
+        participantLabel: '客户',
+        participantValue: '星野・アイ（Ai Hoshino）',
+        productLabel: '商品',
+        productValue: '限定徽章套装 · 4 枚',
+        quantityLabel: '数量',
+        quantityValue: '4',
+        note: '这里展示 DetailDrawer 的头部 / 正文 / 底部结构；正文内容为设计实验室的静态演示数据。',
+        confirm: '确认收尾',
+      },
+    },
+    dataGrid: {
+      emptyFallback: {
+        title: '暂无数据',
+      },
+      selectionToolbar: {
+        countLabel: '已选择 {n} 行',
+        clear: '清除选择',
+      },
+      relativeTime: {
+        justNow: '刚刚',
+        minutesAgo: '{n} 分钟前',
+        hoursAgo: '{n} 小时前',
+        daysAgo: '{n} 天前',
+      },
+    },
+    dataGridDemo: {
+      title: '数据表格套件',
+      subtitle: 'DataGrid —— 包装 NDataTable，内置拼音/假名/谚文感知排序、状态列、分页与多选工具栏。',
+      controls: {
+        loadingLabel: '模拟加载中',
+        emptyLabel: '模拟空数据',
+      },
+      columns: {
+        name: '客户',
+        wave: '所属波次',
+        productKind: '商品类型',
+        supplierState: '工厂状态',
+        shipmentStatus: '发货状态',
+        quantity: '数量',
+        updatedAt: '更新时间',
+        actions: '操作',
+      },
+      actions: {
+        viewDetail: '查看详情',
+      },
+      empty: {
+        title: '这一页没有客户数据',
+        description: '试试关闭"模拟空数据"，或调整筛选条件。',
+      },
+      selectionToolbar: {
+        countLabel: '已选择 {n} 位客户',
+        markShipped: '标记为已发货',
+      },
+      lastClicked: '上次点击：{name}',
+    },
+  },
+  /**
+   * `filterBar` — copy for the FilterBar 组合筛选套件 (shared/ui/filter-bar/**):
+   * FilterBar.vue（多维筛选 + 关键字 + 已选筛选条）与 SavedViews.vue（预置视图 +
+   * 我保存的视图）。`demo` 子命名空间仅用于设计实验室展示页。
+   */
+  filterBar: {
+    keywordPlaceholder: '搜索关键字…',
+    keywordChipLabel: '关键字：{value}',
+    clearAll: '清空筛选',
+    activeFilters: '当前筛选条件',
+    noActiveFilters: '还没有设置任何筛选条件',
+    removeFilter: '移除筛选：{label}',
+    optionsMenuLabel: '{dimension} 筛选选项',
+    savedViews: {
+      title: '保存的视图',
+      presetsGroup: '预置视图',
+      savedGroup: '我保存的视图',
+      saveCurrent: '保存当前筛选',
+      namePlaceholder: '给这个视图起个名字',
+      save: '保存',
+      cancel: '取消',
+      delete: '删除视图',
+      deleteConfirmContent: '删除后无法恢复，需要的话得重新保存一次。',
+      empty: '还没有保存过视图',
+    },
+    demo: {
+      title: 'FilterBar 组合筛选套件',
+      subtitle: '多维组合筛选 + URL 同步 + 保存视图 —— 两次点击可达的筛选组合，深链可分享。',
+      resultCount: '共 {n} 条结果',
+      urlPreviewLabel: '当前 URL 查询（深链示例）',
+      tableHeaders: {
+        participant: '客户',
+        product: '商品',
+        addressState: '地址状态',
+        supplierState: '工厂状态',
+      },
+      presets: {
+        blocked: '阻塞项',
+        readyToSubmit: '可提交工厂',
+        producing: '生产中',
+      },
+    },
+  },
+  /**
+   * `intakeWizard.mapping` — copy for the field-mapping editor
+   * (shared/ui/field-mapping/**). Only the editor's own labels live here;
+   * the rest of the wizard copy returns when the wizard is rebuilt.
+   */
+  intakeWizard: {
+    mapping: {
+      inputFormat: '识别格式',
+      sheetName: '工作表',
+      transformsLabel: '转换规则',
+      transformTrim: '去除首尾空白',
+      transformStripQuotes: '去除成对引号',
+      transformStripLeadingQuote: '去除前导单引号',
+      requiredLabel: '必填',
+      modeHeader: '按表头',
+      modePositional: '按列位置',
+      unmappedSourceColumns: '未映射来源列（不会被导入）：',
+    },
   },
 }
 

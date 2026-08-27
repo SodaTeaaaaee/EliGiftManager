@@ -9,11 +9,9 @@ export const enUS: AppMessageSchema = {
     cancel: 'Cancel',
     refresh: 'Refresh',
     create: 'Create',
-    delete: 'Delete',
     close: 'Close',
     back: 'Back',
     confirm: 'Confirm',
-    search: 'Search',
     edit: 'Edit',
     submit: 'Submit',
     clear: 'Clear',
@@ -44,7 +42,6 @@ export const enUS: AppMessageSchema = {
     libraryTemplates: 'Templates',
     settings: 'Settings',
     devSectionLabel: 'Dev Tools',
-    placeholderDescription: 'This section is under development.',
   },
   wave: {
     rules: 'Rules',
@@ -127,6 +124,33 @@ export const enUS: AppMessageSchema = {
     topProgressBar: {
       loadingLabel: 'Loading page…',
     },
+    demo: {
+      title: 'Feedback system',
+      subtitle: 'A complete walkthrough of toasts, the action log, error banners, and the disconnected banner',
+      toastGroupTitle: 'Toasts',
+      triggerSuccess: 'Fire a success toast',
+      triggerError: 'Fire an error toast',
+      triggerInfo: 'Fire an info toast',
+      successMessage: 'Factory order generated for wave W-2024-11-Aki',
+      infoMessage: 'Waiting on address details for customer Sato Akari',
+      errorMessage: 'Channel writeback failed — wave W-2024-11-Yui could not complete writeback',
+      errorDetail: 'ChannelSyncJob#8821 request timeout after 30000ms — endpoint https://api.example-shop.com/v2/fulfillments/8821/tracking',
+      receiptGroupTitle: 'Action log',
+      logUndo: 'Log an undo',
+      logRedo: 'Log a redo',
+      logAction: 'Log an action',
+      sampleUndo: 'Undo: removed Suzuki Hinata from wave W-2024-11-Aki',
+      sampleRedo: 'Redo: generated the factory order for wave W-2024-12-Sora',
+      sampleAction: 'Bulk-imported 32 input fact lines into the Inbox',
+      bannerGroupTitle: 'Error banner',
+      bannerMessage: 'Factory order generation failed for wave W-2024-11-Yui — some lines could not be submitted',
+      bannerDetail: 'SupplierOrder#5502 validation error: missing recipient postal code for 3 lines',
+      disconnectedGroupTitle: 'Disconnected banner',
+      toggleDisconnected: 'Simulate backend disconnect',
+      toggleConnected: 'Simulate reconnect',
+      liveDisconnectedGroupTitle: 'Live bridge status',
+      liveDisconnectedHint: 'The banner below reads the real useBridgeHealth() state — outside a Wails runtime preview it will always show disconnected.',
+    },
   },
   glossary: {
     identityType: {
@@ -193,7 +217,7 @@ export const enUS: AppMessageSchema = {
     },
   },
   home: {
-    title: 'Task Center',
+    title: 'To Do',
     subtitle: 'Cross-wave pending buckets and recent waves',
     buckets: {
       unassigned: 'Unassigned',
@@ -213,9 +237,6 @@ export const enUS: AppMessageSchema = {
     },
     recentWaves: 'Recent Waves',
     noWaves: 'No waves found',
-    allGood: 'All systems running smoothly, no blocked items.',
-    openInbox: 'Go to Inbox',
-    openWaves: 'Go to Waves',
   },
   inbox: {
     title: 'Inbox',
@@ -223,9 +244,7 @@ export const enUS: AppMessageSchema = {
     importDocument: 'Import Document',
     assignToWave: 'Assign to Wave',
     attachIdentity: 'Attach Identity',
-    selectedCount: '{count} selected',
     allDocuments: 'All Documents',
-    filterDocument: 'Filter by Document',
     selectWave: 'Select Target Wave',
     selectCustomer: 'Select Target Customer',
     empty: 'No unprocessed fact lines in inbox',
@@ -237,13 +256,11 @@ export const enUS: AppMessageSchema = {
     unaligned: 'Product Alignment',
     unattached: 'Identity Status',
     documentNo: 'Source Document No',
-    importSuccess: 'Document imported successfully',
-    assignSuccess: 'Assigned to wave successfully',
-    attachSuccess: 'Identity attached successfully',
   },
   waves: {
     title: 'Waves',
-    subtitle: 'Manage fulfillment wave lifecycles',
+    subtitle: 'Manage merch fulfillment waves',
+    actions: 'Actions',
     createWave: 'New Wave',
     waveNo: 'Wave No',
     name: 'Wave Name',
@@ -256,8 +273,6 @@ export const enUS: AppMessageSchema = {
     cleanClose: 'Clean Close',
     residualClose: 'Residual Close',
     closeNote: 'Close Note',
-    closeConfirm: 'Are you sure you want to close wave {name}?',
-    reopenConfirm: 'Are you sure you want to reopen wave {name}?',
     empty: 'No waves found',
     createSuccess: 'Wave created successfully',
     closeSuccess: 'Wave closed successfully',
@@ -367,5 +382,307 @@ export const enUS: AppMessageSchema = {
     duplicateAskDaysDesc: 'Within this window, re-imported identical external facts prompt the operator for manual review (default 10 days). Beyond this window, new responsibility is created by default.',
     dataDirectory: 'Data Directory',
     saveSuccess: 'Settings saved successfully',
+  },
+  /**
+   * `statusKit` — copy owned by the status rendering kit
+   * (`shared/ui/status/**`). `dimensionNames` maps each glossary dimension
+   * to its display name for legends and filter labels.
+   */
+  statusKit: {
+    badge: {
+      ariaLabel: '{label}: {desc}',
+    },
+    legend: {
+      title: '{dimension} legend',
+      empty: 'No statuses to display',
+    },
+    dimensionNames: {
+      identityType: 'Identity Type',
+      platformKind: 'Platform Kind',
+      inputFactKind: 'Input Fact Kind',
+      templateDirection: 'Template Direction',
+      waveCloseResult: 'Wave Close Result',
+      entitlementSelectorType: 'Entitlement Selector',
+      fulfillmentSourceKind: 'Fulfillment Source',
+      blockReason: 'Block Reason',
+      supplierOrderStatus: 'Factory Order Status',
+      duplicateVerdict: 'Duplicate Verdict',
+      writebackStatus: 'Writeback Status',
+      workState: 'Work State',
+    },
+  },
+  /**
+   * `shellKit` — copy owned by the app shell / navigation kit
+   * (`shared/ui/shell/**`: AppShell, SideNav, WorkspaceNav, NavBadge,
+   * ContentErrorBoundary, PageHeader). `demo` holds only design-lab
+   * showcase copy, never used by real pages.
+   */
+  shellKit: {
+    sideNav: {
+      rootAriaLabel: 'Main navigation',
+      brandName: 'EliGiftManager',
+      itemAriaLabelWithCount: '{label} ({count} pending)',
+      collapse: 'Collapse sidebar',
+      expand: 'Expand sidebar',
+    },
+    workspaceNav: {
+      rootAriaLabel: 'Workspace navigation',
+      itemAriaLabelWithCount: '{label} ({count})',
+    },
+    errorBoundary: {
+      title: 'This section hit an error',
+      description: 'Navigation still works — retry, or copy the error details to report it.',
+      retry: 'Retry',
+      copyDetails: 'Copy error details',
+      copied: 'Copied',
+      stackToggle: 'View technical details',
+    },
+    demo: {
+      title: 'App Shell & Navigation',
+      subtitle: 'SideNav / WorkspaceNav / ContentErrorBoundary / PageHeader / NavBadge — the full two-tier nav and content-zone skeleton',
+      appShellGroupTitle: 'AppShell + SideNav (top-level nav)',
+      appShellHint: 'Collapse state persists to local storage; below is a height-constrained preview box for the design lab.',
+      nav: {
+        sectionActionCenter: 'Action Center',
+        sectionFulfillment: 'Fulfillment',
+        sectionMasterData: 'Master Data',
+        home: 'To Do',
+        waves: 'Waves',
+        inbox: 'Inbox',
+        customers: 'Customers',
+        products: 'Products',
+        integrations: 'Integrations',
+        settings: 'Settings',
+      },
+      contentTitle: 'Content zone sample',
+      contentBody: 'This is where the route view renders — AppShell only provides the shell, page content comes in through `<slot />`.',
+      workspaceNavGroupTitle: 'WorkspaceNav (2nd-tier nav)',
+      workspaceNavHint: 'This only demos the visual language and status dot/count rendering.',
+      workspace: {
+        waveKicker: 'Wave Workspace',
+        waveName: '2026-07 Membership Wave',
+        waveMeta: 'W-2026-0710 · In progress',
+        sectionOverview: 'Overview',
+        overview: 'Overview',
+        sectionPrep: 'Prep',
+        intake: 'Intake',
+        allocation: 'Assignment',
+        sectionReview: 'Review',
+        lines: 'Results',
+        readiness: 'Readiness',
+        sectionExecution: 'Execution',
+        factory: 'Factory Order',
+        shipments: 'Shipments',
+        closure: 'Closure',
+      },
+      pageHeaderGroupTitle: 'PageHeader',
+      pageHeader: {
+        kicker: 'Wave Workspace · 2026-07 Membership Wave',
+        title: 'Results Workbench',
+        description: 'A sample surface combining multi-dimension status filtering with batch progression.',
+        actionExport: 'Export CSV',
+        actionAdjust: 'Batch Adjust',
+      },
+      navBadgeGroupTitle: 'NavBadge',
+      navBadgeHint: 'Badge color comes from status tokens; counts above 99 show as "99+".',
+      errorBoundaryGroupTitle: 'ContentErrorBoundary',
+      errorBoundaryHint: 'Click "Trigger error" to simulate a child render crash — once the error panel appears, the sidebar and the rest of this page are unaffected.',
+      triggerError: 'Trigger error',
+      contentOk: 'Content rendered fine — wave "2026-07 Membership Wave" has 128 lines, 12 of them missing an address.',
+    },
+  },
+  /**
+   * `uiKit` — copy owned by the shared/ui component kits (cards, empty
+   * states, funnel, guidance, drawer, ...). Sub-namespaced per kit so each
+   * kit's strings stay easy to find; the `*Demo` sub-namespaces hold only
+   * design-lab showcase copy, never used by real pages.
+   */
+  uiKit: {
+    funnel: {
+      groupLabel: 'Fulfillment funnel',
+      segmentAriaLabel: '{label}: {count} lines',
+    },
+    cardsDemo: {
+      heading: 'Wave overview sample',
+      subheading: 'StatCard / FunnelBar / GuidanceCard / CalloutBar / EmptyState / DetailDrawer composed into the overview look',
+      stats: {
+        totalLines: 'Total lines',
+        addressReady: 'Address ready',
+        submittedToSupplier: 'Submitted to factory',
+        closureFailed: 'Writeback failed',
+        deltaCaption: 'vs last week',
+      },
+      funnel: {
+        totalLines: 'Total lines',
+        addressReady: 'Address ready',
+        submittedToSupplier: 'Submitted to factory',
+        shipmentSynced: 'Shipment obtained',
+        syncedBack: 'Written back',
+        manualClosure: 'Manual closure',
+      },
+      guidance: {
+        title: 'Suggested next step',
+        reason: '"March Membership Wave" still has 12 lines missing a shipping address — complete those to keep the wave moving.',
+        primary: 'Go to readiness check',
+        secondaryFix: 'Skip these lines instead',
+        secondaryRule: 'Adjust assignment rule',
+      },
+      callout: {
+        message: 'This wave has a few duplicate-verdict signals awaiting review — check the details before submitting to the factory.',
+        action: 'View duplicate verdicts',
+      },
+      emptyState: {
+        title: 'Nothing blocking right now',
+        description: 'Every wave in progress is moving along fine — the to-do home has no urgent items.',
+        action: 'Refresh to-do home',
+      },
+      flatCard: {
+        title: 'Nested section sample',
+        description: 'A flat-variant SectionCard, used to group content inside another card.',
+      },
+      variants: {
+        totalLines: 'Total lines',
+        addressReady: 'Address ready',
+        addressBlocked: 'Address blocked',
+        closureFailed: 'Writeback failed',
+        clickableTile: 'Clickable tile',
+        vsLastWeek: 'vs last week',
+        toneNames: {
+          success: 'Success',
+          warning: 'Warning',
+          error: 'Error',
+          info: 'Info',
+          progress: 'Progress',
+          neutral: 'Neutral',
+        },
+      },
+      reviewGrids: {
+        statCardTitle: 'StatCard variants',
+        statCardDescription: 'Label + big tabular-nums value, optional delta and caption, all 6 status tones',
+        calloutBarTitle: 'CalloutBar variants',
+        emptyStateTitle: 'EmptyState variants',
+        emptyStateDescription: 'md / sm sizes, default geometric mark vs. a custom icon slot',
+      },
+      drawer: {
+        openLabel: 'View wave detail',
+        title: 'Wave overview detail',
+        participantLabel: 'Customer',
+        participantValue: 'Hoshino Ai (星野・アイ)',
+        productLabel: 'Product',
+        productValue: 'Limited badge set · 4 pcs',
+        quantityLabel: 'Quantity',
+        quantityValue: '4',
+        note: 'This shows the DetailDrawer header / body / footer structure; the body content is static design-lab sample data.',
+        confirm: 'Confirm closure',
+      },
+    },
+    dataGrid: {
+      emptyFallback: {
+        title: 'No data',
+      },
+      selectionToolbar: {
+        countLabel: '{n} rows selected',
+        clear: 'Clear selection',
+      },
+      relativeTime: {
+        justNow: 'Just now',
+        minutesAgo: '{n} min ago',
+        hoursAgo: '{n} hr ago',
+        daysAgo: '{n} d ago',
+      },
+    },
+    dataGridDemo: {
+      title: 'DataGrid Kit',
+      subtitle: 'DataGrid — a wrapped NDataTable with pinyin/kana/hangul-aware sorting, status columns, pagination, and a selection toolbar built in.',
+      controls: {
+        loadingLabel: 'Simulate loading',
+        emptyLabel: 'Simulate empty data',
+      },
+      columns: {
+        name: 'Customer',
+        wave: 'Wave',
+        productKind: 'Product kind',
+        supplierState: 'Factory status',
+        shipmentStatus: 'Shipment status',
+        quantity: 'Qty',
+        updatedAt: 'Updated',
+        actions: 'Actions',
+      },
+      actions: {
+        viewDetail: 'View detail',
+      },
+      empty: {
+        title: 'No customers on this page',
+        description: 'Try turning off "Simulate empty data", or adjust the filters.',
+      },
+      selectionToolbar: {
+        countLabel: '{n} customers selected',
+        markShipped: 'Mark as shipped',
+      },
+      lastClicked: 'Last clicked: {name}',
+    },
+  },
+  /**
+   * `filterBar` — copy for the FilterBar combination-filtering kit
+   * (shared/ui/filter-bar/**): FilterBar.vue (multi-dimension filters +
+   * keyword + active-filter chips) and SavedViews.vue (presets + saved
+   * views). The `demo` sub-namespace is design-lab showcase copy only.
+   */
+  filterBar: {
+    keywordPlaceholder: 'Search keyword…',
+    keywordChipLabel: 'Keyword: {value}',
+    clearAll: 'Clear filters',
+    activeFilters: 'Active filters',
+    noActiveFilters: 'No filters applied yet',
+    removeFilter: 'Remove filter: {label}',
+    optionsMenuLabel: '{dimension} filter options',
+    savedViews: {
+      title: 'Saved views',
+      presetsGroup: 'Preset views',
+      savedGroup: 'My saved views',
+      saveCurrent: 'Save current filters',
+      namePlaceholder: 'Name this view',
+      save: 'Save',
+      cancel: 'Cancel',
+      delete: 'Delete view',
+      deleteConfirmContent: 'This cannot be undone — you would need to save it again.',
+      empty: 'No saved views yet',
+    },
+    demo: {
+      title: 'FilterBar Combination Filtering Kit',
+      subtitle: 'Multi-dimension filters + URL sync + saved views — two clicks to a filter combination, shareable as a deep link.',
+      resultCount: '{n} results',
+      urlPreviewLabel: 'Current URL query (deep-link sample)',
+      tableHeaders: {
+        participant: 'Customer',
+        product: 'Product',
+        addressState: 'Address state',
+        supplierState: 'Factory status',
+      },
+      presets: {
+        blocked: 'Blocked',
+        readyToSubmit: 'Ready to submit',
+        producing: 'In production',
+      },
+    },
+  },
+  /**
+   * `intakeWizard.mapping` — copy for the field-mapping editor
+   * (shared/ui/field-mapping/**). Only the editor's own labels live here;
+   * the rest of the wizard copy returns when the wizard is rebuilt.
+   */
+  intakeWizard: {
+    mapping: {
+      inputFormat: 'Detected format',
+      sheetName: 'Sheet',
+      transformsLabel: 'Transforms',
+      transformTrim: 'Trim whitespace',
+      transformStripQuotes: 'Strip surrounding quotes',
+      transformStripLeadingQuote: 'Strip leading apostrophe',
+      requiredLabel: 'Required',
+      modeHeader: 'By Header',
+      modePositional: 'By Position',
+      unmappedSourceColumns: 'Unmapped source columns (will not be imported):',
+    },
   },
 }
