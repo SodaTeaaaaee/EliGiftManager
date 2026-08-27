@@ -462,19 +462,21 @@ const previewColumns = computed(() =>
                   type="button"
                   class="field-mapping-editor__chip-op"
                   :disabled="readonly || index === 0"
-                  :aria-label="t('common.actions')"
+                  :aria-label="t('templateEditor.moveTransformUp')"
                   @click="handleTransformMove(field.key, index, -1)"
                 >↑</button>
                 <button
                   type="button"
                   class="field-mapping-editor__chip-op"
                   :disabled="readonly || index === transformValue(field.key).length - 1"
+                  :aria-label="t('templateEditor.moveTransformDown')"
                   @click="handleTransformMove(field.key, index, 1)"
                 >↓</button>
                 <button
                   type="button"
                   class="field-mapping-editor__chip-op"
                   :disabled="readonly"
+                  :aria-label="t('templateEditor.removeTransform')"
                   @click="handleTransformRemove(field.key, index)"
                 >×</button>
               </span>

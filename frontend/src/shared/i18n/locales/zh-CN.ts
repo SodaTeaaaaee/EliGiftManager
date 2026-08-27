@@ -411,7 +411,6 @@ export const zhCN = {
       '从本波次已解析的权益实例中选择对象，例外保存后立即重算未提交权益。',
     exceptions: {
       empty: '本波次暂无个人权益例外',
-      instance: '权益实例',
       instancePlaceholder: '选择客户（身份 · 等级）',
       deleteConfirm: '确定删除该例外？删除后重算本波次权益。',
     },
@@ -858,6 +857,9 @@ export const zhCN = {
     fixedValuePlaceholder: '固定默认值（优先于来源列）',
     transformsLabel: '转换规则',
     transformAdd: '追加转换器（链按显示顺序执行）',
+    moveTransformUp: '上移该转换器',
+    moveTransformDown: '下移该转换器',
+    removeTransform: '移除该转换器',
     requiredLabel: '必填',
     fingerprintLabel: '指纹',
     advanced: '高级配置（行拆分 / 合并列 / 枚举映射）',

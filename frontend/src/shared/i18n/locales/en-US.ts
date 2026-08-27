@@ -416,7 +416,6 @@ export const enUS: AppMessageSchema = {
       'Pick from the entitlement instances resolved in this wave; saving an exception recomputes unsubmitted entitlements immediately.',
     exceptions: {
       empty: 'No personal entitlement exceptions in this wave',
-      instance: 'Entitlement instance',
       instancePlaceholder: 'Pick a member (identity · level)',
       deleteConfirm: 'Delete this exception? The wave entitlements will be recomputed.',
     },
@@ -864,6 +863,9 @@ export const enUS: AppMessageSchema = {
     fixedValuePlaceholder: 'Fixed default (overrides source)',
     transformsLabel: 'Transforms',
     transformAdd: 'Append transform (chain runs in shown order)',
+    moveTransformUp: 'Move transform up',
+    moveTransformDown: 'Move transform down',
+    removeTransform: 'Remove transform',
     requiredLabel: 'Required',
     fingerprintLabel: 'Fingerprint',
     advanced: 'Advanced (row split / column join / enum maps)',
