@@ -7,6 +7,7 @@ import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard, StatCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
+import type { StatusTone } from '@/shared/i18n/glossary'
 import { getHomeBuckets } from '@/shared/api/bridge'
 import type { HomeBuckets, Wave } from '@/entities/models'
 
@@ -40,13 +41,22 @@ onMounted(() => {
   void loadData()
 })
 
-const bucketCards = computed(() => [
+interface HomeBucketCard {
+  key: string
+  label: string
+  value: string
+  caption: string
+  tone: StatusTone
+  to: string
+}
+
+const bucketCards = computed<HomeBucketCard[]>(() => [
   {
     key: 'unassigned',
     label: t('home.buckets.unassigned'),
     value: String(buckets.value.Unassigned),
     caption: t('home.buckets.unassignedDesc'),
-    tone: (buckets.value.Unassigned > 0 ? 'warning' : 'neutral') as const,
+    tone: buckets.value.Unassigned > 0 ? 'warning' : 'neutral',
     to: '/inbox',
   },
   {
@@ -54,7 +64,7 @@ const bucketCards = computed(() => [
     label: t('home.buckets.duplicateAsk'),
     value: String(buckets.value.DuplicateAsk),
     caption: t('home.buckets.duplicateAskDesc'),
-    tone: (buckets.value.DuplicateAsk > 0 ? 'warning' : 'neutral') as const,
+    tone: buckets.value.DuplicateAsk > 0 ? 'warning' : 'neutral',
     to: '/inbox',
   },
   {
@@ -62,7 +72,7 @@ const bucketCards = computed(() => [
     label: t('home.buckets.alignmentConflict'),
     value: String(buckets.value.AlignmentConflict),
     caption: t('home.buckets.alignmentConflictDesc'),
-    tone: (buckets.value.AlignmentConflict > 0 ? 'error' : 'neutral') as const,
+    tone: buckets.value.AlignmentConflict > 0 ? 'error' : 'neutral',
     to: '/inbox',
   },
   {
@@ -70,7 +80,7 @@ const bucketCards = computed(() => [
     label: t('home.buckets.identityUnattached'),
     value: String(buckets.value.IdentityUnattached),
     caption: t('home.buckets.identityUnattachedDesc'),
-    tone: (buckets.value.IdentityUnattached > 0 ? 'error' : 'neutral') as const,
+    tone: buckets.value.IdentityUnattached > 0 ? 'error' : 'neutral',
     to: '/inbox',
   },
   {
@@ -78,7 +88,7 @@ const bucketCards = computed(() => [
     label: t('home.buckets.blockedResults'),
     value: String(buckets.value.BlockedResults),
     caption: t('home.buckets.blockedResultsDesc'),
-    tone: (buckets.value.BlockedResults > 0 ? 'error' : 'neutral') as const,
+    tone: buckets.value.BlockedResults > 0 ? 'error' : 'neutral',
     to: '/waves',
   },
   {
@@ -86,7 +96,7 @@ const bucketCards = computed(() => [
     label: t('home.buckets.writebackFailed'),
     value: String(buckets.value.WritebackFailed),
     caption: t('home.buckets.writebackFailedDesc'),
-    tone: (buckets.value.WritebackFailed > 0 ? 'error' : 'neutral') as const,
+    tone: buckets.value.WritebackFailed > 0 ? 'error' : 'neutral',
     to: '/waves',
   },
   {
@@ -94,7 +104,7 @@ const bucketCards = computed(() => [
     label: t('home.buckets.residualClose'),
     value: String(buckets.value.ResidualClose),
     caption: t('home.buckets.residualCloseDesc'),
-    tone: (buckets.value.ResidualClose > 0 ? 'info' : 'neutral') as const,
+    tone: buckets.value.ResidualClose > 0 ? 'info' : 'neutral',
     to: '/waves',
   },
 ])

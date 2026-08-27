@@ -599,9 +599,9 @@ export const zhCN = {
       columns: {
         name: '客户',
         wave: '所属波次',
-        productKind: '商品类型',
-        supplierState: '工厂状态',
-        shipmentStatus: '发货状态',
+        factKind: '事实类型',
+        workState: '工作态',
+        writebackStatus: '回写状态',
         quantity: '数量',
         updatedAt: '更新时间',
         actions: '操作',
@@ -653,8 +653,8 @@ export const zhCN = {
       tableHeaders: {
         participant: '客户',
         product: '商品',
-        addressState: '地址状态',
-        supplierState: '工厂状态',
+        workState: '工作态',
+        writebackStatus: '回写状态',
       },
       presets: {
         blocked: '阻塞项',

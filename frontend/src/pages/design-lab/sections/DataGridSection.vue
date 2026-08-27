@@ -11,32 +11,24 @@ import { useI18n } from 'vue-i18n'
 import { NButton, NSwitch } from 'naive-ui'
 import { DataGrid, createColumns } from '@/shared/ui/data-grid'
 import type { DataGridColumnSpec } from '@/shared/ui/data-grid'
-import type { ProductKindValue, ShipmentStatusValue, SupplierStateValue } from '@/shared/i18n/glossary'
+import type { InputFactKindValue, WorkStateValue, WritebackStatusValue } from '@/shared/i18n/glossary'
 
 interface ParticipantRow {
   id: string
   name: string
   wave: string
-  productKind: ProductKindValue
-  supplierState: SupplierStateValue
-  shipmentStatus: ShipmentStatusValue
+  factKind: InputFactKindValue
+  workState: WorkStateValue
+  writebackStatus: WritebackStatusValue
   quantity: number
   updatedAt: string
 }
 
 const { t } = useI18n()
 
-const productKinds: ProductKindValue[] = ['badge', 'standee', 'charm', 'postcard', 'print', 'bundle', 'other']
-const supplierStates: SupplierStateValue[] = [
-  'not_submitted',
-  'submitted',
-  'accepted',
-  'producing',
-  'partially_shipped',
-  'shipped',
-  'canceled',
-]
-const shipmentStatuses: ShipmentStatusValue[] = ['pending', 'shipped', 'in_transit', 'delivered', 'exception', 'returned']
+const factKinds: InputFactKindValue[] = ['membership', 'retail_order', 'operator_grant']
+const workStates: WorkStateValue[] = ['blocked', 'ready', 'in_factory', 'shipped', 'writeback_failed']
+const writebackStatuses: WritebackStatusValue[] = ['pending', 'sent', 'failed']
 const waves = ['2026-07 会员波 · July Wave', '2026-06 零售波 · June Wave', '2026-05 限定波 · May Wave']
 
 /** Mixed 中文 / 日本語 / English names — proves script-aware (pinyin/kana) sorting. */
@@ -73,9 +65,9 @@ function buildRows(): ParticipantRow[] {
     id: `participant-${index}`,
     name,
     wave: waves[index % waves.length],
-    productKind: productKinds[index % productKinds.length],
-    supplierState: supplierStates[index % supplierStates.length],
-    shipmentStatus: shipmentStatuses[index % shipmentStatuses.length],
+    factKind: factKinds[index % factKinds.length],
+    workState: workStates[index % workStates.length],
+    writebackStatus: writebackStatuses[index % writebackStatuses.length],
     quantity: ((index * 7) % 6) + 1,
     updatedAt: new Date(now - index * 9 * 60 * 60 * 1000).toISOString(),
   }))
@@ -105,24 +97,24 @@ const columns = computed(() => {
     },
     {
       type: 'status',
-      key: 'productKind',
-      title: t('uiKit.dataGridDemo.columns.productKind'),
-      dimension: 'productKind',
+      key: 'factKind',
+      title: t('uiKit.dataGridDemo.columns.factKind'),
+      dimension: 'inputFactKind',
       width: 140,
     },
     {
       type: 'status',
-      key: 'supplierState',
-      title: t('uiKit.dataGridDemo.columns.supplierState'),
-      dimension: 'supplierState',
+      key: 'workState',
+      title: t('uiKit.dataGridDemo.columns.workState'),
+      dimension: 'workState',
       showDot: true,
       width: 150,
     },
     {
       type: 'status',
-      key: 'shipmentStatus',
-      title: t('uiKit.dataGridDemo.columns.shipmentStatus'),
-      dimension: 'shipmentStatus',
+      key: 'writebackStatus',
+      title: t('uiKit.dataGridDemo.columns.writebackStatus'),
+      dimension: 'writebackStatus',
       showDot: true,
       width: 140,
     },

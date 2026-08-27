@@ -13,7 +13,6 @@ import {
   NSelect,
   NSpace,
   NSpin,
-  NTag,
   NDrawer,
   NDrawerContent,
 } from 'naive-ui'
@@ -62,7 +61,6 @@ const customers = ref<CustomerProfile[]>([])
 const platforms = ref<Platform[]>([])
 const supplierOrders = ref<SupplierOrder[]>([])
 
-const groupBy = ref<'none' | 'workState' | 'customer' | 'product' | 'source'>('none')
 const filterProduct = ref<string>('all')
 
 const showAddressModal = ref(false)

@@ -601,9 +601,9 @@ export const enUS: AppMessageSchema = {
       columns: {
         name: 'Customer',
         wave: 'Wave',
-        productKind: 'Product kind',
-        supplierState: 'Factory status',
-        shipmentStatus: 'Shipment status',
+        factKind: 'Fact kind',
+        workState: 'Work state',
+        writebackStatus: 'Writeback status',
         quantity: 'Qty',
         updatedAt: 'Updated',
         actions: 'Actions',
@@ -656,8 +656,8 @@ export const enUS: AppMessageSchema = {
       tableHeaders: {
         participant: 'Customer',
         product: 'Product',
-        addressState: 'Address state',
-        supplierState: 'Factory status',
+        workState: 'Work state',
+        writebackStatus: 'Writeback status',
       },
       presets: {
         blocked: 'Blocked',

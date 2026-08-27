@@ -21,7 +21,13 @@ import {
 
 export { SUPPORTED_LOCALES, type SupportedLocale } from './locale-loader'
 
-export interface LocaleOption {
+/**
+ * Declared as a type alias (not an interface) on purpose: object-literal type
+ * aliases carry an implicit string index signature, so `LocaleOption[]` stays
+ * assignable to naive-ui option arrays (`SelectMixedOption[]` & co. declare
+ * `[k: string]: unknown`), which interfaces are not.
+ */
+export type LocaleOption = {
   label: string
   value: SupportedLocale
 }

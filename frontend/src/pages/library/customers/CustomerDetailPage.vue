@@ -147,7 +147,7 @@ const addressColumns = [
     render(row: RecipientAddress) {
       return row.IsDefault
         ? h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
-        : h(NTag, { type: 'neutral', size: 'small' }, { default: () => t('common.no') })
+        : h(NTag, { type: 'default', size: 'small' }, { default: () => t('common.no') })
     },
   },
 ]

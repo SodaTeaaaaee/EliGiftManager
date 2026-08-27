@@ -3,9 +3,9 @@
   "tasks": {
     "prepare": "deno install",
     "dev": "vite --host 127.0.0.1 --strictPort --port 5173",
-    "build": "vue-tsc -b && vite build",
+    "build": "node node_modules/vue-tsc/bin/vue-tsc.js -b && vite build",
     "preview": "vite preview --host 127.0.0.1 --strictPort --port 4173",
-    "typecheck": "vue-tsc -b",
+    "typecheck": "node node_modules/vue-tsc/bin/vue-tsc.js --noEmit -p tsconfig.app.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "gen:enums": "deno run --allow-read --allow-write scripts/gen-enums.ts",

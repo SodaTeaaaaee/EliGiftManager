@@ -14,13 +14,13 @@ import {
 import { PageHeader } from '@/shared/ui/shell'
 import { SectionCard } from '@/shared/ui/cards'
 import { useFeedback } from '@/shared/ui/feedback'
-import { useNaiveTheme } from '@/shared/theme/naive-bridge'
+import { useThemeStore, type Density, type ThemePreference } from '@/shared/theme/theme'
 import { getDataDir, getSettings, revealInFolder, saveSettings } from '@/shared/api/bridge'
 import type { AppSettings } from '@/entities/models'
 
 const { t, locale } = useI18n()
 const feedback = useFeedback()
-const { densityMode, themeMode } = useNaiveTheme()
+const themeStore = useThemeStore()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -71,8 +71,8 @@ async function handleSave() {
       DuplicateAskDays: form.value.DuplicateAskDays,
     })
     locale.value = form.value.Locale
-    themeMode.value = form.value.Theme as 'system' | 'light' | 'dark'
-    densityMode.value = form.value.Density as 'comfortable' | 'compact'
+    themeStore.setPreference(form.value.Theme as ThemePreference)
+    themeStore.setDensity(form.value.Density as Density)
     feedback.success(t('settings.saveSuccess'))
   } catch (err) {
     console.error('Failed to save settings:', err)

@@ -260,7 +260,7 @@ const ruleColumns = [
     render(row: EntitlementRule) {
       return row.Active
         ? h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
-        : h(NTag, { type: 'neutral', size: 'small' }, { default: () => t('common.no') })
+        : h(NTag, { type: 'default', size: 'small' }, { default: () => t('common.no') })
     },
   },
 ]
