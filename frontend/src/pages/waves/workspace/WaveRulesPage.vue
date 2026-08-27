@@ -30,6 +30,8 @@ import {
   deleteRule,
   getProductTotals,
   listCustomers,
+  listEntitlementInstances,
+  listExceptions,
   listPlatforms,
   listProducts,
   listQuantitySplitRules,
@@ -40,6 +42,8 @@ import {
 import type {
   CustomerProfile,
   EntitlementRule,
+  ExceptionView,
+  InstanceView,
   Platform,
   ProductItem,
   ProductTotal,
@@ -72,6 +76,8 @@ const products = ref<ProductItem[]>([])
 const platforms = ref<Platform[]>([])
 const customers = ref<CustomerProfile[]>([])
 const splitRules = ref<QuantitySplitRule[]>([])
+const exceptions = ref<ExceptionView[]>([])
+const instances = ref<InstanceView[]>([])
 
 const showRuleModal = ref(false)
 const ruleForm = ref({
@@ -94,26 +100,15 @@ const grantForm = ref({
 
 // ── Per-instance entitlement exceptions ──
 
-// The backend exposes AddException/DeleteException only — no list or
-// instance-lookup binding yet — so each product card carries a minimal
-// manual add form, and deletion happens by exception id below.
-interface ExceptionDraft {
-  instanceId: number | null
-  quantity: number
-  note: string
-}
-
-const exceptionForms = ref<Record<number, ExceptionDraft>>({})
-const deleteExceptionId = ref<number | null>(null)
-
-/** Seed one draft per known product, keeping any partially-filled entries. */
-function resetExceptionForms() {
-  const next: Record<number, ExceptionDraft> = {}
-  for (const p of products.value) {
-    next[p.ID] = exceptionForms.value[p.ID] ?? { instanceId: null, quantity: 1, note: '' }
-  }
-  exceptionForms.value = next
-}
+// Exceptions are listed through ListExceptions and added by picking one of
+// the wave's entitlement instances (ListEntitlementInstances) — no manual
+// instance or exception ids.
+const exceptionForm = ref({
+  instanceId: null as number | null,
+  productId: null as number | null,
+  quantity: 1,
+  note: '',
+})
 
 // ── Quantity split rules ──
 
@@ -134,21 +129,25 @@ async function loadData() {
   if (!props.waveId) return
   loading.value = true
   try {
-    const [ruleRes, totalRes, prodRes, platRes, custRes, splitRes] = await Promise.all([
-      listRules(props.waveId),
-      getProductTotals(props.waveId),
-      listProducts(),
-      listPlatforms(),
-      listCustomers(),
-      listQuantitySplitRules(props.waveId),
-    ])
+    const [ruleRes, totalRes, prodRes, platRes, custRes, splitRes, excRes, instRes] =
+      await Promise.all([
+        listRules(props.waveId),
+        getProductTotals(props.waveId),
+        listProducts(),
+        listPlatforms(),
+        listCustomers(),
+        listQuantitySplitRules(props.waveId),
+        listExceptions(props.waveId),
+        listEntitlementInstances(props.waveId),
+      ])
     rules.value = ruleRes
     totals.value = totalRes
     products.value = prodRes
     platforms.value = platRes
     customers.value = custRes
     splitRules.value = splitRes
-    resetExceptionForms()
+    exceptions.value = excRes
+    instances.value = instRes
   } catch (err) {
     console.error('Failed to load wave rules:', err)
   } finally {
@@ -203,7 +202,6 @@ interface ProductCardData {
   rules: EntitlementRule[]
   total: ProductTotal | null
   splitMentionCount: number
-  form: ExceptionDraft | undefined
 }
 
 const productCards = computed<ProductCardData[]>(() => {
@@ -216,7 +214,6 @@ const productCards = computed<ProductCardData[]>(() => {
         rules: [],
         total: null,
         splitMentionCount: 0,
-        form: exceptionForms.value[p.ID],
       }
       byId.set(p.ID, card)
     }
@@ -348,14 +345,26 @@ async function handleDeleteRule(rule: EntitlementRule) {
 
 // ── Per-instance exception flow ──
 
-async function handleAddExceptionFor(productId: number) {
-  const form = exceptionForms.value[productId]
-  if (!form || !form.instanceId) return
+/** Instance picker labels: customer name, identity summary, membership level. */
+const instanceOptions = computed(() =>
+  instances.value.map((inst) => {
+    const who = inst.CustomerName || `#${inst.ID}`
+    const parts = [inst.PlatformIdentity, inst.MembershipLevel].filter((s) => s && s.trim() !== '')
+    return {
+      label: parts.length ? `${who}（${parts.join(' · ')}）` : who,
+      value: inst.ID,
+    }
+  }),
+)
+
+async function handleAddException() {
+  const form = exceptionForm.value
+  if (!form.instanceId || !form.productId) return
   actionLoading.value = true
   try {
     await addException({
       WaveID: props.waveId,
-      ProductID: productId,
+      ProductID: form.productId,
       InstanceID: form.instanceId,
       Quantity: form.quantity,
       Note: form.note.trim(),
@@ -373,13 +382,12 @@ async function handleAddExceptionFor(productId: number) {
   }
 }
 
-async function handleDeleteException() {
-  if (!deleteExceptionId.value) return
+async function handleDeleteException(row: ExceptionView) {
+  if (!window.confirm(t('waveRules.exceptions.deleteConfirm'))) return
   actionLoading.value = true
   try {
-    await deleteException(deleteExceptionId.value)
+    await deleteException(row.ID)
     feedback.success(t('waveWorkspace.exceptionDeleteSuccess'))
-    deleteExceptionId.value = null
     await loadData()
     emit('refresh')
   } catch (err) {
@@ -388,6 +396,59 @@ async function handleDeleteException() {
     actionLoading.value = false
   }
 }
+
+const exceptionColumns = computed(() => [
+  {
+    title: t('library.displayName'),
+    key: 'CustomerName',
+    render(row: ExceptionView) {
+      const inst = instances.value.find((i) => i.ID === row.InstanceID)
+      return inst && inst.MembershipLevel
+        ? `${row.CustomerName}（${inst.MembershipLevel}）`
+        : row.CustomerName || `#${row.InstanceID}`
+    },
+  },
+  {
+    title: t('library.productName'),
+    key: 'ProductName',
+    render(row: ExceptionView) {
+      return row.ProductName || `#${row.ProductItemID}`
+    },
+  },
+  {
+    title: t('waveWorkspace.quantity'),
+    key: 'Quantity',
+    width: 90,
+    render(row: ExceptionView) {
+      return row.Quantity > 0 ? `+${row.Quantity}` : String(row.Quantity)
+    },
+  },
+  {
+    title: t('library.notes'),
+    key: 'Note',
+    render(row: ExceptionView) {
+      return row.Note || '—'
+    },
+  },
+  {
+    title: t('common.actions'),
+    key: 'actions',
+    width: 100,
+    render(row: ExceptionView) {
+      return h(
+        NButton,
+        {
+          size: 'tiny',
+          type: 'error',
+          secondary: true,
+          disabled: actionLoading.value,
+          onClick: () => void handleDeleteException(row),
+        },
+        { default: () => t('waveWorkspace.deleteException') },
+      )
+    },
+  },
+])
 
 // ── Quantity split flow ──
 
@@ -655,37 +716,6 @@ const splitColumns = [
               </div>
             </div>
             <p v-else class="wave-rules-page__no-rules">{{ t('waveRules.noRulesInProduct') }}</p>
-
-            <div class="wave-rules-page__card-exception">
-              <span class="wave-rules-page__section-label">{{ t('waveWorkspace.exceptions') }}</span>
-              <div v-if="card.form" class="wave-rules-page__exception-form">
-                <NInputNumber
-                  v-model:value="card.form.instanceId"
-                  :min="1"
-                  size="small"
-                  :placeholder="t('waveWorkspace.instanceID')"
-                />
-                <NInputNumber
-                  v-model:value="card.form.quantity"
-                  size="small"
-                  :placeholder="t('waveWorkspace.quantity')"
-                />
-                <NInput
-                  v-model:value="card.form.note"
-                  size="small"
-                  :placeholder="t('library.notes')"
-                />
-                <NButton
-                  size="tiny"
-                  type="primary"
-                  :loading="actionLoading"
-                  :disabled="!card.form.instanceId"
-                  @click="handleAddExceptionFor(card.product.ID)"
-                >
-                  {{ t('waveWorkspace.addException') }}
-                </NButton>
-              </div>
-            </div>
           </div>
         </div>
       </NSpin>
@@ -722,26 +752,54 @@ const splitColumns = [
       </div>
     </SectionCard>
 
-    <!-- Exception maintenance (manual delete by id) -->
+    <!-- Exception maintenance: real list + instance picker -->
     <SectionCard :title="t('waveRules.exceptionTools')">
       <p class="wave-rules-page__hint">{{ t('waveRules.exceptionToolsHint') }}</p>
-      <div class="wave-rules-page__exception-delete">
-        <NInputNumber
-          v-model:value="deleteExceptionId"
-          :min="1"
-          :placeholder="t('waveWorkspace.exceptionID')"
-          class="wave-rules-page__number"
+      <div class="wave-rules-page__exception-add">
+        <NSelect
+          v-model:value="exceptionForm.instanceId"
+          :options="instanceOptions"
+          filterable
+          size="small"
+          class="wave-rules-page__instance-select"
+          :placeholder="t('waveRules.exceptions.instancePlaceholder')"
+        />
+        <NSelect
+          v-model:value="exceptionForm.productId"
+          :options="productOptions"
+          filterable
+          size="small"
+          class="wave-rules-page__product-select"
+          :placeholder="t('library.productName')"
+        />
+        <NInputNumber v-model:value="exceptionForm.quantity" size="small" />
+        <NInput
+          v-model:value="exceptionForm.note"
+          size="small"
+          class="wave-rules-page__note-input"
+          :placeholder="t('library.notes')"
         />
         <NButton
           size="small"
-          type="error"
-          secondary
+          type="primary"
           :loading="actionLoading"
-          :disabled="!deleteExceptionId"
-          @click="handleDeleteException"
+          :disabled="!exceptionForm.instanceId || !exceptionForm.productId"
+          @click="handleAddException"
         >
-          {{ t('waveWorkspace.deleteException') }}
+          {{ t('waveWorkspace.addException') }}
         </NButton>
+      </div>
+
+      <div v-if="!exceptions.length" class="wave-rules-page__empty">
+        <EmptyState :title="t('waveRules.exceptions.empty')" size="sm" />
+      </div>
+      <div v-else class="wave-rules-page__table">
+        <NDataTable
+          :columns="exceptionColumns"
+          :data="exceptions"
+          :row-key="(row: ExceptionView) => row.ID"
+          size="small"
+        />
       </div>
     </SectionCard>
 
@@ -1021,29 +1079,10 @@ const splitColumns = [
   margin-left: auto;
 }
 
-.wave-rules-page__card-exception {
-  border-top: 1px dashed var(--color-border, var(--card-border-color));
-  padding-top: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
 .wave-rules-page__section-label {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-secondary);
-}
-
-.wave-rules-page__exception-form {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-
-.wave-rules-page__exception-form .n-input {
-  width: 150px;
 }
 
 .wave-rules-page__empty {
@@ -1066,14 +1105,24 @@ const splitColumns = [
   gap: var(--space-2);
 }
 
-.wave-rules-page__number {
-  width: 180px;
-}
-
-.wave-rules-page__exception-delete {
+.wave-rules-page__exception-add {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+}
+
+.wave-rules-page__instance-select {
+  width: 260px;
+}
+
+.wave-rules-page__product-select {
+  width: 220px;
+}
+
+.wave-rules-page__note-input {
+  width: 180px;
 }
 
 .wave-rules-page__components {
