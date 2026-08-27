@@ -76,7 +76,7 @@ func (ws *Workspace) generateFactoryOrder(ctx context.Context, waveID, factoryID
 	// Snapshot the factory order output template version into the execution
 	// links; 0 means no output template was configured.
 	configVersion := 0
-	if tpl := ws.findTemplate(ctx, factoryID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); tpl != nil {
+	if tpl := findTemplate(ctx, ws.Store, factoryID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); tpl != nil {
 		configVersion = tpl.Version
 	}
 	order := &domain.SupplierOrder{WaveID: waveID, FactoryPlatformID: factoryID, Status: string(domain.SupplierOrderGenerated)}
@@ -229,7 +229,7 @@ func (ws *Workspace) ImportShipment(ctx context.Context, trackingID, trackingNo,
 func (ws *Workspace) GenerateWritebacks(ctx context.Context, factID uint) ([]domain.ChannelWritebackItem, error) {
 	var created []domain.ChannelWritebackItem
 	if err := ws.Store.WithTx(ctx, func(tx domain.Store) error {
-		items, err := ws.withStore(tx).generateWritebacks(ctx, factID)
+		items, err := generateWritebacks(ctx, tx, factID)
 		if err != nil {
 			return err
 		}
@@ -242,17 +242,18 @@ func (ws *Workspace) GenerateWritebacks(ctx context.Context, factID uint) ([]dom
 }
 
 // generateWritebacks collects the shipments behind a source fact and records
-// one writeback item per shipment. It must run on a workspace bound to the
-// surrounding transaction so every write commits or rolls back together.
-func (ws *Workspace) generateWritebacks(ctx context.Context, factID uint) ([]domain.ChannelWritebackItem, error) {
-	existing, err := ws.Store.ListWritebacksByFact(ctx, factID)
+// one writeback item per shipment. Every read and write goes through the
+// explicit store argument, so callers hand it the transaction they opened;
+// every write commits or rolls back together.
+func generateWritebacks(ctx context.Context, store domain.Store, factID uint) ([]domain.ChannelWritebackItem, error) {
+	existing, err := store.ListWritebacksByFact(ctx, factID)
 	if err != nil {
 		return nil, err
 	}
 	if len(existing) > 0 {
 		return existing, nil
 	}
-	waves, err := ws.Store.ListWaves(ctx)
+	waves, err := store.ListWaves(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -261,15 +262,15 @@ func (ws *Workspace) generateWritebacks(ctx context.Context, factID uint) ([]dom
 	// Snapshot the writeback output template (0 when none is configured).
 	var wbTplID uint
 	var wbTplVersion int
-	fact, err := ws.Store.GetFact(ctx, factID)
+	fact, err := store.GetFact(ctx, factID)
 	if err != nil {
 		return nil, err
 	}
-	if tpl := ws.findTemplate(ctx, fact.PlatformID, domain.TemplateDirectionOutput, DocumentTypeWriteback); tpl != nil {
+	if tpl := findTemplate(ctx, store, fact.PlatformID, domain.TemplateDirectionOutput, DocumentTypeWriteback); tpl != nil {
 		wbTplID, wbTplVersion = tpl.ID, tpl.Version
 	}
 	for _, w := range waves {
-		results, err := ws.Store.ListResults(ctx, w.ID)
+		results, err := store.ListResults(ctx, w.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -277,19 +278,19 @@ func (ws *Workspace) generateWritebacks(ctx context.Context, factID uint) ([]dom
 			if r.InputFactID == nil || *r.InputFactID != factID {
 				continue
 			}
-			links, err := ws.Store.ListLinksByResult(ctx, r.ID)
+			links, err := store.ListLinksByResult(ctx, r.ID)
 			if err != nil {
 				return nil, err
 			}
 			for _, link := range links {
-				line, err := ws.Store.GetSupplierOrderLine(ctx, link.SupplierOrderLineID)
+				line, err := store.GetSupplierOrderLine(ctx, link.SupplierOrderLineID)
 				if err != nil {
 					return nil, err
 				}
 				if line.TrackingRetired {
 					continue
 				}
-				ships, err := ws.Store.ListShipmentsByTracking(ctx, line.TrackingID)
+				ships, err := store.ListShipmentsByTracking(ctx, line.TrackingID)
 				if err != nil {
 					return nil, err
 				}
@@ -308,7 +309,7 @@ func (ws *Workspace) generateWritebacks(ctx context.Context, factID uint) ([]dom
 						TemplateVersion: wbTplVersion,
 						Payload:         strings.Join([]string{sh.TrackingNo, sh.CarrierCode}, ","),
 					}
-					if err := ws.Store.CreateWriteback(ctx, item); err != nil {
+					if err := store.CreateWriteback(ctx, item); err != nil {
 						return nil, err
 					}
 					created = append(created, *item)
