@@ -253,7 +253,8 @@ func (c *WorkspaceController) GenerateFactoryOrder(waveID, factoryID uint) (*app
 }
 
 // GenerateFactoryOrderForResults submits only the selected fulfillment
-// results; resultIDs nil or empty degrades to the whole-wave form.
+// results; resultIDs nil means the whole wave, an explicitly empty selection
+// submits nothing (ErrNothingToSubmit).
 func (c *WorkspaceController) GenerateFactoryOrderForResults(waveID, factoryID uint, resultIDs []uint) (*app.GenerateFactoryOrderResult, error) {
 	order, lines, err := c.ws.GenerateFactoryOrderForResults(c.ctx(), waveID, factoryID, resultIDs)
 	if err != nil {

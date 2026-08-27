@@ -23,7 +23,8 @@ func (ws *Workspace) GenerateFactoryOrder(ctx context.Context, waveID, factoryID
 }
 
 // GenerateFactoryOrderForResults submits only the results whose ids appear in
-// resultIDs (nil or empty means the whole wave). Unselected results are left
+// resultIDs (nil means the whole wave; an explicitly empty selection submits
+// nothing and reports ErrNothingToSubmit). Unselected results are left
 // untouched; the one-open-order-per-(wave, factory) slot constraint is
 // unchanged, so a partial submission blocks further submissions to the same
 // factory until that order is exported or voided.
@@ -106,7 +107,7 @@ func (ws *Workspace) generateFactoryOrderForResults(ctx context.Context, waveID,
 	for _, g := range groups {
 		ordered = append(ordered, g)
 	}
-	sort.Slice(ordered, func(i, j int) bool {
+	sort.SliceStable(ordered, func(i, j int) bool {
 		if ordered[i].product.Name != ordered[j].product.Name {
 			return ordered[i].product.Name < ordered[j].product.Name
 		}
