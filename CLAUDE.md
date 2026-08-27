@@ -11,7 +11,7 @@ Do not revive old Demand/Fulfillment V2 language. External inputs are facts. Acc
 The user-facing workflow is:
 
 1. Inbox parses and triages input facts.
-2. Wave owns membership fact resolution, product alignment, entitlement deltas, retail orders, operational grants, remediation, and supplier execution.
+2. Wave owns membership fact resolution, product alignment, entitlement deltas, retail orders, operational grants, and supplier execution.
 3. Library owns stable product facts, platform integrations, template configuration, carrier mapping, and semantic alignment.
 4. Settings owns local app preferences and duplicate import window defaults.
 

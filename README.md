@@ -8,9 +8,9 @@ The current product model is documented in [CONTEXT.md](./CONTEXT.md) and [docs/
 
 The smallest workflow is input -> mapping -> output.
 
-Input enters the Inbox as input documents and input fact lines. Operators assign accepted facts into a Wave. A Wave resolves membership facts, retail orders, operational grants, product alignment, addresses, and remediation into source-level fulfillment results.
+Input enters the Inbox as input documents and input fact lines. Operators assign accepted facts into a Wave. A Wave resolves membership facts, retail orders, operational grants, product alignment, and addresses into source-level fulfillment results.
 
-The Wave workbench is a large editable responsibility list. Users can sort it or group it by supporter, product, source type, platform, factory, status, or any supported operational view. Grouping changes the view only. The leaf fulfillment results keep their source facts and quantities.
+The Wave workbench is a large editable responsibility list. Users can sort it or group it by work state, customer, product, source, or factory. Grouping changes the view only. The leaf fulfillment results keep their source facts and quantities.
 
 Supplier order export creates supplier order lines and internal tracking IDs. Factory shipment files map back through those tracking IDs. Source platforms receive writeback items, including multiple parcels for one source order when the platform supports it.
 
@@ -19,7 +19,7 @@ Supplier order export creates supplier order lines and internal tracking IDs. Fa
 | Term | Meaning |
 |------|---------|
 | InputDocument | Raw file, API response, or manual batch submitted to the system. |
-| InputFact / InputFactLine | Parsed business fact. Membership identity, retail order, operational grant, and remediation are different fact types. |
+| InputFact / InputFactLine | Parsed business fact. Membership identity, retail order, and operational grant are different fact types. |
 | Wave | A bounded fulfillment work scope. A membership identity fact must be resolved inside one Wave. |
 | ProductItem | Internal physical product fact, anchored to one responsible factory SKU. |
 | ProductAlias | External platform product ID, name, or spec mapped to a ProductItem. |

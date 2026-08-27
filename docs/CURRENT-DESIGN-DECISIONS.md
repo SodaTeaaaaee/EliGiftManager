@@ -2,7 +2,7 @@
 
 本文是已接受决定的摘要。术语以 [CONTEXT.md](../CONTEXT.md) 为准，工作流以 [TARGET-DOMAIN-AND-PRODUCT-MODEL.md](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md) 为准，取舍理由在 [docs/adr/](./adr/)。
 
-实现前还要补齐实体字段、基数、状态机和画面操作清单。未写清的部分见文末。当前代码不是目标。
+实现前还要补齐实体字段、基数、状态机和画面操作清单。当前代码不是目标。
 
 ## 重做契约
 
