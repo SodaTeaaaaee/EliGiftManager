@@ -2,11 +2,10 @@ package alignment
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
 // Transformer rewrites one semantic value in the context of its semantic key.
@@ -17,36 +16,56 @@ type Transformer func(key, value string) (string, error)
 // separator is effectively impossible in spreadsheet cell data.
 const joinAddressPart = "\x1f"
 
+// namedTransformerFactories is the single source of truth for the transformer
+// names callable inside Transforms chains. domain.NamedTransformers is the
+// user-facing catalog and is only a projection of this registry plus the
+// row-expansion capability; TestRegisteredTransformers_MatchDomainList keeps
+// the two lists aligned.
+var namedTransformerFactories = map[string]func(MappingConfig) Transformer{
+	"trim":           func(MappingConfig) Transformer { return transformTrim },
+	"strip_quotes":   func(MappingConfig) Transformer { return transformStripQuotes },
+	"parseDate":      func(MappingConfig) Transformer { return transformParseDate },
+	"mapEnum":        mapEnumTransformer,
+	"normalizePhone": func(MappingConfig) Transformer { return transformNormalizePhone },
+	"joinAddress":    func(MappingConfig) Transformer { return transformJoinAddress },
+}
+
+// SplitSkuQuantityName is the row-expansion capability carried by
+// MappingConfig.SplitSkuQuantity. It appears in domain.NamedTransformers for
+// config authoring, but it must never appear inside a Transforms chain.
+const SplitSkuQuantityName = "splitSkuQuantity"
+
+// RegisteredTransformers returns every callable transformer name derived from
+// the registry, sorted for stable display.
+func RegisteredTransformers() []string {
+	names := make([]string, 0, len(namedTransformerFactories))
+	for name := range namedTransformerFactories {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // buildTransformers compiles the config's transform chains into callable
-// transformers. Every name must come from domain.NamedTransformers, and
-// splitSkuQuantity is rejected here as well because it is a row-expansion
-// capability carried by MappingConfig.SplitSkuQuantity.
+// transformers against the registry. Names outside the registry are fatal at
+// parse time, and splitSkuQuantity is rejected as well because chains must use
+// MappingConfig.SplitSkuQuantity instead.
 func buildTransformers(cfg MappingConfig) (map[string]Transformer, error) {
 	for _, chains := range cfg.Transforms {
 		for _, name := range chains {
-			known := false
-			for _, n := range domain.NamedTransformers {
-				if n == name {
-					known = true
-					break
-				}
+			if name == SplitSkuQuantityName {
+				return nil, fmt.Errorf("alignment: transformer %s is a row-expansion capability; set MappingConfig.SplitSkuQuantity instead", SplitSkuQuantityName)
 			}
-			if !known {
+			if _, ok := namedTransformerFactories[name]; !ok {
 				return nil, fmt.Errorf("alignment: unknown transformer %q", name)
-			}
-			if name == "splitSkuQuantity" {
-				return nil, fmt.Errorf("alignment: transformer splitSkuQuantity is a row-expansion capability; set MappingConfig.SplitSkuQuantity instead")
 			}
 		}
 	}
-	return map[string]Transformer{
-		"trim":           transformTrim,
-		"strip_quotes":   transformStripQuotes,
-		"parseDate":      transformParseDate,
-		"mapEnum":        mapEnumTransformer(cfg),
-		"normalizePhone": transformNormalizePhone,
-		"joinAddress":    transformJoinAddress,
-	}, nil
+	set := make(map[string]Transformer, len(namedTransformerFactories))
+	for name, build := range namedTransformerFactories {
+		set[name] = build(cfg)
+	}
+	return set, nil
 }
 
 func transformTrim(_, value string) (string, error) {

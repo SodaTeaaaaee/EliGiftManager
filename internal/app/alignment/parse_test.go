@@ -228,6 +228,21 @@ func TestParse_TransformFailureKeepsRowAndRecordsIssue(t *testing.T) {
 	}
 }
 
+// finishRow must surface an unregistered transformer as an issue instead of
+// silently skipping the transform step (defense in depth behind
+// buildTransformers' up-front validation).
+func TestFinishRow_UnknownTransformerRecordsIssue(t *testing.T) {
+	values := map[string]string{"quantity": " 5 "}
+	cfg := MappingConfig{Transforms: map[string][]string{"quantity": {"trim", "explode"}}}
+	row, issues := finishRow(values, cfg, map[string]Transformer{"trim": transformTrim}, 7)
+	if row == nil {
+		t.Fatal("row must survive an unknown transformer")
+	}
+	if len(issues) != 1 || issues[0].LineNo != 7 || issues[0].Key != "quantity" || !strings.Contains(issues[0].Message, "explode") {
+		t.Fatalf("issues = %+v, want one unknown-transformer issue for quantity", issues)
+	}
+}
+
 func TestParse_SplitFailureDropsRow(t *testing.T) {
 	csvData := "规格&数量\nsku_a * many\n"
 	spec := TemplateSpec{Mapping: MappingConfig{

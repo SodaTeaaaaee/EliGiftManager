@@ -197,6 +197,10 @@ func finishRow(values map[string]string, cfg MappingConfig, transformers map[str
 		for _, name := range chain {
 			tf, ok := transformers[name]
 			if !ok {
+				// buildTransformers validates chains up front, so hitting an
+				// unregistered name here means a bad config slipped through;
+				// surface it instead of silently skipping the step.
+				issues = append(issues, ParseIssue{LineNo: sourceRow, Key: key, Message: fmt.Sprintf("unknown transformer %q", name)})
 				continue
 			}
 			out, err := tf(key, v)

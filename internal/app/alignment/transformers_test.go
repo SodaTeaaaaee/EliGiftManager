@@ -1,7 +1,10 @@
 package alignment
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
 )
 
 func runChain(t *testing.T, cfg MappingConfig, key, value string, names ...string) (string, error) {
@@ -140,6 +143,36 @@ func TestTransformNormalizePhone(t *testing.T) {
 	}
 }
 
+// TestRegisteredTransformers_MatchDomainList keeps domain.NamedTransformers —
+// the user-facing catalog served to template authors — equal to the callable
+// registry plus splitSkuQuantity, which is a row-expansion capability rather
+// than a value transformer. A drift on either side fails here.
+func TestRegisteredTransformers_MatchDomainList(t *testing.T) {
+	registered := RegisteredTransformers()
+	if len(registered) == 0 {
+		t.Fatal("registry is empty")
+	}
+	catalog := map[string]bool{}
+	for _, n := range domain.NamedTransformers {
+		catalog[n] = true
+	}
+	for _, n := range registered {
+		if !catalog[n] {
+			t.Fatalf("registered transformer %q missing from domain.NamedTransformers", n)
+		}
+		delete(catalog, n)
+	}
+	if len(catalog) != 1 || !catalog["splitSkuQuantity"] {
+		t.Fatalf("domain.NamedTransformers diverges from registry; extra = %v", catalog)
+	}
+	stableAgain := RegisteredTransformers()
+	for i, n := range stableAgain {
+		if registered[i] != n {
+			t.Fatalf("RegisteredTransformers order is unstable: %v vs %v", registered, stableAgain)
+		}
+	}
+}
+
 func TestTransformJoinAddress(t *testing.T) {
 	got, err := runChain(t, MappingConfig{}, "recipient.address_line1", " 江苏省 \x1f\x1f南京市\x1f 栖霞区 \x1f仙林大道1号", "joinAddress")
 	if err != nil {
@@ -160,6 +193,22 @@ func TestBuildTransformers_RejectsUnknownAndSplitInChain(t *testing.T) {
 	}
 	if _, err := buildTransformers(MappingConfig{Transforms: map[string][]string{"k": {"splitSkuQuantity"}}}); err == nil {
 		t.Fatal("expected error for splitSkuQuantity in a chain")
+	}
+}
+
+// Config-shape validation (normalize) must reject unregistered transformer
+// names up front so bad configs cannot reach template storage.
+func TestMappingNormalize_RejectsUnregisteredTransformer(t *testing.T) {
+	cfg := MappingConfig{
+		Mode:      ModePositional,
+		Positions: map[string]int{"quantity": 0},
+		Transforms: map[string][]string{
+			"quantity": {"trim", "explode"},
+		},
+	}
+	err := cfg.normalize()
+	if err == nil || !strings.Contains(err.Error(), "unregistered") {
+		t.Fatalf("normalize err = %v, want unregistered-transformer rejection", err)
 	}
 }
 

@@ -153,8 +153,11 @@ func (cfg *MappingConfig) normalize() error {
 	}
 	for key, chain := range cfg.Transforms {
 		for _, name := range chain {
-			if name == "splitSkuQuantity" {
+			if name == SplitSkuQuantityName {
 				return fmt.Errorf("alignment: transform splitSkuQuantity on %q belongs in the splitSkuQuantity field, not a transform chain", key)
+			}
+			if _, ok := namedTransformerFactories[name]; !ok {
+				return fmt.Errorf("alignment: mapping config references unregistered transformer %q on key %q", name, key)
 			}
 		}
 	}

@@ -372,6 +372,10 @@ var SemanticDictionary = []string{
 	"shipment.quantity",
 }
 
+// NamedTransformers is the user-facing catalog of transformer names shown to
+// template authors. The callable registry lives in internal/app/alignment
+// (RegisteredTransformers); this list must stay equal to that registry plus
+// "splitSkuQuantity", which alignment's contract test enforces.
 var NamedTransformers = []string{
 	"trim",
 	"strip_quotes",
