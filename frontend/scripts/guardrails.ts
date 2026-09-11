@@ -27,6 +27,10 @@
 //   no-unused-export    every named export of a src .ts module must be
 //                        imported somewhere in src (.vue SFCs, main.ts and
 //                        barrel re-exports handled per exemption rules).
+//   stale-generated-enums  the wails v3 generated TS enums (BlockReason,
+//                        WorkState, incl. their synthetic $zero member)
+//                        must match the *Values mirror arrays in
+//                        src/shared/api/generated/enums.ts value-for-value.
 
 const SRC_ROOT = "src";
 const GLOSSARY_PATH = "src/shared/i18n/glossary.ts";
@@ -44,7 +48,8 @@ interface Violation {
     | "no-raw-enum"
     | "no-restricted-import"
     | "no-missing-locale-key"
-    | "no-unused-export";
+    | "no-unused-export"
+    | "stale-generated-enums";
   message: string;
   snippet: string;
 }
@@ -917,6 +922,121 @@ function scanUnusedExports(files: string[]): void {
 }
 
 // ---------------------------------------------------------------------------
+// Rule: stale-generated-enums — bindings enum domains vs generated/enums.ts
+// ---------------------------------------------------------------------------
+
+// The wails v3 generator emits TS enums for the Go enums (BlockReason,
+// WorkState, …), each carrying a synthetic `$zero` member for the Go zero
+// value. gen-enums.ts mirrors the same Go enums into
+// src/shared/api/generated/enums.ts as `*Values` arrays + string-literal
+// unions — the form the UI actually consumes (pages compare raw literals,
+// see the @/entities facade header). The two representations must stay
+// value-for-value identical, order included ($zero excluded: it is the Go
+// zero marker, never a real wire value), otherwise the UI keeps compiling
+// against enum members the bindings can no longer deliver, or vice versa.
+// Only enums that have a generated mirror participate; when gen-enums.ts
+// grows a new one, add it to CROSS_CHECKED_ENUMS.
+const BINDINGS_DOMAIN_MODELS_PATH =
+  "bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/domain/models.ts";
+const GENERATED_ENUMS_PATH = "src/shared/api/generated/enums.ts";
+const CROSS_CHECKED_ENUMS = ["BlockReason", "WorkState"] as const;
+
+interface ParsedEnum {
+  name: string;
+  /** String-valued members in declaration order ($zero kept). */
+  members: { name: string; value: string }[];
+  line: number;
+}
+
+/** Parses `export enum X { A = "a", ... }` blocks out of a bindings module. */
+function parseExportedEnums(source: string): ParsedEnum[] {
+  const enums: ParsedEnum[] = [];
+  const enumRe = /\bexport\s+enum\s+([A-Za-z_$][\w$]*)\s*\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = enumRe.exec(source)) !== null) {
+    const bodyStart = enumRe.lastIndex;
+    const bodyEnd = source.indexOf("}", bodyStart);
+    const body = bodyEnd === -1
+      ? source.slice(bodyStart)
+      : source.slice(bodyStart, bodyEnd);
+    const memberRe = /([A-Za-z_$][\w$]*)\s*=\s*"((?:[^"\\]|\\.)*)"/g;
+    const members: { name: string; value: string }[] = [];
+    let mm: RegExpExecArray | null;
+    while ((mm = memberRe.exec(body)) !== null) {
+      members.push({ name: mm[1], value: mm[2] });
+    }
+    enums.push({ name: m[1], members, line: indexToLine(source, m.index) });
+  }
+  return enums;
+}
+
+/** Parses the `export const <lowerFirst(name)>Values = [ 'a', 'b' ] as const` mirror. */
+function parseGeneratedValues(
+  source: string,
+  enumName: string,
+): { arrayName: string; values: string[] } | null {
+  const arrayName = enumName[0].toLowerCase() + enumName.slice(1) + "Values";
+  const re = new RegExp(
+    `export\\s+const\\s+${arrayName}\\s*=\\s*\\[([^\\]]*)\\]`,
+  );
+  const m = re.exec(source);
+  if (!m) return null;
+  const values: string[] = [];
+  const strRe = /'([^']*)'/g;
+  let mm: RegExpExecArray | null;
+  while ((mm = strRe.exec(m[1])) !== null) values.push(mm[1]);
+  return { arrayName, values };
+}
+
+function checkGeneratedEnumDomains(): void {
+  const bindingsSource = Deno.readTextFileSync(BINDINGS_DOMAIN_MODELS_PATH);
+  const generatedSource = Deno.readTextFileSync(GENERATED_ENUMS_PATH);
+  const enumsByName = new Map(
+    parseExportedEnums(bindingsSource).map((e) => [e.name, e]),
+  );
+
+  for (const enumName of CROSS_CHECKED_ENUMS) {
+    const parsed = enumsByName.get(enumName);
+    if (!parsed) {
+      violations.push({
+        file: BINDINGS_DOMAIN_MODELS_PATH,
+        line: 1,
+        rule: "stale-generated-enums",
+        message:
+          `expected generated TS enum ${enumName} not found — rerun wails3 generate bindings`,
+        snippet: BINDINGS_DOMAIN_MODELS_PATH,
+      });
+      continue;
+    }
+    const bindingValues = parsed.members
+      .filter((mem) => mem.name !== "$zero")
+      .map((mem) => mem.value);
+    const mirror = parseGeneratedValues(generatedSource, enumName);
+    if (!mirror) {
+      violations.push({
+        file: GENERATED_ENUMS_PATH,
+        line: 1,
+        rule: "stale-generated-enums",
+        message:
+          `no ${enumName[0].toLowerCase() + enumName.slice(1)}Values array found for bindings enum ${enumName} — rerun deno task gen:enums`,
+        snippet: GENERATED_ENUMS_PATH,
+      });
+      continue;
+    }
+    if (bindingValues.join("\n") !== mirror.values.join("\n")) {
+      violations.push({
+        file: BINDINGS_DOMAIN_MODELS_PATH,
+        line: parsed.line,
+        rule: "stale-generated-enums",
+        message:
+          `enum ${enumName} domain out of sync with ${GENERATED_ENUMS_PATH} ${mirror.arrayName}: bindings declare [${bindingValues.join(", ")}] but the mirror lists [${mirror.values.join(", ")}] — rerun wails3 generate bindings and/or deno task gen:enums`,
+        snippet: `export enum ${enumName} { ... }`,
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -972,6 +1092,9 @@ function main(): void {
 
   // Rule 5: named exports must be imported somewhere in src.
   scanUnusedExports(files);
+
+  // Rule 6: generated enum domains must match the bindings value-for-value.
+  checkGeneratedEnumDomains();
 
   if (violations.length === 0) {
     console.log("guardrails: no violations found.");
