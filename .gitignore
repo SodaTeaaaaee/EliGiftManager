@@ -45,11 +45,6 @@ frontend/package.json.md5
 frontend/test-results/
 frontend/blob-report/
 frontend/playwright-report/
-frontend-legacy/.vite/
-frontend-legacy/.cache/
-frontend-legacy/dist/*
-frontend-legacy/test-results/
-frontend-legacy/blob-report/
 
 # npm/yarn/pnpm lockfiles — this project is Deno-only (deno.lock is committed)
 package-lock.json
@@ -96,8 +91,6 @@ AGENTS.md
 # Console dumps left behind by typecheck/build runs
 frontend/*_out.txt
 frontend/*_fresh.txt
-frontend-legacy/*_out.txt
-frontend-legacy/*_fresh.txt
 
 # Local helper scripts (transient — do not commit)
 _*.bat
