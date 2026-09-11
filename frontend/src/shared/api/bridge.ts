@@ -217,6 +217,13 @@ import { markBridgeMissing, markBridgeSeen } from './health'
  * (WKWebView), `window.wails` (Android WebView). Unlike the post-navigation
  * `window._wails` init script these exist before any page script runs, so the
  * check is synchronous and race-free.
+ *
+ * Semantics differ from the v2 guard, which tested whether the bound Go
+ * objects existed: this guard only proves the host WebView bridge exists. In
+ * the extreme case where the WebView is present but the runtime fails to
+ * initialize, the old guard would soft-fail while this one lets the call
+ * through and the invocation itself errors. That matches how @wailsio/runtime
+ * performs its own WebView detection, and is a deliberate choice.
  */
 interface WailsHostGlobals {
   chrome?: { webview?: { postMessage?: unknown } }
@@ -383,13 +390,15 @@ export async function inspectSampleFile(
 ): Promise<SampleFileInfo> {
   assertWailsRuntime()
   const res = (await _InspectSampleFile(filePath, sheetName, limit)) as SampleFileInfoWire
+  // Optional chains mirror the v2 baseline: today the Go side returns nil
+  // only alongside an error, so these are pure defensive fallbacks.
   return {
-    Format: res.Format ?? '',
-    Sheets: res.Sheets ?? [],
-    Records: (res.Records ?? []).map((row) =>
+    Format: res?.Format ?? '',
+    Sheets: res?.Sheets ?? [],
+    Records: (res?.Records ?? []).map((row) =>
       (row ?? []).map((cell) => (cell == null ? '' : String(cell))),
     ),
-    Total: res.Total ?? 0,
+    Total: res?.Total ?? 0,
   }
 }
 
@@ -858,9 +867,24 @@ export async function pickFile(
         : {}),
     })
   } catch (err) {
-    // beta.20 surfaces a user cancel as a rejected promise (the platform's
-    // "cancelled by user" error); anything else is a real failure.
-    if (err instanceof Error && /cancel/i.test(err.message)) return null
+    // A user cancel reaches us as a rejected promise, in one of two shapes:
+    //  - the runtime's own "cancelled" error (matched by /cancel/i), or
+    //  - the wails wrapper's locale-independent English prefix
+    //    "Dialog.OpenFile failed, error getting selection" wrapping the OS
+    //    error. On Windows the cancel HRESULT (ERROR_CANCELLED) is described
+    //    by the OS in the system locale (e.g. 「操作已被用户取消。」 on zh-CN,
+    //    which contains no "cancel"), so matching the message text alone
+    //    breaks on non-English systems. The wrapper prefix is hardcoded in
+    //    @wailsio/runtime and locale-free; genuine non-cancel failures under
+    //    that prefix are vanishingly rare, and mapping them to null matches
+    //    the v2 behaviour of degrading silently at the dialog layer.
+    if (
+      err instanceof Error &&
+      (/cancel/i.test(err.message) ||
+        /Dialog\.OpenFile failed, error getting selection/i.test(err.message))
+    ) {
+      return null
+    }
     throw err
   }
   // Single selection resolves to a string; guard the array shape anyway —
