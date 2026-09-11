@@ -9,7 +9,7 @@
 迁移顺带采用的原生能力与清理：
 
 - 文件对话框改走前端 `@wailsio/runtime` 的 `Dialogs`，删除 Go 侧四个 `Pick*File` 绑定。
-- 窗口缩放做完整：启动时应用 `zoom.cfg` 的值，关闭窗口时把当前缩放写回，全部在 Go 侧完成；删除 `WindowExecJS(__persistZoom)` 调用与无人使用的 `SaveZoom` 绑定。
+- 窗口缩放做完整：启动时应用 `zoom.cfg` 的值，关闭窗口时把当前缩放写回，全部在 Go 侧完成；删除 `WindowExecJS(__persistZoom)` 调用与无人使用的 `SaveZoom` 绑定。经 beta.20 源码核实：25%–99% 的缩放在初始 Zoom 选项路径与 WebView2 原生缩放控件（Ctrl+滚轮，0.25–5.0）下原生生效；wails 的 SetZoom 公共 API 才有 1.0 下限，本项目不使用该 API——不要为此引入 CSS 缩放层。
 - 本地图片服务改挂 `AssetOptions.Middleware`，`/local-images/` 前缀拦截语义与目录穿越防护不变。
 - dev 模式探测改用 `production` 构建标签，取代对 v2 环境变量 `devserver`/`frontenddevserverurl` 的嗅探；`.portable` 与数据目录三级判定语义不变。
 - 控制器注册为 v3 services，删除 `SetAppContext` 包级上下文 hack。

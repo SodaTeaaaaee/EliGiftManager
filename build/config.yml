@@ -1,6 +1,4 @@
 # This file contains the configuration for this project.
-# When you update `info` or `fileAssociations`, run `wails3 task common:update:build-assets` to update the assets.
-# Note that this will overwrite any changes you have made to the assets.
 version: '3'
 
 # This information is used to generate the build assets.
@@ -11,7 +9,7 @@ info:
   description: "Creator fulfillment workspace"
   copyright: "(c) SodaTeaaaaee"
   comments: "Creator fulfillment workspace"
-  version: "2.0.0-alpha"
+  version: "2.0.0-alpha" # 版本号升级需同步四处：internal/config/config.go、此处、build/windows/info.json、build/windows/wails.exe.manifest
 
 # Dev mode configuration
 dev_mode:
@@ -37,9 +35,9 @@ dev_mode:
       - "*.ts" # The frontend directory will be excluded entirely by the setting above.
     git_ignore: true
   executes:
-    - cmd: wails3 build DEV=true
-      type: blocking
     - cmd: wails3 task common:dev:frontend
       type: background
+    - cmd: wails3 build DEV=true
+      type: blocking
     - cmd: wails3 task run
       type: primary

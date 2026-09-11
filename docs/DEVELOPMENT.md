@@ -35,6 +35,8 @@ cd frontend && deno install && cd ..
 | `wails3 build` | 桌面打包 |
 | `wails3 generate bindings` | 变更绑定的服务方法后重新生成前端绑定（`frontend/bindings/`） |
 
+版本号升级需同步四处：`internal/config/config.go`、`build/config.yml`、`build/windows/info.json`、`build/windows/wails.exe.manifest`。
+
 ## 4. 代码风格
 
 - Go：`gofmt` clean，tab 缩进，domain 命名用业务语言（`CustomerProfile`、`FulfillmentResult`、`SupplierOrderLine` 等）
