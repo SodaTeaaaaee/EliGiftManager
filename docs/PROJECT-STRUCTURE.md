@@ -5,7 +5,7 @@
 ## Top Level
 
 ```text
-main.go, app.go, zoom_config.go   Wails 启动、生命周期与桌面级能力
+main.go, zoom_config.go          Wails 启动、生命周期与桌面级能力
 internal/                         领域、用例、持久化、Wails 绑定
 frontend/                         Vue 3 信息架构（待处理、收件箱、波次、资料库、设置）
 docs/                             现行设计
@@ -29,8 +29,7 @@ SampleData/, testdata/            示例输入与测试夹具
 
 ## Desktop Boundary
 
-- `main.go` — 嵌入 `frontend/dist`，初始化 SQLite，注册 `WorkspaceController` 与 `FileSystemController` 为 v3 services
-- `app.go` — 窗口生命周期
+- `main.go` — 嵌入 `frontend/dist`，初始化 SQLite，注册 `WorkspaceController` 与 `FileSystemController` 为 v3 services，并承担 application.New、窗口创建等窗口生命周期与缩放钩子
 - `zoom_config.go` — 缩放读写（启动时应用 `data/zoom.cfg`，关窗写回，全部 Go 侧完成）
 - `internal/controller/workspace.go`、`internal/controller/api.go` — Wails 传输边界；业务规则在 `internal/app/`
 
