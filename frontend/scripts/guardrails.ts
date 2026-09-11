@@ -3,7 +3,7 @@
 //
 // This is a standalone scanner, NOT an ESLint/deno-lint plugin, because
 // `deno lint` does not process .vue files at all. It walks frontend/src,
-// applies five structural rules, prints violations as file:line + rule id +
+// applies six structural rules, prints violations as file:line + rule id +
 // snippet, and exits 1 if any violation was found.
 //
 // Rules:
@@ -11,14 +11,15 @@
 //                        user-visible attributes must go through t(...).
 //   no-raw-enum         enum-suffixed fields must not be interpolated as
 //                        raw text outside StatusBadge/StatusDot/t()/glossary.
-//   no-restricted-import  src/pages/** must not import frontend/bindings
+//   no-restricted-import  no file under src/** may import frontend/bindings
 //                        (wails v3 generated bindings — runtime AND type
-//                        imports alike, no type-only exemption; runtime calls
-//                        go through src/shared/api/bridge.ts, types through
-//                        the @/entities facade), must not import the
-//                        deprecated wails v2 `wailsjs/` generated tree, and
-//                        must not import Naive UI layout/feedback components
-//                        directly (shared/ui).
+//                        imports alike, no type-only exemption), with
+//                        src/shared/api/bridge.ts as the single sanctioned
+//                        entry (runtime calls go through the bridge, types
+//                        through it or the @/entities facade); no file may
+//                        import the deprecated wails v2 `wailsjs/` generated
+//                        tree; and Naive UI layout/feedback components must
+//                        not be imported directly anywhere in src (shared/ui).
 //   no-missing-locale-key  every t('...') literal in src/.vue/.ts must
 //                        resolve to a key in zh-CN.ts (en-US.ts is kept in
 //                        lockstep via AppMessageSchema typing) or to a
@@ -363,8 +364,16 @@ function scanTemplate(
 }
 
 // ---------------------------------------------------------------------------
-// Rule: no-restricted-import (src/pages/** only)
+// Rule: no-restricted-import — the bindings wall covers ALL of src/**, with
+// src/shared/api/bridge.ts as the single exempt entry (ADR 0072: bridge.ts
+// is the only file in the whole frontend allowed to import the generated
+// bindings modules). bridge.test.ts needs no exemption of its own: its
+// bindings references are vi.mock() specifiers, which are function-call
+// arguments, not import statements.
 // ---------------------------------------------------------------------------
+
+/** The only file under src/ allowed to import frontend/bindings. */
+const BINDINGS_ENTRY_FILE = "src/shared/api/bridge.ts";
 
 // NModal and NDrawer are RETAINED Naive UI kernels per redesign plan §4.3
 // ("保留 Naive UI" / retain list explicitly includes "NModal/NDrawer 内核")
@@ -508,7 +517,7 @@ function extractImportStatements(scriptContent: string): ImportStatement[] {
 /**
  * True when a raw import specifier, resolved from the importing file under
  * src/**, lands in frontend/bindings/. Covered specifier shapes — the ones
- * Vite/vue-tsc can physically resolve from a page:
+ * Vite/vue-tsc can physically resolve from any file under src/:
  *   - relative climbs:            `../../bindings/...`
  *   - Vite root-absolute paths:   `/bindings/...` (the leading `/` resolves
  *     from the frontend project root)
@@ -548,7 +557,7 @@ function resolvesUnderBindings(specifier: string, relFile: string): boolean {
   return first === "frontend" && stack[1]?.toLowerCase() === "bindings";
 }
 
-function scanImportsInPages(
+function scanImports(
   scriptContent: string,
   scriptStartOffset: number,
   fileContent: string,
@@ -564,7 +573,7 @@ function scanImportsInPages(
         line,
         rule: "no-restricted-import",
         message:
-          `page imports "${imp.specifier}" directly — route runtime calls through src/shared/api/bridge.ts and types through @/entities (frontend/bindings is banned in src/pages, no type-only exemption)`,
+          `imports "${imp.specifier}" directly — frontend/bindings is only importable from src/shared/api/bridge.ts; route runtime calls through the bridge and types through @/entities (no type-only exemption)`,
         snippet: snippetOf(imp.raw),
       });
     }
@@ -577,7 +586,7 @@ function scanImportsInPages(
         line,
         rule: "no-restricted-import",
         message:
-          `page imports "${imp.specifier}" — wailsjs (wails v2) generated artifacts are deprecated; route runtime calls through src/shared/api/bridge.ts and types through @/entities`,
+          `imports "${imp.specifier}" — wailsjs (wails v2) generated artifacts are deprecated; route runtime calls through src/shared/api/bridge.ts and types through @/entities`,
         snippet: snippetOf(imp.raw),
       });
     }
@@ -589,7 +598,7 @@ function scanImportsInPages(
           file: relFile,
           line,
           rule: "no-restricted-import",
-          message: `page imports Naive layout/feedback component(s) directly: ${
+          message: `imports Naive layout/feedback component(s) directly: ${
             banned.join(", ")
           } — use the src/shared/ui wrapper instead`,
           snippet: snippetOf(imp.raw),
@@ -1040,8 +1049,10 @@ function checkGeneratedEnumDomains(): void {
 // Main
 // ---------------------------------------------------------------------------
 
-function isUnderPages(relFile: string): boolean {
-  return relFile.startsWith("src/pages/");
+function isImportScanTarget(relFile: string): boolean {
+  // The bindings wall spans all of src/**; the bridge itself is the one
+  // sanctioned importer of frontend/bindings and stays exempt.
+  return relFile !== BINDINGS_ENTRY_FILE;
 }
 
 function main(): void {
@@ -1061,12 +1072,11 @@ function main(): void {
       if (block) scanTemplate(block, fileContent, relFile);
     }
 
-    // Rule 3: src/pages/** only. (src/shared/api/ — the bridge/health wrapper
-    // layer — is never under src/pages/**, so it is naturally out of scope.)
-    if (isUnderPages(relFile)) {
+    // Rule 3: imports — every file under src/ except the bridge itself.
+    if (isImportScanTarget(relFile)) {
       if (isVue) {
         for (const scriptBlock of extractScriptBlocks(fileContent)) {
-          scanImportsInPages(
+          scanImports(
             scriptBlock.content,
             scriptBlock.startOffset,
             fileContent,
@@ -1074,7 +1084,7 @@ function main(): void {
           );
         }
       } else {
-        scanImportsInPages(fileContent, 0, fileContent, relFile);
+        scanImports(fileContent, 0, fileContent, relFile);
       }
     }
   }
