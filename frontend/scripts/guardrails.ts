@@ -11,10 +11,12 @@
 //                        user-visible attributes must go through t(...).
 //   no-raw-enum         enum-suffixed fields must not be interpolated as
 //                        raw text outside StatusBadge/StatusDot/t()/glossary.
-//   no-restricted-import  src/pages/** must not import wailsjs directly
-//                        (except `import type { dto } from '.../wailsjs/go/models'`)
-//                        and must not import Naive UI layout/feedback
-//                        components directly (must go through shared/ui).
+//   no-restricted-import  src/pages/** must not import frontend/bindings
+//                        (wails v3 generated bindings — runtime AND type
+//                        imports alike, no type-only exemption; runtime calls
+//                        go through src/shared/api/bridge.ts, types through
+//                        the @/entities facade) and must not import Naive UI
+//                        layout/feedback components directly (shared/ui).
 //   no-missing-locale-key  every t('...') literal in src/.vue/.ts must
 //                        resolve to a key in zh-CN.ts (en-US.ts is kept in
 //                        lockstep via AppMessageSchema typing) or to a
@@ -416,6 +418,39 @@ function extractImportStatements(scriptContent: string): ImportStatement[] {
   return out;
 }
 
+/**
+ * True when a raw import specifier, resolved from the importing file under
+ * src/**, lands in frontend/bindings/. Covers every shape that can physically
+ * reach the generated bindings from a page: relative climbs
+ * (`../../bindings/...`), Vite root-absolute paths (`/bindings/...`, the
+ * leading `/` resolves from the frontend project root) and `@/..` escapes
+ * (`@` aliases to `src`, so `@/../bindings` escapes to the project root).
+ * Bare specifiers cannot reach it (bindings is not an npm package and has no
+ * alias), so they are rejected outright.
+ */
+function resolvesUnderBindings(specifier: string, relFile: string): boolean {
+  let path: string;
+  if (specifier.startsWith("/")) {
+    path = specifier;
+  } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
+    path = `${relFile.slice(0, relFile.lastIndexOf("/"))}/${specifier}`;
+  } else if (specifier.startsWith("@/")) {
+    path = specifier.replace(/^@\//, "src/");
+  } else {
+    return false;
+  }
+  const stack: string[] = [];
+  for (const part of path.split("/")) {
+    if (part === "" || part === ".") continue;
+    if (part === "..") {
+      stack.pop();
+      continue;
+    }
+    stack.push(part);
+  }
+  return stack[0] === "bindings";
+}
+
 function scanImportsInPages(
   scriptContent: string,
   scriptStartOffset: number,
@@ -426,19 +461,15 @@ function scanImportsInPages(
     const absIndex = scriptStartOffset + imp.index;
     const line = indexToLine(fileContent, absIndex);
 
-    if (/wailsjs/i.test(imp.specifier)) {
-      const isModelsPath = /wailsjs\/go\/models$/.test(imp.specifier);
-      const isExempt = imp.isTypeOnly && isModelsPath;
-      if (!isExempt) {
-        violations.push({
-          file: relFile,
-          line,
-          rule: "no-restricted-import",
-          message:
-            `page imports "${imp.specifier}" directly — route runtime calls through src/shared/api/bridge.ts (only \`import type { dto } from '.../wailsjs/go/models'\` is exempt)`,
-          snippet: snippetOf(imp.raw),
-        });
-      }
+    if (resolvesUnderBindings(imp.specifier, relFile)) {
+      violations.push({
+        file: relFile,
+        line,
+        rule: "no-restricted-import",
+        message:
+          `page imports "${imp.specifier}" directly — route runtime calls through src/shared/api/bridge.ts and types through @/entities (frontend/bindings is banned in src/pages, no type-only exemption)`,
+        snippet: snippetOf(imp.raw),
+      });
     }
 
     if (imp.specifier === "naive-ui") {
