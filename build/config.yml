@@ -35,6 +35,16 @@ dev_mode:
       - "*.ts" # The frontend directory will be excluded entirely by the setting above.
     git_ignore: true
   executes:
+    # Pre-generate bindings before the vite dev server starts: `generate
+    # bindings -clean=true` deletes and recreates frontend/bindings/, which
+    # races with the background vite watcher (the Deno-backed fs watcher
+    # crashes on the deleted directory and kills the dev chain).
+    # The full `windows:common:` namespace must match the task path used
+    # inside `wails3 build DEV=true` so the shared checksum
+    # (.task/checksum/windows-common-generate-bindings) lets the build step
+    # below skip generation as up-to-date.
+    - cmd: wails3 task windows:common:generate:bindings
+      type: blocking
     - cmd: wails3 task common:dev:frontend
       type: background
     - cmd: wails3 build DEV=true

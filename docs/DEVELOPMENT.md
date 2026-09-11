@@ -35,6 +35,8 @@ cd frontend && deno install && cd ..
 | `wails3 build` | 桌面打包 |
 | `wails3 task common:generate:bindings` | 变更绑定的服务方法后重新生成前端绑定（`frontend/bindings/`，已提交）。等价全参数形式为 `wails3 generate bindings -clean=true -ts -i`；不带参数的裸命令会删光已提交的 `.ts` 并改产出 `.js`，不要运行 |
 
+`wails3 dev` 会话中重新生成 bindings（编辑 `.go` 触发或手工执行生成任务）时，`frontend/bindings/` 会被删除重建；dev server 的 watch 已忽略该目录，vite 不会热更新，需手动刷新页面或重启 dev 会话以加载新绑定。
+
 版本号升级需同步四处：`internal/config/config.go`、`build/config.yml`、`build/windows/info.json`、`build/windows/wails.exe.manifest`。
 
 ## 4. 代码风格
