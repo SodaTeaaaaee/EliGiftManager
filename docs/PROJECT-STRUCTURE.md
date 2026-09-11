@@ -9,12 +9,13 @@ main.go, app.go, zoom_config.go   Wails 启动、生命周期与桌面级能力
 internal/                         领域、用例、持久化、Wails 绑定
 frontend/                         Vue 3 信息架构（待处理、收件箱、波次、资料库、设置）
 docs/                             现行设计
+Taskfile.yml                      wails3 构建任务驱动（前端命令挂接 deno task）
 data/                             开发期运行时数据（生成，不入库）
 build/bin/                        Wails 打包产物（生成）
 SampleData/, testdata/            示例输入与测试夹具
 ```
 
-`frontend/` 是 `wails dev`、`wails build` 和 `main.go` 资源嵌入使用的唯一前端。
+`frontend/` 是 `wails3 dev`、`wails3 build` 和 `main.go` 资源嵌入使用的唯一前端。
 
 ## Documentation
 
@@ -28,10 +29,12 @@ SampleData/, testdata/            示例输入与测试夹具
 
 ## Desktop Boundary
 
-- `main.go` — 嵌入 `frontend/dist`，初始化 SQLite，注册 `WorkspaceController` 与 `FileSystemController`
-- `app.go` — 窗口生命周期与文件选择
-- `zoom_config.go` — 缩放读写
+- `main.go` — 嵌入 `frontend/dist`，初始化 SQLite，注册 `WorkspaceController` 与 `FileSystemController` 为 v3 services
+- `app.go` — 窗口生命周期
+- `zoom_config.go` — 缩放读写（启动时应用 `data/zoom.cfg`，关窗写回，全部 Go 侧完成）
 - `internal/controller/workspace.go`、`internal/controller/api.go` — Wails 传输边界；业务规则在 `internal/app/`
+
+文件对话框由前端 `@wailsio/runtime` 的 `Dialogs` 承担，Go 侧无对话框绑定。
 
 ## Backend
 
@@ -55,7 +58,7 @@ frontend/src/app/          路由与 App 壳
 frontend/src/pages/        待处理、收件箱、波次（规则/结果）、资料库（客户/商品/模板）、设置
 frontend/src/entities/     与 Go DTO 对齐的类型
 frontend/src/shared/       bridge、UI kit、i18n、theme
-frontend/wailsjs/          生成绑定（WorkspaceController、FileSystemController、App）
+frontend/bindings/         wails3 生成的 TypeScript 绑定（已提交）
 ```
 
-运行时 Wails 调用只走 `frontend/src/shared/api/bridge.ts`。
+运行时 Wails 调用只走 `frontend/src/shared/api/bridge.ts`，其他模块不得直接 import `frontend/bindings`。

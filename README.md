@@ -43,15 +43,16 @@ frontend/src/entities/ frontend types derived from Go DTOs
 frontend/src/shared/   API bridge, UI, composables, theme, i18n
 ```
 
-Runtime Wails calls go through `frontend/src/shared/api/bridge.ts`. Type-only imports from `frontend/wailsjs/go/models` are allowed.
+Runtime Wails calls go through `frontend/src/shared/api/bridge.ts`. No other module may import `frontend/bindings` directly; types come from the `@/entities` facade.
 
 ## Development
 
 ```bash
 go mod tidy
 go test ./...
-wails dev
-wails build
+wails3 dev
+wails3 build
+wails3 generate bindings
 
 cd frontend && deno task dev
 cd frontend && deno task typecheck
@@ -67,7 +68,7 @@ Deno is the frontend task runner. Do not use npm, yarn, or pnpm for project task
 
 | Path | Status |
 |------|--------|
-| `frontend/wailsjs/` | Generated Wails bindings, committed. |
+| `frontend/bindings/` | wails3-generated TypeScript bindings, committed. |
 | `frontend/src/shared/api/generated/enums.ts` | Generated from Go domain enums, committed. |
 | `frontend/dist/`, `frontend/node_modules/`, `build/bin/` | Generated output, ignored. |
 | `data/` | Runtime data, ignored. |
