@@ -28,6 +28,9 @@ type Store interface {
 	CreateAddress(ctx context.Context, a *RecipientAddress) error
 	GetAddress(ctx context.Context, id uint) (*RecipientAddress, error)
 	ListAddresses(ctx context.Context, customerID uint) ([]RecipientAddress, error)
+	// FindAddressByRecipient returns the oldest address whose recipient name
+	// and phone both match exactly, or ErrNotFound.
+	FindAddressByRecipient(ctx context.Context, recipientName, phone string) (*RecipientAddress, error)
 	UpdateAddress(ctx context.Context, a *RecipientAddress) error
 	ClearDefaultAddresses(ctx context.Context, customerID uint) error
 
@@ -56,9 +59,13 @@ type Store interface {
 	GetTemplate(ctx context.Context, id uint) (*TemplateConfig, error)
 	ListTemplates(ctx context.Context) ([]TemplateConfig, error)
 	UpdateTemplate(ctx context.Context, t *TemplateConfig) error
+	DeleteTemplate(ctx context.Context, id uint) error
 
 	CreateCarrierMapping(ctx context.Context, m *CarrierMapping) error
+	GetCarrierMapping(ctx context.Context, id uint) (*CarrierMapping, error)
 	ListCarrierMappings(ctx context.Context, platformID uint) ([]CarrierMapping, error)
+	UpdateCarrierMapping(ctx context.Context, m *CarrierMapping) error
+	DeleteCarrierMapping(ctx context.Context, id uint) error
 
 	CreateDocument(ctx context.Context, d *InputDocument) error
 	GetDocument(ctx context.Context, id uint) (*InputDocument, error)

@@ -13,7 +13,12 @@ import {
 } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { DataGrid, createColumns } from '@/shared/ui/data-grid'
-import type { FieldMappingDestField, FieldMappingMode, FieldMappingValue } from './types'
+import type {
+  FieldMappingDestField,
+  FieldMappingGroup,
+  FieldMappingMode,
+  FieldMappingValue,
+} from './types'
 import { applyMapping } from './previewTransform'
 
 /**
@@ -21,10 +26,13 @@ import { applyMapping } from './previewTransform'
  * v3. Left column lists semantic keys (built by the page from the backend
  * semantic dictionary); the right side binds each to a source header name or
  * 0-based cell position, a fixed default, a transform chain, a required flag,
- * and a fingerprint flag. Collapsible advanced sections edit splitSkuQuantity,
+ * and a fingerprint flag. Fields render inside collapsible groups when the
+ * page supplies `groups`, and a per-document-type `defaultVisibleKeys` set
+ * hides the long tail behind a "show all fields" toggle (bound fields always
+ * stay visible). Collapsible advanced sections edit splitSkuQuantity,
  * joinSources (joinAddress), and enumMaps (mapEnum). The live preview only
  * mirrors the cheap local transforms; full parsing goes through the backend
- * PreviewTemplate use case.
+ * PreviewMapping / PreviewTemplate use cases.
  */
 const props = withDefaults(
   defineProps<{
@@ -36,9 +44,25 @@ const props = withDefaults(
     sampleRows: Record<string, string>[]
     /** Read-only review mode. */
     readonly?: boolean
+    /** Collapsible sections in display order; fields whose `group` is absent render last. */
+    groups?: FieldMappingGroup[]
+    /**
+     * Keys shown before the operator toggles "show all fields". `null` /
+     * omitted shows everything. Fields that already carry a binding, default,
+     * or join are always visible regardless of this set.
+     */
+    defaultVisibleKeys?: string[] | null
+    /**
+     * Hide the mode / sheet-name row when the hosting page drives them from
+     * a sample-file panel instead (avoids two controls for one setting).
+     */
+    hideSourceMeta?: boolean
   }>(),
   {
     readonly: false,
+    groups: () => [],
+    defaultVisibleKeys: null,
+    hideSourceMeta: false,
   },
 )
 
@@ -133,6 +157,77 @@ function isUnmapped(destField: string): boolean {
     !(destField in (props.modelValue.joinSources ?? {})) &&
     !(destField in props.modelValue.defaults)
   )
+}
+
+// ── Grouping & default visibility ──
+
+const showAllFields = ref(false)
+const collapsedGroups = ref<Set<string>>(new Set())
+
+const hasVisibilityFilter = computed(() => Array.isArray(props.defaultVisibleKeys))
+
+function isFieldVisible(destField: string): boolean {
+  if (showAllFields.value || !props.defaultVisibleKeys) return true
+  return props.defaultVisibleKeys.includes(destField) || !isUnmapped(destField)
+}
+
+const visibleFields = computed(() => props.destFields.filter((field) => isFieldVisible(field.key)))
+
+const hiddenFieldCount = computed(() => props.destFields.length - visibleFields.value.length)
+
+interface RenderedGroup {
+  key: string
+  label: string
+  fields: FieldMappingDestField[]
+  boundCount: number
+}
+
+/**
+ * Fields bucketed by `groups` order; ungrouped fields (or fields pointing at
+ * an unknown group) trail in one anonymous bucket so nothing disappears.
+ * Without `groups` the whole list renders as a single header-less bucket.
+ */
+const renderedGroups = computed<RenderedGroup[]>(() => {
+  const groupKeys = props.groups.map((group) => group.key)
+  const buckets = new Map<string, FieldMappingDestField[]>()
+  for (const key of groupKeys) buckets.set(key, [])
+  const ungrouped: FieldMappingDestField[] = []
+  for (const field of visibleFields.value) {
+    const bucket = field.group ? buckets.get(field.group) : undefined
+    if (bucket) bucket.push(field)
+    else ungrouped.push(field)
+  }
+  const out: RenderedGroup[] = []
+  for (const group of props.groups) {
+    const fields = buckets.get(group.key) ?? []
+    if (fields.length === 0) continue
+    out.push({
+      key: group.key,
+      label: group.label,
+      fields,
+      boundCount: fields.filter((field) => !isUnmapped(field.key)).length,
+    })
+  }
+  if (ungrouped.length > 0) {
+    out.push({
+      key: '',
+      label: '',
+      fields: ungrouped,
+      boundCount: ungrouped.filter((field) => !isUnmapped(field.key)).length,
+    })
+  }
+  return out
+})
+
+function isGroupCollapsed(groupKey: string): boolean {
+  return collapsedGroups.value.has(groupKey)
+}
+
+function toggleGroup(groupKey: string): void {
+  const next = new Set(collapsedGroups.value)
+  if (next.has(groupKey)) next.delete(groupKey)
+  else next.add(groupKey)
+  collapsedGroups.value = next
 }
 
 function handleColumnChange(destField: string, value: string | null): void {
@@ -343,7 +438,7 @@ const previewRows = computed<PreviewRow[]>(() => {
 
 const previewColumns = computed(() =>
   createColumns<PreviewRow>(
-    props.destFields.map((field) => ({
+    visibleFields.value.map((field) => ({
       key: field.key,
       title: field.label,
       type: 'text' as const,
@@ -376,7 +471,7 @@ const previewColumns = computed(() =>
 
 <template>
   <div class="field-mapping-editor">
-    <div class="field-mapping-editor__meta">
+    <div v-if="!hideSourceMeta" class="field-mapping-editor__meta">
       <div class="field-mapping-editor__meta-row">
         <span class="field-mapping-editor__meta-label">{{ t('templateEditor.mode') }}</span>
         <NRadioGroup
@@ -408,107 +503,136 @@ const previewColumns = computed(() =>
       <div class="field-mapping-editor__mapping-header">
         <span class="field-mapping-editor__mapping-header-cell">{{ t('templateEditor.destColumn') }}</span>
         <span class="field-mapping-editor__mapping-header-cell">{{ t('templateEditor.srcColumn') }}</span>
+        <label v-if="hasVisibilityFilter" class="field-mapping-editor__show-all">
+          <NSwitch :value="showAllFields" size="small" @update:value="(v) => (showAllFields = v)" />
+          <span>
+            {{
+              hiddenFieldCount > 0
+                ? t('templateEditor.showAllFieldsWithCount', { n: hiddenFieldCount })
+                : t('templateEditor.showAllFields')
+            }}
+          </span>
+        </label>
       </div>
-      <div v-for="field in destFields" :key="field.key" class="field-mapping-editor__row">
-        <div class="field-mapping-editor__field-label">
-          <span>{{ field.label }}</span>
-          <span v-if="field.tooltip" class="field-mapping-editor__hint" :title="field.tooltip">?</span>
-        </div>
-        <div class="field-mapping-editor__field-controls">
-          <NSelect
-            v-if="mode === 'header'"
-            class="field-mapping-editor__column-select"
-            :value="columnValue(field.key)"
-            :options="sourceHeaderOptions"
-            clearable
-            filterable
-            :tag="!readonly"
-            :placeholder="t('templateEditor.unmapped')"
-            :disabled="readonly"
-            @update:value="(value) => handleColumnChange(field.key, value)"
-          />
-          <NInputNumber
-            v-else
-            class="field-mapping-editor__position-input"
-            :value="positionValue(field.key)"
-            :min="0"
-            :precision="0"
-            :placeholder="t('templateEditor.positionPlaceholder')"
-            clearable
-            :disabled="readonly"
-            @update:value="(value) => handlePositionChange(field.key, value)"
-          />
-          <NInput
-            class="field-mapping-editor__default-input"
-            :value="defaultValue(field.key)"
-            :placeholder="t('templateEditor.fixedValuePlaceholder')"
-            :disabled="readonly"
-            @update:value="(value) => handleDefaultChange(field.key, value)"
-          />
-          <div
-            class="field-mapping-editor__transform-box"
-            :title="t('templateEditor.transformsLabel')"
-          >
-            <span
-              v-for="(name, index) in transformValue(field.key)"
-              :key="`${field.key}-${name}`"
-              class="field-mapping-editor__transform-chip"
-            >
-              <span class="field-mapping-editor__transform-name">
-                {{ transformDisplayName(name) }}
-              </span>
-              <span class="field-mapping-editor__transform-ops">
-                <button
-                  type="button"
-                  class="field-mapping-editor__chip-op"
-                  :disabled="readonly || index === 0"
-                  :aria-label="t('templateEditor.moveTransformUp')"
-                  @click="handleTransformMove(field.key, index, -1)"
-                >↑</button>
-                <button
-                  type="button"
-                  class="field-mapping-editor__chip-op"
-                  :disabled="readonly || index === transformValue(field.key).length - 1"
-                  :aria-label="t('templateEditor.moveTransformDown')"
-                  @click="handleTransformMove(field.key, index, 1)"
-                >↓</button>
-                <button
-                  type="button"
-                  class="field-mapping-editor__chip-op"
+      <template v-for="group in renderedGroups" :key="group.key || '__ungrouped'">
+        <button
+          v-if="group.label"
+          type="button"
+          class="field-mapping-editor__group-header"
+          :aria-expanded="!isGroupCollapsed(group.key)"
+          @click="toggleGroup(group.key)"
+        >
+          <span class="field-mapping-editor__group-chevron" aria-hidden="true">
+            {{ isGroupCollapsed(group.key) ? '▸' : '▾' }}
+          </span>
+          <span class="field-mapping-editor__group-title">{{ group.label }}</span>
+          <span class="field-mapping-editor__group-count">
+            {{ t('templateEditor.groupBoundCount', { bound: group.boundCount, total: group.fields.length }) }}
+          </span>
+        </button>
+        <template v-if="!group.label || !isGroupCollapsed(group.key)">
+          <div v-for="field in group.fields" :key="field.key" class="field-mapping-editor__row">
+            <div class="field-mapping-editor__field-label">
+              <span>{{ field.label }}</span>
+              <span v-if="field.tooltip" class="field-mapping-editor__hint" :title="field.tooltip">?</span>
+            </div>
+            <div class="field-mapping-editor__field-controls">
+              <NSelect
+                v-if="mode === 'header'"
+                class="field-mapping-editor__column-select"
+                :value="columnValue(field.key)"
+                :options="sourceHeaderOptions"
+                clearable
+                filterable
+                :tag="!readonly"
+                :placeholder="t('templateEditor.unmapped')"
+                :disabled="readonly"
+                @update:value="(value) => handleColumnChange(field.key, value)"
+              />
+              <NInputNumber
+                v-else
+                class="field-mapping-editor__position-input"
+                :value="positionValue(field.key)"
+                :min="0"
+                :precision="0"
+                :placeholder="t('templateEditor.positionPlaceholder')"
+                clearable
+                :disabled="readonly"
+                @update:value="(value) => handlePositionChange(field.key, value)"
+              />
+              <NInput
+                class="field-mapping-editor__default-input"
+                :value="defaultValue(field.key)"
+                :placeholder="t('templateEditor.fixedValuePlaceholder')"
+                :disabled="readonly"
+                @update:value="(value) => handleDefaultChange(field.key, value)"
+              />
+              <div
+                class="field-mapping-editor__transform-box"
+                :title="t('templateEditor.transformsLabel')"
+              >
+                <span
+                  v-for="(name, index) in transformValue(field.key)"
+                  :key="`${field.key}-${name}`"
+                  class="field-mapping-editor__transform-chip"
+                >
+                  <span class="field-mapping-editor__transform-name">
+                    {{ transformDisplayName(name) }}
+                  </span>
+                  <span class="field-mapping-editor__transform-ops">
+                    <button
+                      type="button"
+                      class="field-mapping-editor__chip-op"
+                      :disabled="readonly || index === 0"
+                      :aria-label="t('templateEditor.moveTransformUp')"
+                      @click="handleTransformMove(field.key, index, -1)"
+                    >↑</button>
+                    <button
+                      type="button"
+                      class="field-mapping-editor__chip-op"
+                      :disabled="readonly || index === transformValue(field.key).length - 1"
+                      :aria-label="t('templateEditor.moveTransformDown')"
+                      @click="handleTransformMove(field.key, index, 1)"
+                    >↓</button>
+                    <button
+                      type="button"
+                      class="field-mapping-editor__chip-op"
+                      :disabled="readonly"
+                      :aria-label="t('templateEditor.removeTransform')"
+                      @click="handleTransformRemove(field.key, index)"
+                    >×</button>
+                  </span>
+                </span>
+                <NSelect
+                  class="field-mapping-editor__transform-add"
+                  :value="null"
+                  :options="remainingTransformOptions(field.key)"
+                  size="small"
+                  :placeholder="t('templateEditor.transformAdd')"
                   :disabled="readonly"
-                  :aria-label="t('templateEditor.removeTransform')"
-                  @click="handleTransformRemove(field.key, index)"
-                >×</button>
-              </span>
-            </span>
-            <NSelect
-              class="field-mapping-editor__transform-add"
-              :value="null"
-              :options="remainingTransformOptions(field.key)"
-              size="small"
-              :placeholder="t('templateEditor.transformAdd')"
-              :disabled="readonly"
-              @update:value="(value) => handleTransformAdd(field.key, value)"
-            />
+                  @update:value="(value) => handleTransformAdd(field.key, value)"
+                />
+              </div>
+              <label class="field-mapping-editor__flag-control">
+                <NSwitch
+                  :value="isRequired(field.key)"
+                  :disabled="readonly"
+                  @update:value="(value) => handleRequiredChange(field.key, value)"
+                />
+                <span>{{ t('templateEditor.requiredLabel') }}</span>
+              </label>
+              <label class="field-mapping-editor__flag-control">
+                <NCheckbox
+                  :checked="isFingerprint(field.key)"
+                  :disabled="readonly"
+                  @update:checked="(value) => handleFingerprintChange(field.key, value)"
+                />
+                <span>{{ t('templateEditor.fingerprintLabel') }}</span>
+              </label>
+            </div>
           </div>
-          <label class="field-mapping-editor__flag-control">
-            <NSwitch
-              :value="isRequired(field.key)"
-              :disabled="readonly"
-              @update:value="(value) => handleRequiredChange(field.key, value)"
-            />
-            <span>{{ t('templateEditor.requiredLabel') }}</span>
-          </label>
-          <label class="field-mapping-editor__flag-control">
-            <NCheckbox
-              :checked="isFingerprint(field.key)"
-              :disabled="readonly"
-              @update:checked="(value) => handleFingerprintChange(field.key, value)"
-            />
-            <span>{{ t('templateEditor.fingerprintLabel') }}</span>
-          </label>
-        </div>
-      </div>
+        </template>
+      </template>
     </div>
 
     <NButton
@@ -693,7 +817,8 @@ const previewColumns = computed(() =>
 
 .field-mapping-editor__mapping-header {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr);
+  grid-template-columns: minmax(160px, 1fr) minmax(240px, 2fr) auto;
+  align-items: center;
   gap: var(--space-4);
   padding: 0 var(--space-1);
 }
@@ -705,6 +830,59 @@ const previewColumns = computed(() =>
   color: var(--color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.field-mapping-editor__show-all {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.field-mapping-editor__group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-inset);
+  color: var(--color-text-primary);
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+  cursor: pointer;
+}
+
+.field-mapping-editor__group-header:hover {
+  background: var(--color-accent-subtle);
+}
+
+.field-mapping-editor__group-header:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.field-mapping-editor__group-chevron {
+  width: 1em;
+  color: var(--color-text-muted);
+}
+
+.field-mapping-editor__group-title {
+  flex: 1;
+}
+
+.field-mapping-editor__group-count {
+  font-family: var(--font-body);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-muted);
 }
 
 .field-mapping-editor__row {

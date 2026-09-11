@@ -113,9 +113,10 @@ func (ws *Workspace) generateFactoryOrderForResults(ctx context.Context, waveID,
 		return ordered[i].product.FactorySKU < ordered[j].product.FactorySKU
 	})
 	// Snapshot the factory order output template version into the execution
-	// links; 0 means no output template was configured.
+	// links; 0 means no active output template exists yet. Generation itself
+	// does not need the layout — the export step requires it.
 	configVersion := 0
-	if tpl, err := findTemplate(ctx, ws.Store, factoryID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); err != nil {
+	if tpl, err := findActiveTemplate(ctx, ws.Store, factoryID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder); err != nil {
 		return nil, nil, err
 	} else if tpl != nil {
 		configVersion = tpl.Version

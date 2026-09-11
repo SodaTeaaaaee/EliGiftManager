@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import {
@@ -20,12 +20,14 @@ import { SectionCard } from '@/shared/ui/cards'
 import { EmptyState } from '@/shared/ui/empty-state'
 import { StatusBadge } from '@/shared/ui/status'
 import { useFeedback } from '@/shared/ui/feedback'
+import { TemplatePreviewPanel } from '@/shared/ui/template-preview'
 import DuplicateDecisionList from './DuplicateDecisionList.vue'
 import {
   applyRevision,
   assignLines,
   attachIdentity,
   dismissRevision,
+  getSemanticDictionary,
   importFile,
   ingestDocument,
   listCustomers,
@@ -36,6 +38,7 @@ import {
   listWaves,
   moveLines,
   pickFile,
+  previewTemplate,
   updateAlias,
 } from '@/shared/api/bridge'
 import { identityTypeValues, inputFactKindValues } from '@/shared/api/generated/enums'
@@ -47,10 +50,11 @@ import type {
   Platform,
   ProductItem,
   TemplateConfig,
+  TemplatePreview,
   Wave,
 } from '@/entities/models'
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const feedback = useFeedback()
@@ -101,6 +105,7 @@ const moveExcludeWaveId = ref<number | null>(null)
 // ── File import (ImportFile) ──
 
 const importFileFilters = [{ displayName: 'CSV / Excel', pattern: '*.csv;*.xlsx;*.xls' }]
+const IMPORT_PREVIEW_LIMIT = 20
 const showImportFileModal = ref(false)
 const importForm = ref({
   platformId: null as number | null,
@@ -109,6 +114,14 @@ const importForm = ref({
 })
 const importResult = ref<ImportFileResult | null>(null)
 const importError = ref('')
+const dictionary = ref<string[]>([])
+
+// Pre-import preview: the confirm button stays locked until PreviewTemplate
+// succeeded for exactly the (template, file) pair currently selected.
+const importPreview = ref<TemplatePreview | null>(null)
+const importPreviewLoading = ref(false)
+const importPreviewError = ref('')
+const importPreviewFor = ref<{ templateId: number; filePath: string } | null>(null)
 
 // ── Align-to-product (UpdateAlias) ──
 
@@ -119,18 +132,20 @@ const selectedAlignProductId = ref<number | null>(null)
 async function loadData() {
   loading.value = true
   try {
-    const [inboxRes, waveRes, custRes, platRes, tmplRes] = await Promise.all([
+    const [inboxRes, waveRes, custRes, platRes, tmplRes, dictRes] = await Promise.all([
       listInboxRows(),
       listWaves(),
       listCustomers(),
       listPlatforms(),
       listTemplates(),
+      getSemanticDictionary(),
     ])
     rows.value = inboxRes
     waves.value = waveRes.filter((w) => w.CloseResult === 'open' || !w.CloseResult)
     customers.value = custRes
     platforms.value = platRes
     templates.value = tmplRes
+    dictionary.value = dictRes
   } catch (err) {
     console.error('Failed to load inbox data:', err)
   } finally {
@@ -264,19 +279,42 @@ const platformOptions = computed(() =>
   })),
 )
 
-/** Input-direction templates for the selected platform. */
+function documentTypeLabel(type: string): string {
+  const key = `templates.documentTypeOptions.${type}`
+  return te(key) ? t(key) : type
+}
+
+/** File import feeds the inbox with membership / order facts, so only source platforms apply. */
+const importPlatformOptions = computed(() =>
+  platforms.value
+    .filter((p) => p.Kind === 'source')
+    .map((p) => ({ label: `${p.Name} (${p.Key})`, value: p.ID })),
+)
+
+/** Active (non-builtin) input templates of the selected platform, labelled 名称 · 单据类型. */
 const importTemplateOptions = computed(() =>
   templates.value
     .filter(
       (tpl) =>
+        !tpl.Builtin &&
         tpl.Direction === 'input' &&
-        (!importForm.value.platformId || tpl.PlatformID === importForm.value.platformId),
+        importForm.value.platformId != null &&
+        tpl.PlatformID === importForm.value.platformId,
     )
     .map((tpl) => ({
-      label: `${tpl.Name} (${tpl.DocumentType})`,
+      label: `${tpl.Name} · ${documentTypeLabel(tpl.DocumentType)}`,
       value: tpl.ID,
     })),
 )
+
+const importPlatformHasNoTemplate = computed(
+  () => importForm.value.platformId != null && importTemplateOptions.value.length === 0,
+)
+
+function goToLibraryTemplates() {
+  showImportFileModal.value = false
+  void router.push({ name: 'library-templates' })
+}
 
 const kindOptions = inputFactKindValues.map((kind) => ({
   label: t(`glossary.inputFactKind.${kind}.label`),
@@ -437,14 +475,21 @@ async function handleIngest() {
 
 // ── File import flow ──
 
+function resetImportPreview() {
+  importPreview.value = null
+  importPreviewError.value = ''
+  importPreviewFor.value = null
+}
+
 function openImportFileModal() {
   importForm.value = {
-    platformId: platformOptions.value[0]?.value ?? null,
+    platformId: importPlatformOptions.value[0]?.value ?? null,
     templateId: null,
     filePath: '',
   }
   importResult.value = null
   importError.value = ''
+  resetImportPreview()
   showImportFileModal.value = true
 }
 
@@ -457,8 +502,66 @@ async function handlePickImportFile() {
   if (path) importForm.value.filePath = path
 }
 
+let importPreviewRequest = 0
+
+async function runImportPreview() {
+  const templateId = importForm.value.templateId
+  const filePath = importForm.value.filePath
+  if (!templateId || !filePath) {
+    resetImportPreview()
+    return
+  }
+  // Only the newest request may write state: a slower, older preview must
+  // not overwrite the result for a template/file pair picked afterwards.
+  const request = ++importPreviewRequest
+  importPreviewLoading.value = true
+  importPreviewError.value = ''
+  try {
+    const result = await previewTemplate(templateId, filePath, IMPORT_PREVIEW_LIMIT)
+    if (request !== importPreviewRequest) return
+    importPreview.value = result
+    importPreviewFor.value = { templateId, filePath }
+  } catch (err) {
+    if (request !== importPreviewRequest) return
+    importPreview.value = null
+    importPreviewFor.value = null
+    importPreviewError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (request === importPreviewRequest) importPreviewLoading.value = false
+  }
+}
+
+// Re-preview whenever the template or the file changes; a fresh import
+// receipt also becomes stale, so it is cleared alongside the preview.
+watch(
+  [() => importForm.value.templateId, () => importForm.value.filePath],
+  () => {
+    if (!showImportFileModal.value) return
+    importResult.value = null
+    importError.value = ''
+    resetImportPreview()
+    void runImportPreview()
+  },
+)
+
+const importPreviewReady = computed(
+  () =>
+    importPreviewFor.value != null &&
+    importPreviewFor.value.templateId === importForm.value.templateId &&
+    importPreviewFor.value.filePath === importForm.value.filePath,
+)
+
+const canConfirmImport = computed(
+  () =>
+    Boolean(importForm.value.platformId) &&
+    Boolean(importForm.value.templateId) &&
+    importForm.value.filePath !== '' &&
+    importPreviewReady.value &&
+    !importPreviewLoading.value,
+)
+
 async function handleImportFile() {
-  if (!importForm.value.platformId || !importForm.value.templateId || !importForm.value.filePath) return
+  if (!canConfirmImport.value || !importForm.value.platformId || !importForm.value.templateId) return
   actionLoading.value = true
   importError.value = ''
   try {
@@ -467,10 +570,12 @@ async function handleImportFile() {
       importForm.value.templateId,
       importForm.value.filePath,
     )
+    feedback.success(t('inbox.importFileSuccess'))
     await loadData()
   } catch (err) {
     importResult.value = null
     importError.value = err instanceof Error ? err.message : String(err)
+    feedback.error(t('feedback.error'), importError.value)
   } finally {
     actionLoading.value = false
   }
@@ -837,23 +942,32 @@ const columns = [
       v-model:show="showImportFileModal"
       preset="card"
       :title="t('inbox.importFile')"
-      style="width: 560px"
+      class="inbox-page__import-modal"
     >
       <NForm label-placement="left" label-width="100">
         <NFormItem :label="t('inbox.selectPlatform')">
           <NSelect
             v-model:value="importForm.platformId"
-            :options="platformOptions"
+            :options="importPlatformOptions"
             :placeholder="t('common.pleaseSelect')"
             @update:value="handleImportPlatformChange"
           />
         </NFormItem>
         <NFormItem :label="t('inbox.selectTemplate')">
-          <NSelect
-            v-model:value="importForm.templateId"
-            :options="importTemplateOptions"
-            :placeholder="importTemplateOptions.length ? t('inbox.selectTemplate') : t('inbox.noTemplateForPlatform')"
-          />
+          <div class="inbox-page__template-field">
+            <NSelect
+              v-model:value="importForm.templateId"
+              :options="importTemplateOptions"
+              :disabled="!importTemplateOptions.length"
+              :placeholder="importTemplateOptions.length ? t('inbox.selectTemplate') : t('inbox.noTemplateForPlatform')"
+            />
+            <div v-if="importPlatformHasNoTemplate" class="inbox-page__template-hint">
+              <span>{{ t('inbox.noTemplateHint') }}</span>
+              <NButton size="tiny" type="primary" secondary @click="goToLibraryTemplates">
+                {{ t('inbox.goToLibraryTemplates') }}
+              </NButton>
+            </div>
+          </div>
         </NFormItem>
         <NFormItem :label="t('inbox.filePath')">
           <div class="inbox-page__file-row">
@@ -865,6 +979,17 @@ const columns = [
           </div>
         </NFormItem>
       </NForm>
+
+      <div v-if="importForm.templateId && importForm.filePath && !importResult" class="inbox-page__preview">
+        <h5 class="inbox-page__receipt-title">{{ t('inbox.importPreview') }}</h5>
+        <p class="inbox-page__receipt-hint">{{ t('inbox.importPreviewHint') }}</p>
+        <TemplatePreviewPanel
+          :preview="importPreview"
+          :loading="importPreviewLoading"
+          :error="importPreviewError"
+          :key-order="dictionary"
+        />
+      </div>
 
       <p v-if="importError" class="inbox-page__error">{{ importError }}</p>
 
@@ -900,12 +1025,13 @@ const columns = [
         <NSpace justify="end">
           <NButton @click="showImportFileModal = false">{{ t('common.close') }}</NButton>
           <NButton
+            v-if="!importResult"
             type="primary"
             :loading="actionLoading"
-            :disabled="!importForm.platformId || !importForm.templateId || !importForm.filePath"
+            :disabled="!canConfirmImport"
             @click="handleImportFile"
           >
-            {{ t('common.import') }}
+            {{ t('inbox.confirmImport') }}
           </NButton>
         </NSpace>
       </template>
@@ -1065,6 +1191,38 @@ const columns = [
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.inbox-page__import-modal {
+  width: min(920px, 94vw);
+}
+
+.inbox-page__import-modal :deep(.n-card__content) {
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.inbox-page__template-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.inbox-page__template-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.inbox-page__preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
 }
 
 .inbox-page__file-row {

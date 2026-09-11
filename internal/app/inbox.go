@@ -31,8 +31,16 @@ type IngestFactInput struct {
 	SourceDocumentNo  string
 	SourceCreatedAt   *time.Time
 	CustomerProfileID *uint
-	ExtraData         string
-	Lines             []IngestLine
+	// DisplayName names the customer profile created for a not-yet-known
+	// identity (customer.display_name); empty falls back to the identity
+	// value or the recipient name.
+	DisplayName string
+	// Recipient is the recipient data the row carried (recipient.*). It is
+	// written to the resolved customer profile as an address; when the row
+	// has no identity it also decides which profile the fact belongs to.
+	Recipient *domain.AddressSnapshot
+	ExtraData string
+	Lines     []IngestLine
 }
 
 type InboxRow struct {
@@ -183,50 +191,56 @@ type duplicateInputSnapshot struct {
 }
 
 // createFactWithLines materializes one ingest input as a fact with its
-// identity, lines, and alias-resolved product alignment. A non-nil revisesID
-// marks the new fact as a revision of the established fact (which shares the
-// stable external id, so it must be set at insert time). Every read and write
-// goes through the explicit store argument so callers control the transaction.
+// identity, customer profile, recipient address, lines, and alias-resolved
+// product alignment. A non-nil revisesID marks the new fact as a revision of
+// the established fact (which shares the stable external id, so it must be set
+// at insert time). Every read and write goes through the explicit store
+// argument so callers control the transaction.
 func (ws *Workspace) createFactWithLines(ctx context.Context, tx domain.Store, doc *domain.InputDocument, in IngestFactInput, kind string, revisesID *uint) (*domain.InputFact, error) {
-	var identID *uint
+	var ident *domain.PlatformIdentity
 	if in.IdentityValue != "" {
 		typ := in.IdentityType
 		if typ == "" {
 			typ = string(domain.IdentityTypePlatformUID)
 		}
 		norm := NormalizeIdentity(in.IdentityValue)
-		ident, err := tx.FindIdentity(ctx, doc.PlatformID, typ, norm)
+		found, err := tx.FindIdentity(ctx, doc.PlatformID, typ, norm)
 		if err == domain.ErrNotFound {
-			ident = &domain.PlatformIdentity{PlatformID: doc.PlatformID, IdentityType: typ, IdentityValue: in.IdentityValue, NormalizedValue: norm}
-			if err := tx.CreateIdentity(ctx, ident); err != nil {
+			found = &domain.PlatformIdentity{PlatformID: doc.PlatformID, IdentityType: typ, IdentityValue: in.IdentityValue, NormalizedValue: norm}
+			if err := tx.CreateIdentity(ctx, found); err != nil {
 				return nil, err
 			}
 		} else if err != nil {
 			return nil, err
 		}
-		identID = &ident.ID
+		ident = found
+	}
+
+	customerID, err := resolveIngestCustomer(ctx, tx, in, ident)
+	if err != nil {
+		return nil, err
+	}
+	if customerID != nil && in.Recipient != nil {
+		if err := upsertRecipientAddress(ctx, tx, *customerID, *in.Recipient); err != nil {
+			return nil, err
+		}
 	}
 
 	docID := doc.ID
 	fact := &domain.InputFact{
-		DocumentID:         &docID,
-		PlatformID:         doc.PlatformID,
-		Kind:               kind,
-		StableExternalID:   in.StableExternalID,
-		CustomerProfileID:  in.CustomerProfileID,
-		PlatformIdentityID: identID,
-		MembershipLevel:    in.MembershipLevel,
-		SourceDocumentNo:   in.SourceDocumentNo,
-		SourceCreatedAt:    in.SourceCreatedAt,
-		RevisesID:          revisesID,
-		ExtraData:          in.ExtraData,
+		DocumentID:        &docID,
+		PlatformID:        doc.PlatformID,
+		Kind:              kind,
+		StableExternalID:  in.StableExternalID,
+		CustomerProfileID: customerID,
+		MembershipLevel:   in.MembershipLevel,
+		SourceDocumentNo:  in.SourceDocumentNo,
+		SourceCreatedAt:   in.SourceCreatedAt,
+		RevisesID:         revisesID,
+		ExtraData:         in.ExtraData,
 	}
-	if identID != nil {
-		ident, err := tx.GetIdentity(ctx, *identID)
-		if err != nil {
-			return nil, err
-		}
-		fact.CustomerProfileID = ident.CustomerProfileID
+	if ident != nil {
+		fact.PlatformIdentityID = &ident.ID
 	}
 	if err := tx.CreateFact(ctx, fact); err != nil {
 		return nil, err
@@ -268,28 +282,138 @@ func (ws *Workspace) createFactWithLines(ctx context.Context, tx domain.Store, d
 	return fact, nil
 }
 
+// resolveIngestCustomer decides which customer profile an ingested fact
+// belongs to, creating one when the input is the first sighting of a person:
+//
+//   - An identity already attached to a profile resolves to that profile.
+//   - An unattached identity is attached to the explicit CustomerProfileID
+//     when given, otherwise to a fresh profile named by DisplayName (else the
+//     identity value).
+//   - Without an identity, an explicit CustomerProfileID wins; otherwise
+//     recipient data (name + phone) reuses the profile that already owns an
+//     address with that recipient, and failing that a profile named by
+//     DisplayName (else the recipient name) is created.
+//
+// Rows with neither identity nor recipient data resolve to no profile. Every
+// read and write goes through the explicit store argument.
+func resolveIngestCustomer(ctx context.Context, tx domain.Store, in IngestFactInput, ident *domain.PlatformIdentity) (*uint, error) {
+	if ident != nil {
+		if ident.CustomerProfileID != nil {
+			return ident.CustomerProfileID, nil
+		}
+		target := in.CustomerProfileID
+		if target == nil {
+			name := in.DisplayName
+			if name == "" {
+				name = ident.IdentityValue
+			}
+			profile := &domain.CustomerProfile{DisplayName: name}
+			if err := tx.CreateCustomer(ctx, profile); err != nil {
+				return nil, err
+			}
+			target = &profile.ID
+		}
+		ident.CustomerProfileID = target
+		if err := tx.UpdateIdentity(ctx, ident); err != nil {
+			return nil, err
+		}
+		return target, nil
+	}
+	if in.CustomerProfileID != nil {
+		return in.CustomerProfileID, nil
+	}
+	if in.Recipient == nil || in.Recipient.RecipientName == "" {
+		return nil, nil
+	}
+	if in.Recipient.Phone != "" {
+		addr, err := tx.FindAddressByRecipient(ctx, in.Recipient.RecipientName, in.Recipient.Phone)
+		if err == nil {
+			return &addr.CustomerProfileID, nil
+		}
+		if err != domain.ErrNotFound {
+			return nil, err
+		}
+	}
+	name := in.DisplayName
+	if name == "" {
+		name = in.Recipient.RecipientName
+	}
+	profile := &domain.CustomerProfile{DisplayName: name}
+	if err := tx.CreateCustomer(ctx, profile); err != nil {
+		return nil, err
+	}
+	return &profile.ID, nil
+}
+
+// upsertRecipientAddress writes imported recipient data to the profile's
+// address list. An address with the same recipient name, phone, and first
+// address line already on the profile is reused untouched; a new one becomes
+// the default when the profile had no address yet. Snapshots without a usable
+// recipient (name + address line) are not stored.
+func upsertRecipientAddress(ctx context.Context, tx domain.Store, customerID uint, snap domain.AddressSnapshot) error {
+	if !snap.Usable() {
+		return nil
+	}
+	addrs, err := tx.ListAddresses(ctx, customerID)
+	if err != nil {
+		return err
+	}
+	for _, a := range addrs {
+		if a.RecipientName == snap.RecipientName && a.Phone == snap.Phone && a.AddressLine1 == snap.AddressLine1 {
+			return nil
+		}
+	}
+	return tx.CreateAddress(ctx, &domain.RecipientAddress{
+		CustomerProfileID: customerID,
+		RecipientName:     snap.RecipientName,
+		Phone:             snap.Phone,
+		Country:           snap.Country,
+		Province:          snap.Province,
+		City:              snap.City,
+		District:          snap.District,
+		AddressLine1:      snap.AddressLine1,
+		AddressLine2:      snap.AddressLine2,
+		PostalCode:        snap.PostalCode,
+		IsDefault:         len(addrs) == 0,
+	})
+}
+
+// AttachIdentity re-points a platform identity to a customer profile. Import
+// attaches every new identity to an auto-created profile, so this is how the
+// operator says "this identity is really that customer". Everything behind
+// the identity follows: the facts, the entitlement instances in open waves,
+// and the unfrozen retail results (which take the new profile's default
+// address unless the operator pinned one). Frozen results stay as executed,
+// and open waves recompute so entitlement results resolve the new profile.
 func (ws *Workspace) AttachIdentity(ctx context.Context, identityID, customerID uint) error {
 	return ws.Store.WithTx(ctx, func(tx domain.Store) error {
 		ident, err := tx.GetIdentity(ctx, identityID)
 		if err != nil {
 			return err
 		}
+		if _, err := tx.GetCustomer(ctx, customerID); err != nil {
+			return err
+		}
 		ident.CustomerProfileID = &customerID
 		if err := tx.UpdateIdentity(ctx, ident); err != nil {
 			return err
 		}
-		// Every open wave holding a line of a fact behind this identity must
-		// recompute: attaching can unblock identity-blocked entitlement
-		// results and re-point retail customers.
 		facts, err := tx.ListFactsByPlatform(ctx, ident.PlatformID)
 		if err != nil {
 			return err
 		}
-		waves := map[uint]struct{}{}
+		// Lines of re-pointed facts, grouped by the open wave they sit in.
+		repointed := map[uint]map[uint]struct{}{}
 		for i := range facts {
 			fact := &facts[i]
 			if fact.PlatformIdentityID == nil || *fact.PlatformIdentityID != identityID {
 				continue
+			}
+			if fact.CustomerProfileID == nil || *fact.CustomerProfileID != customerID {
+				fact.CustomerProfileID = &customerID
+				if err := tx.UpdateFact(ctx, fact); err != nil {
+					return err
+				}
 			}
 			lines, err := tx.ListFactLines(ctx, fact.ID)
 			if err != nil {
@@ -306,10 +430,46 @@ func (ws *Workspace) AttachIdentity(ctx context.Context, identityID, customerID 
 				if wave.CloseResult != string(domain.WaveCloseResultOpen) {
 					continue
 				}
-				waves[*ln.WaveID] = struct{}{}
+				if repointed[wave.ID] == nil {
+					repointed[wave.ID] = map[uint]struct{}{}
+				}
+				repointed[wave.ID][ln.ID] = struct{}{}
+				inst, err := tx.GetInstanceByLine(ctx, wave.ID, ln.ID)
+				if err == nil {
+					inst.CustomerProfileID = &customerID
+					if err := tx.UpdateInstance(ctx, inst); err != nil {
+						return err
+					}
+				} else if err != domain.ErrNotFound {
+					return err
+				}
 			}
 		}
-		for waveID := range waves {
+		for waveID, lineIDs := range repointed {
+			results, err := tx.ListResults(ctx, waveID)
+			if err != nil {
+				return err
+			}
+			for i := range results {
+				r := &results[i]
+				if r.Frozen || r.SourceKind != string(domain.SourceRetailLine) || r.InputFactLineID == nil {
+					continue
+				}
+				if _, ok := lineIDs[*r.InputFactLineID]; !ok {
+					continue
+				}
+				r.CustomerProfileID = &customerID
+				if !r.AddressPinned {
+					addr, err := defaultSnapshot(ctx, tx, &customerID)
+					if err != nil {
+						return err
+					}
+					r.Address = addr
+				}
+				if err := tx.UpdateResult(ctx, r); err != nil {
+					return err
+				}
+			}
 			if err := recompute(ctx, tx, waveID); err != nil {
 				return err
 			}

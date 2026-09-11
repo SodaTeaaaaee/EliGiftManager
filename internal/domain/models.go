@@ -141,6 +141,19 @@ type TemplateConfig struct {
 	UpdatedAt    time.Time
 }
 
+// CarrierMapping translates a carrier as factory shipment files describe it
+// into the identifier a source (demand) platform accepts when tracking numbers
+// are written back. It is a loose description-to-ID lookup, not a precise
+// carrier registry:
+//
+//   - PlatformID is the source platform whose writeback consumes ExternalCode.
+//   - InternalName is the carrier description as it appears in factory
+//     shipment files (e.g. 申通快递, 韵达); matching normalizes it (trim,
+//     case-fold, strip 快递/速运/物流/速递 suffixes) and tolerates
+//     containment either way.
+//   - ExternalCode is the carrier ID the source platform accepts, rendered as
+//     shipment.carrier_code in writeback layouts.
+//   - InternalCode is an optional internal key and may stay empty.
 type CarrierMapping struct {
 	ID           uint
 	PlatformID   uint

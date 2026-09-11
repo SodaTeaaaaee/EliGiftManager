@@ -37,6 +37,7 @@ import {
   listResultViews,
   listSupplierOrderLines,
   listSupplierOrders,
+  listTemplates,
   listWritebacksByWave,
   markWritebackFailed,
   markWritebackSent,
@@ -56,6 +57,7 @@ import type {
   ResultView,
   SupplierOrder,
   SupplierOrderLine,
+  TemplateConfig,
   Wave,
 } from '@/entities/models'
 import { fulfillmentSourceKindValues, workStateValues } from '@/shared/api/generated/enums'
@@ -80,6 +82,7 @@ const results = ref<ResultView[]>([])
 const products = ref<ProductItem[]>([])
 const customers = ref<CustomerProfile[]>([])
 const platforms = ref<Platform[]>([])
+const templates = ref<TemplateConfig[]>([])
 const supplierOrders = ref<SupplierOrder[]>([])
 const writebackItems = ref<ChannelWritebackItem[]>([])
 
@@ -233,6 +236,7 @@ const exportResult = ref<ExportFileResult | null>(null)
 const shipmentFileFilters = [{ displayName: 'CSV / Excel', pattern: '*.csv;*.xlsx;*.xls' }]
 const showShipmentModal = ref(false)
 const shipmentPlatformId = ref<number | null>(null)
+const shipmentTemplateId = ref<number | null>(null)
 const shipmentFilePath = ref('')
 const shipmentResult = ref<ImportShipmentFileResult | null>(null)
 const shipmentError = ref('')
@@ -261,13 +265,14 @@ async function loadData() {
   if (!props.waveId) return
   loading.value = true
   try {
-    const [resViews, prods, custs, plats, orders, writebacks] = await Promise.all([
+    const [resViews, prods, custs, plats, orders, writebacks, tmpls] = await Promise.all([
       listResultViews(props.waveId),
       listProducts(),
       listCustomers(),
       listPlatforms(),
       listSupplierOrders(props.waveId),
       listWritebacksByWave(props.waveId),
+      listTemplates(),
     ])
     results.value = resViews
     products.value = prods
@@ -275,6 +280,7 @@ async function loadData() {
     platforms.value = plats
     supplierOrders.value = orders
     writebackItems.value = writebacks
+    templates.value = tmpls
   } catch (err) {
     console.error('Failed to load wave results:', err)
   } finally {
@@ -469,8 +475,42 @@ async function openOrdersDrawer() {
   }
 }
 
+/** Active shipment_return input templates of the chosen factory platform. */
+const shipmentTemplateOptions = computed(() =>
+  templates.value
+    .filter(
+      (tpl) =>
+        !tpl.Builtin &&
+        tpl.Direction === 'input' &&
+        tpl.DocumentType === 'shipment_return' &&
+        shipmentPlatformId.value != null &&
+        tpl.PlatformID === shipmentPlatformId.value,
+    )
+    .map((tpl) => ({ label: tpl.Name, value: tpl.ID })),
+)
+
+const shipmentPlatformHasNoTemplate = computed(
+  () => shipmentPlatformId.value != null && shipmentTemplateOptions.value.length === 0,
+)
+
+function pickDefaultShipmentTemplate() {
+  const options = shipmentTemplateOptions.value
+  shipmentTemplateId.value = options.length === 1 ? options[0].value : null
+}
+
+function handleShipmentPlatformChange(value: number | null) {
+  shipmentPlatformId.value = value
+  pickDefaultShipmentTemplate()
+}
+
+function goToLibraryTemplates() {
+  showShipmentModal.value = false
+  void router.push({ name: 'library-templates' })
+}
+
 function openShipmentModal() {
   shipmentPlatformId.value = factoryPlatformOptions.value[0]?.value ?? null
+  pickDefaultShipmentTemplate()
   shipmentFilePath.value = ''
   shipmentResult.value = null
   shipmentError.value = ''
@@ -490,19 +530,27 @@ async function handlePickShipmentFile() {
   if (path) shipmentFilePath.value = path
 }
 
+const canImportShipmentFile = computed(
+  () =>
+    Boolean(shipmentPlatformId.value) && Boolean(shipmentTemplateId.value) && shipmentFilePath.value !== '',
+)
+
 async function handleImportShipmentFile() {
-  if (!shipmentPlatformId.value || !shipmentFilePath.value) return
+  if (!shipmentPlatformId.value || !shipmentTemplateId.value || !shipmentFilePath.value) return
   actionLoading.value = true
   shipmentError.value = ''
   try {
     shipmentResult.value = await importShipmentFile(
       shipmentPlatformId.value,
+      shipmentTemplateId.value,
       shipmentFilePath.value,
     )
+    feedback.success(t('waveWorkspace.shipmentSuccess'))
     await loadData()
   } catch (err) {
     shipmentResult.value = null
     shipmentError.value = err instanceof Error ? err.message : String(err)
+    feedback.error(t('feedback.error'), shipmentError.value)
   } finally {
     actionLoading.value = false
   }
@@ -1107,7 +1155,31 @@ async function handleMarkWritebackFailed() {
     >
       <NForm label-placement="left" label-width="110">
         <NFormItem :label="t('waveWorkspace.factory')">
-          <NSelect v-model:value="shipmentPlatformId" :options="factoryPlatformOptions" />
+          <NSelect
+            :value="shipmentPlatformId"
+            :options="factoryPlatformOptions"
+            @update:value="(value: number | null) => handleShipmentPlatformChange(value)"
+          />
+        </NFormItem>
+        <NFormItem :label="t('inbox.selectTemplate')">
+          <div class="wave-results-page__template-field">
+            <NSelect
+              v-model:value="shipmentTemplateId"
+              :options="shipmentTemplateOptions"
+              :disabled="!shipmentTemplateOptions.length"
+              :placeholder="
+                shipmentTemplateOptions.length
+                  ? t('inbox.selectTemplate')
+                  : t('waveWorkspace.noShipmentTemplate')
+              "
+            />
+            <div v-if="shipmentPlatformHasNoTemplate" class="wave-results-page__template-hint">
+              <span>{{ t('waveWorkspace.noShipmentTemplateHint') }}</span>
+              <NButton size="tiny" type="primary" secondary @click="goToLibraryTemplates">
+                {{ t('inbox.goToLibraryTemplates') }}
+              </NButton>
+            </div>
+          </div>
         </NFormItem>
         <NFormItem :label="t('inbox.filePath')">
           <div class="wave-results-page__file-row">
@@ -1196,7 +1268,7 @@ async function handleMarkWritebackFailed() {
           <NButton
             type="primary"
             :loading="actionLoading"
-            :disabled="!shipmentPlatformId || !shipmentFilePath"
+            :disabled="!canImportShipmentFile"
             @click="handleImportShipmentFile"
           >
             {{ t('common.import') }}
@@ -1425,6 +1497,22 @@ async function handleMarkWritebackFailed() {
   font-size: var(--font-size-xs);
   color: var(--color-text-primary);
   word-break: break-all;
+}
+
+.wave-results-page__template-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.wave-results-page__template-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 
 .wave-results-page__file-row {

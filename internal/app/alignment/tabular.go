@@ -63,6 +63,24 @@ func ReadRows(data []byte, format, sheetName string) ([][]string, error) {
 	}
 }
 
+// ListSheets returns the sheet names of an xlsx workbook in workbook order.
+// csv and xls files have no selectable sheets and yield an empty list (xls
+// always reads its first sheet).
+func ListSheets(data []byte, format string) ([]string, error) {
+	if format != FormatXLSX {
+		return []string{}, nil
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("alignment: read xlsx: file is empty")
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("alignment: read xlsx: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+	return append([]string{}, f.GetSheetList()...), nil
+}
+
 // readCSV decodes UTF-8 CSV only; a leading UTF-8 BOM is tolerated and
 // stripped. Known limitation: files in other encodings (GBK, BIG5, ...) are
 // not transcoded and must be re-saved as UTF-8 before import, otherwise the

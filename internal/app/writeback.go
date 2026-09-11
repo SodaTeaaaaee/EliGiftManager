@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,20 +16,6 @@ import (
 // maxWritebackErrorRunes caps the stored error text so a runaway platform
 // response cannot bloat the writeback row.
 const maxWritebackErrorRunes = 500
-
-// DefaultWritebackLayout is the built-in bilibili-shaped two-column writeback
-// sheet used when the source platform has no writeback output template yet.
-func DefaultWritebackLayout() alignment.LayoutConfig {
-	return alignment.LayoutConfig{
-		Version:     alignment.LayoutSchemaVersion,
-		Format:      alignment.FormatCSV,
-		ColumnOrder: []string{"source.document_no", "shipment.carrier_code"},
-		HeaderNames: map[string]string{
-			"source.document_no":    "订单号",
-			"shipment.carrier_code": "快递公司编码",
-		},
-	}
-}
 
 // GenerateWritebacks collects the parcels behind a source fact into writeback
 // items, one per shipment. Re-running it is safe: parcels that already have an
@@ -80,18 +67,20 @@ func generateWritebacks(ctx context.Context, store domain.Store, factID uint) ([
 	if err != nil {
 		return nil, err
 	}
+	// The source platform's carrier mappings translate the carrier as the
+	// factory file described it into the id the platform accepts. No match or
+	// an ambiguous match leaves the cell empty rather than guessing; the
+	// warning names the shipment so the operator can add or fix a mapping.
 	externalCarrierCode := func(sh domain.Shipment) string {
-		if sh.CarrierCode == "" {
-			return ""
-		}
-		for _, m := range mappings {
-			if m.InternalCode == sh.CarrierCode && m.ExternalCode != "" {
-				return m.ExternalCode
+		code, ambiguous := matchCarrierCode(mappings, sh.CarrierName)
+		if code == "" && sh.CarrierName != "" {
+			reason := "no carrier mapping"
+			if ambiguous {
+				reason = "ambiguous carrier mapping"
 			}
+			slog.Warn("writeback carrier code left empty", "reason", reason, "carrier", sh.CarrierName, "platform_id", fact.PlatformID, "shipment_id", sh.ID, "tracking_no", sh.TrackingNo)
 		}
-		// No mapping to the platform's carrier vocabulary: stay conservative
-		// and leave the cell empty rather than guess an external code.
-		return ""
+		return code
 	}
 	waves, err := store.ListWaves(ctx)
 	if err != nil {
@@ -130,9 +119,10 @@ func generateWritebacks(ctx context.Context, store domain.Store, factID uint) ([
 					// Carrier code is the one value that needs translation:
 					// templates receive the source platform's external code,
 					// every other shipment field is passed through verbatim.
+					carrierCode := externalCarrierCode(sh)
 					payload, err := alignment.Render([]map[string]string{{
 						"source.document_no":    orderNo,
-						"shipment.carrier_code": externalCarrierCode(sh),
+						"shipment.carrier_code": carrierCode,
 						"shipment.carrier_name": sh.CarrierName,
 						"shipment.tracking_no":  sh.TrackingNo,
 						"shipment.quantity":     strconv.Itoa(sh.Quantity),
@@ -144,7 +134,7 @@ func generateWritebacks(ctx context.Context, store domain.Store, factID uint) ([
 						InputFactID:     factID,
 						ShipmentID:      sh.ID,
 						TrackingNo:      sh.TrackingNo,
-						CarrierCode:     sh.CarrierCode,
+						CarrierCode:     carrierCode,
 						Quantity:        sh.Quantity,
 						Status:          string(domain.WritebackPending),
 						TemplateID:      tplID,
@@ -162,25 +152,19 @@ func generateWritebacks(ctx context.Context, store domain.Store, factID uint) ([
 	return items, nil
 }
 
-// writebackLayout resolves the source platform's writeback output template
-// and falls back to the built-in bilibili layout when no template is
-// configured or its layout does not parse. The template id/version snapshot
-// is only non-zero when the template layout is actually used.
+// writebackLayout resolves the source platform's active writeback output
+// template and its layout. Without an active template the writeback cannot be
+// rendered and ErrNoActiveTemplate names the platform.
 func writebackLayout(ctx context.Context, store domain.Store, platformID uint) (alignment.LayoutConfig, uint, int, error) {
-	layout := DefaultWritebackLayout()
-	var tplID uint
-	var tplVersion int
-	tpl, err := findTemplate(ctx, store, platformID, domain.TemplateDirectionOutput, DocumentTypeWriteback)
+	tpl, err := requireActiveTemplate(ctx, store, platformID, domain.TemplateDirectionOutput, DocumentTypeWriteback)
 	if err != nil {
-		return layout, 0, 0, err
+		return alignment.LayoutConfig{}, 0, 0, fmt.Errorf("writeback: %w", err)
 	}
-	if tpl != nil {
-		if parsed, perr := alignment.ParseLayoutConfig(tpl.LayoutJSON); perr == nil && len(parsed.ColumnOrder) > 0 {
-			layout = parsed
-			tplID, tplVersion = tpl.ID, tpl.Version
-		}
+	layout, err := alignment.ParseLayoutConfig(tpl.LayoutJSON)
+	if err != nil {
+		return alignment.LayoutConfig{}, 0, 0, fmt.Errorf("writeback: template %q: %w", tpl.Name, err)
 	}
-	return layout, tplID, tplVersion, nil
+	return layout, tpl.ID, tpl.Version, nil
 }
 
 // storeRenderedPayload keeps rendered CSV payloads verbatim and base64-prefixes

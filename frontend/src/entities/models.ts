@@ -444,8 +444,40 @@ export interface ImportFileResult {
   Issues: ParseIssue[]
 }
 
+/** One parsed sample row (alignment.PreviewRow): semantic values plus the duplicate fingerprint. */
+export interface PreviewRow {
+  LineNo: number
+  SourceRow: number
+  Values: Record<string, string>
+  Fingerprint: string
+}
+
 export interface TemplatePreview {
-  Rows: Record<string, string>[]
+  Rows: PreviewRow[]
+  Issues: ParseIssue[]
+  TotalRows: number
+  DroppedRows: number
+}
+
+/** Raw first rows of a sample file (app.SampleFileInfo); Records[0] is the candidate header. */
+export interface SampleFileInfo {
+  Format: 'csv' | 'xlsx' | 'xls' | string
+  Sheets: string[]
+  Records: string[][]
+  Total: number
+}
+
+/** One closed-set document type with its locked direction and owning platform kind (app.DocumentTypeInfo). */
+export interface DocumentTypeInfo {
+  Key: string
+  Direction: TemplateDirection | string
+  PlatformKind: PlatformKind | string
+}
+
+export interface ImportCarrierMappingsResult {
+  Created: number
+  Updated: number
+  Skipped: number
   Issues: ParseIssue[]
 }
 

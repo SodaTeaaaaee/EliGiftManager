@@ -218,6 +218,15 @@ func (s *GormStore) ListAddresses(ctx context.Context, customerID uint) ([]domai
 	return out, nil
 }
 
+func (s *GormStore) FindAddressByRecipient(ctx context.Context, recipientName, phone string) (*domain.RecipientAddress, error) {
+	var row persistence.RecipientAddress
+	if err := first(s.db.WithContext(ctx).Where("recipient_name = ? AND phone = ?", recipientName, phone).Order("id"), &row); err != nil {
+		return nil, err
+	}
+	d := addressToDomain(row)
+	return &d, nil
+}
+
 func (s *GormStore) UpdateAddress(ctx context.Context, a *domain.RecipientAddress) error {
 	row := addressFromDomain(*a)
 	row.ID = a.ID
@@ -469,7 +478,16 @@ func (s *GormStore) ListTemplates(ctx context.Context) ([]domain.TemplateConfig,
 func (s *GormStore) UpdateTemplate(ctx context.Context, t *domain.TemplateConfig) error {
 	row := templateFromDomain(*t)
 	row.ID = t.ID
-	return s.db.WithContext(ctx).Save(&row).Error
+	row.UpdatedAt = time.Now()
+	if err := s.db.WithContext(ctx).Save(&row).Error; err != nil {
+		return err
+	}
+	t.UpdatedAt = row.UpdatedAt
+	return nil
+}
+
+func (s *GormStore) DeleteTemplate(ctx context.Context, id uint) error {
+	return s.db.WithContext(ctx).Delete(&persistence.TemplateConfig{}, id).Error
 }
 
 func (s *GormStore) CreateCarrierMapping(ctx context.Context, m *domain.CarrierMapping) error {
@@ -481,16 +499,47 @@ func (s *GormStore) CreateCarrierMapping(ctx context.Context, m *domain.CarrierM
 	return nil
 }
 
+func (s *GormStore) GetCarrierMapping(ctx context.Context, id uint) (*domain.CarrierMapping, error) {
+	var row persistence.CarrierMapping
+	if err := first(s.db.WithContext(ctx).Where("id = ?", id), &row); err != nil {
+		return nil, err
+	}
+	d := carrierMappingToDomain(row)
+	return &d, nil
+}
+
 func (s *GormStore) ListCarrierMappings(ctx context.Context, platformID uint) ([]domain.CarrierMapping, error) {
 	var rows []persistence.CarrierMapping
-	if err := s.db.WithContext(ctx).Where("platform_id = ?", platformID).Find(&rows).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("platform_id = ?", platformID).Order("id").Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make([]domain.CarrierMapping, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, domain.CarrierMapping{ID: r.ID, PlatformID: r.PlatformID, ExternalCode: r.ExternalCode, InternalCode: r.InternalCode, InternalName: r.InternalName, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt})
+		out = append(out, carrierMappingToDomain(r))
 	}
 	return out, nil
+}
+
+func (s *GormStore) UpdateCarrierMapping(ctx context.Context, m *domain.CarrierMapping) error {
+	now := time.Now()
+	if err := s.db.WithContext(ctx).Model(&persistence.CarrierMapping{}).Where("id = ?", m.ID).Updates(map[string]any{
+		"external_code": m.ExternalCode,
+		"internal_code": m.InternalCode,
+		"internal_name": m.InternalName,
+		"updated_at":    now,
+	}).Error; err != nil {
+		return err
+	}
+	m.UpdatedAt = now
+	return nil
+}
+
+func (s *GormStore) DeleteCarrierMapping(ctx context.Context, id uint) error {
+	return s.db.WithContext(ctx).Delete(&persistence.CarrierMapping{}, id).Error
+}
+
+func carrierMappingToDomain(r persistence.CarrierMapping) domain.CarrierMapping {
+	return domain.CarrierMapping{ID: r.ID, PlatformID: r.PlatformID, ExternalCode: r.ExternalCode, InternalCode: r.InternalCode, InternalName: r.InternalName, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 }
 
 func (s *GormStore) CreateDocument(ctx context.Context, d *domain.InputDocument) error {

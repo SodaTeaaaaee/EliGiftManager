@@ -183,13 +183,25 @@ func TestMainPath(t *testing.T) {
 		t.Fatalf("expected 2 retail lines, got %d", len(retailLines))
 	}
 
-	// 5. Check unattached identity behavior before AttachIdentity.
+	// 5. The first sighting of UID-99001 auto-created a profile (named after
+	// the identity value, no display name was imported) and attached the
+	// identity to it; it is not Alice's profile yet.
 	ident, err := ws.Store.FindIdentity(ctx, sourcePlatform.ID, string(domain.IdentityTypePlatformUID), NormalizeIdentity("UID-99001"))
 	if err != nil {
 		t.Fatalf("FindIdentity: %v", err)
 	}
-	if ident.CustomerProfileID != nil {
-		t.Fatalf("expected unattached identity before attach, got customer ID %v", *ident.CustomerProfileID)
+	if ident.CustomerProfileID == nil {
+		t.Fatal("expected the imported identity to be attached to an auto-created profile")
+	}
+	if *ident.CustomerProfileID == customer.ID {
+		t.Fatal("auto-created profile must not be Alice's profile")
+	}
+	autoProfile, err := ws.GetCustomer(ctx, *ident.CustomerProfileID)
+	if err != nil {
+		t.Fatalf("GetCustomer auto profile: %v", err)
+	}
+	if autoProfile.DisplayName != "UID-99001" {
+		t.Fatalf("auto profile display name = %q, want the identity value", autoProfile.DisplayName)
 	}
 
 	// 6. Create wave and assign membership + retail lines into that wave.
@@ -222,27 +234,35 @@ func TestMainPath(t *testing.T) {
 		t.Fatalf("UpsertRule: %v", err)
 	}
 
-	// Before attaching identity, entitlement result view reports identity_unattached block.
+	// Before re-pointing the identity, the entitlement result resolves the
+	// auto-created profile, which has no address: blocked on the address, not
+	// on the identity.
 	viewsBeforeAttach, err := ws.ListResultViews(ctx, wave.ID)
 	if err != nil {
 		t.Fatalf("ListResultViews before attach: %v", err)
 	}
-	foundUnattachedBlock := false
+	foundAddressBlock := false
 	for _, v := range viewsBeforeAttach {
-		if v.Result.SourceKind == string(domain.SourceEntitlementInstance) {
-			for _, b := range v.Blocks {
-				if b == domain.BlockIdentityUnattached {
-					foundUnattachedBlock = true
-					break
-				}
+		if v.Result.SourceKind != string(domain.SourceEntitlementInstance) {
+			continue
+		}
+		if v.Result.CustomerProfileID == nil || *v.Result.CustomerProfileID != autoProfile.ID {
+			t.Fatalf("entitlement result customer = %v, want auto profile %d", v.Result.CustomerProfileID, autoProfile.ID)
+		}
+		for _, b := range v.Blocks {
+			if b == domain.BlockIdentityUnattached {
+				t.Fatal("auto-attached identity must not block as unattached")
+			}
+			if b == domain.BlockUnusableAddress {
+				foundAddressBlock = true
 			}
 		}
 	}
-	if !foundUnattachedBlock {
-		t.Fatal("expected BlockIdentityUnattached before AttachIdentity on entitlement result")
+	if !foundAddressBlock {
+		t.Fatal("expected BlockUnusableAddress while the auto profile has no address")
 	}
 
-	// Attach identity to the customer profile and recompute.
+	// Re-point the identity to Alice's profile: recompute follows it.
 	if err := ws.AttachIdentity(ctx, ident.ID, customer.ID); err != nil {
 		t.Fatalf("AttachIdentity: %v", err)
 	}
@@ -575,6 +595,10 @@ func TestMainPath(t *testing.T) {
 	}
 
 	// 16. GenerateWritebacks(retailFactID): grouped by InputFact, returns 2 items for the two parcels.
+	// Writeback needs an active template on the source platform: copy the
+	// seeded built-in one.
+	seedBuiltins(t, ws)
+	cloneBuiltinTemplate(t, ws, sourcePlatform.ID, DocumentTypeWriteback)
 	writebackItems, err := ws.GenerateWritebacks(ctx, retailFactID)
 	if err != nil {
 		t.Fatalf("GenerateWritebacks: %v", err)

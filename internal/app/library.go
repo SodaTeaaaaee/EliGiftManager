@@ -176,31 +176,12 @@ func (ws *Workspace) CreateBundleComponent(ctx context.Context, c *domain.Produc
 	return ws.Store.CreateBundleComponent(ctx, c)
 }
 
-func (ws *Workspace) CreateTemplate(ctx context.Context, t *domain.TemplateConfig) error {
-	if t.Version == 0 {
-		t.Version = 1
-	}
-	return ws.Store.CreateTemplate(ctx, t)
-}
-
-func (ws *Workspace) ListTemplates(ctx context.Context) ([]domain.TemplateConfig, error) {
-	return ws.Store.ListTemplates(ctx)
-}
-
 func (ws *Workspace) SemanticDictionary() []string {
 	return append([]string(nil), domain.SemanticDictionary...)
 }
 
 func (ws *Workspace) NamedTransformers() []string {
 	return append([]string(nil), domain.NamedTransformers...)
-}
-
-func (ws *Workspace) CreateCarrierMapping(ctx context.Context, m *domain.CarrierMapping) error {
-	return ws.Store.CreateCarrierMapping(ctx, m)
-}
-
-func (ws *Workspace) ListCarrierMappings(ctx context.Context, platformID uint) ([]domain.CarrierMapping, error) {
-	return ws.Store.ListCarrierMappings(ctx, platformID)
 }
 
 func (ws *Workspace) GetSettings(ctx context.Context) (*domain.AppSettings, error) {

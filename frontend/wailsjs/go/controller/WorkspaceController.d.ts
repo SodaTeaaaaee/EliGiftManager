@@ -36,15 +36,23 @@ export function CreateWave(arg1:string,arg2:string):Promise<domain.Wave>;
 
 export function DecideDuplicate(arg1:number,arg2:boolean):Promise<void>;
 
+export function DeleteCarrierMapping(arg1:number):Promise<void>;
+
 export function DeleteException(arg1:number):Promise<void>;
 
 export function DeleteQuantitySplitRule(arg1:number):Promise<void>;
 
 export function DeleteRule(arg1:number):Promise<void>;
 
+export function DeleteTemplate(arg1:number):Promise<void>;
+
 export function DismissRevision(arg1:number):Promise<void>;
 
+export function DocumentTypeCatalog():Promise<Array<app.DocumentTypeInfo>>;
+
 export function EnsureBuiltinPlatforms():Promise<void>;
+
+export function EnsureBuiltinTemplates():Promise<void>;
 
 export function ExportFactoryOrder(arg1:number):Promise<domain.SupplierOrder>;
 
@@ -62,17 +70,23 @@ export function GetCustomer(arg1:number):Promise<domain.CustomerProfile>;
 
 export function GetSettings():Promise<domain.AppSettings>;
 
+export function GetTemplate(arg1:number):Promise<domain.TemplateConfig>;
+
 export function GetWave(arg1:number):Promise<domain.Wave>;
 
 export function Home():Promise<app.HomeBuckets>;
+
+export function ImportCarrierMappings(arg1:number,arg2:string,arg3:string,arg4:string):Promise<app.ImportCarrierMappingsResult>;
 
 export function ImportFile(arg1:number,arg2:number,arg3:string):Promise<app.ImportFileResult>;
 
 export function ImportShipment(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<domain.Shipment>;
 
-export function ImportShipmentFile(arg1:number,arg2:string):Promise<app.ImportShipmentFileResult>;
+export function ImportShipmentFile(arg1:number,arg2:number,arg3:string):Promise<app.ImportShipmentFileResult>;
 
 export function IngestDocument(arg1:domain.InputDocument,arg2:Array<app.IngestFactInput>):Promise<app.IngestDocumentResult>;
+
+export function InspectSampleFile(arg1:string,arg2:string,arg3:number):Promise<app.SampleFileInfo>;
 
 export function ListAddresses(arg1:number):Promise<Array<domain.RecipientAddress>>;
 
@@ -116,6 +130,8 @@ export function MoveLines(arg1:Array<number>,arg2:number):Promise<void>;
 
 export function NamedTransformers():Promise<Array<string>>;
 
+export function PreviewMapping(arg1:string,arg2:string,arg3:string,arg4:number):Promise<alignment.TemplatePreview>;
+
 export function PreviewTemplate(arg1:number,arg2:string,arg3:number):Promise<alignment.TemplatePreview>;
 
 export function ProductTotals(arg1:number):Promise<Array<app.ProductTotal>>;
@@ -130,7 +146,11 @@ export function SetResultAddress(arg1:number,arg2:number):Promise<void>;
 
 export function UpdateAlias(arg1:number,arg2:number):Promise<void>;
 
+export function UpdateCarrierMapping(arg1:domain.CarrierMapping):Promise<domain.CarrierMapping>;
+
 export function UpdateCustomer(arg1:domain.CustomerProfile):Promise<void>;
+
+export function UpdateTemplate(arg1:domain.TemplateConfig):Promise<domain.TemplateConfig>;
 
 export function UpsertQuantitySplitRule(arg1:domain.QuantitySplitRule):Promise<void>;
 

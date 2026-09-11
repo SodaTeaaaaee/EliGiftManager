@@ -123,9 +123,7 @@ func TestGenerateWritebacksRollsBackAtomically(t *testing.T) {
 	gdb := openTestDB(t)
 	base := infra.NewGormStore(gdb)
 	ws := NewWorkspace(base)
-	if err := ws.EnsureBuiltinPlatforms(ctx); err != nil {
-		t.Fatalf("EnsureBuiltinPlatforms: %v", err)
-	}
+	seedBuiltins(t, ws)
 	var source, factory *domain.Platform
 	for _, p := range mustListPlatforms(t, ws) {
 		pc := p
@@ -136,6 +134,7 @@ func TestGenerateWritebacksRollsBackAtomically(t *testing.T) {
 			factory = &pc
 		}
 	}
+	cloneBuiltinTemplate(t, ws, source.ID, DocumentTypeWriteback)
 
 	fact := &domain.InputFact{PlatformID: source.ID, Kind: string(domain.InputFactKindRetailOrder), StableExternalID: "WB-RB-1"}
 	if err := base.CreateFact(ctx, fact); err != nil {

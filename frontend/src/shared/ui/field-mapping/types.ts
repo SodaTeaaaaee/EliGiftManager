@@ -13,6 +13,15 @@ export interface FieldMappingDestField {
   label: string
   /** Already-resolved tooltip copy, shown next to the label. */
   tooltip?: string
+  /** Key of the `FieldMappingGroup` this field renders under; ungrouped when absent. */
+  group?: string
+}
+
+/** One collapsible section of destination fields (order = display order). */
+export interface FieldMappingGroup {
+  key: string
+  /** Already-resolved section title. */
+  label: string
 }
 
 /** Mapping mode stored in MappingConfig.mode. */

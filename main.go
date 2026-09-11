@@ -49,6 +49,10 @@ func main() {
 		logger.Error("seed builtin platforms", "error", err)
 		os.Exit(1)
 	}
+	if err := ws.EnsureBuiltinTemplates(context.Background()); err != nil {
+		logger.Error("seed builtin templates", "error", err)
+		os.Exit(1)
+	}
 	zoom := LoadZoom()
 
 	err = wails.Run(&options.App{

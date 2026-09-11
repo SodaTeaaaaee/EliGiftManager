@@ -10,7 +10,8 @@ func TestHomeBucketUnits(t *testing.T) {
 	f := newRevisionFixture(t)
 	ctx := f.ctx
 
-	// One unassigned, unaligned, unattached retail line.
+	// One unassigned, unaligned retail line. Its identity is new, so import
+	// auto-creates a profile and attaches it: nothing is left unattached.
 	in := IngestFactInput{
 		Kind:             string(domain.InputFactKindRetailOrder),
 		StableExternalID: "HOME-ORD-1",
@@ -19,6 +20,23 @@ func TestHomeBucketUnits(t *testing.T) {
 		Lines:            []IngestLine{{SourceLineNo: 1, ExternalSKU: "UNKNOWN-SKU", Quantity: 1}},
 	}
 	f.ingest(t, in)
+	// A hand-made identity without a profile still counts as unattached
+	// work once a fact points at it.
+	orphan := &domain.PlatformIdentity{PlatformID: f.source.ID, IdentityType: string(domain.IdentityTypePlatformUID), IdentityValue: "UID-ORPHAN", NormalizedValue: NormalizeIdentity("UID-ORPHAN")}
+	if err := f.ws.Store.CreateIdentity(ctx, orphan); err != nil {
+		t.Fatalf("CreateIdentity: %v", err)
+	}
+	orphanDoc := &domain.InputDocument{PlatformID: f.source.ID, DocumentType: "retail"}
+	if err := f.ws.Store.CreateDocument(ctx, orphanDoc); err != nil {
+		t.Fatalf("CreateDocument: %v", err)
+	}
+	orphanFact := &domain.InputFact{DocumentID: &orphanDoc.ID, PlatformID: f.source.ID, Kind: string(domain.InputFactKindMembership), StableExternalID: "HOME-ORPHAN", PlatformIdentityID: &orphan.ID}
+	if err := f.ws.Store.CreateFact(ctx, orphanFact); err != nil {
+		t.Fatalf("CreateFact: %v", err)
+	}
+	if err := f.ws.Store.CreateFactLine(ctx, &domain.InputFactLine{FactID: orphanFact.ID, SourceLineNo: 1, Quantity: 1}); err != nil {
+		t.Fatalf("CreateFactLine: %v", err)
+	}
 
 	// An open wave with unfrozen results must NOT count as residual close.
 	grantRes, err := f.ws.CreateGrant(ctx, f.wave.ID, f.cust.ID, f.product.ID, 2)
@@ -44,14 +62,15 @@ func TestHomeBucketUnits(t *testing.T) {
 	if home.ResidualClose != 1 {
 		t.Fatalf("ResidualClose = %d, want 1 (residual-closed wave only)", home.ResidualClose)
 	}
-	if home.Unassigned != 1 {
-		t.Fatalf("Unassigned = %d, want 1", home.Unassigned)
+	if home.Unassigned != 2 {
+		t.Fatalf("Unassigned = %d, want 2 (imported retail line + orphan membership line)", home.Unassigned)
 	}
 	if home.AlignmentConflict != 1 {
 		t.Fatalf("AlignmentConflict = %d, want 1", home.AlignmentConflict)
 	}
 	// The unattached identity bucket counts inbox rows (lines), not the
-	// platform-identity row on its own.
+	// platform-identity row on its own; the imported line auto-attached, only
+	// the orphan line counts.
 	if home.IdentityUnattached != 1 {
 		t.Fatalf("IdentityUnattached = %d, want 1 row", home.IdentityUnattached)
 	}

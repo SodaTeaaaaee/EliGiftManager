@@ -66,6 +66,10 @@ export function DecideDuplicate(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['DecideDuplicate'](arg1, arg2);
 }
 
+export function DeleteCarrierMapping(arg1) {
+  return window['go']['controller']['WorkspaceController']['DeleteCarrierMapping'](arg1);
+}
+
 export function DeleteException(arg1) {
   return window['go']['controller']['WorkspaceController']['DeleteException'](arg1);
 }
@@ -78,12 +82,24 @@ export function DeleteRule(arg1) {
   return window['go']['controller']['WorkspaceController']['DeleteRule'](arg1);
 }
 
+export function DeleteTemplate(arg1) {
+  return window['go']['controller']['WorkspaceController']['DeleteTemplate'](arg1);
+}
+
 export function DismissRevision(arg1) {
   return window['go']['controller']['WorkspaceController']['DismissRevision'](arg1);
 }
 
+export function DocumentTypeCatalog() {
+  return window['go']['controller']['WorkspaceController']['DocumentTypeCatalog']();
+}
+
 export function EnsureBuiltinPlatforms() {
   return window['go']['controller']['WorkspaceController']['EnsureBuiltinPlatforms']();
+}
+
+export function EnsureBuiltinTemplates() {
+  return window['go']['controller']['WorkspaceController']['EnsureBuiltinTemplates']();
 }
 
 export function ExportFactoryOrder(arg1) {
@@ -118,12 +134,20 @@ export function GetSettings() {
   return window['go']['controller']['WorkspaceController']['GetSettings']();
 }
 
+export function GetTemplate(arg1) {
+  return window['go']['controller']['WorkspaceController']['GetTemplate'](arg1);
+}
+
 export function GetWave(arg1) {
   return window['go']['controller']['WorkspaceController']['GetWave'](arg1);
 }
 
 export function Home() {
   return window['go']['controller']['WorkspaceController']['Home']();
+}
+
+export function ImportCarrierMappings(arg1, arg2, arg3, arg4) {
+  return window['go']['controller']['WorkspaceController']['ImportCarrierMappings'](arg1, arg2, arg3, arg4);
 }
 
 export function ImportFile(arg1, arg2, arg3) {
@@ -134,12 +158,16 @@ export function ImportShipment(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['controller']['WorkspaceController']['ImportShipment'](arg1, arg2, arg3, arg4, arg5);
 }
 
-export function ImportShipmentFile(arg1, arg2) {
-  return window['go']['controller']['WorkspaceController']['ImportShipmentFile'](arg1, arg2);
+export function ImportShipmentFile(arg1, arg2, arg3) {
+  return window['go']['controller']['WorkspaceController']['ImportShipmentFile'](arg1, arg2, arg3);
 }
 
 export function IngestDocument(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['IngestDocument'](arg1, arg2);
+}
+
+export function InspectSampleFile(arg1, arg2, arg3) {
+  return window['go']['controller']['WorkspaceController']['InspectSampleFile'](arg1, arg2, arg3);
 }
 
 export function ListAddresses(arg1) {
@@ -226,6 +254,10 @@ export function NamedTransformers() {
   return window['go']['controller']['WorkspaceController']['NamedTransformers']();
 }
 
+export function PreviewMapping(arg1, arg2, arg3, arg4) {
+  return window['go']['controller']['WorkspaceController']['PreviewMapping'](arg1, arg2, arg3, arg4);
+}
+
 export function PreviewTemplate(arg1, arg2, arg3) {
   return window['go']['controller']['WorkspaceController']['PreviewTemplate'](arg1, arg2, arg3);
 }
@@ -254,8 +286,16 @@ export function UpdateAlias(arg1, arg2) {
   return window['go']['controller']['WorkspaceController']['UpdateAlias'](arg1, arg2);
 }
 
+export function UpdateCarrierMapping(arg1) {
+  return window['go']['controller']['WorkspaceController']['UpdateCarrierMapping'](arg1);
+}
+
 export function UpdateCustomer(arg1) {
   return window['go']['controller']['WorkspaceController']['UpdateCustomer'](arg1);
+}
+
+export function UpdateTemplate(arg1) {
+  return window['go']['controller']['WorkspaceController']['UpdateTemplate'](arg1);
 }
 
 export function UpsertQuantitySplitRule(arg1) {

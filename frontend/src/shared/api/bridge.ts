@@ -20,9 +20,12 @@ import {
   CreateTemplate as _CreateTemplate,
   CreateWave as _CreateWave,
   AddException as _AddException,
+  DeleteCarrierMapping as _DeleteCarrierMapping,
   DeleteException as _DeleteException,
   DeleteQuantitySplitRule as _DeleteQuantitySplitRule,
   DeleteRule as _DeleteRule,
+  DeleteTemplate as _DeleteTemplate,
+  DocumentTypeCatalog as _DocumentTypeCatalog,
   ListQuantitySplitRules as _ListQuantitySplitRules,
   UpsertQuantitySplitRule as _UpsertQuantitySplitRule,
   ExportFactoryOrderFile as _ExportFactoryOrderFile,
@@ -32,12 +35,15 @@ import {
   GenerateWritebacks as _GenerateWritebacks,
   GetCustomer as _GetCustomer,
   GetSettings as _GetSettings,
+  GetTemplate as _GetTemplate,
   GetWave as _GetWave,
   Home as _Home,
+  ImportCarrierMappings as _ImportCarrierMappings,
   ImportFile as _ImportFile,
   ImportShipment as _ImportShipment,
   ImportShipmentFile as _ImportShipmentFile,
   IngestDocument as _IngestDocument,
+  InspectSampleFile as _InspectSampleFile,
   ListAddresses as _ListAddresses,
   ListAliases as _ListAliases,
   ListCarrierMappings as _ListCarrierMappings,
@@ -58,13 +64,16 @@ import {
   MarkWritebackSent as _MarkWritebackSent,
   NamedTransformers as _NamedTransformers,
   ProductTotals as _ProductTotals,
+  PreviewMapping as _PreviewMapping,
   PreviewTemplate as _PreviewTemplate,
   ReopenWave as _ReopenWave,
   SaveSettings as _SaveSettings,
   SemanticDictionary as _SemanticDictionary,
   SetResultAddress as _SetResultAddress,
   UpdateAlias as _UpdateAlias,
+  UpdateCarrierMapping as _UpdateCarrierMapping,
   UpdateCustomer as _UpdateCustomer,
+  UpdateTemplate as _UpdateTemplate,
   UpsertRule as _UpsertRule,
   VoidFactoryOrder as _VoidFactoryOrder,
 } from '../../../wailsjs/go/controller/WorkspaceController'
@@ -79,6 +88,7 @@ import type {
   CarrierMapping,
   ChannelWritebackItem,
   CustomerProfile,
+  DocumentTypeInfo,
   DuplicateObservation,
   EntitlementException,
   EntitlementRule,
@@ -87,6 +97,7 @@ import type {
   FulfillmentResult,
   GenerateFactoryOrderResult,
   HomeBuckets,
+  ImportCarrierMappingsResult,
   ImportFileResult,
   ImportShipmentFileResult,
   InboxRow,
@@ -96,6 +107,7 @@ import type {
   InstanceView,
   ParseIssue,
   Platform,
+  PreviewRow,
   ProductAlias,
   ProductBundleComponent,
   ProductItem,
@@ -103,6 +115,7 @@ import type {
   QuantitySplitRule,
   RecipientAddress,
   ResultView,
+  SampleFileInfo,
   Shipment,
   SkippedShipment,
   SupplierOrder,
@@ -241,6 +254,32 @@ export async function listTemplates(): Promise<TemplateConfig[]> {
   return (res ?? []) as unknown as TemplateConfig[]
 }
 
+export async function getTemplate(id: number): Promise<TemplateConfig> {
+  assertWailsRuntime()
+  const res = await _GetTemplate(id)
+  return res as unknown as TemplateConfig
+}
+
+/** Edit an active template in place; the backend bumps Version itself. */
+export async function updateTemplate(input: Partial<TemplateConfig>): Promise<TemplateConfig> {
+  assertWailsRuntime()
+  const res = await _UpdateTemplate(input as wailsDomain.TemplateConfig)
+  return res as unknown as TemplateConfig
+}
+
+/** Delete an active template; built-ins are refused by the backend. */
+export async function deleteTemplate(id: number): Promise<void> {
+  assertWailsRuntime()
+  await _DeleteTemplate(id)
+}
+
+/** Closed set of document types with their locked direction and platform kind. */
+export async function getDocumentTypeCatalog(): Promise<DocumentTypeInfo[]> {
+  if (!isWailsRuntimeAvailable()) return []
+  const res = await _DocumentTypeCatalog()
+  return (res ?? []) as unknown as DocumentTypeInfo[]
+}
+
 export async function getSemanticDictionary(): Promise<string[]> {
   if (!isWailsRuntimeAvailable()) return []
   const res = await _SemanticDictionary()
@@ -253,7 +292,63 @@ export async function getNamedTransformers(): Promise<string[]> {
   return res ?? []
 }
 
-/** Parse a sample file through a template's mapping config without ingesting. */
+/**
+ * Read the raw first rows of a sample file (no mapping applied). Pass an
+ * empty sheetName for the first sheet; Records[0] is the candidate header.
+ */
+export async function inspectSampleFile(
+  filePath: string,
+  sheetName: string,
+  limit: number,
+): Promise<SampleFileInfo> {
+  assertWailsRuntime()
+  const res = await _InspectSampleFile(filePath, sheetName, limit)
+  return {
+    Format: res?.Format ?? '',
+    Sheets: (res?.Sheets ?? []) as string[],
+    Records: ((res?.Records ?? []) as unknown as string[][]).map((row) =>
+      (row ?? []).map((cell) => (cell == null ? '' : String(cell))),
+    ),
+    Total: res?.Total ?? 0,
+  }
+}
+
+function toTemplatePreview(res: unknown): TemplatePreview {
+  const raw = (res ?? {}) as {
+    Rows?: unknown[]
+    Issues?: unknown[]
+    TotalRows?: number
+    DroppedRows?: number
+  }
+  return {
+    Rows: (raw.Rows ?? []).map((row) => {
+      const r = (row ?? {}) as Partial<PreviewRow>
+      return {
+        LineNo: r.LineNo ?? 0,
+        SourceRow: r.SourceRow ?? 0,
+        Values: (r.Values ?? {}) as Record<string, string>,
+        Fingerprint: r.Fingerprint ?? '',
+      }
+    }),
+    Issues: (raw.Issues ?? []) as ParseIssue[],
+    TotalRows: raw.TotalRows ?? 0,
+    DroppedRows: raw.DroppedRows ?? 0,
+  }
+}
+
+/** Parse a sample file through an unsaved mapping config (editor validation). */
+export async function previewMapping(
+  mappingJSON: string,
+  documentType: string,
+  filePath: string,
+  limit: number,
+): Promise<TemplatePreview> {
+  assertWailsRuntime()
+  const res = await _PreviewMapping(mappingJSON, documentType, filePath, limit)
+  return toTemplatePreview(res)
+}
+
+/** Parse a sample file through a saved template's mapping config without ingesting. */
 export async function previewTemplate(
   templateID: number,
   filePath: string,
@@ -261,10 +356,7 @@ export async function previewTemplate(
 ): Promise<TemplatePreview> {
   assertWailsRuntime()
   const res = await _PreviewTemplate(templateID, filePath, limit)
-  return {
-    Rows: (res?.Rows ?? []) as Record<string, string>[],
-    Issues: (res?.Issues ?? []) as unknown as ParseIssue[],
-  }
+  return toTemplatePreview(res)
 }
 
 /** Import a platform export file through a template into inbox facts. */
@@ -294,6 +386,37 @@ export async function listCarrierMappings(platformID: number): Promise<CarrierMa
   if (!isWailsRuntimeAvailable()) return []
   const res = await _ListCarrierMappings(platformID)
   return (res ?? []) as unknown as CarrierMapping[]
+}
+
+export async function updateCarrierMapping(input: Partial<CarrierMapping>): Promise<CarrierMapping> {
+  assertWailsRuntime()
+  const res = await _UpdateCarrierMapping(input as wailsDomain.CarrierMapping)
+  return res as unknown as CarrierMapping
+}
+
+export async function deleteCarrierMapping(id: number): Promise<void> {
+  assertWailsRuntime()
+  await _DeleteCarrierMapping(id)
+}
+
+/**
+ * Bulk-load carrier mappings from a file: `nameHeader` is the column holding
+ * the carrier name/description, `codeHeader` the platform carrier ID.
+ */
+export async function importCarrierMappings(
+  platformID: number,
+  filePath: string,
+  nameHeader: string,
+  codeHeader: string,
+): Promise<ImportCarrierMappingsResult> {
+  assertWailsRuntime()
+  const res = await _ImportCarrierMappings(platformID, filePath, nameHeader, codeHeader)
+  return {
+    Created: res?.Created ?? 0,
+    Updated: res?.Updated ?? 0,
+    Skipped: res?.Skipped ?? 0,
+    Issues: (res?.Issues ?? []) as unknown as ParseIssue[],
+  }
 }
 
 // ── WorkspaceController: Settings ──
@@ -568,13 +691,14 @@ export async function exportFactoryOrderFile(orderID: number): Promise<ExportFil
   }
 }
 
-/** Import a factory shipment-return file (one row per parcel). */
+/** Import a factory shipment-return file (one row per parcel) through an explicit template. */
 export async function importShipmentFile(
   platformID: number,
+  templateID: number,
   filePath: string,
 ): Promise<ImportShipmentFileResult> {
   assertWailsRuntime()
-  const res = await _ImportShipmentFile(platformID, filePath)
+  const res = await _ImportShipmentFile(platformID, templateID, filePath)
   return {
     Imported: res.Imported ?? 0,
     Skipped: (res.Skipped ?? []) as unknown as SkippedShipment[],

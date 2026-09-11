@@ -44,6 +44,14 @@ const (
 	defaultFingerprint = "\x00default"
 )
 
+// parseStats counts what Parse discarded on the way to its rows.
+type parseStats struct {
+	// Dropped counts candidate rows that never became a ParsedRow: one per
+	// source row whose splitSkuQuantity blob failed to expand, and one per
+	// expanded candidate that lost a Required key.
+	Dropped int
+}
+
 // Parse turns raw file bytes into semantic rows. Fatal problems (unreadable
 // file, unusable mapping) come back as errors; per-row problems come back as
 // issues. The fingerprint is the SHA-256 of the Fingerprint keys' values
@@ -51,13 +59,21 @@ const (
 // semantic key participates (sorted by key) so duplicate detection still has
 // something stable to chew on.
 func Parse(data []byte, format string, spec TemplateSpec) ([]ParsedRow, []ParseIssue, error) {
+	rows, issues, _, err := parseWithStats(data, format, spec)
+	return rows, issues, err
+}
+
+// parseWithStats is Parse plus the drop counters the template-testing surface
+// reports; import paths only need the rows and issues.
+func parseWithStats(data []byte, format string, spec TemplateSpec) ([]ParsedRow, []ParseIssue, parseStats, error) {
+	var stats parseStats
 	cfg := spec.Mapping
 	if err := cfg.normalize(); err != nil {
-		return nil, nil, err
+		return nil, nil, stats, err
 	}
 	records, err := ReadRows(data, format, cfg.SheetName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, stats, err
 	}
 
 	// Split header from data records.
@@ -65,7 +81,7 @@ func Parse(data []byte, format string, spec TemplateSpec) ([]ParsedRow, []ParseI
 	dataStart := 0
 	if cfg.HasHeader {
 		if len(records) == 0 {
-			return nil, nil, fmt.Errorf("alignment: parse: file has no header row")
+			return nil, nil, stats, fmt.Errorf("alignment: parse: file has no header row")
 		}
 		for i, h := range records[0] {
 			name := strings.TrimSpace(h)
@@ -78,7 +94,7 @@ func Parse(data []byte, format string, spec TemplateSpec) ([]ParsedRow, []ParseI
 
 	transformers, err := buildTransformers(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, stats, err
 	}
 
 	// Resolve every referenced source column up front so missing headers are
@@ -153,6 +169,7 @@ func Parse(data []byte, format string, spec TemplateSpec) ([]ParsedRow, []ParseI
 			expanded, err := expandSplitSku(values, cfg.SplitSkuQuantity)
 			if err != nil {
 				issues = append(issues, ParseIssue{LineNo: sourceRow, Key: cfg.SplitSkuQuantity, Message: err.Error()})
+				stats.Dropped++
 				continue
 			}
 			candidates = expanded
@@ -161,14 +178,16 @@ func Parse(data []byte, format string, spec TemplateSpec) ([]ParsedRow, []ParseI
 		for _, candidate := range candidates {
 			row, rowIssues := finishRow(candidate, cfg, transformers, sourceRow)
 			issues = append(issues, rowIssues...)
-			if row != nil {
-				lineNo++
-				row.LineNo = lineNo
-				rows = append(rows, *row)
+			if row == nil {
+				stats.Dropped++
+				continue
 			}
+			lineNo++
+			row.LineNo = lineNo
+			rows = append(rows, *row)
 		}
 	}
-	return rows, issues, nil
+	return rows, issues, stats, nil
 }
 
 // finishRow applies transform chains, required checks, and fingerprinting for

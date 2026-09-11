@@ -16,9 +16,29 @@ export namespace alignment {
 	        this.Message = source["Message"];
 	    }
 	}
+	export class PreviewRow {
+	    LineNo: number;
+	    SourceRow: number;
+	    Values: Record<string, string>;
+	    Fingerprint: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PreviewRow(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.LineNo = source["LineNo"];
+	        this.SourceRow = source["SourceRow"];
+	        this.Values = source["Values"];
+	        this.Fingerprint = source["Fingerprint"];
+	    }
+	}
 	export class TemplatePreview {
-	    Rows: any[];
+	    Rows: PreviewRow[];
 	    Issues: ParseIssue[];
+	    TotalRows: number;
+	    DroppedRows: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new TemplatePreview(source);
@@ -26,8 +46,10 @@ export namespace alignment {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.Rows = source["Rows"];
+	        this.Rows = this.convertValues(source["Rows"], PreviewRow);
 	        this.Issues = this.convertValues(source["Issues"], ParseIssue);
+	        this.TotalRows = source["TotalRows"];
+	        this.DroppedRows = source["DroppedRows"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -53,6 +75,22 @@ export namespace alignment {
 
 export namespace app {
 	
+	export class DocumentTypeInfo {
+	    Key: string;
+	    Direction: string;
+	    PlatformKind: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new DocumentTypeInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Key = source["Key"];
+	        this.Direction = source["Direction"];
+	        this.PlatformKind = source["PlatformKind"];
+	    }
+	}
 	export class ExceptionView {
 	    ID: number;
 	    InstanceID: number;
@@ -171,6 +209,42 @@ export namespace app {
 	        this.ResidualClose = source["ResidualClose"];
 	        this.RevisionFrozenConflicts = source["RevisionFrozenConflicts"];
 	        this.RecentWaves = this.convertValues(source["RecentWaves"], domain.Wave);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ImportCarrierMappingsResult {
+	    Created: number;
+	    Updated: number;
+	    Skipped: number;
+	    Issues: alignment.ParseIssue[];
+	
+	    static createFrom(source: any = {}) {
+	        return new ImportCarrierMappingsResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Created = source["Created"];
+	        this.Updated = source["Updated"];
+	        this.Skipped = source["Skipped"];
+	        this.Issues = this.convertValues(source["Issues"], alignment.ParseIssue);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -387,6 +461,8 @@ export namespace app {
 	    // Go type: time
 	    SourceCreatedAt?: any;
 	    CustomerProfileID?: number;
+	    DisplayName: string;
+	    Recipient?: domain.AddressSnapshot;
 	    ExtraData: string;
 	    Lines: IngestLine[];
 	
@@ -404,6 +480,8 @@ export namespace app {
 	        this.SourceDocumentNo = source["SourceDocumentNo"];
 	        this.SourceCreatedAt = this.convertValues(source["SourceCreatedAt"], null);
 	        this.CustomerProfileID = source["CustomerProfileID"];
+	        this.DisplayName = source["DisplayName"];
+	        this.Recipient = this.convertValues(source["Recipient"], domain.AddressSnapshot);
 	        this.ExtraData = source["ExtraData"];
 	        this.Lines = this.convertValues(source["Lines"], IngestLine);
 	    }
@@ -500,6 +578,24 @@ export namespace app {
 		    }
 		    return a;
 		}
+	}
+	export class SampleFileInfo {
+	    Format: string;
+	    Sheets: string[];
+	    Records: string[][];
+	    Total: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SampleFileInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Format = source["Format"];
+	        this.Sheets = source["Sheets"];
+	        this.Records = source["Records"];
+	        this.Total = source["Total"];
+	    }
 	}
 	
 	export class WritebackFileResult {

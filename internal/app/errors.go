@@ -16,4 +16,11 @@ var (
 	ErrRevisionPending   = errors.New("fact revises another fact and is pending; apply or dismiss the revision first")
 	ErrNotRevision       = errors.New("fact is not a pending revision")
 	ErrRevisionApplied   = errors.New("revision was already applied")
+
+	// Template errors keep a stable leading token so the UI can localize
+	// them; the wrapped text carries the platform and document type.
+	ErrNoActiveTemplate = errors.New("no active template")
+	ErrBuiltinTemplate  = errors.New("builtin template is read-only")
+	ErrTemplateMismatch = errors.New("template mismatch")
+	ErrInvalidTemplate  = errors.New("invalid template")
 )

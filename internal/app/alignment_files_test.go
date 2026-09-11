@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/app/alignment"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/domain"
+	"github.com/xuri/excelize/v2"
 )
 
 func writeTempFixture(t *testing.T, name, content string) string {
@@ -47,34 +49,76 @@ func platformByKind(t *testing.T, ws *Workspace, kind domain.PlatformKind) domai
 	return domain.Platform{}
 }
 
+// seedBuiltins runs the startup seeding: platforms first, then the read-only
+// template catalog.
+func seedBuiltins(t *testing.T, ws *Workspace) {
+	t.Helper()
+	ctx := context.Background()
+	if err := ws.EnsureBuiltinPlatforms(ctx); err != nil {
+		t.Fatalf("EnsureBuiltinPlatforms: %v", err)
+	}
+	if err := ws.EnsureBuiltinTemplates(ctx); err != nil {
+		t.Fatalf("EnsureBuiltinTemplates: %v", err)
+	}
+}
+
+// builtinTemplate finds the seeded read-only template for a platform and
+// document type.
+func builtinTemplate(t *testing.T, ws *Workspace, platformID uint, documentType string) domain.TemplateConfig {
+	t.Helper()
+	templates, err := ws.ListTemplates(context.Background())
+	if err != nil {
+		t.Fatalf("ListTemplates: %v", err)
+	}
+	for _, tpl := range templates {
+		if tpl.Builtin && tpl.PlatformID == platformID && tpl.DocumentType == documentType {
+			return tpl
+		}
+	}
+	t.Fatalf("no builtin %s template on platform %d", documentType, platformID)
+	return domain.TemplateConfig{}
+}
+
+// cloneBuiltinTemplate copies a seeded built-in template into an active user
+// template, the way the UI creates templates from the catalog.
+func cloneBuiltinTemplate(t *testing.T, ws *Workspace, platformID uint, documentType string) *domain.TemplateConfig {
+	t.Helper()
+	src := builtinTemplate(t, ws, platformID, documentType)
+	clone := &domain.TemplateConfig{
+		PlatformID:   src.PlatformID,
+		DocumentType: src.DocumentType,
+		Direction:    src.Direction,
+		Name:         strings.TrimSuffix(src.Name, "（内置）") + "（副本）",
+		Notes:        src.Notes,
+		MappingJSON:  src.MappingJSON,
+		LayoutJSON:   src.LayoutJSON,
+	}
+	if err := ws.CreateTemplate(context.Background(), clone); err != nil {
+		t.Fatalf("clone builtin %s: %v", documentType, err)
+	}
+	return clone
+}
+
+// readRenderedFile reads an exported csv/xlsx file back into records.
+func readRenderedFile(t *testing.T, path string) [][]string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read export %q: %v", path, err)
+	}
+	records, err := alignment.ReadRows(raw, alignment.FormatFromExtension(filepath.Ext(path)), "")
+	if err != nil {
+		t.Fatalf("read rows of %q: %v", path, err)
+	}
+	return records
+}
+
 func TestImportFile_MembershipPositionalEndToEnd(t *testing.T) {
 	ws := newTestWorkspace(t)
 	ctx := context.Background()
-	if err := ws.EnsureBuiltinPlatforms(ctx); err != nil {
-		t.Fatal(err)
-	}
+	seedBuiltins(t, ws)
 	source := platformByKind(t, ws, domain.PlatformKindSource)
-
-	tpl := &domain.TemplateConfig{
-		PlatformID:   source.ID,
-		DocumentType: DocumentTypeMembershipList,
-		Direction:    string(domain.TemplateDirectionInput),
-		Name:         "bilibili membership list",
-		Version:      2,
-		MappingJSON: mustSerializeMapping(t, alignment.MappingConfig{
-			Mode: alignment.ModePositional,
-			Positions: map[string]int{
-				"membership.level":      0,
-				"identity.value":        1,
-				"customer.display_name": 2,
-			},
-			Required:    []string{"identity.value"},
-			Fingerprint: []string{"identity.value"},
-		}),
-	}
-	if err := ws.CreateTemplate(ctx, tpl); err != nil {
-		t.Fatal(err)
-	}
+	tpl := cloneBuiltinTemplate(t, ws, source.ID, DocumentTypeMembershipList)
 
 	path := filepath.Join("..", "..", "testdata", "integration_profile", "bilibili_membership_positional.csv")
 	result, err := ws.ImportFile(ctx, source.ID, tpl.ID, path)
@@ -87,14 +131,45 @@ func TestImportFile_MembershipPositionalEndToEnd(t *testing.T) {
 	if len(result.Duplicates) != 0 || len(result.Issues) != 0 {
 		t.Fatalf("duplicates = %v issues = %v", result.Duplicates, result.Issues)
 	}
-	if result.Document.TemplateID == nil || *result.Document.TemplateID != tpl.ID || result.Document.TemplateVersion != 2 {
+	if result.Document.TemplateID == nil || *result.Document.TemplateID != tpl.ID || result.Document.TemplateVersion != 1 {
 		t.Fatalf("document template snapshot = %+v", result.Document.TemplateID)
 	}
 	if result.Document.OriginalName != "bilibili_membership_positional.csv" {
 		t.Fatalf("original name = %q", result.Document.OriginalName)
 	}
 
-	// Re-import: same fingerprints must dedupe every fact.
+	// Every identity got a profile named after the display-name column and
+	// is attached to it, so nothing is left unattached.
+	customers, err := ws.ListCustomers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, c := range customers {
+		names[c.DisplayName] = true
+	}
+	if len(customers) != 3 || !names["DisplayA"] || !names["DisplayB"] || !names["DisplayC"] {
+		t.Fatalf("auto-created profiles = %+v, want DisplayA/B/C", customers)
+	}
+	unattached, err := ws.Store.ListUnattachedIdentities(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unattached) != 0 {
+		t.Fatalf("unattached identities = %+v, want none", unattached)
+	}
+	rows, err := ws.ListInboxRows(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if r.Unattached || r.Fact.CustomerProfileID == nil {
+			t.Fatalf("inbox row %+v must resolve its customer", r.Fact)
+		}
+	}
+
+	// Re-import: same fingerprints must dedupe every fact, and no second
+	// profile appears for a known identity.
 	again, err := ws.ImportFile(ctx, source.ID, tpl.ID, path)
 	if err != nil {
 		t.Fatalf("re-import: %v", err)
@@ -106,6 +181,13 @@ func TestImportFile_MembershipPositionalEndToEnd(t *testing.T) {
 		if d.Reason != "stable_external_id" {
 			t.Fatalf("dup reason = %q", d.Reason)
 		}
+	}
+	customers, err = ws.ListCustomers(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(customers) != 3 {
+		t.Fatalf("customers after re-import = %d, want 3", len(customers))
 	}
 }
 
@@ -254,7 +336,10 @@ func setupReadyRetailPath(t *testing.T, sku string) *readyPath {
 	return p
 }
 
-func TestExportFactoryOrderFile_DefaultLayout(t *testing.T) {
+// TestExportFactoryOrderFile_NoActiveTemplateFails pins the removed fallback:
+// generation still works without an output template (links snapshot version
+// 0), but exporting the file needs an active template and fails clearly.
+func TestExportFactoryOrderFile_NoActiveTemplateFails(t *testing.T) {
 	p := setupReadyRetailPath(t, "BILI-SKU-9")
 	ws, ctx := p.ws, p.ctx
 	dataDir := t.TempDir()
@@ -264,7 +349,6 @@ func TestExportFactoryOrderFile_DefaultLayout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateFactoryOrder: %v", err)
 	}
-	// No output template configured: links snapshot config version 0.
 	links, err := ws.Store.ListLinksByOrderLine(ctx, lines[0].ID)
 	if err != nil {
 		t.Fatal(err)
@@ -273,27 +357,67 @@ func TestExportFactoryOrderFile_DefaultLayout(t *testing.T) {
 		t.Fatalf("links = %+v, want ConfigVersion 0", links)
 	}
 
+	_, err = ws.ExportFactoryOrderFile(ctx, order.ID)
+	if !errors.Is(err, ErrNoActiveTemplate) {
+		t.Fatalf("export without template err = %v, want ErrNoActiveTemplate", err)
+	}
+	if !strings.Contains(err.Error(), p.factory.Name) || !strings.Contains(err.Error(), DocumentTypeFactoryOrder) {
+		t.Fatalf("error must name the platform and document type: %v", err)
+	}
+	after, err := ws.Store.GetSupplierOrder(ctx, order.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Status != string(domain.SupplierOrderGenerated) || after.ExportedAt != nil {
+		t.Fatalf("order = %+v, want still generated", after)
+	}
+
+	// A built-in template alone does not count: it must be copied first.
+	seedBuiltins(t, ws)
+	if _, err := ws.ExportFactoryOrderFile(ctx, order.ID); !errors.Is(err, ErrNoActiveTemplate) {
+		t.Fatalf("export with only a builtin template err = %v, want ErrNoActiveTemplate", err)
+	}
+}
+
+// TestExportFactoryOrderFile_BuiltinCloneLayout renders through a copy of the
+// seeded rouzao layout: an xlsx with the six bulk-order columns.
+func TestExportFactoryOrderFile_BuiltinCloneLayout(t *testing.T) {
+	p := setupReadyRetailPath(t, "BILI-SKU-9B")
+	ws, ctx := p.ws, p.ctx
+	seedBuiltins(t, ws)
+	tpl := cloneBuiltinTemplate(t, ws, p.factory.ID, DocumentTypeFactoryOrder)
+	dataDir := t.TempDir()
+	ws.ResolveDataDir = func() (string, error) { return dataDir, nil }
+
+	order, lines, err := ws.GenerateFactoryOrder(ctx, p.wave.ID, p.factory.ID)
+	if err != nil {
+		t.Fatalf("GenerateFactoryOrder: %v", err)
+	}
+	links, err := ws.Store.ListLinksByOrderLine(ctx, lines[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 1 || links[0].ConfigVersion != 1 {
+		t.Fatalf("links = %+v, want ConfigVersion 1", links)
+	}
+
 	result, err := ws.ExportFactoryOrderFile(ctx, order.ID)
 	if err != nil {
 		t.Fatalf("ExportFactoryOrderFile: %v", err)
 	}
-	if !strings.Contains(result.Path, filepath.Join("exports", "factory-orders")) || !strings.HasSuffix(result.Path, ".csv") {
+	if !strings.Contains(result.Path, filepath.Join("exports", "factory-orders")) || !strings.HasSuffix(result.Path, ".xlsx") {
 		t.Fatalf("path = %q", result.Path)
 	}
-	raw, err := os.ReadFile(result.Path)
-	if err != nil {
-		t.Fatalf("read export: %v", err)
+	records := readRenderedFile(t, result.Path)
+	if len(records) != 2 {
+		t.Fatalf("records = %d, want header + 1 row", len(records))
 	}
-	text := strings.TrimPrefix(string(raw), "\uFEFF")
-	csvLines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
-	if csvLines[0] != "第三方订单号,收件人,联系电话,收件地址,商家编码,下单数量" {
-		t.Fatalf("header = %q", csvLines[0])
+	if got := strings.Join(records[0], ","); got != "第三方订单号,收件人,联系电话,收件地址,商家编码,下单数量" {
+		t.Fatalf("header = %q", got)
 	}
-	if len(csvLines) != 2 {
-		t.Fatalf("lines = %d", len(csvLines))
-	}
-	if !strings.Contains(csvLines[1], "Alice Zhang") || !strings.Contains(csvLines[1], "ROZAO-MEDAL-001") || !strings.Contains(csvLines[1], ",2") {
-		t.Fatalf("row = %q", csvLines[1])
+	row := records[1]
+	if row[0] != lines[0].TrackingID || row[1] != "Alice Zhang" || row[4] != "ROZAO-MEDAL-001" || row[5] != "2" {
+		t.Fatalf("row = %q", row)
 	}
 	updated, err := ws.Store.GetSupplierOrder(ctx, order.ID)
 	if err != nil {
@@ -302,11 +426,11 @@ func TestExportFactoryOrderFile_DefaultLayout(t *testing.T) {
 	if updated.Status != string(domain.SupplierOrderExported) || updated.ExportedAt == nil {
 		t.Fatalf("order state = %+v", updated)
 	}
-	if updated.ExportPayload != string(raw) {
-		t.Fatal("ExportPayload must hold the rendered bytes")
+	if !strings.HasPrefix(updated.ExportPayload, "base64:") {
+		t.Fatal("xlsx ExportPayload must be base64-prefixed")
 	}
-	if updated.TemplateID != 0 || updated.TemplateVersion != 0 {
-		t.Fatalf("template snapshot = %d/%d, want 0/0 for builtin layout", updated.TemplateID, updated.TemplateVersion)
+	if updated.TemplateID != tpl.ID || updated.TemplateVersion != 1 {
+		t.Fatalf("template snapshot = %d/%d, want %d/1", updated.TemplateID, updated.TemplateVersion, tpl.ID)
 	}
 	// Export-after-export keeps the exported state machine semantics.
 	if err := ws.VoidFactoryOrder(ctx, order.ID); err != ErrOrderExported {
@@ -330,11 +454,24 @@ func TestExportFactoryOrderFile_TemplateLayoutSnapshotsVersion(t *testing.T) {
 		DocumentType: DocumentTypeFactoryOrder,
 		Direction:    string(domain.TemplateDirectionOutput),
 		Name:         "rozao order import",
-		Version:      4,
+		Version:      4, // ignored: new templates always start at 1
 		LayoutJSON:   layoutRaw,
 	}
 	if err := ws.CreateTemplate(ctx, tpl); err != nil {
 		t.Fatal(err)
+	}
+	// Two in-place edits: same row, version 3.
+	for i := 0; i < 2; i++ {
+		edited := *tpl
+		edited.Notes = fmt.Sprintf("edit %d", i+1)
+		updated, err := ws.UpdateTemplate(ctx, &edited)
+		if err != nil {
+			t.Fatalf("UpdateTemplate %d: %v", i+1, err)
+		}
+		tpl = updated
+	}
+	if tpl.Version != 3 {
+		t.Fatalf("template version after two edits = %d, want 3", tpl.Version)
 	}
 	dataDir := t.TempDir()
 	ws.ResolveDataDir = func() (string, error) { return dataDir, nil }
@@ -348,8 +485,8 @@ func TestExportFactoryOrderFile_TemplateLayoutSnapshotsVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(links) != 1 || links[0].ConfigVersion != 4 {
-		t.Fatalf("links = %+v, want ConfigVersion 4", links)
+	if len(links) != 1 || links[0].ConfigVersion != 3 {
+		t.Fatalf("links = %+v, want ConfigVersion 3", links)
 	}
 
 	result, err := ws.ExportFactoryOrderFile(ctx, order.ID)
@@ -368,7 +505,7 @@ func TestExportFactoryOrderFile_TemplateLayoutSnapshotsVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.TemplateID != tpl.ID || updated.TemplateVersion != 4 {
+	if updated.TemplateID != tpl.ID || updated.TemplateVersion != 3 {
 		t.Fatalf("template snapshot = %d/%d", updated.TemplateID, updated.TemplateVersion)
 	}
 }
@@ -410,11 +547,11 @@ func TestParseShipmentQuantity(t *testing.T) {
 func TestImportShipmentFile_EndToEnd(t *testing.T) {
 	p := setupReadyRetailPath(t, "BILI-SKU-11")
 	ws, ctx := p.ws, p.ctx
+	seedBuiltins(t, ws)
+	cloneBuiltinTemplate(t, ws, p.factory.ID, DocumentTypeFactoryOrder)
+	returnTpl := cloneBuiltinTemplate(t, ws, p.factory.ID, DocumentTypeShipmentReturn)
 	dataDir := t.TempDir()
 	ws.ResolveDataDir = func() (string, error) { return dataDir, nil }
-	if err := ws.CreateCarrierMapping(ctx, &domain.CarrierMapping{PlatformID: p.factory.ID, ExternalCode: "STO", InternalCode: "sto", InternalName: "申通快递"}); err != nil {
-		t.Fatal(err)
-	}
 	order, lines, err := ws.GenerateFactoryOrder(ctx, p.wave.ID, p.factory.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -426,7 +563,7 @@ func TestImportShipmentFile_EndToEnd(t *testing.T) {
 
 	// A rouzao-shaped return CSV pointing at the real tracking id.
 	path := writeTempFixture(t, "return.csv", "\uFEFF\"订单编号\",\"下单时间\",\"商品编码\",\"商品名称\",\"规格&数量\",\"应付金额\",\"收件人\",\"电话\",\"收件信息\",\"物流公司\",\"物流单号\",\"打印快递时间\",\"订单状态\"\n\""+trackingID+"\n\",\"2026-05-01 10:00:00\",\"SKU\",\"Name\",\"111_x * 1|222_y * 2\",\"0.00\",\"Alice\",\"13800000000\",\" addr \",\"申通快递\",\"'YT888999000\",\"2026-05-10 09:17:20\",\"运输中\"\n")
-	result, err := ws.ImportShipmentFile(ctx, p.factory.ID, path)
+	result, err := ws.ImportShipmentFile(ctx, p.factory.ID, returnTpl.ID, path)
 	if err != nil {
 		t.Fatalf("ImportShipmentFile: %v", err)
 	}
@@ -442,15 +579,18 @@ func TestImportShipmentFile_EndToEnd(t *testing.T) {
 	if sh.Quantity != 3 {
 		t.Fatalf("shipment quantity = %d, want 3", sh.Quantity)
 	}
-	if sh.CarrierName != "申通快递" || sh.CarrierCode != "sto" {
-		t.Fatalf("carrier = %q/%q", sh.CarrierName, sh.CarrierCode)
+	// The carrier stays as the factory file spelled it; no code is resolved
+	// on the factory side (translation belongs to the source platform's
+	// writeback).
+	if sh.CarrierName != "申通快递" || sh.CarrierCode != "" {
+		t.Fatalf("carrier = %q/%q, want name kept and empty code", sh.CarrierName, sh.CarrierCode)
 	}
 	if sh.ShippedAt == nil || sh.ShippedAt.Format("2006-01-02") != "2026-05-10" {
 		t.Fatalf("shippedAt = %v, want the printed courier time", sh.ShippedAt)
 	}
 
 	// Re-import the same parcel: skipped as duplicate, nothing new lands.
-	again, err := ws.ImportShipmentFile(ctx, p.factory.ID, path)
+	again, err := ws.ImportShipmentFile(ctx, p.factory.ID, returnTpl.ID, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -460,7 +600,7 @@ func TestImportShipmentFile_EndToEnd(t *testing.T) {
 
 	// The synthetic fixture's order numbers are not our tracking ids.
 	fixturePath := filepath.Join("..", "..", "testdata", "integration_profile", "rouzao_shipment_return.csv")
-	fixtureResult, err := ws.ImportShipmentFile(ctx, p.factory.ID, fixturePath)
+	fixtureResult, err := ws.ImportShipmentFile(ctx, p.factory.ID, returnTpl.ID, fixturePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -471,6 +611,32 @@ func TestImportShipmentFile_EndToEnd(t *testing.T) {
 		if !strings.Contains(s.Reason, "tracking") {
 			t.Fatalf("skip reason = %q", s.Reason)
 		}
+	}
+}
+
+// TestImportShipmentFile_TemplateChecks pins the template-explicit contract:
+// the template must be an active shipment_return input template owned by the
+// factory platform.
+func TestImportShipmentFile_TemplateChecks(t *testing.T) {
+	p := setupReadyRetailPath(t, "BILI-SKU-12")
+	ws, ctx := p.ws, p.ctx
+	seedBuiltins(t, ws)
+	path := writeTempFixture(t, "return.csv", "订单编号,物流单号\nX,Y\n")
+
+	builtin := builtinTemplate(t, ws, p.factory.ID, DocumentTypeShipmentReturn)
+	if _, err := ws.ImportShipmentFile(ctx, p.factory.ID, builtin.ID, path); !errors.Is(err, ErrBuiltinTemplate) {
+		t.Fatalf("builtin template err = %v, want ErrBuiltinTemplate", err)
+	}
+	factoryOrder := cloneBuiltinTemplate(t, ws, p.factory.ID, DocumentTypeFactoryOrder)
+	if _, err := ws.ImportShipmentFile(ctx, p.factory.ID, factoryOrder.ID, path); !errors.Is(err, ErrTemplateMismatch) {
+		t.Fatalf("output template err = %v, want ErrTemplateMismatch", err)
+	}
+	membership := cloneBuiltinTemplate(t, ws, p.source.ID, DocumentTypeMembershipList)
+	if _, err := ws.ImportShipmentFile(ctx, p.factory.ID, membership.ID, path); !errors.Is(err, ErrTemplateMismatch) {
+		t.Fatalf("foreign platform template err = %v, want ErrTemplateMismatch", err)
+	}
+	if _, err := ws.ImportShipmentFile(ctx, p.factory.ID, 99999, path); !errors.Is(err, domain.ErrNotFound) {
+		t.Fatalf("missing template err = %v, want ErrNotFound", err)
 	}
 }
 
@@ -688,20 +854,145 @@ func TestPreviewTemplate_RunsAgainstSampleFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PreviewTemplate: %v", err)
 	}
-	if len(preview.Rows) != 2 || preview.Rows[0]["membership.level"] != "总督" {
+	if len(preview.Rows) != 2 || preview.Rows[0].Values["membership.level"] != "总督" {
 		t.Fatalf("preview = %+v", preview.Rows)
 	}
 	if preview.Issues == nil {
 		t.Fatal("issues must be non-nil")
 	}
+	if preview.TotalRows != 3 || preview.DroppedRows != 0 {
+		t.Fatalf("totals = %d/%d, want 3 produced, 0 dropped", preview.TotalRows, preview.DroppedRows)
+	}
+
+	// Built-in templates may be previewed before copying.
+	seedBuiltins(t, ws)
+	builtin := builtinTemplate(t, ws, source.ID, DocumentTypeMembershipList)
+	bp, err := ws.PreviewTemplate(ctx, builtin.ID, path, 0)
+	if err != nil {
+		t.Fatalf("PreviewTemplate builtin: %v", err)
+	}
+	if len(bp.Rows) != 3 || bp.Rows[2].Values["customer.display_name"] != "DisplayC" || bp.Rows[2].Fingerprint == "" {
+		t.Fatalf("builtin preview = %+v", bp.Rows)
+	}
 }
 
-func TestImportFile_RejectsForeignTemplate(t *testing.T) {
+func TestPreviewMapping_UnsavedConfigAgainstSample(t *testing.T) {
 	ws := newTestWorkspace(t)
 	ctx := context.Background()
-	if err := ws.EnsureBuiltinPlatforms(ctx); err != nil {
+	path := filepath.Join("..", "..", "testdata", "integration_profile", "bilibili_membership_positional.csv")
+	mapping := mustSerializeMapping(t, alignment.MappingConfig{
+		Mode:        alignment.ModePositional,
+		Positions:   map[string]int{"membership.level": 0, "identity.value": 1, "customer.display_name": 2},
+		Required:    []string{"identity.value"},
+		Fingerprint: []string{"identity.value"},
+	})
+	preview, err := ws.PreviewMapping(ctx, mapping, DocumentTypeMembershipList, path, 2)
+	if err != nil {
+		t.Fatalf("PreviewMapping: %v", err)
+	}
+	if len(preview.Rows) != 2 || preview.TotalRows != 3 || preview.DroppedRows != 0 {
+		t.Fatalf("preview = %+v", preview)
+	}
+	row := preview.Rows[1]
+	if row.LineNo != 2 || row.SourceRow != 2 || row.Values["identity.value"] != "uid-10002" {
+		t.Fatalf("row = %+v", row)
+	}
+	if row.Fingerprint != alignment.FingerprintValues(map[string]string{"identity.value": "uid-10002"}, []string{"identity.value"}) {
+		t.Fatalf("fingerprint = %q, want the identity-only hash", row.Fingerprint)
+	}
+
+	// A required key on a column that is empty drops rows and counts them.
+	strict := mustSerializeMapping(t, alignment.MappingConfig{
+		Mode:      alignment.ModePositional,
+		Positions: map[string]int{"identity.value": 1, "recipient.phone": 7},
+		Required:  []string{"recipient.phone"},
+	})
+	dropped, err := ws.PreviewMapping(ctx, strict, DocumentTypeMembershipList, path, 10)
+	if err != nil {
+		t.Fatalf("PreviewMapping strict: %v", err)
+	}
+	if len(dropped.Rows) != 0 || dropped.TotalRows != 0 || dropped.DroppedRows != 3 || len(dropped.Issues) != 3 {
+		t.Fatalf("dropped preview = %+v", dropped)
+	}
+	if dropped.Rows == nil {
+		t.Fatal("rows must be non-nil for JSON transport")
+	}
+
+	if _, err := ws.PreviewMapping(ctx, "", DocumentTypeMembershipList, path, 2); err == nil {
+		t.Fatal("empty mapping must fail")
+	}
+}
+
+func TestInspectSampleFile_CSVAndXLSX(t *testing.T) {
+	ws := newTestWorkspace(t)
+	ctx := context.Background()
+
+	csvPath := filepath.Join("..", "..", "testdata", "integration_profile", "rouzao_shipment_return.csv")
+	info, err := ws.InspectSampleFile(ctx, csvPath, "", 2)
+	if err != nil {
+		t.Fatalf("InspectSampleFile csv: %v", err)
+	}
+	if info.Format != alignment.FormatCSV || len(info.Sheets) != 0 || info.Sheets == nil {
+		t.Fatalf("csv info = %+v", info)
+	}
+	if info.Total != 4 || len(info.Records) != 2 {
+		t.Fatalf("csv total/records = %d/%d, want 4/2", info.Total, len(info.Records))
+	}
+	if len(info.Records[0]) != 13 || info.Records[0][0] != "订单编号" || info.Records[0][12] != "订单状态" {
+		t.Fatalf("csv header = %q", info.Records[0])
+	}
+
+	// An xlsx with two sheets: the second sheet is selectable by name.
+	f := excelize.NewFile()
+	first := f.GetSheetName(0)
+	if err := f.SetSheetRow(first, "A1", &[]string{"h1", "h2"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := f.SetSheetRow(first, "A2", &[]string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.NewSheet("Second"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.SetSheetRow("Second", "A1", &[]string{"only"}); err != nil {
+		t.Fatal(err)
+	}
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	xlsxPath := writeTempFixture(t, "sample.xlsx", buf.String())
+
+	xinfo, err := ws.InspectSampleFile(ctx, xlsxPath, "", 0)
+	if err != nil {
+		t.Fatalf("InspectSampleFile xlsx: %v", err)
+	}
+	if xinfo.Format != alignment.FormatXLSX || len(xinfo.Sheets) != 2 || xinfo.Sheets[0] != first || xinfo.Sheets[1] != "Second" {
+		t.Fatalf("xlsx info = %+v", xinfo)
+	}
+	if xinfo.Total != 2 || len(xinfo.Records) != 2 || xinfo.Records[0][0] != "h1" {
+		t.Fatalf("xlsx first sheet = %+v", xinfo.Records)
+	}
+	second, err := ws.InspectSampleFile(ctx, xlsxPath, "Second", 0)
+	if err != nil {
+		t.Fatalf("InspectSampleFile sheet: %v", err)
+	}
+	if second.Total != 1 || second.Records[0][0] != "only" {
+		t.Fatalf("second sheet = %+v", second.Records)
+	}
+	if _, err := ws.InspectSampleFile(ctx, xlsxPath, "Missing", 0); err == nil {
+		t.Fatal("unknown sheet must fail")
+	}
+	if _, err := ws.InspectSampleFile(ctx, csvPath+".txt", "", 0); err == nil {
+		t.Fatal("unsupported extension must fail")
+	}
+}
+
+func TestImportFile_RejectsForeignAndBuiltinTemplates(t *testing.T) {
+	ws := newTestWorkspace(t)
+	ctx := context.Background()
+	seedBuiltins(t, ws)
 	source := platformByKind(t, ws, domain.PlatformKindSource)
 	factory := platformByKind(t, ws, domain.PlatformKindFactory)
 	tpl := &domain.TemplateConfig{
@@ -718,11 +1009,25 @@ func TestImportFile_RejectsForeignTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := writeTempFixture(t, "x.csv", "a\n1\n")
-	if _, err := ws.ImportFile(ctx, factory.ID, tpl.ID, path); err == nil {
-		t.Fatal("expected platform mismatch error")
+	if _, err := ws.ImportFile(ctx, factory.ID, tpl.ID, path); !errors.Is(err, ErrTemplateMismatch) {
+		t.Fatalf("platform mismatch err = %v, want ErrTemplateMismatch", err)
 	}
 	if _, err := ws.ImportFile(ctx, source.ID, tpl.ID, path+"-missing"); err == nil {
 		t.Fatal("expected read error")
+	}
+	builtin := builtinTemplate(t, ws, source.ID, DocumentTypeMembershipList)
+	if _, err := ws.ImportFile(ctx, source.ID, builtin.ID, path); !errors.Is(err, ErrBuiltinTemplate) {
+		t.Fatalf("builtin import err = %v, want ErrBuiltinTemplate", err)
+	}
+	writeback := cloneBuiltinTemplate(t, ws, source.ID, DocumentTypeWriteback)
+	if _, err := ws.ImportFile(ctx, source.ID, writeback.ID, path); !errors.Is(err, ErrTemplateMismatch) {
+		t.Fatalf("output template import err = %v, want ErrTemplateMismatch", err)
+	}
+	// Shipment returns are input templates too, but they feed
+	// ImportShipmentFile, not fact ingestion.
+	returns := cloneBuiltinTemplate(t, ws, factory.ID, DocumentTypeShipmentReturn)
+	if _, err := ws.ImportFile(ctx, factory.ID, returns.ID, path); !errors.Is(err, ErrTemplateMismatch) {
+		t.Fatalf("shipment_return via ImportFile err = %v, want ErrTemplateMismatch", err)
 	}
 }
 

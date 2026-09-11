@@ -16,99 +16,6 @@ import (
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
 )
 
-// Document type conventions used by the built-in templates and the file use
-// cases. They ride on TemplateConfig.DocumentType.
-const (
-	DocumentTypeMembershipList = "membership_list"
-	DocumentTypeOrderExport    = "order_export"
-	DocumentTypeShipmentReturn = "shipment_return"
-	DocumentTypeFactoryOrder   = "factory_order"
-	DocumentTypeWriteback      = "writeback"
-)
-
-// DefaultFactoryOrderLayout is the rozao-shaped six-column order sheet used
-// when the factory platform has no output template yet.
-func DefaultFactoryOrderLayout() alignment.LayoutConfig {
-	return alignment.LayoutConfig{
-		Version:     alignment.LayoutSchemaVersion,
-		Format:      alignment.FormatCSV,
-		ColumnOrder: []string{"tracking.id", "recipient.name", "recipient.phone", "recipient.address_line1", "product.factory_sku", "quantity"},
-		HeaderNames: map[string]string{
-			"tracking.id":             "第三方订单号",
-			"recipient.name":          "收件人",
-			"recipient.phone":         "联系电话",
-			"recipient.address_line1": "收件地址",
-			"product.factory_sku":     "商家编码",
-			"quantity":                "下单数量",
-		},
-	}
-}
-
-// DefaultShipmentReturnMapping is the rouzao 13-column shipment-return CSV
-// used when the factory platform has no input template yet.
-func DefaultShipmentReturnMapping() alignment.MappingConfig {
-	return alignment.MappingConfig{
-		Version:   alignment.MappingSchemaVersion,
-		Mode:      alignment.ModeHeader,
-		SheetName: "",
-		Columns: map[string]string{
-			"tracking.id":             "订单编号",
-			"source.created_at":       "下单时间",
-			"product.alias_id":        "商品编码",
-			"product.alias_title":     "商品名称",
-			"product.alias_spec":      "规格&数量",
-			"recipient.name":          "收件人",
-			"recipient.phone":         "电话",
-			"recipient.address_line1": "收件信息",
-			"shipment.carrier_name":   "物流公司",
-			"shipment.tracking_no":    "物流单号",
-			"shipment.shipped_at":     "打印快递时间",
-			"shipment.quantity":       "规格&数量",
-		},
-		Transforms: map[string][]string{
-			"tracking.id":          {"trim", "strip_quotes"},
-			"shipment.tracking_no": {"trim", "strip_quotes"},
-			"shipment.shipped_at":  {"parseDate"},
-		},
-		Required:    []string{"tracking.id", "shipment.tracking_no"},
-		Fingerprint: []string{"tracking.id", "shipment.tracking_no"},
-	}
-}
-
-// findTemplate returns the newest template for a platform, direction, and
-// document type, or nil when none is configured. A store failure is returned
-// to the caller rather than silently falling back to the built-in defaults.
-// Every read goes through the explicit store argument so callers control
-// which transaction or connection the lookup joins.
-func findTemplate(ctx context.Context, store domain.Store, platformID uint, direction domain.TemplateDirection, documentType string) (*domain.TemplateConfig, error) {
-	templates, err := store.ListTemplates(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var best *domain.TemplateConfig
-	for i := range templates {
-		t := templates[i]
-		if t.PlatformID != platformID || t.Direction != string(direction) || t.DocumentType != documentType {
-			continue
-		}
-		if best == nil || t.Version > best.Version {
-			best = &templates[i]
-		}
-	}
-	return best, nil
-}
-
-func factKindForDocumentType(documentType string) string {
-	switch documentType {
-	case DocumentTypeMembershipList, string(domain.InputFactKindMembership):
-		return string(domain.InputFactKindMembership)
-	case string(domain.InputFactKindOperatorGrant):
-		return string(domain.InputFactKindOperatorGrant)
-	default:
-		return string(domain.InputFactKindRetailOrder)
-	}
-}
-
 // ImportFileResult reports what a file import produced: the document, the
 // facts and lines that landed, duplicate observations, and parse issues.
 type ImportFileResult struct {
@@ -120,14 +27,20 @@ type ImportFileResult struct {
 }
 
 // ImportFile reads a platform export file, parses it through the template's
-// mapping config, and ingests the produced facts in one transaction.
+// mapping config, and ingests the produced facts in one transaction. The
+// template must be an active input template of the platform that produces
+// facts (membership_list or order_export); built-in rows are refused (copy
+// them first) and shipment returns go through ImportShipmentFile.
 func (ws *Workspace) ImportFile(ctx context.Context, platformID, tplID uint, filePath string) (*ImportFileResult, error) {
 	tpl, err := ws.Store.GetTemplate(ctx, tplID)
 	if err != nil {
 		return nil, err
 	}
-	if tpl.PlatformID != platformID {
-		return nil, fmt.Errorf("import file: template %d does not belong to platform %d", tplID, platformID)
+	if err := checkUsableTemplate(tpl, platformID, domain.TemplateDirectionInput, ""); err != nil {
+		return nil, fmt.Errorf("import file: %w", err)
+	}
+	if tpl.DocumentType != DocumentTypeMembershipList && tpl.DocumentType != DocumentTypeOrderExport {
+		return nil, fmt.Errorf("import file: %w: template %d %q is a %s template; only membership_list and order_export templates ingest facts", ErrTemplateMismatch, tpl.ID, tpl.Name, tpl.DocumentType)
 	}
 	mapping, err := alignment.ParseMappingConfig(tpl.MappingJSON)
 	if err != nil {
@@ -207,6 +120,8 @@ func buildIngestFacts(kind string, rows []alignment.ParsedRow) []IngestFactInput
 				IdentityType:    row.Values["identity.type"],
 				IdentityValue:   row.Values["identity.value"],
 				MembershipLevel: row.Values["membership.level"],
+				DisplayName:     strings.TrimSpace(row.Values["customer.display_name"]),
+				Recipient:       recipientSnapshot(row.Values),
 			}
 			if docNo := row.Values["source.document_no"]; docNo != "" {
 				in.SourceDocumentNo = docNo
@@ -226,8 +141,8 @@ func buildIngestFacts(kind string, rows []alignment.ParsedRow) []IngestFactInput
 					in.SourceCreatedAt = &t
 				}
 			}
-			if extra := recipientExtraData(row.Values); extra != "" {
-				in.ExtraData = extra
+			if in.Recipient != nil {
+				in.ExtraData = recipientExtraData(*in.Recipient)
 			}
 			bySource[row.SourceRow] = in
 			order = append(order, row.SourceRow)
@@ -236,8 +151,12 @@ func buildIngestFacts(kind string, rows []alignment.ParsedRow) []IngestFactInput
 		if n, err := strconv.Atoi(strings.TrimSpace(row.Values["quantity"])); err == nil && n > 0 {
 			qty = n
 		}
+		lineNo := row.LineNo
+		if n, err := strconv.Atoi(strings.TrimSpace(row.Values["source.line_no"])); err == nil && n > 0 {
+			lineNo = n
+		}
 		in.Lines = append(in.Lines, IngestLine{
-			SourceLineNo:  row.LineNo,
+			SourceLineNo:  lineNo,
 			ExternalSKU:   row.Values["product.alias_id"],
 			ExternalTitle: row.Values["product.alias_title"],
 			ExternalSpec:  row.Values["product.alias_spec"],
@@ -251,23 +170,30 @@ func buildIngestFacts(kind string, rows []alignment.ParsedRow) []IngestFactInput
 	return facts
 }
 
-// recipientExtraData snapshots recipient-ish keys onto the fact's extra data
-// so imported addresses survive until the address-snapshot linkage lands.
-func recipientExtraData(values map[string]string) string {
+// recipientSnapshot collects the recipient.* keys of a parsed row, or nil when
+// the row carries no recipient data at all.
+func recipientSnapshot(values map[string]string) *domain.AddressSnapshot {
 	snap := domain.AddressSnapshot{
-		RecipientName: values["recipient.name"],
-		Phone:         values["recipient.phone"],
-		Country:       values["recipient.country"],
-		Province:      values["recipient.province"],
-		City:          values["recipient.city"],
-		District:      values["recipient.district"],
-		AddressLine1:  values["recipient.address_line1"],
-		AddressLine2:  values["recipient.address_line2"],
-		PostalCode:    values["recipient.postal_code"],
+		RecipientName: strings.TrimSpace(values["recipient.name"]),
+		Phone:         strings.TrimSpace(values["recipient.phone"]),
+		Country:       strings.TrimSpace(values["recipient.country"]),
+		Province:      strings.TrimSpace(values["recipient.province"]),
+		City:          strings.TrimSpace(values["recipient.city"]),
+		District:      strings.TrimSpace(values["recipient.district"]),
+		AddressLine1:  strings.TrimSpace(values["recipient.address_line1"]),
+		AddressLine2:  strings.TrimSpace(values["recipient.address_line2"]),
+		PostalCode:    strings.TrimSpace(values["recipient.postal_code"]),
 	}
 	if snap.RecipientName == "" && snap.Phone == "" && snap.AddressLine1 == "" && snap.Province == "" && snap.City == "" {
-		return ""
+		return nil
 	}
+	return &snap
+}
+
+// recipientExtraData keeps the recipient data as read from the file on the
+// fact's extra data, an audit copy independent of the profile address it also
+// lands in.
+func recipientExtraData(snap domain.AddressSnapshot) string {
 	b, err := json.Marshal(map[string]domain.AddressSnapshot{"recipient": snap})
 	if err != nil {
 		return ""
@@ -296,7 +222,9 @@ type ExportFileResult struct {
 // ExportFactoryOrderFile renders a generated supplier order into the factory
 // platform's order-import file (one row per order line and distinct frozen
 // address), stores the payload, and advances the order to exported. It is the
-// file-producing layer on top of the generate-then-export state machine.
+// file-producing layer on top of the generate-then-export state machine. The
+// layout comes from the factory platform's active factory_order template;
+// without one the export fails with ErrNoActiveTemplate.
 func (ws *Workspace) ExportFactoryOrderFile(ctx context.Context, orderID uint) (*ExportFileResult, error) {
 	order, err := ws.Store.GetSupplierOrder(ctx, orderID)
 	if err != nil {
@@ -310,19 +238,15 @@ func (ws *Workspace) ExportFactoryOrderFile(ctx context.Context, orderID uint) (
 		return nil, err
 	}
 
-	layout := DefaultFactoryOrderLayout()
-	var tplID uint
-	var tplVersion int
-	tpl, err := findTemplate(ctx, ws.Store, order.FactoryPlatformID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder)
+	tpl, err := requireActiveTemplate(ctx, ws.Store, order.FactoryPlatformID, domain.TemplateDirectionOutput, DocumentTypeFactoryOrder)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("export factory order: %w", err)
 	}
-	if tpl != nil {
-		if parsed, perr := alignment.ParseLayoutConfig(tpl.LayoutJSON); perr == nil && len(parsed.ColumnOrder) > 0 {
-			layout = parsed
-			tplID, tplVersion = tpl.ID, tpl.Version
-		}
+	layout, err := alignment.ParseLayoutConfig(tpl.LayoutJSON)
+	if err != nil {
+		return nil, fmt.Errorf("export factory order: template %q: %w", tpl.Name, err)
 	}
+	tplID, tplVersion := tpl.ID, tpl.Version
 
 	rows, err := ws.factoryOrderRows(ctx, lines)
 	if err != nil {
@@ -460,24 +384,28 @@ type ImportShipmentFileResult struct {
 	Issues    []alignment.ParseIssue
 }
 
-// ImportShipmentFile reads a factory shipment return (one row per parcel),
+// ImportShipmentFile reads a factory shipment return (one row per parcel)
+// through the given active shipment_return template of the factory platform,
 // resolves each row's tracking id to a live supplier order line, and creates
 // the shipments in one transaction. Unknown or retired tracking ids and
 // already-recorded parcels are skipped with reasons; store failures abort.
-func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID uint, filePath string) (*ImportShipmentFileResult, error) {
+// Carrier names are kept as the file spells them; translating them into a
+// source platform's carrier id happens at writeback time.
+func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID, tplID uint, filePath string) (*ImportShipmentFileResult, error) {
+	tpl, err := ws.Store.GetTemplate(ctx, tplID)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkUsableTemplate(tpl, platformID, domain.TemplateDirectionInput, DocumentTypeShipmentReturn); err != nil {
+		return nil, fmt.Errorf("import shipment file: %w", err)
+	}
+	mapping, err := alignment.ParseMappingConfig(tpl.MappingJSON)
+	if err != nil {
+		return nil, fmt.Errorf("import shipment file: template %q: %w", tpl.Name, err)
+	}
 	data, format, err := readFileWithFormat(filePath)
 	if err != nil {
 		return nil, err
-	}
-	mapping := DefaultShipmentReturnMapping()
-	tpl, err := findTemplate(ctx, ws.Store, platformID, domain.TemplateDirectionInput, DocumentTypeShipmentReturn)
-	if err != nil {
-		return nil, err
-	}
-	if tpl != nil {
-		if parsed, perr := alignment.ParseMappingConfig(tpl.MappingJSON); perr == nil {
-			mapping = parsed
-		}
 	}
 	rows, issues, err := alignment.Parse(data, format, alignment.TemplateSpec{Mapping: mapping})
 	if err != nil {
@@ -530,9 +458,8 @@ func (ws *Workspace) ImportShipmentFile(ctx context.Context, platformID uint, fi
 					shippedAt = &t
 				}
 			}
-			carrierName := row.Values["shipment.carrier_name"]
-			carrierCode := resolveCarrierCode(ctx, tx, platformID, carrierName)
-			sh, err := tws.ImportShipment(ctx, trackingID, trackingNo, carrierCode, carrierName, qty)
+			carrierName := strings.TrimSpace(row.Values["shipment.carrier_name"])
+			sh, err := tws.ImportShipment(ctx, trackingID, trackingNo, "", carrierName, qty)
 			if err != nil {
 				if err == ErrUnknownTracking || err == ErrTrackingRetired {
 					skip(err.Error())
@@ -606,24 +533,6 @@ func parseShipmentQuantity(blob string) (int, []alignment.ParseIssue, error) {
 	return total, issues, nil
 }
 
-// resolveCarrierCode matches a carrier display name against the platform's
-// carrier mappings; unmatched names carry no code.
-func resolveCarrierCode(ctx context.Context, tx domain.Store, platformID uint, carrierName string) string {
-	if carrierName == "" {
-		return ""
-	}
-	mappings, err := tx.ListCarrierMappings(ctx, platformID)
-	if err != nil {
-		return ""
-	}
-	for _, m := range mappings {
-		if m.InternalName == carrierName && m.InternalCode != "" {
-			return m.InternalCode
-		}
-	}
-	return ""
-}
-
 // readFileWithFormat reads a file and derives its tabular format from the
 // extension.
 func readFileWithFormat(filePath string) ([]byte, string, error) {
@@ -638,23 +547,101 @@ func readFileWithFormat(filePath string) ([]byte, string, error) {
 	return data, format, nil
 }
 
-// PreviewTemplate runs a template's mapping against a sample file without
-// touching any store, returning the first limit rows and every issue.
-func (ws *Workspace) PreviewTemplate(ctx context.Context, tplID uint, filePath string, limit int) (alignment.TemplatePreview, error) {
+// defaultPreviewLimit caps preview and inspection output when the caller
+// passes no positive limit.
+const defaultPreviewLimit = 20
+
+// PreviewTemplate runs a saved template's mapping against a sample file
+// without touching any store, returning the first limit rows and every issue.
+// Built-in templates may be previewed: testing before copying is fine.
+func (ws *Workspace) PreviewTemplate(ctx context.Context, tplID uint, filePath string, limit int) (*alignment.TemplatePreview, error) {
 	tpl, err := ws.Store.GetTemplate(ctx, tplID)
 	if err != nil {
-		return alignment.TemplatePreview{}, err
+		return nil, err
 	}
-	mapping, err := alignment.ParseMappingConfig(tpl.MappingJSON)
+	if tpl.Direction != string(domain.TemplateDirectionInput) {
+		return nil, fmt.Errorf("preview: template %q is an output template; only input templates parse sample files", tpl.Name)
+	}
+	preview, err := previewMapping(tpl.MappingJSON, tpl.DocumentType, filePath, limit)
 	if err != nil {
-		return alignment.TemplatePreview{}, fmt.Errorf("preview: template %q: %w", tpl.Name, err)
+		return nil, fmt.Errorf("preview: template %q: %w", tpl.Name, err)
+	}
+	return preview, nil
+}
+
+// PreviewMapping runs an unsaved mapping config against a sample file, so a
+// template can be tuned before it is stored. documentType picks the fact kind
+// the rows would ingest as; no store is touched.
+func (ws *Workspace) PreviewMapping(ctx context.Context, mappingJSON, documentType, filePath string, limit int) (*alignment.TemplatePreview, error) {
+	preview, err := previewMapping(mappingJSON, documentType, filePath, limit)
+	if err != nil {
+		return nil, fmt.Errorf("preview: %w", err)
+	}
+	return preview, nil
+}
+
+func previewMapping(mappingJSON, documentType, filePath string, limit int) (*alignment.TemplatePreview, error) {
+	mapping, err := alignment.ParseMappingConfig(mappingJSON)
+	if err != nil {
+		return nil, err
 	}
 	data, format, err := readFileWithFormat(filePath)
 	if err != nil {
-		return alignment.TemplatePreview{}, err
+		return nil, err
 	}
 	if limit <= 0 {
-		limit = 20
+		limit = defaultPreviewLimit
 	}
-	return alignment.TestTemplate(data, format, alignment.TemplateSpec{Mapping: mapping, Kind: factKindForDocumentType(tpl.DocumentType)}, limit)
+	preview, err := alignment.TestTemplate(data, format, alignment.TemplateSpec{Mapping: mapping, Kind: factKindForDocumentType(documentType)}, limit)
+	if err != nil {
+		return nil, err
+	}
+	if preview.Rows == nil {
+		preview.Rows = []alignment.PreviewRow{}
+	}
+	return &preview, nil
+}
+
+// SampleFileInfo describes a tabular file before any mapping is applied: its
+// format, the selectable xlsx sheets, the first raw records (the first one is
+// the candidate header row), and the total record count.
+type SampleFileInfo struct {
+	Format  string
+	Sheets  []string
+	Records [][]string
+	Total   int
+}
+
+// InspectSampleFile reads a sample file's raw records so a template author can
+// see the headers and values before mapping them. sheetName selects the xlsx
+// sheet (empty means the first); it is ignored for csv and xls. limit <= 0
+// returns the first 20 records. No store is touched.
+func (ws *Workspace) InspectSampleFile(ctx context.Context, filePath, sheetName string, limit int) (*SampleFileInfo, error) {
+	data, format, err := readFileWithFormat(filePath)
+	if err != nil {
+		return nil, err
+	}
+	sheets, err := alignment.ListSheets(data, format)
+	if err != nil {
+		return nil, err
+	}
+	records, err := alignment.ReadRows(data, format, sheetName)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = defaultPreviewLimit
+	}
+	info := &SampleFileInfo{Format: format, Sheets: sheets, Total: len(records)}
+	if len(records) > limit {
+		records = records[:limit]
+	}
+	info.Records = make([][]string, 0, len(records))
+	for _, r := range records {
+		if r == nil {
+			r = []string{}
+		}
+		info.Records = append(info.Records, r)
+	}
+	return info, nil
 }

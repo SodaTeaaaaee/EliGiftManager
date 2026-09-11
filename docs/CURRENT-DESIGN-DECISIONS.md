@@ -34,6 +34,7 @@
 - 履约结果工作态由数据派生。第一期阻塞原因闭集：商品未对齐、收件信息不可用、身份未挂靠、数量拆分未凑满来源数量。[ADR 0058](./adr/0058-fulfillment-work-state-is-derived.md)、[ADR 0061](./adr/0061-block-reasons-are-a-closed-set.md)
 - 先生成工厂订单（追踪标识、冻结履约）再导出文件。导出失败重试仍用原标识。尚未导出的订单可以作废并解冻履约；已导出的不能作废。[ADR 0002](./adr/0002-freeze-fulfillment-after-supplier-submission.md)、[ADR 0063](./adr/0063-generate-factory-order-then-export.md)、[ADR 0067](./adr/0067-void-unexported-factory-order.md)
 - 收件信息快照来自客户档案地址，生成工厂订单前可换，生成后冻结。[ADR 0023](./adr/0023-freeze-address-snapshot-on-submission.md)、[ADR 0064](./adr/0064-address-snapshot-from-customer-profile.md)
+- 导入自动建立客户档案并把行里的收件字段写入档案地址：新身份得到自动档案并挂靠，无身份的零售订单按收件人姓名加电话复用或新建档案。身份挂靠改指档案时未冻结的事实和结果一起跟过去。[ADR 0071](./adr/0071-import-auto-creates-customer-profile.md)
 - 待处理首页工作桶：未归属、待决策重复、商品对齐冲突、身份未挂靠、阻塞的履约结果、回写失败、可带残留关闭，外加最近波次。[ADR 0066](./adr/0066-home-work-buckets.md)
 
 ## 商品与规则
@@ -46,7 +47,7 @@
 
 ## 模板
 
-模板绑定「平台、文档类型、输入或输出方向」。承运商映射挂在平台上。映射目标来自第一期封闭语义字典和转换器清单，见目标模型文档。解析与渲染由 `internal/app/alignment` 纯函数引擎统一执行，模板测试用真实或样例数据驱动同一引擎。[ADR 0035](./adr/0035-template-bound-to-integration-document-direction.md) 至 [ADR 0043](./adr/0043-builtin-templates-are-read-only-and-copyable.md)、[ADR 0052](./adr/0052-platform-owns-templates-and-carrier-maps.md)、[ADR 0065](./adr/0065-closed-semantic-dictionary-v1.md)、[ADR 0069](./adr/0069-alignment-engine-and-template-schema-v3.md)
+模板绑定「平台、文档类型、输入或输出方向」；文档类型是封闭集合，每种类型锁定方向和平台种类。内置模板只读、可测试、可复制，不能直接用于导入导出；用户模板原地编辑、版本单调递增、可删除，历史快照保留悬空的 ID 和版本号；缺少活动模板的操作以明确错误失败，没有代码默认值。承运商映射挂在需求平台上，是「承运商名称 → 平台接受的承运商 ID」的宽松对照，回写时按规范化名称翻译。映射目标来自第一期封闭语义字典和转换器清单，见目标模型文档。解析与渲染由 `internal/app/alignment` 纯函数引擎统一执行，模板测试用真实或样例数据驱动同一引擎。[ADR 0035](./adr/0035-template-bound-to-integration-document-direction.md) 至 [ADR 0043](./adr/0043-builtin-templates-are-read-only-and-copyable.md)、[ADR 0052](./adr/0052-platform-owns-templates-and-carrier-maps.md)、[ADR 0065](./adr/0065-closed-semantic-dictionary-v1.md)、[ADR 0069](./adr/0069-alignment-engine-and-template-schema-v3.md)
 
 ## 实现边界
 

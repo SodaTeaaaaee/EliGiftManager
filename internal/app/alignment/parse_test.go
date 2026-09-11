@@ -302,4 +302,37 @@ func TestTestTemplate_ReturnsPreviewAndIssues(t *testing.T) {
 	if preview.Issues == nil {
 		t.Fatal("issues must be non-nil for JSON transport")
 	}
+	if preview.TotalRows != 3 || preview.DroppedRows != 0 {
+		t.Fatalf("totals = %d/%d, want 3 produced and 0 dropped", preview.TotalRows, preview.DroppedRows)
+	}
+	first := preview.Rows[0]
+	if first.LineNo != 1 || first.SourceRow != 1 || first.Fingerprint == "" || first.Values["membership.level"] == "" {
+		t.Fatalf("preview row shape = %+v", first)
+	}
+}
+
+func TestTestTemplate_CountsDroppedRows(t *testing.T) {
+	spec := TemplateSpec{Mapping: MappingConfig{
+		Version:          3,
+		Mode:             ModeHeader,
+		Columns:          map[string]string{"source.document_no": "no", "product.alias_spec": "spec"},
+		SplitSkuQuantity: "product.alias_spec",
+		Required:         []string{"source.document_no"},
+	}}
+	// Row 1 expands into two lines, row 2 loses its required key, row 3 has
+	// an unparseable split blob.
+	data := []byte("no,spec\nA,1_x * 1|2_y * 2\n,3_z * 1\nC,4_w * bad\n")
+	preview, err := TestTemplate(data, FormatCSV, spec, 1)
+	if err != nil {
+		t.Fatalf("test template: %v", err)
+	}
+	if len(preview.Rows) != 1 || preview.TotalRows != 2 {
+		t.Fatalf("rows = %d total = %d, want 1 shown of 2 produced", len(preview.Rows), preview.TotalRows)
+	}
+	if preview.DroppedRows != 2 {
+		t.Fatalf("dropped = %d, want 2 (required-key row + split failure)", preview.DroppedRows)
+	}
+	if len(preview.Issues) != 2 {
+		t.Fatalf("issues = %+v, want one per dropped row", preview.Issues)
+	}
 }

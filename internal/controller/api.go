@@ -20,6 +20,12 @@ func (c *WorkspaceController) EnsureBuiltinPlatforms() error {
 	return c.ws.EnsureBuiltinPlatforms(c.ctx())
 }
 
+// EnsureBuiltinTemplates re-seeds the read-only template catalog; startup
+// runs it after EnsureBuiltinPlatforms.
+func (c *WorkspaceController) EnsureBuiltinTemplates() error {
+	return c.ws.EnsureBuiltinTemplates(c.ctx())
+}
+
 func (c *WorkspaceController) ListPlatforms() ([]domain.Platform, error) {
 	return c.ws.ListPlatforms(c.ctx())
 }
@@ -85,6 +91,7 @@ func (c *WorkspaceController) CreateBundleComponent(comp domain.ProductBundleCom
 	return c.ws.CreateBundleComponent(c.ctx(), &comp)
 }
 
+// CreateTemplate stores a new active (user) template at version 1.
 func (c *WorkspaceController) CreateTemplate(t domain.TemplateConfig) (*domain.TemplateConfig, error) {
 	if err := c.ws.CreateTemplate(c.ctx(), &t); err != nil {
 		return nil, err
@@ -92,8 +99,31 @@ func (c *WorkspaceController) CreateTemplate(t domain.TemplateConfig) (*domain.T
 	return &t, nil
 }
 
+func (c *WorkspaceController) GetTemplate(id uint) (*domain.TemplateConfig, error) {
+	return c.ws.GetTemplate(c.ctx(), id)
+}
+
+// UpdateTemplate edits a user template in place and advances its version;
+// built-in rows are refused.
+func (c *WorkspaceController) UpdateTemplate(t domain.TemplateConfig) (*domain.TemplateConfig, error) {
+	return c.ws.UpdateTemplate(c.ctx(), &t)
+}
+
+// DeleteTemplate removes a user template; built-in rows are refused.
+func (c *WorkspaceController) DeleteTemplate(id uint) error {
+	return c.ws.DeleteTemplate(c.ctx(), id)
+}
+
+// ListTemplates returns built-in and user templates; the Builtin flag tells
+// them apart.
 func (c *WorkspaceController) ListTemplates() ([]domain.TemplateConfig, error) {
 	return c.ws.ListTemplates(c.ctx())
+}
+
+// DocumentTypeCatalog returns the closed document-type set with the direction
+// and platform kind each type locks.
+func (c *WorkspaceController) DocumentTypeCatalog() []app.DocumentTypeInfo {
+	return c.ws.DocumentTypeCatalog()
 }
 
 func (c *WorkspaceController) SemanticDictionary() []string { return c.ws.SemanticDictionary() }
@@ -111,6 +141,21 @@ func (c *WorkspaceController) ListCarrierMappings(platformID uint) ([]domain.Car
 	return c.ws.ListCarrierMappings(c.ctx(), platformID)
 }
 
+func (c *WorkspaceController) UpdateCarrierMapping(m domain.CarrierMapping) (*domain.CarrierMapping, error) {
+	return c.ws.UpdateCarrierMapping(c.ctx(), &m)
+}
+
+func (c *WorkspaceController) DeleteCarrierMapping(id uint) error {
+	return c.ws.DeleteCarrierMapping(c.ctx(), id)
+}
+
+// ImportCarrierMappings loads a source platform's carrier table from a file;
+// nameHeader and codeHeader name the columns carrying the carrier description
+// and the platform's carrier code.
+func (c *WorkspaceController) ImportCarrierMappings(platformID uint, filePath, nameHeader, codeHeader string) (*app.ImportCarrierMappingsResult, error) {
+	return c.ws.ImportCarrierMappings(c.ctx(), platformID, filePath, nameHeader, codeHeader)
+}
+
 func (c *WorkspaceController) UpdateAlias(aliasID, productItemID uint) error {
 	return c.ws.UpdateAlias(c.ctx(), aliasID, productItemID)
 }
@@ -119,7 +164,20 @@ func (c *WorkspaceController) ImportFile(platformID, templateID uint, filePath s
 	return c.ws.ImportFile(c.ctx(), platformID, templateID, filePath)
 }
 
-func (c *WorkspaceController) PreviewTemplate(templateID uint, filePath string, limit int) (alignment.TemplatePreview, error) {
+// InspectSampleFile returns a file's raw records (first row = candidate
+// header), its format, and xlsx sheet names, without applying any mapping.
+func (c *WorkspaceController) InspectSampleFile(filePath, sheetName string, limit int) (*app.SampleFileInfo, error) {
+	return c.ws.InspectSampleFile(c.ctx(), filePath, sheetName, limit)
+}
+
+// PreviewMapping runs an unsaved mapping JSON against a sample file.
+func (c *WorkspaceController) PreviewMapping(mappingJSON, documentType, filePath string, limit int) (*alignment.TemplatePreview, error) {
+	return c.ws.PreviewMapping(c.ctx(), mappingJSON, documentType, filePath, limit)
+}
+
+// PreviewTemplate runs a saved template (built-in ones included) against a
+// sample file.
+func (c *WorkspaceController) PreviewTemplate(templateID uint, filePath string, limit int) (*alignment.TemplatePreview, error) {
 	return c.ws.PreviewTemplate(c.ctx(), templateID, filePath, limit)
 }
 
@@ -298,8 +356,10 @@ func (c *WorkspaceController) ImportShipment(trackingID, trackingNo, carrierCode
 	return c.ws.ImportShipment(c.ctx(), trackingID, trackingNo, carrierCode, carrierName, qty)
 }
 
-func (c *WorkspaceController) ImportShipmentFile(platformID uint, filePath string) (*app.ImportShipmentFileResult, error) {
-	return c.ws.ImportShipmentFile(c.ctx(), platformID, filePath)
+// ImportShipmentFile imports a factory shipment return through the given
+// active shipment_return template of the factory platform.
+func (c *WorkspaceController) ImportShipmentFile(platformID, templateID uint, filePath string) (*app.ImportShipmentFileResult, error) {
+	return c.ws.ImportShipmentFile(c.ctx(), platformID, templateID, filePath)
 }
 
 func (c *WorkspaceController) ExportFactoryOrderFile(orderID uint) (*app.ExportFileResult, error) {
