@@ -82,6 +82,8 @@ frontend/scripts/          guardrails 与枚举生成器
 
 使用 `service.ResolveDataDir()` / `service.ResolveAssetsDir()` 获取路径。
 
+注意：便携模式（`.portable`）的验证必须用 `wails3 build` 的 production 产物——非 production 标签的二进制一律按开发模式落工作目录 `data/`，`.portable` 对其不生效。
+
 ## 7. 测试与验证
 
 - 后端改动：补聚焦的回归测试，执行 `go test ./...`

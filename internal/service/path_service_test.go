@@ -33,7 +33,14 @@ func stubEnv(t *testing.T, dev bool, wd, execPath, userConfigDir string, portabl
 			}
 			return userConfigDir, nil
 		},
-		stat: func(string) (fs.FileInfo, error) {
+		stat: func(path string) (fs.FileInfo, error) {
+			// The portable probe must target exactly <exe dir>/.portable.
+			if base := filepath.Base(path); base != portableMarkerName {
+				t.Fatalf("stat probe: base = %q, want %q", base, portableMarkerName)
+			}
+			if dir := filepath.Dir(path); dir != filepath.Dir(execPath) {
+				t.Fatalf("stat probe: dir = %q, want exe dir %q", dir, filepath.Dir(execPath))
+			}
 			if !portableExists {
 				return nil, os.ErrNotExist
 			}
@@ -162,16 +169,5 @@ func TestResolveDataDir_CreatesDirectory(t *testing.T) {
 	info, err := os.Stat(got)
 	if err != nil || !info.IsDir() {
 		t.Fatalf("data dir %q was not created: %v", got, err)
-	}
-}
-
-func TestIsDevBuild_MatchesBuildTags(t *testing.T) {
-	t.Parallel()
-
-	// Without -tags production (plain `go test`) the dev variant is compiled
-	// in; `go test -tags production` compiles the other side. Both variants
-	// must compile, which this file's existence already checks.
-	if !isDevBuild() {
-		t.Log("production build: isDevBuild() = false as expected with -tags production")
 	}
 }

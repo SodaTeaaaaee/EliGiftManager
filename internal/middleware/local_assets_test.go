@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -93,7 +94,6 @@ func TestLocalAssetsMiddleware_BlocksDirectoryTraversal(t *testing.T) {
 	// which is exactly the hostile shape the guard must survive.
 	for _, path := range []string{
 		"/local-images/../secret.txt",
-		"/local-images/..%5Csecret.txt",
 		"/local-images/%2e%2e/secret.txt",
 		"/local-images/products/../../../secret.txt",
 	} {
@@ -105,6 +105,22 @@ func TestLocalAssetsMiddleware_BlocksDirectoryTraversal(t *testing.T) {
 		if strings.Contains(rec.Body.String(), "secret") {
 			t.Errorf("GET %s: response leaked outside content: %q", path, rec.Body.String())
 		}
+	}
+
+	// "%5C" only decodes into a path separator on Windows, where it must be
+	// blocked; on other platforms it stays a plain character inside a file
+	// name and simply misses the assets dir.
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/local-images/..%5Csecret.txt", nil))
+	want := http.StatusNotFound
+	if runtime.GOOS == "windows" {
+		want = http.StatusForbidden
+	}
+	if rec.Code != want {
+		t.Errorf("GET /local-images/..%%5Csecret.txt: code = %d, want %d", rec.Code, want)
+	}
+	if strings.Contains(rec.Body.String(), "secret") {
+		t.Errorf("GET /local-images/..%%5Csecret.txt: response leaked outside content: %q", rec.Body.String())
 	}
 
 	// Sanity: the traversal target really exists next to the assets dir.
