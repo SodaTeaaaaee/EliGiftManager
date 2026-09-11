@@ -5,7 +5,7 @@
 // `Wire` suffix (see bridge.ts). This facade narrows those wire shapes into
 // the names the UI already uses, so pages keep importing from
 // '@/entities/models' and never touch the generated modules (guardrails
-// enforces that for src/pages/**).
+// enforces that for all of src/, exempting bridge.ts itself).
 //
 // Deliberate deviations from the raw generated shapes — each kept because the
 // existing UI contract depends on it:
