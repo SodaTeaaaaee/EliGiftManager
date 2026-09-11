@@ -33,7 +33,7 @@ cd frontend && deno install && cd ..
 | `cd frontend && deno task lint:guardrails` | UI/import guardrails 与生成枚举一致性检查 |
 | `go test ./...` | 后端测试 |
 | `wails3 build` | 桌面打包 |
-| `wails3 generate bindings` | 变更绑定的服务方法后重新生成前端绑定（`frontend/bindings/`） |
+| `wails3 task common:generate:bindings` | 变更绑定的服务方法后重新生成前端绑定（`frontend/bindings/`，已提交）。等价全参数形式为 `wails3 generate bindings -clean=true -ts -i`；不带参数的裸命令会删光已提交的 `.ts` 并改产出 `.js`，不要运行 |
 
 版本号升级需同步四处：`internal/config/config.go`、`build/config.yml`、`build/windows/info.json`、`build/windows/wails.exe.manifest`。
 

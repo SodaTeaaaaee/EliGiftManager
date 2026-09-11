@@ -26,7 +26,7 @@ go mod tidy
 go test ./...
 wails3 dev
 wails3 build
-wails3 generate bindings
+wails3 task common:generate:bindings
 
 cd frontend && deno task dev
 cd frontend && deno task typecheck
@@ -36,7 +36,7 @@ cd frontend && deno task lint:guardrails
 cd frontend && deno task gen:enums
 ```
 
-Use Deno for frontend work. Do not use npm, yarn, or pnpm. Run `wails3 generate bindings` after changing bound service methods.
+Use Deno for frontend work. Do not use npm, yarn, or pnpm. Run `wails3 task common:generate:bindings` after changing bound service methods (the task in `build/Taskfile.yml`; full form `wails3 generate bindings -clean=true -ts -i`). The bare `wails3 generate bindings` without flags deletes the committed `.ts` bindings and emits `.js`.
 
 ## Boundaries
 

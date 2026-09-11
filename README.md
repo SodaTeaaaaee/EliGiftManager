@@ -52,7 +52,7 @@ go mod tidy
 go test ./...
 wails3 dev
 wails3 build
-wails3 generate bindings
+wails3 task common:generate:bindings
 
 cd frontend && deno task dev
 cd frontend && deno task typecheck
@@ -62,7 +62,7 @@ cd frontend && deno task lint:guardrails
 cd frontend && deno task gen:enums
 ```
 
-Deno is the frontend task runner. Do not use npm, yarn, or pnpm for project tasks.
+Deno is the frontend task runner. Do not use npm, yarn, or pnpm for project tasks. Regenerate bindings with `wails3 task common:generate:bindings` (full form `wails3 generate bindings -clean=true -ts -i`); the bare `wails3 generate bindings` without flags deletes the committed `.ts` bindings and emits `.js`.
 
 ## Generated and runtime paths
 
