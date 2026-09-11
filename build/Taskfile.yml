@@ -1,0 +1,86 @@
+version: '3'
+
+# Common tasks shared by all platforms. The frontend is Deno-driven
+# (frontend/deno.json); package-manager dispatch is intentionally omitted.
+
+tasks:
+  go:mod:tidy:
+    summary: Runs `go mod tidy`
+    internal: true
+    run: once
+    cmds:
+      - go mod tidy
+
+  install:frontend:deps:
+    summary: Install frontend dependencies (deno install)
+    run: once
+    dir: frontend
+    sources:
+      - deno.json
+      - deno.lock
+      - package.json
+    generates:
+      - node_modules
+    preconditions:
+      - sh: deno --version
+        msg: "Looks like deno isn't installed. See https://deno.com"
+    cmds:
+      - deno task prepare
+
+  build:frontend:
+    summary: Build the frontend project
+    run: once
+    dir: frontend
+    sources:
+      - '**/*'
+      - exclude: node_modules/**/*
+    generates:
+      - dist/**/*
+    deps:
+      - task: install:frontend:deps
+      - task: generate:bindings
+        vars:
+          BUILD_FLAGS:
+            ref: .BUILD_FLAGS
+          OBFUSCATED:
+            ref: .OBFUSCATED
+    cmds:
+      - deno task build
+    env:
+      PRODUCTION: '{{if eq .DEV "true"}}false{{else}}true{{end}}'
+
+  generate:bindings:
+    summary: Generates TypeScript bindings for the frontend
+    run: once
+    deps:
+      - task: go:mod:tidy
+    sources:
+      - '**/*.[jt]s'
+      - exclude: frontend/**/*
+      - frontend/bindings/**/*  # Rerun when switching between dev/production mode causes changes in output
+      - '**/*.go'
+      - go.mod
+      - go.sum
+    generates:
+      - frontend/bindings/**/*
+    cmds:
+      - wails3 generate bindings -f '{{.BUILD_FLAGS}}' -clean=true -ts -i
+
+  generate:icons:
+    summary: Regenerates build/windows/icon.ico from build/appicon.png
+    run: once
+    dir: build
+    sources:
+      - appicon.png
+    generates:
+      - windows/icon.ico
+    cmds:
+      - wails3 generate icons -input appicon.png -windowsfilename windows/icon.ico
+
+  dev:frontend:
+    summary: Runs the frontend dev server (vite on 127.0.0.1:5173)
+    deps:
+      - task: install:frontend:deps
+    dir: frontend
+    cmds:
+      - deno task dev

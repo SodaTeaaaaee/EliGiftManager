@@ -5,17 +5,17 @@ import (
 	"embed"
 	"log/slog"
 	"os"
+	"path/filepath"
 
-	application "github.com/SodaTeaaaaee/EliGiftManager/internal/app"
+	appcore "github.com/SodaTeaaaaee/EliGiftManager/internal/app"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/config"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/controller"
 	database "github.com/SodaTeaaaaee/EliGiftManager/internal/db"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/infra"
 	"github.com/SodaTeaaaaee/EliGiftManager/internal/middleware"
-	"github.com/wailsapp/wails/v2"
-	"github.com/wailsapp/wails/v2/pkg/options"
-	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
-	wailsWindows "github.com/wailsapp/wails/v2/pkg/options/windows"
+	"github.com/SodaTeaaaaee/EliGiftManager/internal/service"
+	application "github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -23,10 +23,9 @@ var assets embed.FS
 
 func main() {
 	cfg := config.Load()
-	app := NewApp(cfg)
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	dbPath, err := app.resolveDatabasePath()
+	dbPath, err := resolveDatabasePath()
 	if err != nil {
 		logger.Error("resolve database path", "error", err)
 		os.Exit(1)
@@ -44,7 +43,7 @@ func main() {
 	database.SetDefaultDB(gdb)
 	defer sqlDB.Close()
 
-	ws := application.NewWorkspace(infra.NewGormStore(gdb))
+	ws := appcore.NewWorkspace(infra.NewGormStore(gdb))
 	if err := ws.EnsureBuiltinPlatforms(context.Background()); err != nil {
 		logger.Error("seed builtin platforms", "error", err)
 		os.Exit(1)
@@ -53,33 +52,50 @@ func main() {
 		logger.Error("seed builtin templates", "error", err)
 		os.Exit(1)
 	}
-	zoom := LoadZoom()
 
-	err = wails.Run(&options.App{
-		Title:     cfg.Name,
-		Width:     cfg.WindowWidth,
-		Height:    cfg.WindowHeight,
-		MinWidth:  cfg.MinWindowWidth,
-		MinHeight: cfg.MinWindowHeight,
-		AssetServer: &assetserver.Options{
-			Assets:     assets,
+	app := application.New(application.Options{
+		Name:        cfg.Name,
+		Description: cfg.Description,
+		Services: []application.Service{
+			application.NewService(controller.NewWorkspaceController(ws)),
+			application.NewService(controller.NewFileSystemController()),
+		},
+		Assets: application.AssetOptions{
+			Handler:    application.AssetFileServerFS(assets),
 			Middleware: middleware.LocalAssetsMiddleware("/local-images/"),
 		},
-		BackgroundColour: &options.RGBA{R: 20, G: 18, B: 16, A: 1},
-		Windows: &wailsWindows.Options{
-			ZoomFactor:           zoom / 100.0,
-			IsZoomControlEnabled: true,
-		},
-		OnStartup:     app.startup,
-		OnBeforeClose: app.beforeClose,
-		Bind: []any{
-			app,
-			controller.NewWorkspaceController(ws),
-			controller.NewFileSystemController(),
-		},
 	})
-	if err != nil {
+
+	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Name:               "main",
+		Title:              cfg.Name,
+		Width:              cfg.WindowWidth,
+		Height:             cfg.WindowHeight,
+		MinWidth:           cfg.MinWindowWidth,
+		MinHeight:          cfg.MinWindowHeight,
+		BackgroundColour:   application.RGBA{Red: 20, Green: 18, Blue: 16, Alpha: 255},
+		Zoom:               LoadZoomPercent() / 100.0,
+		ZoomControlEnabled: true,
+	})
+
+	// Persist the zoom level when the window is about to close. The hook runs
+	// before the webview is torn down, so GetZoom still reads a live value.
+	win.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
+		if err := SaveZoomPercent(win.GetZoom() * 100); err != nil {
+			logger.Warn("save zoom", "error", err)
+		}
+	})
+
+	if err := app.Run(); err != nil {
 		logger.Error("run wails application", "error", err)
 		os.Exit(1)
 	}
+}
+
+func resolveDatabasePath() (string, error) {
+	dataDir, err := service.ResolveDataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dataDir, "eligiftmanager.db"), nil
 }

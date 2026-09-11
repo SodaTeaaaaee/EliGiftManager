@@ -65,6 +65,7 @@ wailsdev.log
 .wails/
 .wails-scaffold/
 .vue-scaffold/
+.task/
 *.pdb
 *.msi
 
