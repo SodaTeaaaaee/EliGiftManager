@@ -82,6 +82,7 @@ export type {
   InstanceViewWire as InstanceView,
   ProductTotalWire as ProductTotal,
   ParseIssueWire as ParseIssue,
+  SkippedShipmentWire as SkippedShipment,
 } from '@/shared/api/bridge'
 
 // ── Frontend-only types (no generated counterpart) ──
