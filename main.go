@@ -84,10 +84,13 @@ func main() {
 	// GetZoomFactor errors), so skip non-positive sentinels instead of letting
 	// the clamp persist them as 25.
 	win.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
-		if z := win.GetZoom(); z > 0 {
+		z := win.GetZoom()
+		if z > 0 {
 			if err := SaveZoomPercent(z * 100); err != nil {
 				logger.Warn("save zoom", "error", err)
 			}
+		} else {
+			logger.Warn("skip zoom persistence: GetZoom returned non-positive sentinel, keeping existing zoom.cfg", "zoom", z)
 		}
 	})
 
