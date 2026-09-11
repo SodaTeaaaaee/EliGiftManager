@@ -80,9 +80,14 @@ func main() {
 
 	// Persist the zoom level when the window is about to close. The hook runs
 	// before the webview is torn down, so GetZoom still reads a live value.
+	// GetZoom returns -1 when the underlying zoom query fails (e.g. Windows
+	// GetZoomFactor errors), so skip non-positive sentinels instead of letting
+	// the clamp persist them as 25.
 	win.RegisterHook(events.Common.WindowClosing, func(*application.WindowEvent) {
-		if err := SaveZoomPercent(win.GetZoom() * 100); err != nil {
-			logger.Warn("save zoom", "error", err)
+		if z := win.GetZoom(); z > 0 {
+			if err := SaveZoomPercent(z * 100); err != nil {
+				logger.Warn("save zoom", "error", err)
+			}
 		}
 	})
 

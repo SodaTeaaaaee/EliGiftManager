@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -23,19 +24,27 @@ func zoomFilePath() (string, error) {
 }
 
 // LoadZoomPercent reads the saved zoom percentage from zoom.cfg. Returns 100
-// if the file is missing, unreadable, or out of the 25–500 range. Values
-// written by the legacy v2 binding ("125.00") still parse.
+// if the file is missing, unreadable, unparsable (including NaN), or outside
+// the 25–500 range. Values written by the legacy v2 binding ("125.00") still
+// parse.
 func LoadZoomPercent() float64 {
 	path, err := zoomFilePath()
 	if err != nil {
 		return 100
 	}
+	return loadZoomPercentFrom(path)
+}
+
+// loadZoomPercentFrom is the path-injectable core of LoadZoomPercent. NaN must
+// be rejected explicitly: all comparisons against NaN are false, so the range
+// checks alone would let it through. ±Inf is already caught by them.
+func loadZoomPercentFrom(path string) float64 {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return 100
 	}
 	v, err := strconv.ParseFloat(string(data), 64)
-	if err != nil || v < zoomMinPercent || v > zoomMaxPercent {
+	if err != nil || math.IsNaN(v) || v < zoomMinPercent || v > zoomMaxPercent {
 		return 100
 	}
 	return v
@@ -44,15 +53,20 @@ func LoadZoomPercent() float64 {
 // SaveZoomPercent clamps the zoom percentage to 25–500 and writes it to
 // zoom.cfg as an integer percentage.
 func SaveZoomPercent(percent float64) error {
+	cfgPath, err := zoomFilePath()
+	if err != nil {
+		return err
+	}
+	return saveZoomPercentTo(cfgPath, percent)
+}
+
+// saveZoomPercentTo is the path-injectable core of SaveZoomPercent.
+func saveZoomPercentTo(path string, percent float64) error {
 	if percent < zoomMinPercent {
 		percent = zoomMinPercent
 	}
 	if percent > zoomMaxPercent {
 		percent = zoomMaxPercent
 	}
-	cfgPath, err := zoomFilePath()
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(cfgPath, fmt.Appendf(nil, "%d", int64(percent+0.5)), 0o644)
+	return os.WriteFile(path, fmt.Appendf(nil, "%d", int64(percent+0.5)), 0o644)
 }
