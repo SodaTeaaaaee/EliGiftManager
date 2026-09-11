@@ -1,5 +1,8 @@
-// Bridge: strong-typed thin wrappers over generated Wails bindings.
-// Never import from "wailsjs" directly outside this file.
+// Bridge: strong-typed thin wrappers over the Wails v3 generated bindings.
+// This is the only file in src/ allowed to import from frontend/bindings/ or
+// @wailsio/runtime; pages go through '@/shared/api/bridge' exclusively.
+
+import { Dialogs } from '@wailsio/runtime'
 
 import {
   ApplyRevision as _ApplyRevision,
@@ -76,12 +79,74 @@ import {
   UpdateTemplate as _UpdateTemplate,
   UpsertRule as _UpsertRule,
   VoidFactoryOrder as _VoidFactoryOrder,
-} from '../../../wailsjs/go/controller/WorkspaceController'
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/controller/workspacecontroller'
 
 import {
   GetDataDir as _GetDataDir,
   RevealInFolder as _RevealInFolder,
-} from '../../../wailsjs/go/controller/FileSystemController'
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/controller/filesystemcontroller'
+
+// ── Generated model types: wire shapes for the entities facade ──
+// The bridge is the only file in src/ allowed to import frontend/bindings,
+// so the type facade (src/entities/models.ts) builds on these re-exports.
+// Type-only: erased at runtime, so this adds no code to the bundle. The
+// `Wire` suffix marks the raw generated forms; the facade narrows them into
+// the UI-facing names. Note BlockReason/WorkState enum objects are left out
+// on purpose — the UI keeps the string-literal unions from
+// @/shared/api/generated/enums (values are identical over the wire).
+
+export type {
+  AddressSnapshot as AddressSnapshotWire,
+  AppSettings as AppSettingsWire,
+  CarrierMapping as CarrierMappingWire,
+  ChannelWritebackItem as ChannelWritebackItemWire,
+  CustomerProfile as CustomerProfileWire,
+  DuplicateObservation as DuplicateObservationWire,
+  EntitlementException as EntitlementExceptionWire,
+  EntitlementRule as EntitlementRuleWire,
+  EntitlementSelector as EntitlementSelectorWire,
+  FulfillmentResult as FulfillmentResultWire,
+  InputDocument as InputDocumentWire,
+  InputFact as InputFactWire,
+  InputFactLine as InputFactLineWire,
+  Platform as PlatformWire,
+  ProductAlias as ProductAliasWire,
+  ProductBundleComponent as ProductBundleComponentWire,
+  ProductItem as ProductItemWire,
+  QuantitySplitRule as QuantitySplitRuleWire,
+  RecipientAddress as RecipientAddressWire,
+  Shipment as ShipmentWire,
+  SupplierOrder as SupplierOrderWire,
+  SupplierOrderLine as SupplierOrderLineWire,
+  TemplateConfig as TemplateConfigWire,
+  Wave as WaveWire,
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/domain/models'
+
+export type {
+  DocumentTypeInfo as DocumentTypeInfoWire,
+  ExceptionView as ExceptionViewWire,
+  ExportFileResult as ExportFileResultWire,
+  GenerateFactoryOrderResult as GenerateFactoryOrderResultWire,
+  HomeBuckets as HomeBucketsWire,
+  ImportCarrierMappingsResult as ImportCarrierMappingsResultWire,
+  ImportFileResult as ImportFileResultWire,
+  ImportShipmentFileResult as ImportShipmentFileResultWire,
+  IngestDocumentResult as IngestDocumentResultWire,
+  IngestFactInput as IngestFactInputWire,
+  IngestLine as IngestLineWire,
+  InboxRow as InboxRowWire,
+  InstanceView as InstanceViewWire,
+  ProductTotal as ProductTotalWire,
+  ResultView as ResultViewWire,
+  SampleFileInfo as SampleFileInfoWire,
+  SkippedShipment as SkippedShipmentWire,
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/app/models'
+
+export type {
+  ParseIssue as ParseIssueWire,
+  PreviewRow as PreviewRowWire,
+  TemplatePreview as TemplatePreviewWire,
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/app/alignment/models'
 
 import type {
   AppSettings,
@@ -89,7 +154,6 @@ import type {
   ChannelWritebackItem,
   CustomerProfile,
   DocumentTypeInfo,
-  DuplicateObservation,
   EntitlementException,
   EntitlementRule,
   ExceptionView,
@@ -105,9 +169,7 @@ import type {
   IngestFactInput,
   InputDocument,
   InstanceView,
-  ParseIssue,
   Platform,
-  PreviewRow,
   ProductAlias,
   ProductBundleComponent,
   ProductItem,
@@ -117,7 +179,6 @@ import type {
   ResultView,
   SampleFileInfo,
   Shipment,
-  SkippedShipment,
   SupplierOrder,
   SupplierOrderLine,
   TemplateConfig,
@@ -125,16 +186,52 @@ import type {
   Wave,
 } from '@/entities/models'
 
-import type { app as wailsApp, domain as wailsDomain } from '../../../wailsjs/go/models'
+// Wire shapes the facade deliberately loosens (optional ids/timestamps); the
+// generated controller signatures want the strict forms.
+import type {
+  AppSettings as AppSettingsWire,
+  QuantitySplitRule as QuantitySplitRuleWire,
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/domain/models'
+
+import type {
+  ExportFileResult as ExportFileResultWire,
+  ImportFileResult as ImportFileResultWire,
+  ImportShipmentFileResult as ImportShipmentFileResultWire,
+  IngestDocumentResult as IngestDocumentResultWire,
+  GenerateFactoryOrderResult as GenerateFactoryOrderResultWire,
+  SampleFileInfo as SampleFileInfoWire,
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/app/models'
+
+import type {
+  TemplatePreview as TemplatePreviewWire,
+} from '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/app/alignment/models'
 
 import { markBridgeMissing, markBridgeSeen } from './health'
 
 // ── Guards ──
 
+/**
+ * Host bridge objects the Wails v3 runtime itself probes to tell a WebView
+ * from a plain browser (see @wailsio/runtime dist/system.js, `_invoke`):
+ * `window.chrome.webview` (WebView2), `window.webkit.messageHandlers.external`
+ * (WKWebView), `window.wails` (Android WebView). Unlike the post-navigation
+ * `window._wails` init script these exist before any page script runs, so the
+ * check is synchronous and race-free.
+ */
+interface WailsHostGlobals {
+  chrome?: { webview?: { postMessage?: unknown } }
+  webkit?: { messageHandlers?: Record<string, { postMessage?: unknown } | undefined> }
+  wails?: { invoke?: unknown }
+}
+
 function isWailsRuntimeAvailable(): boolean {
   if (typeof window === 'undefined') return false
-  const w = window as unknown as { go?: { controller?: unknown } }
-  const ok = Boolean(w.go?.controller)
+  const w = window as unknown as WailsHostGlobals
+  const ok = Boolean(
+    w.chrome?.webview?.postMessage ??
+      w.webkit?.messageHandlers?.['external']?.postMessage ??
+      w.wails?.invoke,
+  )
   if (ok) {
     markBridgeSeen()
   } else {
@@ -153,78 +250,68 @@ function assertWailsRuntime(): void {
 
 export async function listPlatforms(): Promise<Platform[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListPlatforms()
-  return (res ?? []) as unknown as Platform[]
+  return (await _ListPlatforms()) ?? []
 }
 
 /** Register a new source/factory platform manually. */
 export async function createPlatform(input: Partial<Platform>): Promise<void> {
   assertWailsRuntime()
-  await _CreatePlatform(input as wailsDomain.Platform)
+  await _CreatePlatform(input as Platform)
 }
 
 // ── WorkspaceController: Customers & Addresses ──
 
 export async function createCustomer(name: string, notes = ''): Promise<CustomerProfile> {
   assertWailsRuntime()
-  const res = await _CreateCustomer(name, notes)
-  return res as unknown as CustomerProfile
+  return (await _CreateCustomer(name, notes)) as CustomerProfile
 }
 
 export async function listCustomers(): Promise<CustomerProfile[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListCustomers()
-  return (res ?? []) as unknown as CustomerProfile[]
+  return (await _ListCustomers()) ?? []
 }
 
 export async function getCustomer(id: number): Promise<CustomerProfile> {
   assertWailsRuntime()
-  const res = await _GetCustomer(id)
-  return res as unknown as CustomerProfile
+  return (await _GetCustomer(id)) as CustomerProfile
 }
 
 /** Persist edits to an existing customer profile. */
 export async function updateCustomer(input: Partial<CustomerProfile>): Promise<void> {
   assertWailsRuntime()
-  await _UpdateCustomer(input as wailsDomain.CustomerProfile)
+  await _UpdateCustomer(input as CustomerProfile)
 }
 
 export async function createAddress(input: Partial<RecipientAddress>): Promise<RecipientAddress> {
   assertWailsRuntime()
-  const res = await _CreateAddress(input as wailsDomain.RecipientAddress)
-  return res as unknown as RecipientAddress
+  return (await _CreateAddress(input as RecipientAddress)) as RecipientAddress
 }
 
 export async function listAddresses(customerID: number): Promise<RecipientAddress[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListAddresses(customerID)
-  return (res ?? []) as unknown as RecipientAddress[]
+  return (await _ListAddresses(customerID)) ?? []
 }
 
 // ── WorkspaceController: Products & Aliases ──
 
 export async function createProduct(input: Partial<ProductItem>): Promise<ProductItem> {
   assertWailsRuntime()
-  const res = await _CreateProduct(input as wailsDomain.ProductItem)
-  return res as unknown as ProductItem
+  return (await _CreateProduct(input as ProductItem)) as ProductItem
 }
 
 export async function listProducts(): Promise<ProductItem[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListProducts()
-  return (res ?? []) as unknown as ProductItem[]
+  return (await _ListProducts()) ?? []
 }
 
 export async function createAlias(input: Partial<ProductAlias>): Promise<ProductAlias> {
   assertWailsRuntime()
-  const res = await _CreateAlias(input as wailsDomain.ProductAlias)
-  return res as unknown as ProductAlias
+  return (await _CreateAlias(input as ProductAlias)) as ProductAlias
 }
 
 export async function listAliases(productID: number): Promise<ProductAlias[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListAliases(productID)
-  return (res ?? []) as unknown as ProductAlias[]
+  return (await _ListAliases(productID)) ?? []
 }
 
 export async function updateAlias(aliasID: number, productItemID: number): Promise<void> {
@@ -237,34 +324,30 @@ export async function createBundleComponent(
   input: Partial<ProductBundleComponent>,
 ): Promise<void> {
   assertWailsRuntime()
-  await _CreateBundleComponent(input as wailsDomain.ProductBundleComponent)
+  await _CreateBundleComponent(input as ProductBundleComponent)
 }
 
 // ── WorkspaceController: Templates & Carrier Mappings ──
 
 export async function createTemplate(input: Partial<TemplateConfig>): Promise<TemplateConfig> {
   assertWailsRuntime()
-  const res = await _CreateTemplate(input as wailsDomain.TemplateConfig)
-  return res as unknown as TemplateConfig
+  return (await _CreateTemplate(input as TemplateConfig)) as TemplateConfig
 }
 
 export async function listTemplates(): Promise<TemplateConfig[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListTemplates()
-  return (res ?? []) as unknown as TemplateConfig[]
+  return (await _ListTemplates()) ?? []
 }
 
 export async function getTemplate(id: number): Promise<TemplateConfig> {
   assertWailsRuntime()
-  const res = await _GetTemplate(id)
-  return res as unknown as TemplateConfig
+  return (await _GetTemplate(id)) as TemplateConfig
 }
 
 /** Edit an active template in place; the backend bumps Version itself. */
 export async function updateTemplate(input: Partial<TemplateConfig>): Promise<TemplateConfig> {
   assertWailsRuntime()
-  const res = await _UpdateTemplate(input as wailsDomain.TemplateConfig)
-  return res as unknown as TemplateConfig
+  return (await _UpdateTemplate(input as TemplateConfig)) as TemplateConfig
 }
 
 /** Delete an active template; built-ins are refused by the backend. */
@@ -276,20 +359,17 @@ export async function deleteTemplate(id: number): Promise<void> {
 /** Closed set of document types with their locked direction and platform kind. */
 export async function getDocumentTypeCatalog(): Promise<DocumentTypeInfo[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _DocumentTypeCatalog()
-  return (res ?? []) as unknown as DocumentTypeInfo[]
+  return (await _DocumentTypeCatalog()) ?? []
 }
 
 export async function getSemanticDictionary(): Promise<string[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _SemanticDictionary()
-  return res ?? []
+  return (await _SemanticDictionary()) ?? []
 }
 
 export async function getNamedTransformers(): Promise<string[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _NamedTransformers()
-  return res ?? []
+  return (await _NamedTransformers()) ?? []
 }
 
 /**
@@ -302,37 +382,28 @@ export async function inspectSampleFile(
   limit: number,
 ): Promise<SampleFileInfo> {
   assertWailsRuntime()
-  const res = await _InspectSampleFile(filePath, sheetName, limit)
+  const res = (await _InspectSampleFile(filePath, sheetName, limit)) as SampleFileInfoWire
   return {
-    Format: res?.Format ?? '',
-    Sheets: (res?.Sheets ?? []) as string[],
-    Records: ((res?.Records ?? []) as unknown as string[][]).map((row) =>
+    Format: res.Format ?? '',
+    Sheets: res.Sheets ?? [],
+    Records: (res.Records ?? []).map((row) =>
       (row ?? []).map((cell) => (cell == null ? '' : String(cell))),
     ),
-    Total: res?.Total ?? 0,
+    Total: res.Total ?? 0,
   }
 }
 
-function toTemplatePreview(res: unknown): TemplatePreview {
-  const raw = (res ?? {}) as {
-    Rows?: unknown[]
-    Issues?: unknown[]
-    TotalRows?: number
-    DroppedRows?: number
-  }
+function toTemplatePreview(res: TemplatePreviewWire | null): TemplatePreview {
   return {
-    Rows: (raw.Rows ?? []).map((row) => {
-      const r = (row ?? {}) as Partial<PreviewRow>
-      return {
-        LineNo: r.LineNo ?? 0,
-        SourceRow: r.SourceRow ?? 0,
-        Values: (r.Values ?? {}) as Record<string, string>,
-        Fingerprint: r.Fingerprint ?? '',
-      }
-    }),
-    Issues: (raw.Issues ?? []) as ParseIssue[],
-    TotalRows: raw.TotalRows ?? 0,
-    DroppedRows: raw.DroppedRows ?? 0,
+    Rows: (res?.Rows ?? []).map((row) => ({
+      LineNo: row.LineNo ?? 0,
+      SourceRow: row.SourceRow ?? 0,
+      Values: (row.Values ?? {}) as Record<string, string>,
+      Fingerprint: row.Fingerprint ?? '',
+    })),
+    Issues: res?.Issues ?? [],
+    TotalRows: res?.TotalRows ?? 0,
+    DroppedRows: res?.DroppedRows ?? 0,
   }
 }
 
@@ -344,8 +415,7 @@ export async function previewMapping(
   limit: number,
 ): Promise<TemplatePreview> {
   assertWailsRuntime()
-  const res = await _PreviewMapping(mappingJSON, documentType, filePath, limit)
-  return toTemplatePreview(res)
+  return toTemplatePreview(await _PreviewMapping(mappingJSON, documentType, filePath, limit))
 }
 
 /** Parse a sample file through a saved template's mapping config without ingesting. */
@@ -355,8 +425,7 @@ export async function previewTemplate(
   limit: number,
 ): Promise<TemplatePreview> {
   assertWailsRuntime()
-  const res = await _PreviewTemplate(templateID, filePath, limit)
-  return toTemplatePreview(res)
+  return toTemplatePreview(await _PreviewTemplate(templateID, filePath, limit))
 }
 
 /** Import a platform export file through a template into inbox facts. */
@@ -366,32 +435,29 @@ export async function importFile(
   filePath: string,
 ): Promise<ImportFileResult> {
   assertWailsRuntime()
-  const res = await _ImportFile(platformID, templateID, filePath)
+  const res = (await _ImportFile(platformID, templateID, filePath)) as ImportFileResultWire
   return {
-    Document: res.Document as unknown as InputDocument,
+    Document: res.Document,
     FactsCreated: res.FactsCreated ?? 0,
     LinesCreated: res.LinesCreated ?? 0,
-    Duplicates: (res.Duplicates ?? []) as unknown as DuplicateObservation[],
-    Issues: (res.Issues ?? []) as unknown as ParseIssue[],
+    Duplicates: res.Duplicates ?? [],
+    Issues: res.Issues ?? [],
   }
 }
 
 export async function createCarrierMapping(input: Partial<CarrierMapping>): Promise<CarrierMapping> {
   assertWailsRuntime()
-  const res = await _CreateCarrierMapping(input as wailsDomain.CarrierMapping)
-  return res as unknown as CarrierMapping
+  return (await _CreateCarrierMapping(input as CarrierMapping)) as CarrierMapping
 }
 
 export async function listCarrierMappings(platformID: number): Promise<CarrierMapping[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListCarrierMappings(platformID)
-  return (res ?? []) as unknown as CarrierMapping[]
+  return (await _ListCarrierMappings(platformID)) ?? []
 }
 
 export async function updateCarrierMapping(input: Partial<CarrierMapping>): Promise<CarrierMapping> {
   assertWailsRuntime()
-  const res = await _UpdateCarrierMapping(input as wailsDomain.CarrierMapping)
-  return res as unknown as CarrierMapping
+  return (await _UpdateCarrierMapping(input as CarrierMapping)) as CarrierMapping
 }
 
 export async function deleteCarrierMapping(id: number): Promise<void> {
@@ -415,7 +481,7 @@ export async function importCarrierMappings(
     Created: res?.Created ?? 0,
     Updated: res?.Updated ?? 0,
     Skipped: res?.Skipped ?? 0,
-    Issues: (res?.Issues ?? []) as unknown as ParseIssue[],
+    Issues: res?.Issues ?? [],
   }
 }
 
@@ -431,26 +497,28 @@ export async function getSettings(): Promise<AppSettings> {
       DuplicateAskDays: 10,
     }
   }
-  const res = await _GetSettings()
-  return res as unknown as AppSettings
+  return (await _GetSettings()) as AppSettings
 }
 
 export async function saveSettings(input: Partial<AppSettings>): Promise<void> {
   assertWailsRuntime()
-  await _SaveSettings(input as wailsDomain.AppSettings)
+  await _SaveSettings(input as AppSettingsWire)
 }
 
 // ── WorkspaceController: Inbox & Ingestion ──
 
 export async function ingestDocument(
   doc: Partial<InputDocument>,
-  facts: IngestFactInput[],
+  facts: Partial<IngestFactInput>[],
 ): Promise<IngestDocumentResult> {
   assertWailsRuntime()
-  const res = await _IngestDocument(doc as wailsDomain.InputDocument, facts as wailsApp.IngestFactInput[])
+  const res = (await _IngestDocument(
+    doc as InputDocument,
+    facts as IngestFactInput[],
+  )) as IngestDocumentResultWire
   return {
-    Document: res.Document as unknown as InputDocument,
-    Duplicates: (res.Duplicates ?? []) as unknown as DuplicateObservation[],
+    Document: res.Document,
+    Duplicates: res.Duplicates ?? [],
   }
 }
 
@@ -493,28 +561,24 @@ export async function dismissRevision(factID: number): Promise<void> {
 
 export async function listInboxRows(): Promise<InboxRow[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListInboxRows()
-  return (res ?? []) as unknown as InboxRow[]
+  return (await _ListInboxRows()) ?? []
 }
 
 // ── WorkspaceController: Waves ──
 
 export async function createWave(name: string, notes = ''): Promise<Wave> {
   assertWailsRuntime()
-  const res = await _CreateWave(name, notes)
-  return res as unknown as Wave
+  return (await _CreateWave(name, notes)) as Wave
 }
 
 export async function listWaves(): Promise<Wave[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListWaves()
-  return (res ?? []) as unknown as Wave[]
+  return (await _ListWaves()) ?? []
 }
 
 export async function getWave(id: number): Promise<Wave> {
   assertWailsRuntime()
-  const res = await _GetWave(id)
-  return res as unknown as Wave
+  return (await _GetWave(id)) as Wave
 }
 
 export async function closeWave(id: number, result: string, note = ''): Promise<void> {
@@ -531,14 +595,12 @@ export async function reopenWave(id: number): Promise<void> {
 
 export async function upsertRule(rule: Partial<EntitlementRule>): Promise<EntitlementRule> {
   assertWailsRuntime()
-  const res = await _UpsertRule(rule as wailsDomain.EntitlementRule)
-  return res as unknown as EntitlementRule
+  return (await _UpsertRule(rule as EntitlementRule)) as EntitlementRule
 }
 
 export async function listRules(waveID: number): Promise<EntitlementRule[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListRules(waveID)
-  return (res ?? []) as unknown as EntitlementRule[]
+  return (await _ListRules(waveID)) ?? []
 }
 
 /** Delete one rule and recompute the wave's entitlements. */
@@ -550,7 +612,7 @@ export async function deleteRule(ruleID: number): Promise<void> {
 /** Add a per-instance entitlement exception and recompute the wave. */
 export async function addException(input: Partial<EntitlementException>): Promise<void> {
   assertWailsRuntime()
-  await _AddException(input as wailsDomain.EntitlementException)
+  await _AddException(input as EntitlementException)
 }
 
 /** Delete one entitlement exception and recompute the wave. */
@@ -562,21 +624,19 @@ export async function deleteException(exceptionID: number): Promise<void> {
 /** List the wave's exceptions joined with customer and product display names. */
 export async function listExceptions(waveID: number): Promise<ExceptionView[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListExceptions(waveID)
-  return (res ?? []) as unknown as ExceptionView[]
+  return (await _ListExceptions(waveID)) ?? []
 }
 
 /** List the wave's membership instances with display fields for pickers. */
 export async function listEntitlementInstances(waveID: number): Promise<InstanceView[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListEntitlementInstances(waveID)
-  return (res ?? []) as unknown as InstanceView[]
+  return (await _ListEntitlementInstances(waveID)) ?? []
 }
 
 /** Store a wave quantity split (components replaced wholesale) and re-derive covered lines. */
 export async function upsertQuantitySplitRule(rule: Partial<QuantitySplitRule>): Promise<void> {
   assertWailsRuntime()
-  await _UpsertQuantitySplitRule(rule as wailsDomain.QuantitySplitRule)
+  await _UpsertQuantitySplitRule(rule as QuantitySplitRuleWire)
 }
 
 /** Remove a wave quantity split; covered lines fall back to plain alignment. */
@@ -587,8 +647,7 @@ export async function deleteQuantitySplitRule(id: number): Promise<void> {
 
 export async function listQuantitySplitRules(waveID: number): Promise<QuantitySplitRule[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListQuantitySplitRules(waveID)
-  return (res ?? []) as unknown as QuantitySplitRule[]
+  return ((await _ListQuantitySplitRules(waveID)) ?? []) as QuantitySplitRule[]
 }
 
 export async function createGrant(
@@ -598,20 +657,20 @@ export async function createGrant(
   qty: number,
 ): Promise<FulfillmentResult> {
   assertWailsRuntime()
-  const res = await _CreateGrant(waveID, customerID, productID, qty)
-  return res as unknown as FulfillmentResult
+  return (await _CreateGrant(waveID, customerID, productID, qty)) as FulfillmentResult
 }
 
 export async function listResultViews(waveID: number): Promise<ResultView[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListResultViews(waveID)
-  return (res ?? []) as unknown as ResultView[]
+  // The generated ResultView types WorkState/Blocks as TS enum objects and a
+  // nullable array; over the wire Go always sends the raw snake_case strings
+  // and a Blocks array, which is exactly what the facade union types model.
+  return ((await _ListResultViews(waveID)) ?? []) as unknown as ResultView[]
 }
 
 export async function getProductTotals(waveID: number): Promise<ProductTotal[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ProductTotals(waveID)
-  return (res ?? []) as unknown as ProductTotal[]
+  return (await _ProductTotals(waveID)) ?? []
 }
 
 export async function setResultAddress(resultID: number, addressID: number): Promise<void> {
@@ -626,10 +685,10 @@ export async function generateFactoryOrder(
   factoryID: number,
 ): Promise<GenerateFactoryOrderResult> {
   assertWailsRuntime()
-  const res = await _GenerateFactoryOrder(waveID, factoryID)
+  const res = (await _GenerateFactoryOrder(waveID, factoryID)) as GenerateFactoryOrderResultWire
   return {
-    Order: res.Order as unknown as SupplierOrder,
-    Lines: (res.Lines ?? []) as unknown as SupplierOrderLine[],
+    Order: res.Order,
+    Lines: res.Lines ?? [],
   }
 }
 
@@ -644,10 +703,14 @@ export async function generateFactoryOrderForResults(
   resultIDs: number[],
 ): Promise<GenerateFactoryOrderResult> {
   assertWailsRuntime()
-  const res = await _GenerateFactoryOrderForResults(waveID, factoryID, resultIDs)
+  const res = (await _GenerateFactoryOrderForResults(
+    waveID,
+    factoryID,
+    resultIDs,
+  )) as GenerateFactoryOrderResultWire
   return {
-    Order: res.Order as unknown as SupplierOrder,
-    Lines: (res.Lines ?? []) as unknown as SupplierOrderLine[],
+    Order: res.Order,
+    Lines: res.Lines ?? [],
   }
 }
 
@@ -658,14 +721,12 @@ export async function voidFactoryOrder(orderID: number): Promise<void> {
 
 export async function listSupplierOrders(waveID: number): Promise<SupplierOrder[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListSupplierOrders(waveID)
-  return (res ?? []) as unknown as SupplierOrder[]
+  return (await _ListSupplierOrders(waveID)) ?? []
 }
 
 export async function listSupplierOrderLines(orderID: number): Promise<SupplierOrderLine[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListSupplierOrderLines(orderID)
-  return (res ?? []) as unknown as SupplierOrderLine[]
+  return (await _ListSupplierOrderLines(orderID)) ?? []
 }
 
 export async function importShipment(
@@ -676,18 +737,17 @@ export async function importShipment(
   qty: number,
 ): Promise<Shipment> {
   assertWailsRuntime()
-  const res = await _ImportShipment(trackingID, trackingNo, carrierCode, carrierName, qty)
-  return res as unknown as Shipment
+  return (await _ImportShipment(trackingID, trackingNo, carrierCode, carrierName, qty)) as Shipment
 }
 
 /** Render a factory order into its export file and return the written path. */
 export async function exportFactoryOrderFile(orderID: number): Promise<ExportFileResult> {
   assertWailsRuntime()
-  const res = await _ExportFactoryOrderFile(orderID)
+  const res = (await _ExportFactoryOrderFile(orderID)) as ExportFileResultWire
   return {
-    Order: res.Order as unknown as SupplierOrder,
+    Order: res.Order,
     Path: res.Path ?? '',
-    Rows: (res.Rows ?? []) as Record<string, string>[],
+    Rows: (res.Rows ?? []).map((row) => row ?? {}) as Record<string, string>[],
   }
 }
 
@@ -698,26 +758,28 @@ export async function importShipmentFile(
   filePath: string,
 ): Promise<ImportShipmentFileResult> {
   assertWailsRuntime()
-  const res = await _ImportShipmentFile(platformID, templateID, filePath)
+  const res = (await _ImportShipmentFile(
+    platformID,
+    templateID,
+    filePath,
+  )) as ImportShipmentFileResultWire
   return {
     Imported: res.Imported ?? 0,
-    Skipped: (res.Skipped ?? []) as unknown as SkippedShipment[],
-    Shipments: (res.Shipments ?? []) as unknown as Shipment[],
-    Issues: (res.Issues ?? []) as unknown as ParseIssue[],
+    Skipped: res.Skipped ?? [],
+    Shipments: res.Shipments ?? [],
+    Issues: res.Issues ?? [],
   }
 }
 
 export async function generateWritebacks(factID: number): Promise<ChannelWritebackItem[]> {
   assertWailsRuntime()
-  const res = await _GenerateWritebacks(factID)
-  return (res ?? []) as unknown as ChannelWritebackItem[]
+  return (await _GenerateWritebacks(factID)) ?? []
 }
 
 /** List every writeback item behind the wave's fact lines, ordered by id. */
 export async function listWritebacksByWave(waveID: number): Promise<ChannelWritebackItem[]> {
   if (!isWailsRuntimeAvailable()) return []
-  const res = await _ListWritebacksByWave(waveID)
-  return (res ?? []) as unknown as ChannelWritebackItem[]
+  return (await _ListWritebacksByWave(waveID)) ?? []
 }
 
 /** Record a successful channel writeback for one parcel. */
@@ -756,36 +818,54 @@ export async function getHomeBuckets(): Promise<HomeBuckets> {
       RecentWaves: [],
     }
   }
-  const res = await _Home()
-  return res as unknown as HomeBuckets
+  return (await _Home()) as HomeBuckets
 }
 
 // ── Wails runtime: native dialogs ──
 
-/** Minimal mirror of the Wails v2 runtime OpenFileDialog options. */
+/** File-picker filter as pages express it (v2 dialog option shape). */
 interface WailsFileDialogFilter {
   displayName: string
   pattern: string
 }
 
-interface WailsRuntimeDialogApi {
-  OpenFileDialog?: (options?: { title?: string; filters?: WailsFileDialogFilter[] }) => Promise<string>
-}
-
 /**
- * Open a native single-file picker through the Wails runtime dialog API.
- * The committed copy of wailsjs/runtime predates the generated dialog
- * wrappers, so the runtime object Wails injects on `window` is called
- * directly — still only ever from inside the bridge. Returns null when the
- * runtime (or dialog) is unavailable or the user cancels.
+ * Open a native single-file picker through the Wails v3 runtime Dialogs API
+ * (`@wailsio/runtime` Dialogs.OpenFile). Returns null when the runtime is
+ * unavailable or the user cancels.
+ *
+ * Callers pass filters as `{displayName, pattern}` pairs; they map 1:1 onto
+ * v3's `{Filters: [{DisplayName, Pattern}]}`. The filter specs the v2 Go-side
+ * pickers offered (a1cbe78 app.go Pick*File, deleted by the v3 migration) were:
+ *   CSV:     [CSV Files: *.csv]
+ *   Tabular: [Tabular Files: *.csv;*.xlsx;*.xls, CSV Files: *.csv,
+ *             Excel Files: *.xlsx;*.xls]
+ *   ZIP:     [ZIP Files: *.zip]
+ *   Catalog: [Catalog Files: *.zip;*.csv;*.xlsx;*.xls, ZIP Files: *.zip,
+ *             Tabular Files: *.csv;*.xlsx;*.xls]
+ * — kept here so future pickers can restore the same file-kind breakdowns.
  */
 export async function pickFile(
   filters?: WailsFileDialogFilter[],
 ): Promise<string | null> {
   if (!isWailsRuntimeAvailable()) return null
-  const runtime = (window as unknown as { runtime?: WailsRuntimeDialogApi }).runtime
-  if (!runtime?.OpenFileDialog) return null
-  const path = await runtime.OpenFileDialog(filters ? { filters } : undefined)
+  let picked: string | string[] | null
+  try {
+    picked = await Dialogs.OpenFile({
+      CanChooseFiles: true,
+      ...(filters
+        ? { Filters: filters.map((f) => ({ DisplayName: f.displayName, Pattern: f.pattern })) }
+        : {}),
+    })
+  } catch (err) {
+    // beta.20 surfaces a user cancel as a rejected promise (the platform's
+    // "cancelled by user" error); anything else is a real failure.
+    if (err instanceof Error && /cancel/i.test(err.message)) return null
+    throw err
+  }
+  // Single selection resolves to a string; guard the array shape anyway —
+  // the runtime wrapper defaults unresolved selections to [].
+  const path = Array.isArray(picked) ? (picked[0] ?? null) : picked
   return path && path.trim() !== '' ? path : null
 }
 

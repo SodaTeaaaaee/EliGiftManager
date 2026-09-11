@@ -8,6 +8,7 @@
     "npm:@vitejs/plugin-vue@^6.0.8": "6.0.8_vite@8.2.1__@types+node@24.12.2_vue@3.5.41__typescript@6.0.3_@types+node@24.12.2_typescript@6.0.3",
     "npm:@vue/test-utils@^2.4.11": "2.4.11_@vue+compiler-dom@3.5.41_vue@3.5.41__typescript@6.0.3_typescript@6.0.3",
     "npm:@vue/tsconfig@~0.9.1": "0.9.1_typescript@6.0.3_vue@3.5.41__typescript@6.0.3",
+    "npm:@wailsio/runtime@3.0.0-beta.20": "3.0.0-beta.20",
     "npm:happy-dom@^17.4.4": "17.6.3",
     "npm:naive-ui@^2.42.0": "2.44.1_vue@3.5.41__typescript@6.0.3_typescript@6.0.3",
     "npm:pinia@^3.0.4": "3.0.4_typescript@6.0.3_vue@3.5.41__typescript@6.0.3",
@@ -434,6 +435,9 @@
         "typescript",
         "vue"
       ]
+    },
+    "@wailsio/runtime@3.0.0-beta.20": {
+      "integrity": "sha512-oPpWBgNK4QISP9/AweVnRIBg6hlEP7HVi0i4gVl0+6JEsQ6vDDTJXmbyy/j6AITPHWq7cWOYl2Ey5uucl1u3hw=="
     },
     "abbrev@2.0.0": {
       "integrity": "sha512-6/mh1E2u2YgEsCHdY0Yx5oW+61gZU+1vXaoiHHrpKeuRNNgFvS+/jrwHiQhB5apAf5oB7UB7E19ol2R2LKH8hQ=="
@@ -1142,6 +1146,7 @@
         "npm:@vitejs/plugin-vue@^6.0.8",
         "npm:@vue/test-utils@^2.4.11",
         "npm:@vue/tsconfig@~0.9.1",
+        "npm:@wailsio/runtime@3.0.0-beta.20",
         "npm:happy-dom@^17.4.4",
         "npm:naive-ui@^2.42.0",
         "npm:pinia@^3.0.4",
