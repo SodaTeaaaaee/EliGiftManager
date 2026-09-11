@@ -41,8 +41,8 @@ const { t } = useI18n()
 
 const navGroups: NavGroupSpec[] = [
   {
-    key: 'action-center',
-    labelKey: 'shellKit.demo.nav.sectionActionCenter',
+    key: 'home',
+    labelKey: 'shellKit.demo.nav.sectionHome',
     items: [{ key: 'home', labelKey: 'shellKit.demo.nav.home', icon: GridOutline, to: { path: '/design-lab' } }],
   },
   {

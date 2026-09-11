@@ -31,14 +31,14 @@ const themeStore = useThemeStore();
 const { locale, localeOptions, setLocale } = useAppLocale();
 
 const themeOptions = computed(() => [
-  { value: "system", label: t("designLab.controls.themeOptions.system") },
-  { value: "light", label: t("designLab.controls.themeOptions.light") },
-  { value: "dark", label: t("designLab.controls.themeOptions.dark") },
+  { value: "system", label: t("settings.themeOptions.system") },
+  { value: "light", label: t("settings.themeOptions.light") },
+  { value: "dark", label: t("settings.themeOptions.dark") },
 ]);
 
 const densityOptions = computed(() => [
-  { value: "comfortable", label: t("designLab.controls.densityOptions.comfortable") },
-  { value: "compact", label: t("designLab.controls.densityOptions.compact") },
+  { value: "comfortable", label: t("settings.densityOptions.comfortable") },
+  { value: "compact", label: t("settings.densityOptions.compact") },
 ]);
 
 const skinOptions = computed(() => listSkins().map((skin) => ({ value: skin.id, label: skin.name })));

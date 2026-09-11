@@ -249,19 +249,6 @@ const HIRAGANA_END = 0x309f;
 const KATAKANA_START = 0x30a0;
 const KATAKANA_END = 0x30ff;
 
-export function hasKana(input: string): boolean {
-  for (const ch of input) {
-    const cp = ch.codePointAt(0)!;
-    if (
-      (cp >= HIRAGANA_START && cp <= HIRAGANA_END) ||
-      (cp >= KATAKANA_START && cp <= KATAKANA_END)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 const HAN_REGEX = /\p{Script=Han}/u;
 
 export function hasHan(input: string): boolean {

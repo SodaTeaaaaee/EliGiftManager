@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * Design-lab showcase for the FilterBar kit (shared/ui/filter-bar/**): a
- * combination filter bar over sample fulfillment lines (address state ∧
- * supplier state, plus a keyword field), presets + saved views, and a live
+ * combination filter bar over sample fulfillment lines (work state ∧
+ * writeback status, plus a keyword field), presets + saved views, and a live
  * URL-query preview so the useUrlFilters() sync is visibly demonstrated.
  */
 import { computed } from 'vue'
@@ -10,77 +10,74 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { FilterBar, SavedViews, useUrlFilters, type FilterSchema, type FilterViewPreset } from '@/shared/ui/filter-bar'
 import { StatusBadge } from '@/shared/ui/status'
+import type { WorkStateValue, WritebackStatusValue } from '@/shared/i18n/glossary'
 
 const { t } = useI18n()
 const route = useRoute()
 
 const schema = [
-  { key: 'addressState', type: 'enum-multi', dimension: 'addressState' },
-  { key: 'supplierState', type: 'enum-multi', dimension: 'supplierState' },
+  { key: 'workState', type: 'enum-multi', dimension: 'workState' },
+  { key: 'writebackStatus', type: 'enum-multi', dimension: 'writebackStatus' },
   { key: 'keyword', type: 'keyword' },
 ] as const satisfies FilterSchema
 
 const filters = useUrlFilters(schema)
 
-const presets = computed<FilterViewPreset[]>(() => [
-  {
-    id: 'blocked',
-    label: t('filterBar.demo.presets.blocked'),
-    snapshot: { addressState: ['missing', 'invalid'] },
-  },
-  {
-    id: 'ready-to-submit',
-    label: t('filterBar.demo.presets.readyToSubmit'),
-    snapshot: { addressState: ['ready'], supplierState: ['not_submitted'] },
-  },
-  {
-    id: 'producing',
-    label: t('filterBar.demo.presets.producing'),
-    snapshot: { supplierState: ['producing'] },
-  },
-])
+const presets = computed<FilterViewPreset[]>(() => {
+  const views: FilterViewPreset[] = [
+    {
+      id: 'blocked',
+      label: t('filterBar.demo.presets.blocked'),
+      snapshot: { workState: ['blocked'] },
+    },
+    {
+      id: 'ready-to-submit',
+      label: t('filterBar.demo.presets.readyToSubmit'),
+      snapshot: { workState: ['ready'], writebackStatus: ['pending'] },
+    },
+    {
+      id: 'producing',
+      label: t('filterBar.demo.presets.producing'),
+      snapshot: { workState: ['in_factory'] },
+    },
+  ]
+  return views
+})
 
 interface SampleRow {
   id: string
   participant: string
   product: string
-  addressState: 'missing' | 'ready' | 'invalid'
-  supplierState:
-    | 'not_submitted'
-    | 'submitted'
-    | 'accepted'
-    | 'producing'
-    | 'partially_shipped'
-    | 'shipped'
-    | 'canceled'
+  workState: WorkStateValue
+  writebackStatus: WritebackStatusValue
 }
 
 /** Realistic fulfillment-domain sample data — CJK + Latin names mixed, per the design-lab convention. */
 const sampleRows: SampleRow[] = [
-  { id: 'L-001', participant: '星野・アイ（Ai Hoshino）', product: '限定徽章套装', addressState: 'ready', supplierState: 'not_submitted' },
-  { id: 'L-002', participant: '有村架純 Arimura Kasumi', product: '亚克力立牌', addressState: 'missing', supplierState: 'not_submitted' },
-  { id: 'L-003', participant: '佐藤あかり Sato Akari', product: '应援手幅', addressState: 'invalid', supplierState: 'not_submitted' },
-  { id: 'L-004', participant: '宮子 Miyako', product: '明信片套组', addressState: 'ready', supplierState: 'submitted' },
-  { id: 'L-005', participant: '類想 Ayaka', product: '挂件钥匙扣', addressState: 'ready', supplierState: 'producing' },
-  { id: 'L-006', participant: '铃木ひなた Suzuki Hinata', product: 'Elissia 限定徽章', addressState: 'missing', supplierState: 'accepted' },
-  { id: 'L-007', participant: '高橋洋子 Takahashi Yoko', product: '印刷海报', addressState: 'ready', supplierState: 'producing' },
-  { id: 'L-008', participant: '中村悠斗 Nakamura Yuto', product: '立牌套装', addressState: 'invalid', supplierState: 'accepted' },
-  { id: 'L-009', participant: '田中愛子 Aiko Tanaka', product: '挂件', addressState: 'ready', supplierState: 'partially_shipped' },
-  { id: 'L-010', participant: '渡辺さくら Watanabe Sakura', product: '明信片', addressState: 'ready', supplierState: 'shipped' },
-  { id: 'L-011', participant: '小林大地 Kobayashi Daichi', product: '徽章套装', addressState: 'missing', supplierState: 'canceled' },
-  { id: 'L-012', participant: '山本ひまり Yamamoto Himari', product: '立牌', addressState: 'ready', supplierState: 'not_submitted' },
-  { id: 'L-013', participant: '陈薇 Chen Wei', product: '应援色纸', addressState: 'ready', supplierState: 'submitted' },
-  { id: 'L-014', participant: '木村拓也 Kimura Takuya', product: '徽章', addressState: 'invalid', supplierState: 'producing' },
+  { id: 'L-001', participant: '星野・アイ（Ai Hoshino）', product: '限定徽章套装', workState: 'ready', writebackStatus: 'pending' },
+  { id: 'L-002', participant: '有村架純 Arimura Kasumi', product: '亚克力立牌', workState: 'blocked', writebackStatus: 'pending' },
+  { id: 'L-003', participant: '佐藤あかり Sato Akari', product: '应援手幅', workState: 'blocked', writebackStatus: 'pending' },
+  { id: 'L-004', participant: '宮子 Miyako', product: '明信片套组', workState: 'ready', writebackStatus: 'pending' },
+  { id: 'L-005', participant: '類想 Ayaka', product: '挂件钥匙扣', workState: 'in_factory', writebackStatus: 'pending' },
+  { id: 'L-006', participant: '铃木ひなた Suzuki Hinata', product: 'Elissia 限定徽章', workState: 'blocked', writebackStatus: 'pending' },
+  { id: 'L-007', participant: '高橋洋子 Takahashi Yoko', product: '印刷海报', workState: 'in_factory', writebackStatus: 'pending' },
+  { id: 'L-008', participant: '中村悠斗 Nakamura Yuto', product: '立牌套装', workState: 'blocked', writebackStatus: 'pending' },
+  { id: 'L-009', participant: '田中愛子 Aiko Tanaka', product: '挂件', workState: 'shipped', writebackStatus: 'sent' },
+  { id: 'L-010', participant: '渡辺さくら Watanabe Sakura', product: '明信片', workState: 'shipped', writebackStatus: 'sent' },
+  { id: 'L-011', participant: '小林大地 Kobayashi Daichi', product: '徽章套装', workState: 'writeback_failed', writebackStatus: 'failed' },
+  { id: 'L-012', participant: '山本ひまり Yamamoto Himari', product: '立牌', workState: 'ready', writebackStatus: 'pending' },
+  { id: 'L-013', participant: '陈薇 Chen Wei', product: '应援色纸', workState: 'ready', writebackStatus: 'pending' },
+  { id: 'L-014', participant: '木村拓也 Kimura Takuya', product: '徽章', workState: 'in_factory', writebackStatus: 'pending' },
 ]
 
 const filteredRows = computed(() => {
-  const addressSelected = filters.state.addressState
-  const supplierSelected = filters.state.supplierState
+  const workStateSelected = filters.state.workState
+  const writebackSelected = filters.state.writebackStatus
   const keyword = filters.state.keyword.trim().toLowerCase()
 
   return sampleRows.filter((row) => {
-    if (addressSelected.length > 0 && !addressSelected.includes(row.addressState)) return false
-    if (supplierSelected.length > 0 && !supplierSelected.includes(row.supplierState)) return false
+    if (workStateSelected.length > 0 && !workStateSelected.includes(row.workState)) return false
+    if (writebackSelected.length > 0 && !writebackSelected.includes(row.writebackStatus)) return false
     if (keyword.length > 0 && !`${row.participant} ${row.product}`.toLowerCase().includes(keyword)) return false
     return true
   })
@@ -114,16 +111,16 @@ const filteredRows = computed(() => {
           <tr>
             <th>{{ t('filterBar.demo.tableHeaders.participant') }}</th>
             <th>{{ t('filterBar.demo.tableHeaders.product') }}</th>
-            <th>{{ t('filterBar.demo.tableHeaders.addressState') }}</th>
-            <th>{{ t('filterBar.demo.tableHeaders.supplierState') }}</th>
+            <th>{{ t('filterBar.demo.tableHeaders.workState') }}</th>
+            <th>{{ t('filterBar.demo.tableHeaders.writebackStatus') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="row in filteredRows" :key="row.id">
             <td>{{ row.participant }}</td>
             <td>{{ row.product }}</td>
-            <td><StatusBadge dimension="addressState" :value="row.addressState" size="sm" show-dot /></td>
-            <td><StatusBadge dimension="supplierState" :value="row.supplierState" size="sm" show-dot /></td>
+            <td><StatusBadge dimension="workState" :value="row.workState" size="sm" show-dot /></td>
+            <td><StatusBadge dimension="writebackStatus" :value="row.writebackStatus" size="sm" show-dot /></td>
           </tr>
         </tbody>
       </table>

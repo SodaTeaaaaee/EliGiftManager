@@ -11,7 +11,6 @@ import {
   isPureKana,
   toHiragana,
 } from './kanaRomaji.ts'
-import { stableSortRows } from './stableSortRows.ts'
 
 // --- kanaRomaji ---
 test('toHiragana converts katakana to hiragana', () => {
@@ -92,61 +91,6 @@ test('compareValues: booleans', () => {
   expect(compareValues(false, true) < 0).toBe(true)
 })
 
-// --- stableSortRows integration ---
-test('stableSortRows: ascending puts values in order, nulls at end', () => {
-  const rows = [{ name: 'b' }, { name: null }, { name: 'a' }, { name: '' }]
-  const result = stableSortRows(rows, {
-    key: 'name',
-    getValue: (r: { name: string | null }) => r.name,
-  }, 'ascend')
-  expect(result[0].name).toBe('a')
-  expect(result[1].name).toBe('b')
-  expect(result[2].name).toBe(null)
-  expect(result[3].name).toBe('')
-})
-
-test('stableSortRows: descending puts values in reverse, nulls still at end', () => {
-  const rows = [{ name: 'b' }, { name: null }, { name: 'a' }, { name: '' }]
-  const result = stableSortRows(rows, {
-    key: 'name',
-    getValue: (r: { name: string | null }) => r.name,
-  }, 'descend')
-  expect(result[0].name).toBe('b')
-  expect(result[1].name).toBe('a')
-  expect(result[2].name).toBe(null)
-  expect(result[3].name).toBe('')
-})
-
-test('stableSortRows: preserves original order on equal values', () => {
-  const rows = [{ id: 1, v: 'same' }, { id: 2, v: 'same' }, {
-    id: 3,
-    v: 'same',
-  }]
-  const result = stableSortRows(
-    rows,
-    { key: 'v', getValue: (r: { id: number; v: string }) => r.v },
-    'ascend',
-  )
-  expect(result[0].id).toBe(1)
-  expect(result[1].id).toBe(2)
-  expect(result[2].id).toBe(3)
-})
-
-test('stableSortRows: descending preserves original order on equal values', () => {
-  const rows = [{ id: 1, v: 'same' }, { id: 2, v: 'same' }, {
-    id: 3,
-    v: 'same',
-  }]
-  const result = stableSortRows(
-    rows,
-    { key: 'v', getValue: (r: { id: number; v: string }) => r.v },
-    'descend',
-  )
-  expect(result[0].id).toBe(1)
-  expect(result[1].id).toBe(2)
-  expect(result[2].id).toBe(3)
-})
-
 // --- bucket classification ---
 test('classifySortBucket: digit', () => {
   expect(classifySortBucket('123')).toBe('digit')
@@ -220,28 +164,4 @@ test('compareStrings: mixed kana with numbers sort naturally', () => {
 
 test('compareStrings: mixed hangul with numbers sort naturally', () => {
   assert(compareStrings('가2', '가19') < 0)
-})
-
-test('stableSortRows: mixed natural sort descending', () => {
-  const rows = [{ v: 'A19' }, { v: 'A2' }, { v: 'A1' }]
-  const result = stableSortRows(
-    rows,
-    { key: 'v', getValue: (r: { v: string }) => r.v },
-    'descend',
-  )
-  expect(result[0].v).toBe('A19')
-  expect(result[1].v).toBe('A2')
-  expect(result[2].v).toBe('A1')
-})
-
-test('stableSortRows: mixed natural sort keeps nulls at end in descend', () => {
-  const rows = [{ v: 'A2' }, { v: null }, { v: 'A19' }]
-  const result = stableSortRows(
-    rows,
-    { key: 'v', getValue: (r: { v: string | null }) => r.v },
-    'descend',
-  )
-  expect(result[0].v).toBe('A19')
-  expect(result[1].v).toBe('A2')
-  expect(result[2].v).toBe(null)
 })

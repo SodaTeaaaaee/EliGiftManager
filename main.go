@@ -24,48 +24,35 @@ var assets embed.FS
 func main() {
 	cfg := config.Load()
 	app := NewApp(cfg)
-
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
-	// Initialize DB singleton.
 	dbPath, err := app.resolveDatabasePath()
 	if err != nil {
 		logger.Error("resolve database path", "error", err)
 		os.Exit(1)
 	}
-	db, err := database.InitDB(dbPath)
+	gdb, err := database.InitDB(dbPath)
 	if err != nil {
 		logger.Error("initialize database", "error", err)
 		os.Exit(1)
 	}
-	sqlDB, err := db.DB()
+	sqlDB, err := gdb.DB()
 	if err != nil {
 		logger.Error("get underlying sql.DB", "error", err)
 		os.Exit(1)
 	}
-	database.SetDefaultDB(db)
+	database.SetDefaultDB(gdb)
 	defer sqlDB.Close()
-	featurePolicyRepo := infra.NewCustomerResolutionFeaturePolicyRepository(db)
-	featurePolicy, err := featurePolicyRepo.GetFeaturePolicy(context.Background())
-	if err != nil {
-		logger.Error("load customer resolution feature policy", "error", err)
-		os.Exit(1)
-	}
-	if err := migrateLegacyMergePolicy(context.Background(), db); err != nil {
-		logger.Error("migrate legacy merge policy", "error", err)
-		os.Exit(1)
-	}
-	if featurePolicy.ImportEvidenceEnabled {
-		evidenceUC := application.NewImportEvidenceUseCase(infra.NewImportEvidenceRepository(db))
-		if runsDeleted, recordsDeleted, pruneErr := evidenceUC.PruneExpired(context.Background()); pruneErr != nil {
-			logger.Error("prune expired import evidence", "error", pruneErr)
-		} else if runsDeleted > 0 || recordsDeleted > 0 {
-			logger.Info("pruned expired import evidence", "runs_deleted", runsDeleted, "records_deleted", recordsDeleted)
-		}
-	} else {
-		logger.Warn("import evidence disabled by customer resolution feature policy; cold-start pruning skipped")
-	}
 
+	ws := application.NewWorkspace(infra.NewGormStore(gdb))
+	if err := ws.EnsureBuiltinPlatforms(context.Background()); err != nil {
+		logger.Error("seed builtin platforms", "error", err)
+		os.Exit(1)
+	}
+	if err := ws.EnsureBuiltinTemplates(context.Background()); err != nil {
+		logger.Error("seed builtin templates", "error", err)
+		os.Exit(1)
+	}
 	zoom := LoadZoom()
 
 	err = wails.Run(&options.App{
@@ -87,27 +74,8 @@ func main() {
 		OnBeforeClose: app.beforeClose,
 		Bind: []any{
 			app,
-			controller.NewListPaginationController(),
-			controller.NewDemandController(),
-			controller.NewWaveController(),
-			controller.NewExportController(),
-			controller.NewShipmentController(),
-			controller.NewChannelSyncController(),
-			controller.NewAdjustmentController(),
-			controller.NewTemplateController(),
-			controller.NewAllocationPolicyController(),
-			controller.NewProductController(),
-			controller.NewProfileController(),
-			controller.NewAddressController(),
-			controller.NewMergeController(),
-			controller.NewMergeUndoController(),
-			controller.NewSplitController(),
-			controller.NewCustomerProfileController(),
-			controller.NewMergeGovernanceController(),
-			controller.NewActionCenterController(),
+			controller.NewWorkspaceController(ws),
 			controller.NewFileSystemController(),
-			controller.NewImportEvidenceController(),
-			controller.NewCustomerResolutionFeaturePolicyController(),
 		},
 	})
 	if err != nil {

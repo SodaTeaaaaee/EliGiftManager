@@ -1,11 +1,5 @@
 export { default as FieldMappingEditor } from './FieldMappingEditor.vue'
-export type { CatalogImageLayoutValue } from './types'
-export type { FieldMappingDestField, FieldMappingMode, FieldMappingValue } from './types'
-export {
-  emptyFieldMapping,
-  ensureNamespacedDestKey,
-  parseMappingRules,
-  serializeMappingRules,
-} from './types'
-export { applyMapping, bareDestFieldLeaf, validateDestFieldValue } from './previewTransform'
+export type { FieldMappingDestField, FieldMappingGroup, FieldMappingMode, FieldMappingValue } from './types'
+export { emptyFieldMapping, parseMappingRules, serializeMappingRules } from './types'
+export { applyMapping, applyPreviewTransforms } from './previewTransform'
 export type { MappedPreviewRow } from './previewTransform'

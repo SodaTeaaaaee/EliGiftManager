@@ -1,156 +1,167 @@
 /**
- * FieldMappingEditor kit family — shared type contract (P4 demand-intake
- * wizard's CSV column-mapping step; reusable for shipment / product /
- * carrier template-mapped imports).
+ * FieldMappingEditor kit — shared type contract mirroring the backend's
+ * MappingConfig v3 (`internal/app/alignment/schema.go`), stored in
+ * TemplateConfig.MappingJSON. Semantic keys come from the backend semantic
+ * dictionary; this kit stays domain-agnostic.
  */
 
 /** One destination field the operator can bind a source column/position to. */
 export interface FieldMappingDestField {
-  /** Stable identifier — dest key as stored in TemplateMappingRules
-   *  (unprefixed line fields, or v2 `ns.field` keys). Kept as plain `string`
-   *  so this kit stays domain-agnostic. */
+  /** Semantic dictionary key (e.g. `quantity`, `shipment.tracking_no`). */
   key: string
   /** Already-resolved display label (call `t(...)` before building the list). */
   label: string
   /** Already-resolved tooltip copy, shown next to the label. */
   tooltip?: string
+  /** Key of the `FieldMappingGroup` this field renders under; ungrouped when absent. */
+  group?: string
 }
 
-/** Mapping mode stored in TemplateMappingRules.mode. */
+/** One collapsible section of destination fields (order = display order). */
+export interface FieldMappingGroup {
+  key: string
+  /** Already-resolved section title. */
+  label: string
+}
+
+/** Mapping mode stored in MappingConfig.mode. */
 export type FieldMappingMode = 'header' | 'positional'
 
-export interface CatalogImageLayoutValue {
-  enabled: boolean
-  matchField?: string
-  coverDir?: string
-  detailDir?: string
-  namePattern?: string
-  coverPick?: string
-  tabularGlob?: string
-  imageExts?: string[]
-}
+/** Schema version of MappingConfig this kit reads and writes. */
+const MAPPING_VERSION = 3
 
 /**
- * The v-model shape — mirrors the backend's `TemplateMappingRules` JSON
- * (`internal/app/template_mapping_service.go`):
+ * The v-model shape — a mirror of MappingConfig v3.
  *
- * v1 (legacy): `{ columns, defaults }` — treated as version=1, mode=header,
- * hasHeader=true by the backend.
- *
- * v2: adds version/mode/hasHeader/positions/transforms/columnOrder/required.
- * Unprefixed dest keys remain the semantic "line." namespace for demand imports.
- *
- * Resolution order matches the backend: source mapping first (columns or
- * positions), then defaults overwrite. A destField absent from both maps is
- * never set.
+ * Resolution order matches the backend parse loop: source cells first
+ * (columns or positions), JoinSources overwrite the plain cell, fixed
+ * defaults override both, then transform chains run. A semantic key absent
+ * from all three maps is never set.
  */
 export interface FieldMappingValue {
-  /** Mapping rules version. Prefer 2 for new templates. */
+  /** Mapping schema version. Always 3 for new templates. */
   version?: number
-  /** header = bind by CSV header name; positional = bind by 0-based cell index. */
+  /** header = bind by source header name; positional = bind by 0-based column index. */
   mode?: FieldMappingMode
   /** Whether the source sheet's first row is a header row. */
   hasHeader?: boolean
-  /** destField → source header name (mode=header). */
-  columns: Record<string, string>
-  /** destField → 0-based cell index (mode=positional). */
-  positions?: Record<string, number>
-  /** destField → fixed literal applied to every row (wins over source). */
-  defaults: Record<string, string>
-  /** destField → ordered transform names (trim, strip_quotes, …). */
-  transforms?: Record<string, string[]>
-  /** Preferred output column order for export templates. */
-  columnOrder?: string[]
-  /** Dest keys that must be non-empty after mapping. */
-  required?: string[]
-  /** Exact worksheet name for spreadsheet input/output templates. */
+  /** Exact worksheet name for spreadsheet sources. */
   sheetName?: string
-  /** Optional catalog ZIP image association contract. */
-  imageLayout?: CatalogImageLayoutValue
+  /** semantic key → source header name (mode=header). */
+  columns: Record<string, string>
+  /** semantic key → 0-based column index (mode=positional). */
+  positions?: Record<string, number>
+  /** semantic key → fixed literal applied to every row (wins over source). */
+  defaults: Record<string, string>
+  /** semantic key → ordered transformer names (trim, strip_quotes, …). */
+  transforms?: Record<string, string[]>
+  /** semantic key → external→internal value table used by mapEnum. */
+  enumMaps?: Record<string, Record<string, string>>
+  /**
+   * semantic key → source column refs merged by joinAddress. Header names in
+   * header mode, decimal column indexes as strings in positional mode.
+   */
+  joinSources?: Record<string, string[]>
+  /** Semantic key holding the pipe-concatenated multi-product blob to split. */
+  splitSkuQuantity?: string
+  /** Semantic keys that must be non-empty after mapping. */
+  required?: string[]
+  /** Semantic keys whose values form the duplicate-detection fingerprint. */
+  fingerprint?: string[]
 }
 
-/**
- * Bare demand-line dest keys (semantic default namespace "line.").
- * Kept in sync with backend `lineDestBare` / IntakeDestField.
- */
-const LINE_DEST_BARE = new Set([
-  'line_type',
-  'obligation_trigger_kind',
-  'entitlement_authority',
-  'recipient_input_state',
-  'routing_disposition',
-  'routing_reason_code',
-  'eligibility_context_ref',
-  'entitlement_code',
-  'gift_level_snapshot',
-  'recipient_input_payload',
-  'external_title',
-  'requested_quantity',
-])
-
-/**
- * Ensure a dest key is stored in the v2 namespaced form.
- * Bare line fields become `line.<field>`; already-namespaced keys are kept.
- */
-export function ensureNamespacedDestKey(key: string): string {
-  const trimmed = key.trim()
-  if (!trimmed || trimmed.includes('.')) return trimmed
-  if (LINE_DEST_BARE.has(trimmed)) return `line.${trimmed}`
-  return trimmed
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
 }
 
-function mapRecordKeys<T>(record: Record<string, T> | undefined): Record<string, T> {
-  const out: Record<string, T> = {}
-  for (const [k, v] of Object.entries(record ?? {})) {
-    out[ensureNamespacedDestKey(k)] = v
+function copyStrings(source: unknown): Record<string, string> | undefined {
+  if (!isRecord(source)) return undefined
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(source)) {
+    if (k.trim() !== '' && typeof v === 'string' && v.trim() !== '') out[k] = v
   }
-  return out
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
-/** Build a v2-ready empty mapping value. */
+function copyNumbers(source: unknown): Record<string, number> | undefined {
+  if (!isRecord(source)) return undefined
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(source)) {
+    if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = Math.floor(v)
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function copyStringLists(source: unknown): Record<string, string[]> | undefined {
+  if (!isRecord(source)) return undefined
+  const out: Record<string, string[]> = {}
+  for (const [k, v] of Object.entries(source)) {
+    if (!Array.isArray(v)) continue
+    const items = v.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+    if (items.length > 0) out[k] = items
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function copyEnumMaps(source: unknown): Record<string, Record<string, string>> | undefined {
+  if (!isRecord(source)) return undefined
+  const out: Record<string, Record<string, string>> = {}
+  for (const [k, v] of Object.entries(source)) {
+    const table = copyStrings(v)
+    if (table) out[k] = table
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function copyKeyList(source: unknown): string[] | undefined {
+  if (!Array.isArray(source)) return undefined
+  const items = source.filter((item): item is string => typeof item === 'string' && item.trim() !== '')
+  return items.length > 0 ? items : undefined
+}
+
+/** Build a v3-ready empty mapping value. */
 export function emptyFieldMapping(mode: FieldMappingMode = 'header'): FieldMappingValue {
   return {
-    version: 2,
+    version: MAPPING_VERSION,
     mode,
-    hasHeader: true,
+    hasHeader: mode === 'header',
     columns: {},
     positions: {},
     defaults: {},
-    columnOrder: [],
   }
 }
 
 /**
- * Parse a DocumentTemplate.MappingRules JSON string into a FieldMappingValue.
- * Tolerates missing/legacy shapes; never throws — returns empty mapping on failure.
+ * Parse a TemplateConfig.MappingJSON string into a FieldMappingValue.
+ * Tolerates missing input; invalid JSON or a foreign schema version yields an
+ * empty v3 mapping — the backend treats both as hard errors, so the editor
+ * starts from a clean slate instead of half-rendering foreign data.
  */
 export function parseMappingRules(raw: string | undefined | null): FieldMappingValue {
   if (!raw || !raw.trim()) return emptyFieldMapping()
   try {
-    const parsed = JSON.parse(raw) as Partial<FieldMappingValue> & {
-      columns?: Record<string, string>
-      defaults?: Record<string, string>
-      positions?: Record<string, number>
-    }
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    if (!isRecord(parsed) || parsed.version !== MAPPING_VERSION) return emptyFieldMapping()
     const mode: FieldMappingMode = parsed.mode === 'positional' ? 'positional' : 'header'
     return {
-      version: typeof parsed.version === 'number' ? parsed.version : 2,
+      version: MAPPING_VERSION,
       mode,
-      hasHeader: parsed.hasHeader !== false,
-      columns: mapRecordKeys(parsed.columns ?? {}),
-      positions: mapRecordKeys(parsed.positions ?? {}),
-      defaults: mapRecordKeys(parsed.defaults ?? {}),
-      transforms: parsed.transforms ? mapRecordKeys(parsed.transforms) : undefined,
-      columnOrder: Array.isArray(parsed.columnOrder)
-        ? parsed.columnOrder.map(ensureNamespacedDestKey)
-        : [],
-      required: Array.isArray(parsed.required)
-        ? parsed.required.map(ensureNamespacedDestKey)
+      hasHeader: mode === 'header',
+      sheetName: typeof parsed.sheetName === 'string' && parsed.sheetName.trim() !== ''
+        ? parsed.sheetName
         : undefined,
-      imageLayout: parsed.imageLayout && typeof parsed.imageLayout === 'object'
-        ? parsed.imageLayout
+      columns: copyStrings(parsed.columns) ?? {},
+      positions: copyNumbers(parsed.positions),
+      defaults: copyStrings(parsed.defaults) ?? {},
+      transforms: copyStringLists(parsed.transforms),
+      enumMaps: copyEnumMaps(parsed.enumMaps),
+      joinSources: copyStringLists(parsed.joinSources),
+      splitSkuQuantity: typeof parsed.splitSkuQuantity === 'string' &&
+          parsed.splitSkuQuantity.trim() !== ''
+        ? parsed.splitSkuQuantity
         : undefined,
-      sheetName: typeof parsed.sheetName === 'string' ? parsed.sheetName : undefined,
+      required: copyKeyList(parsed.required),
+      fingerprint: copyKeyList(parsed.fingerprint),
     }
   } catch {
     return emptyFieldMapping()
@@ -159,35 +170,36 @@ export function parseMappingRules(raw: string | undefined | null): FieldMappingV
 
 /**
  * Serialize a FieldMappingValue to the JSON string stored in
- * DocumentTemplate.MappingRules. Always emits version=2 so new templates
- * get hasHeader/mode/positions support.
- *
- * Boundary: bare line dest keys are rewritten to `line.*` so presets, the
- * editor, and the stored MappingRules share one namespaced form.
+ * TemplateConfig.MappingJSON. Always emits version=3; empty optional maps are
+ * omitted so stored configs stay as small as the backend's omitempty shape.
  */
 export function serializeMappingRules(mapping: FieldMappingValue): string {
   const mode: FieldMappingMode = mapping.mode === 'positional' ? 'positional' : 'header'
   const rules: Record<string, unknown> = {
-    version: mapping.version ?? 2,
+    version: MAPPING_VERSION,
     mode,
-    hasHeader: mapping.hasHeader ?? true,
-    defaults: mapRecordKeys(mapping.defaults ?? {}),
+    hasHeader: mode === 'header',
   }
   if (mode === 'positional') {
-    rules.positions = mapRecordKeys(mapping.positions ?? {})
+    const positions = copyNumbers(mapping.positions)
+    if (positions) rules.positions = positions
   } else {
-    rules.columns = mapRecordKeys(mapping.columns ?? {})
+    const columns = copyStrings(mapping.columns)
+    if (columns) rules.columns = columns
   }
-  if (mapping.transforms && Object.keys(mapping.transforms).length > 0) {
-    rules.transforms = mapRecordKeys(mapping.transforms)
-  }
-  if (mapping.columnOrder && mapping.columnOrder.length > 0) {
-    rules.columnOrder = mapping.columnOrder.map(ensureNamespacedDestKey)
-  }
-  if (mapping.required && mapping.required.length > 0) {
-    rules.required = mapping.required.map(ensureNamespacedDestKey)
-  }
-  if (mapping.imageLayout) rules.imageLayout = mapping.imageLayout
+  const defaults = copyStrings(mapping.defaults)
+  if (defaults) rules.defaults = defaults
+  const transforms = copyStringLists(mapping.transforms)
+  if (transforms) rules.transforms = transforms
+  const enumMaps = copyEnumMaps(mapping.enumMaps)
+  if (enumMaps) rules.enumMaps = enumMaps
+  const joinSources = copyStringLists(mapping.joinSources)
+  if (joinSources) rules.joinSources = joinSources
+  if (mapping.splitSkuQuantity?.trim()) rules.splitSkuQuantity = mapping.splitSkuQuantity.trim()
+  const required = copyKeyList(mapping.required)
+  if (required) rules.required = required
+  const fingerprint = copyKeyList(mapping.fingerprint)
+  if (fingerprint) rules.fingerprint = fingerprint
   if (mapping.sheetName?.trim()) rules.sheetName = mapping.sheetName.trim()
   return JSON.stringify(rules)
 }

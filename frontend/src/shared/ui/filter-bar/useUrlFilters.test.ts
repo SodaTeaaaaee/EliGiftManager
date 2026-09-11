@@ -26,8 +26,8 @@ vi.mock('vue-router', () => ({
 }))
 
 const SCHEMA = [
-  { key: 'demandKind', type: 'enum-multi', dimension: 'demandKind' },
-  { key: 'routingDisposition', type: 'enum-multi', dimension: 'routingDisposition' },
+  { key: 'inputFactKind', type: 'enum-multi', dimension: 'inputFactKind' },
+  { key: 'workState', type: 'enum-multi', dimension: 'workState' },
 ] as const satisfies FilterSchema
 
 const TestHost = defineComponent({
@@ -56,8 +56,8 @@ describe('useUrlFilters syncToUrl', () => {
   it('syncToUrl=false: filter changes never touch route.query', async () => {
     const { wrapper, filters } = mountHost(false)
 
-    filters.toggleEnumValue('demandKind', 'retail_order')
-    expect(filters.state.demandKind).toEqual(['retail_order'])
+    filters.toggleEnumValue('inputFactKind', 'retail_order')
+    expect(filters.state.inputFactKind).toEqual(['retail_order'])
     await tick()
 
     expect(routerMocks.replace).not.toHaveBeenCalled()
@@ -66,33 +66,33 @@ describe('useUrlFilters syncToUrl', () => {
   })
 
   it('syncToUrl=false: pre-existing route.query is ignored at init (fully local state)', () => {
-    routerMocks.route.query = { demandKind: 'retail_order', routingDisposition: 'pending_intake' }
+    routerMocks.route.query = { inputFactKind: 'retail_order', workState: 'blocked' }
     const { wrapper, filters } = mountHost(false)
 
-    expect(filters.state.demandKind).toEqual([])
-    expect(filters.state.routingDisposition).toEqual([])
+    expect(filters.state.inputFactKind).toEqual([])
+    expect(filters.state.workState).toEqual([])
     wrapper.unmount()
   })
 
   it('syncToUrl=false: external route.query changes do not update state', async () => {
     const { wrapper, filters } = mountHost(false)
 
-    routerMocks.route.query = { routingDisposition: 'pending_intake' }
+    routerMocks.route.query = { workState: 'blocked' }
     await tick()
 
-    expect(filters.state.routingDisposition).toEqual([])
+    expect(filters.state.workState).toEqual([])
     wrapper.unmount()
   })
 
   it('syncToUrl=true (default): filter changes are written to route.query', async () => {
     const { wrapper, filters } = mountHost(true)
 
-    filters.toggleEnumValue('demandKind', 'membership_entitlement')
+    filters.toggleEnumValue('inputFactKind', 'membership')
     await tick()
 
     expect(routerMocks.replace).toHaveBeenCalled()
     const lastCall = routerMocks.replace.mock.calls.at(-1)?.[0]
-    expect(lastCall.query).toEqual({ demandKind: 'membership_entitlement' })
+    expect(lastCall.query).toEqual({ inputFactKind: 'membership' })
     wrapper.unmount()
   })
 })

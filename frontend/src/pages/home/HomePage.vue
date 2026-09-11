@@ -1,227 +1,250 @@
 <script setup lang="ts">
-/**
- * Task Center (plan 3.1) — the default landing route. Primary content is
- * the cross-wave action stream (one ActionCard per blocked bucket, sorted
- * by urgency, each a deep link into a pre-filtered wave workspace), plus a
- * secondary "waves in progress" rollup and an onboarding empty state for a
- * brand-new install. Data comes from `getActionCenterSummary()` (bucket
- * counts + deep-link filters) joined with `listWavesFiltered()` (lifecycle
- * stage + last-activity timestamp, which the action-center summary does not
- * carry) by `waveId`.
- */
-import { computed, onMounted, ref } from "vue";
-import { useI18n } from "vue-i18n";
-import { useRouter } from "vue-router";
-import { NButton } from "naive-ui";
-import { PageHeader } from "@/shared/ui/shell";
-import { SectionCard, StatCard } from "@/shared/ui/cards";
-import { EmptyState } from "@/shared/ui/empty-state";
-import { getActionCenterSummary, listWavesFiltered } from "@/shared/api/bridge";
-import { buildWaveFilterLink } from "@/shared/lib/wave-filter-link";
-import { useWindowFocusRefresh } from "@/shared/lib/useWindowFocusRefresh";
-import type { StatusTone } from "@/shared/i18n/glossary";
-import type { dto } from "../../../wailsjs/go/models";
-import ActionCard from "./components/ActionCard.vue";
-import WaveSummaryCard from "./components/WaveSummaryCard.vue";
+import { computed, h, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import { NButton, NDataTable, NSpin } from 'naive-ui'
+import { PageHeader } from '@/shared/ui/shell'
+import { SectionCard, StatCard } from '@/shared/ui/cards'
+import { EmptyState } from '@/shared/ui/empty-state'
+import { StatusBadge } from '@/shared/ui/status'
+import type { StatusTone } from '@/shared/i18n/glossary'
+import { getHomeBuckets } from '@/shared/api/bridge'
+import type { HomeBuckets, Wave } from '@/entities/models'
 
-interface InProgressWave {
-  id: number;
-  name: string;
-  lifecycleStage: string;
-  updatedAt: string;
-}
+const { t } = useI18n()
+const router = useRouter()
 
-const { t } = useI18n({ useScope: "global" });
-const router = useRouter();
+const loading = ref(false)
+const buckets = ref<HomeBuckets>({
+  Unassigned: 0,
+  DuplicateAsk: 0,
+  AlignmentConflict: 0,
+  IdentityUnattached: 0,
+  PendingRevisions: 0,
+  BlockedResults: 0,
+  WritebackFailed: 0,
+  ResidualClose: 0,
+  RevisionFrozenConflicts: 0,
+  RecentWaves: [],
+})
 
-// bucketKind (backend snake_case) -> taskCenter.buckets.* i18n key suffix.
-const BUCKET_LABEL_KEYS: Record<string, string> = {
-  missing_address: "missingAddress",
-  waiting_input: "waitingInput",
-  mapping_blocked: "mappingBlocked",
-  channel_sync_failed: "channelSyncFailed",
-  awaiting_manual_closure: "awaitingManualClosure",
-  drift_needs_review: "driftReview",
-};
-
-// bucketKind -> ActionCard tone. channel_sync_failed is a hard failure (error);
-// the rest are attention-needed-but-recoverable (warning). Unknown future
-// bucket kinds fall back to warning rather than crashing.
-const BUCKET_TONES: Record<string, StatusTone> = {
-  missing_address: "warning",
-  waiting_input: "info",
-  mapping_blocked: "warning",
-  channel_sync_failed: "error",
-  awaiting_manual_closure: "warning",
-  drift_needs_review: "warning",
-};
-
-interface BucketStreamCard {
-  kind: "bucket";
-  key: string;
-  waveId: number;
-  waveName: string;
-  bucketKind: string;
-  count: number;
-  filter: dto.ActionCenterBucketFilterDTO;
-  tone: StatusTone;
-}
-
-interface InboxStreamCard {
-  kind: "inbox";
-  key: string;
-  count: number;
-  tone: StatusTone;
-}
-
-type StreamCard = BucketStreamCard | InboxStreamCard;
-
-const summary = ref<dto.ActionCenterSummaryDTO | null>(null);
-const waveMetaMap = ref<Map<number, dto.WaveDTO>>(new Map());
-const totalWavesCount = ref(0);
-const loading = ref(true);
-const hasLoadedOnce = ref(false);
-
-async function loadData(): Promise<void> {
-  loading.value = true;
+async function loadData() {
+  loading.value = true
   try {
-    const [summaryResult, wavesPage] = await Promise.all([
-      getActionCenterSummary(),
-      listWavesFiltered({ page: 1, pageSize: 50, sortBy: "updatedAt", sortDesc: true }),
-    ]);
-    summary.value = summaryResult;
-    waveMetaMap.value = new Map(wavesPage.items.map((wave) => [wave.id, wave]));
-    totalWavesCount.value = wavesPage.pagination.totalCount;
-  } catch {
-    summary.value = null;
-    waveMetaMap.value = new Map();
-    totalWavesCount.value = 0;
+    buckets.value = await getHomeBuckets()
+  } catch (err) {
+    console.error('Failed to load home buckets:', err)
   } finally {
-    loading.value = false;
-    hasLoadedOnce.value = true;
+    loading.value = false
   }
 }
 
-onMounted(loadData);
-useWindowFocusRefresh(loadData);
+onMounted(() => {
+  void loadData()
+})
 
-const showOnboarding = computed(
-  () => hasLoadedOnce.value && totalWavesCount.value === 0 && (!summary.value || summary.value.waves.length === 0),
-);
-
-/** Sorted by urgency: highest wave.totalBlockedCount first, then largest bucket.count within each wave. Inbox card is appended last. */
-const streamCards = computed<StreamCard[]>(() => {
-  if (!summary.value) return [];
-  const cards: StreamCard[] = [];
-
-  const sortedWaves = [...summary.value.waves].sort((a, b) => b.totalBlockedCount - a.totalBlockedCount);
-  for (const wave of sortedWaves) {
-    const sortedBuckets = [...wave.buckets].sort((a, b) => b.count - a.count);
-    for (const bucket of sortedBuckets) {
-      cards.push({
-        kind: "bucket",
-        key: `${wave.waveId}:${bucket.bucketKind}`,
-        waveId: wave.waveId,
-        waveName: wave.waveName,
-        bucketKind: bucket.bucketKind,
-        count: bucket.count,
-        filter: bucket.filter,
-        tone: BUCKET_TONES[bucket.bucketKind] ?? "warning",
-      });
-    }
-  }
-
-  if (summary.value.inboxPendingIntakeCount > 0) {
-    cards.push({
-      kind: "inbox",
-      key: "inbox",
-      count: summary.value.inboxPendingIntakeCount,
-      tone: "info",
-    });
-  }
-
-  return cards;
-});
-
-const inProgressWaves = computed<InProgressWave[]>(() => {
-  if (!summary.value) return [];
-  return summary.value.waves.map((wave) => {
-    const meta = waveMetaMap.value.get(wave.waveId);
-    return {
-      id: wave.waveId,
-      name: wave.waveName,
-      lifecycleStage: meta?.lifecycleStage ?? "",
-      updatedAt: meta?.updatedAt ?? "",
-    };
-  });
-});
-
-function cardLabel(card: StreamCard): string {
-  if (card.kind === "inbox") return t("taskCenter.inbox.pendingIntake", { count: card.count });
-  const key = BUCKET_LABEL_KEYS[card.bucketKind];
-  return key ? t(`taskCenter.buckets.${key}`) : card.bucketKind;
+interface HomeBucketCard {
+  key: string
+  label: string
+  value: string
+  caption: string
+  tone: StatusTone
+  to: string
+  /** Extra warning line rendered in the card footer (empty = none). */
+  warning: string
 }
 
-function handleCardClick(card: StreamCard): void {
-  if (card.kind === "bucket") {
-    router.push(buildWaveFilterLink(card.waveId, card.filter));
-    return;
-  }
-  // 待分诊卡深链预筛：routingDisposition=pending_intake 由收件箱 useUrlFilters
-  // 在 init 时读取（与 INBOX_GRID_FILTER_SCHEMA 的单数键一致）。
-  router.push({ name: "inbox", query: { routingDisposition: "pending_intake" } });
+const bucketCards = computed<HomeBucketCard[]>(() => [
+  {
+    key: 'unassigned',
+    label: t('home.buckets.unassigned'),
+    value: String(buckets.value.Unassigned),
+    caption: t('home.buckets.unassignedDesc'),
+    tone: buckets.value.Unassigned > 0 ? 'warning' : 'neutral',
+    to: '/inbox?filter=unassigned',
+    warning: '',
+  },
+  {
+    key: 'duplicateAsk',
+    label: t('home.buckets.duplicateAsk'),
+    value: String(buckets.value.DuplicateAsk),
+    caption: t('home.buckets.duplicateAskDesc'),
+    tone: buckets.value.DuplicateAsk > 0 ? 'warning' : 'neutral',
+    to: '/inbox?filter=duplicates',
+    warning: '',
+  },
+  {
+    key: 'alignmentConflict',
+    label: t('home.buckets.alignmentConflict'),
+    value: String(buckets.value.AlignmentConflict),
+    caption: t('home.buckets.alignmentConflictDesc'),
+    tone: buckets.value.AlignmentConflict > 0 ? 'error' : 'neutral',
+    to: '/inbox?filter=alignment',
+    warning: '',
+  },
+  {
+    key: 'identityUnattached',
+    label: t('home.buckets.identityUnattached'),
+    value: String(buckets.value.IdentityUnattached),
+    caption: t('home.buckets.identityUnattachedDesc'),
+    tone: buckets.value.IdentityUnattached > 0 ? 'error' : 'neutral',
+    to: '/inbox?filter=unattached',
+    warning: '',
+  },
+  {
+    key: 'pendingRevisions',
+    label: t('home.buckets.pendingRevisions'),
+    value: String(buckets.value.PendingRevisions),
+    caption:
+      buckets.value.RevisionFrozenConflicts > 0
+        ? t('home.buckets.revisionFrozenConflictDesc')
+        : t('home.buckets.pendingRevisionsDesc'),
+    tone:
+      buckets.value.PendingRevisions === 0
+        ? buckets.value.RevisionFrozenConflicts > 0
+          ? 'warning'
+          : 'neutral'
+        : buckets.value.RevisionFrozenConflicts > 0
+          ? 'error'
+          : 'warning',
+    to: '/inbox?filter=revisions',
+    warning:
+      buckets.value.RevisionFrozenConflicts > 0
+        ? t('home.buckets.revisionFrozenConflict', {
+            n: buckets.value.RevisionFrozenConflicts,
+          })
+        : '',
+  },
+  {
+    key: 'blockedResults',
+    label: t('home.buckets.blockedResults'),
+    value: String(buckets.value.BlockedResults),
+    caption: t('home.buckets.blockedResultsDesc'),
+    tone: buckets.value.BlockedResults > 0 ? 'error' : 'neutral',
+    to: '/waves?filter=blocked',
+    warning: '',
+  },
+  {
+    key: 'writebackFailed',
+    label: t('home.buckets.writebackFailed'),
+    value: String(buckets.value.WritebackFailed),
+    caption: t('home.buckets.writebackFailedDesc'),
+    tone: buckets.value.WritebackFailed > 0 ? 'error' : 'neutral',
+    to: '/waves?filter=writebackFailed',
+    warning: '',
+  },
+  {
+    key: 'residualClose',
+    label: t('home.buckets.residualClose'),
+    value: String(buckets.value.ResidualClose),
+    caption: t('home.buckets.residualCloseDesc'),
+    tone: buckets.value.ResidualClose > 0 ? 'info' : 'neutral',
+    to: '/waves?filter=residual',
+    warning: '',
+  },
+])
+
+function navigateTo(path: string) {
+  void router.push(path)
 }
 
-function handleWaveClick(waveId: number): void {
-  router.push({ name: "wave-workspace", params: { id: waveId } });
+function openWave(wave: Wave) {
+  void router.push(`/waves/${wave.ID}/results`)
 }
 
-function handleOnboardingCta(): void {
-  router.push("/waves");
-}
+const waveColumns = [
+  {
+    title: t('waves.waveNo'),
+    key: 'WaveNo',
+    width: 140,
+  },
+  {
+    title: t('waves.name'),
+    key: 'Name',
+  },
+  {
+    title: t('waves.status'),
+    key: 'CloseResult',
+    width: 130,
+    render(row: Wave) {
+      return h(StatusBadge, {
+        dimension: 'waveCloseResult',
+        value: row.CloseResult || 'open',
+      })
+    },
+  },
+  {
+    title: t('waves.notes'),
+    key: 'Notes',
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: t('common.actions'),
+    key: 'actions',
+    width: 120,
+    render(row: Wave) {
+      return h(
+        NButton,
+        {
+          size: 'small',
+          type: 'primary',
+          quaternary: true,
+          onClick: () => openWave(row),
+        },
+        { default: () => t('waves.open') },
+      )
+    },
+  },
+]
 </script>
 
 <template>
   <div class="home-page">
-    <PageHeader :title="t('taskCenter.title')" :description="t('taskCenter.subtitle')">
+    <PageHeader :title="t('home.title')" :description="t('home.subtitle')">
       <template #actions>
-        <NButton size="small" :loading="loading" @click="loadData">{{ t("taskCenter.refresh") }}</NButton>
+        <NButton size="small" :loading="loading" @click="loadData">
+          {{ t('common.refresh') }}
+        </NButton>
       </template>
     </PageHeader>
 
-    <EmptyState v-if="showOnboarding" :title="t('taskCenter.onboarding.title')" :description="t('taskCenter.onboarding.description')">
-      <NButton type="primary" @click="handleOnboardingCta">{{ t("taskCenter.onboarding.cta") }}</NButton>
-    </EmptyState>
+    <NSpin :show="loading && !buckets.RecentWaves.length">
+      <div class="home-page__buckets">
+        <StatCard
+          v-for="b in bucketCards"
+          :key="b.key"
+          :label="b.label"
+          :value="b.value"
+          :caption="b.caption"
+          :tone="b.tone"
+          :clickable="true"
+          @click="navigateTo(b.to)"
+        >
+          <template v-if="b.warning" #footer>
+            <span
+              class="home-page__bucket-warning"
+              :title="t('home.buckets.revisionFrozenConflictHint')"
+            >
+              {{ b.warning }}
+            </span>
+          </template>
+        </StatCard>
+      </div>
 
-    <template v-else>
-      <SectionCard :title="t('taskCenter.actionStream.title')">
-        <div v-if="loading && !hasLoadedOnce" class="home-page__loading-grid">
-          <StatCard v-for="n in 4" :key="n" :label="t('common.loading')" value="—" />
+      <SectionCard :title="t('home.recentWaves')">
+        <div v-if="!buckets.RecentWaves || buckets.RecentWaves.length === 0" class="home-page__empty">
+          <EmptyState :title="t('home.noWaves')" size="sm" />
         </div>
-        <EmptyState v-else-if="!streamCards.length" size="sm" :title="t('taskCenter.actionStream.empty')" />
-        <div v-else class="home-page__action-grid">
-          <ActionCard
-            v-for="card in streamCards"
-            :key="card.key"
-            :bucket-label="cardLabel(card)"
-            :wave-name="card.kind === 'bucket' ? card.waveName : undefined"
-            :count="card.count"
-            :tone="card.tone"
-            @click="handleCardClick(card)"
+        <div v-else class="home-page__table">
+          <NDataTable
+            :columns="waveColumns"
+            :data="buckets.RecentWaves"
+            :row-key="(row: Wave) => row.ID"
+            size="small"
           />
         </div>
       </SectionCard>
-
-      <SectionCard :title="t('taskCenter.inProgress.title')">
-        <div v-if="loading && !hasLoadedOnce" class="home-page__loading-grid">
-          <StatCard v-for="n in 3" :key="n" :label="t('common.loading')" value="—" />
-        </div>
-        <EmptyState v-else-if="!inProgressWaves.length" size="sm" :title="t('taskCenter.inProgress.empty')" />
-        <div v-else class="home-page__wave-grid">
-          <WaveSummaryCard v-for="wave in inProgressWaves" :key="wave.id" :wave="wave" @click="handleWaveClick(wave.id)" />
-        </div>
-      </SectionCard>
-    </template>
+    </NSpin>
   </div>
 </template>
 
@@ -232,11 +255,23 @@ function handleOnboardingCta(): void {
   gap: var(--space-4);
 }
 
-.home-page__loading-grid,
-.home-page__action-grid,
-.home-page__wave-grid {
+.home-page__buckets {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.home-page__empty {
+  padding: var(--space-4) 0;
+}
+
+.home-page__table {
+  width: 100%;
+}
+
+.home-page__bucket-warning {
+  color: var(--status-error-fg);
+  font-weight: var(--font-weight-medium);
 }
 </style>

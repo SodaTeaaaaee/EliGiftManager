@@ -71,8 +71,6 @@ frontend/scripts/          guardrails 与枚举生成器
 
 所有运行时 Wails 调用必须通过 `frontend/src/shared/api/bridge.ts`。其他模块不得直接导入 `wailsjs/go/controller/*` 或 `wailsjs/go/main/*`；仅用于类型的 `wailsjs/go/models` import 可以保留。
 
-`frontend-legacy/` 是 2026-07-13 切换前前端的冻结副本，只保留一个发布周期，期间不再增加功能，随后删除。
-
 ## 6. 运行时数据路径
 
 由 `internal/service/path_service.go` 统一解析：
@@ -97,25 +95,22 @@ frontend/scripts/          guardrails 与枚举生成器
 | `frontend/src/shared/api/generated/enums.ts` | Go domain 枚举生成文件（已提交） |
 | `frontend/dist/`、`build/bin/` | 构建产物（已忽略） |
 | `frontend/node_modules/` | Deno npm 兼容层（已忽略） |
-| `frontend-legacy/` | 冻结副本（保留一个发布周期后删除） |
 
-## 9. 模板与接入维护边界
+## 9. 模板与资料库维护边界
 
-模板与接入契约跨越以下当前模块，改动时应一并核对，不要在无关任务中顺带修改：
+模板配置在资料库模板区，绑定平台、文档类型与方向。相关代码：
 
-- `internal/controller/controller_template.go`
-- `internal/app/template_*.go`
-- `frontend/src/pages/integrations/`
+- `internal/app/library.go`
+- `frontend/src/pages/library/templates/`
 - `frontend/src/shared/api/bridge.ts`
-- `frontend/wailsjs/`
+- `frontend/wailsjs/go/controller/WorkspaceController.*`
 
 ## 10. 开发判断原则
 
-- 领域实体用当前业务语言命名（`CustomerProfile`、`FulfillmentResult`、`SupplierOrderLine`），不要使用旧术语（`Member`、`DispatchRecord`、`Demand` 等）
+- 领域实体用当前业务语言命名（`CustomerProfile`、`FulfillmentResult`、`SupplierOrderLine`），不要使用旧术语（`Demand`、`FulfillmentLine` 等）
 - 业务逻辑在 `internal/app/` 用例层，不要堆在控制器
 - 不要绕过 `path_service` 自己拼运行时目录
 - 不要在页面里直接散落 `wailsjs` 调用
-- 不要在 `frontend-legacy/` 增加功能
 - 不要把 TODO 文档或旧分支思路当作当前产品真相
 - 问题在删库从零开始后仍然存在，视为真实问题；仅在旧库升级中出现的，默认不作为高优先级
 

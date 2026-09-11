@@ -14,8 +14,12 @@ const props = withDefaults(
   defineProps<{
     show: boolean
     title?: string
-    /** `md` for a compact inspector (~420px), `lg` for a full row-detail panel (~640px). */
-    size?: 'md' | 'lg'
+    /**
+     * `md` for a compact inspector (~420px), `lg` for a full row-detail panel
+     * (~640px), `xl` for editor workbenches that need grid-width content
+     * (capped to the viewport).
+     */
+    size?: 'md' | 'lg' | 'xl'
     closable?: boolean
   }>(),
   {
@@ -29,7 +33,10 @@ const emit = defineEmits<{ 'update:show': [boolean] }>()
 
 const { t } = useI18n({ useScope: 'global' })
 
-const widthPx = computed(() => (props.size === 'lg' ? 640 : 420))
+const widthPx = computed<number | string>(() => {
+  if (props.size === 'xl') return 'min(1120px, 94vw)'
+  return props.size === 'lg' ? 640 : 420
+})
 
 function handleUpdateShow(value: boolean) {
   emit('update:show', value)

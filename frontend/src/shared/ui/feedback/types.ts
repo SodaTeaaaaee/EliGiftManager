@@ -7,12 +7,6 @@
 /** The three toast tones the app can raise. Errors are sticky by default. */
 export type ToastKind = 'success' | 'error' | 'info'
 
-/** Options accepted by `useFeedback()`'s `error()` call. */
-export interface ToastErrorOptions {
-  /** Optional copyable technical detail (stack trace, raw error message, request id, ...). */
-  detail?: string
-}
-
 /** A live toast instance tracked by `FeedbackProvider`. */
 export interface ToastRecord {
   id: string

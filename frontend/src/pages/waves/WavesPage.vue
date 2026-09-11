@@ -1,246 +1,353 @@
 <script setup lang="ts">
-/**
- * WavesPage — the wave list (plan 3.2): create/rename/close a wave, filter
- * by keyword + lifecycle stage (client-side — `listWavesFiltered`'s
- * `PaginationInput` carries no filter fields yet), and deep-link into the
- * wave workspace on row click.
- */
-import { computed, h, onBeforeMount, onBeforeUnmount, onMounted, ref } from "vue";
-import { useRouter } from "vue-router";
-import { useI18n } from "vue-i18n";
-import { NAlert, NButton } from "naive-ui";
-import { PageHeader } from "@/shared/ui/shell";
-import { FilterBar, useUrlFilters, type FilterSchema } from "@/shared/ui/filter-bar";
-import { DataGrid, createColumns, type DataGridColumnSpec } from "@/shared/ui/data-grid";
-import { useFeedback } from "@/shared/ui/feedback";
-import { listWavesFiltered } from "@/shared/api/bridge";
-import { registerRefreshTarget } from "@/shared/lib/view-hotkeys";
-import type { dto } from "../../../wailsjs/go/models";
-import CreateWaveDialog from "./components/CreateWaveDialog.vue";
-import RenameWaveDialog from "./components/RenameWaveDialog.vue";
-import CloseWaveDialog from "./components/CloseWaveDialog.vue";
+import { computed, h, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import {
+  NButton,
+  NDataTable,
+  NForm,
+  NFormItem,
+  NInput,
+  NModal,
+  NSpace,
+  NSpin,
+  NTag,
+} from 'naive-ui'
+import { PageHeader } from '@/shared/ui/shell'
+import { SectionCard } from '@/shared/ui/cards'
+import { EmptyState } from '@/shared/ui/empty-state'
+import { StatusBadge } from '@/shared/ui/status'
+import {
+  createWave,
+  listResultViews,
+  listWaves,
+  reopenWave,
+} from '@/shared/api/bridge'
+import type { Wave } from '@/entities/models'
+import WaveCloseDialog from './WaveCloseDialog.vue'
 
-const { t } = useI18n({ useScope: "global" });
-const router = useRouter();
-const feedback = useFeedback();
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 
-const WAVE_LIST_PAGE_SIZE = 200;
+const loading = ref(false)
+const actionLoading = ref(false)
+const waves = ref<Wave[]>([])
 
-const allWaves = ref<dto.WaveDTO[]>([]);
-const loading = ref(true);
-const totalWaveCount = ref(0);
+const showCreateModal = ref(false)
+const createForm = ref({ name: '', notes: '' })
 
-// `listWavesFiltered`'s PaginationInput has no filter fields (5.4 note) — the
-// wave count is small enough that client-side filtering below is sufficient.
-async function loadWaves(): Promise<void> {
-  loading.value = true;
+const showCloseModal = ref(false)
+const targetCloseWave = ref<Wave | null>(null)
+
+// ── Home deep-link filter (?filter=blocked|writebackFailed|residual) ──
+
+const homeFilter = computed(() => {
+  const raw = route.query.filter
+  return typeof raw === 'string' ? raw : ''
+})
+
+/** Home bucket cards deep-link one of these filter values; unknown values
+ * keep the safe fallback (no filtering) but hide the tag since there is no
+ * honest bucket name to display. */
+const homeFilterBucketKeys: Record<string, string> = {
+  blocked: 'home.buckets.blockedResults',
+  writebackFailed: 'home.buckets.writebackFailed',
+  residual: 'home.buckets.residualClose',
+}
+
+const isKnownHomeFilter = computed(() => Boolean(homeFilterBucketKeys[homeFilter.value]))
+
+const deepLinkFilterLabel = computed(() => {
+  const key = homeFilterBucketKeys[homeFilter.value]
+  return key ? t('common.deepLinkFilter', { filter: t(key) }) : ''
+})
+
+interface WaveFlags {
+  blocked: boolean
+  writebackFailed: boolean
+}
+
+const flagsLoading = ref(false)
+const waveFlags = ref<Record<number, WaveFlags>>({})
+
+async function loadWaveFlags() {
+  if (homeFilter.value !== 'blocked' && homeFilter.value !== 'writebackFailed') return
+  flagsLoading.value = true
   try {
-    const page = await listWavesFiltered({
-      page: 1,
-      pageSize: WAVE_LIST_PAGE_SIZE,
-      sortBy: "updatedAt",
-      sortDesc: true,
-    });
-    allWaves.value = page.items;
-    totalWaveCount.value = page.pagination.totalCount;
-  } catch (err) {
-    feedback.error(t("feedback.error"), err instanceof Error ? err.message : String(err));
+    const flags: Record<number, WaveFlags> = {}
+    await Promise.all(
+      waves.value.map(async (w) => {
+        // The blocked bucket only counts strictly open waves, matching the
+        // backend's home bucket semantics; writeback failures can linger on
+        // closed waves, so those still get inspected.
+        if (homeFilter.value === 'blocked' && w.CloseResult !== 'open') {
+          flags[w.ID] = { blocked: false, writebackFailed: false }
+          return
+        }
+        try {
+          const views = await listResultViews(w.ID)
+          flags[w.ID] = {
+            blocked: views.some((v) => v.WorkState === 'blocked'),
+            writebackFailed: views.some((v) => v.WritebackFailed),
+          }
+        } catch (err) {
+          console.error('Failed to load result views for wave flags:', err)
+          flags[w.ID] = { blocked: false, writebackFailed: false }
+        }
+      }),
+    )
+    waveFlags.value = flags
   } finally {
-    loading.value = false;
+    flagsLoading.value = false
   }
 }
 
-onMounted(loadWaves);
+const displayWaves = computed(() => {
+  switch (homeFilter.value) {
+    case 'blocked':
+      return waves.value.filter((w) => waveFlags.value[w.ID]?.blocked)
+    case 'writebackFailed':
+      return waves.value.filter((w) => waveFlags.value[w.ID]?.writebackFailed)
+    case 'residual':
+      return waves.value.filter((w) => w.CloseResult === 'residual')
+    default:
+      return waves.value
+  }
+})
 
-let unregisterRefresh: (() => void) | undefined;
-onBeforeMount(() => {
-  unregisterRefresh = registerRefreshTarget(loadWaves);
-});
-onBeforeUnmount(() => unregisterRefresh?.());
-
-// ── Filters (URL-synced; applied client-side over `allWaves`) ──
-
-const schema = [
-  { key: "keyword", type: "keyword" },
-  { key: "lifecycleStage", type: "enum-multi", dimension: "lifecycleStage" },
-] as const satisfies FilterSchema;
-
-const filters = useUrlFilters(schema);
-
-const filteredRows = computed<dto.WaveDTO[]>(() => {
-  const keyword = filters.state.keyword.trim().toLowerCase();
-  const stages = filters.state.lifecycleStage;
-  return allWaves.value.filter((wave) => {
-    if (stages.length > 0 && !stages.includes(wave.lifecycleStage)) return false;
-    if (keyword.length > 0 && !`${wave.name} ${wave.waveNo}`.toLowerCase().includes(keyword)) return false;
-    return true;
-  });
-});
-
-const isWaveListTruncated = computed(() => totalWaveCount.value > allWaves.value.length);
-
-// ── Navigation ──
-
-function openWorkspace(wave: dto.WaveDTO): void {
-  router.push({ name: "wave-workspace", params: { id: wave.id } });
+function clearHomeFilter() {
+  void router.replace({ query: { ...route.query, filter: undefined } })
 }
 
-// ── Dialogs ──
-
-const showCreate = ref(false);
-const renameTarget = ref<dto.WaveDTO | null>(null);
-const closeTarget = ref<dto.WaveDTO | null>(null);
-
-function onRenameDialogVisibility(visible: boolean): void {
-  if (!visible) renameTarget.value = null;
+async function refreshAll() {
+  await loadData()
+  await loadWaveFlags()
 }
 
-function onCloseDialogVisibility(visible: boolean): void {
-  if (!visible) closeTarget.value = null;
+watch(
+  () => route.query.filter,
+  () => {
+    void loadWaveFlags()
+  },
+)
+
+onMounted(() => {
+  void refreshAll()
+})
+
+async function loadData() {
+  loading.value = true
+  try {
+    waves.value = await listWaves()
+  } catch (err) {
+    console.error('Failed to load waves:', err)
+  } finally {
+    loading.value = false
+  }
 }
 
-function onCreated(wave: dto.WaveDTO): void {
-  showCreate.value = false;
-  void loadWaves();
-  feedback.success(t("wavesList.feedback.created"));
-  feedback.receipt({ kind: "action", summary: `${t("wavesList.feedback.created")} · ${wave.name}` });
+function openWorkspace(wave: Wave) {
+  void router.push(`/waves/${wave.ID}/rules`)
 }
 
-function onRenamed(wave: dto.WaveDTO): void {
-  renameTarget.value = null;
-  void loadWaves();
-  feedback.success(t("wavesList.feedback.renamed"));
-  feedback.receipt({ kind: "action", summary: `${t("wavesList.feedback.renamed")} · ${wave.name}` });
+async function handleCreate() {
+  if (!createForm.value.name.trim()) return
+  actionLoading.value = true
+  try {
+    const wave = await createWave(createForm.value.name.trim(), createForm.value.notes.trim())
+    showCreateModal.value = false
+    createForm.value = { name: '', notes: '' }
+    await loadData()
+    if (wave && wave.ID) {
+      void router.push(`/waves/${wave.ID}/rules`)
+    }
+  } catch (err) {
+    console.error('Failed to create wave:', err)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
-function onClosed(result: dto.CloseWaveResult): void {
-  closeTarget.value = null;
-  void loadWaves();
-  const message =
-    result.forced && result.residualItemCount > 0
-      ? t("wavesList.feedback.closeForced", { count: result.residualItemCount })
-      : t("wavesList.feedback.closed");
-  feedback.success(message);
-  feedback.receipt({ kind: "action", summary: `${message} · ${result.wave.name}` });
+function openCloseModal(wave: Wave) {
+  targetCloseWave.value = wave
+  showCloseModal.value = true
 }
 
-// ── Grid columns ──
+async function handleReopen(wave: Wave) {
+  actionLoading.value = true
+  try {
+    await reopenWave(wave.ID)
+    await loadData()
+  } catch (err) {
+    console.error('Failed to reopen wave:', err)
+  } finally {
+    actionLoading.value = false
+  }
+}
 
-const columns = computed(() => {
-  const specs: DataGridColumnSpec<dto.WaveDTO>[] = [
-    { type: "text", key: "waveNo", title: t("wavesList.columns.waveNo"), width: 140 },
-    { type: "text", key: "name", title: t("wavesList.columns.name"), minWidth: 200 },
-    {
-      type: "text",
-      key: "waveType",
-      title: t("wavesList.columns.type"),
-      width: 120,
-      sortable: false,
-      getValue: (row) => t(`wavesList.waveType.${row.waveType}`),
+const columns = [
+  {
+    title: t('waves.waveNo'),
+    key: 'WaveNo',
+    width: 140,
+  },
+  {
+    title: t('waves.name'),
+    key: 'Name',
+  },
+  {
+    title: t('waves.status'),
+    key: 'CloseResult',
+    width: 130,
+    render(row: Wave) {
+      return h(StatusBadge, {
+        dimension: 'waveCloseResult',
+        value: row.CloseResult || 'open',
+      })
     },
-    {
-      type: "status",
-      key: "lifecycleStage",
-      title: t("wavesList.columns.stage"),
-      dimension: "lifecycleStage",
-      width: 170,
-      showDot: true,
+  },
+  {
+    title: t('waves.notes'),
+    key: 'Notes',
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: t('waves.createdAt'),
+    key: 'CreatedAt',
+    width: 170,
+    render(row: Wave) {
+      if (!row.CreatedAt) return '—'
+      const date = new Date(row.CreatedAt)
+      return isNaN(date.getTime()) ? row.CreatedAt : date.toLocaleDateString()
     },
-    { type: "date", key: "createdAt", title: t("wavesList.columns.createdAt"), width: 130 },
-    { type: "date", key: "updatedAt", title: t("wavesList.columns.updatedAt"), width: 130 },
-    {
-      type: "actions",
-      key: "actions",
-      title: t("wavesList.columns.actions"),
-      width: 240,
-      render: (row) =>
-        h("div", { class: "waves-page__row-actions" }, [
-          h(
-            NButton,
-            {
-              size: "tiny",
-              quaternary: true,
-              onClick: (event: MouseEvent) => {
-                event.stopPropagation();
-                openWorkspace(row);
+  },
+  {
+    title: t('waves.actions'),
+    key: 'actions',
+    width: 220,
+    render(row: Wave) {
+      const isOpen = row.CloseResult === 'open' || !row.CloseResult
+      return h(NSpace, { size: 'small' }, () => [
+        h(
+          NButton,
+          {
+            size: 'small',
+            type: 'primary',
+            quaternary: true,
+            onClick: () => openWorkspace(row),
+          },
+          { default: () => t('waves.open') },
+        ),
+        isOpen
+          ? h(
+              NButton,
+              {
+                size: 'small',
+                type: 'warning',
+                quaternary: true,
+                onClick: () => openCloseModal(row),
               },
-            },
-            { default: () => t("wavesList.rowActions.open") },
-          ),
-          h(
-            NButton,
-            {
-              size: "tiny",
-              quaternary: true,
-              onClick: (event: MouseEvent) => {
-                event.stopPropagation();
-                renameTarget.value = row;
+              { default: () => t('waves.close') },
+            )
+          : h(
+              NButton,
+              {
+                size: 'small',
+                type: 'info',
+                quaternary: true,
+                onClick: () => handleReopen(row),
               },
-            },
-            { default: () => t("wavesList.rowActions.rename") },
-          ),
-          h(
-            NButton,
-            {
-              size: "tiny",
-              quaternary: true,
-              onClick: (event: MouseEvent) => {
-                event.stopPropagation();
-                closeTarget.value = row;
-              },
-            },
-            { default: () => t("wavesList.rowActions.close") },
-          ),
-        ]),
+              { default: () => t('waves.reopen') },
+            ),
+      ])
     },
-  ];
-  return createColumns<dto.WaveDTO>(specs);
-});
+  },
+]
 </script>
 
 <template>
   <div class="waves-page">
-    <PageHeader :title="t('wavesList.title')" :description="t('wavesList.subtitle')">
+    <PageHeader :title="t('waves.title')" :description="t('waves.subtitle')">
       <template #actions>
-        <NButton type="primary" @click="showCreate = true">{{ t("wavesList.create") }}</NButton>
+        <NSpace>
+          <NButton type="primary" size="small" @click="showCreateModal = true">
+            {{ t('waves.createWave') }}
+          </NButton>
+          <NButton size="small" :loading="loading" @click="refreshAll">
+            {{ t('common.refresh') }}
+          </NButton>
+        </NSpace>
       </template>
     </PageHeader>
 
-    <FilterBar :filters="filters" />
+    <SectionCard :title="t('waves.title')">
+      <template #actions>
+        <div class="waves-page__filter">
+          <NTag
+            v-if="isKnownHomeFilter"
+            closable
+            size="small"
+            @close="clearHomeFilter"
+          >
+            {{ deepLinkFilterLabel }}
+          </NTag>
+        </div>
+      </template>
+      <NSpin :show="loading || flagsLoading">
+        <div v-if="!displayWaves.length" class="waves-page__empty">
+          <EmptyState :title="t('waves.empty')" size="sm" />
+        </div>
+        <div v-else class="waves-page__table">
+          <NDataTable
+            :columns="columns"
+            :data="displayWaves"
+            :row-key="(row: Wave) => row.ID"
+            size="small"
+          />
+        </div>
+      </NSpin>
+    </SectionCard>
 
-    <NAlert
-      v-if="isWaveListTruncated"
-      type="info"
-      :show-icon="false"
-      class="waves-page__truncation-notice"
+    <!-- Create Wave Modal -->
+    <NModal
+      v-model:show="showCreateModal"
+      preset="card"
+      :title="t('waves.createWave')"
+      style="width: 480px"
     >
-      {{ t("wavesList.truncationNotice", { shown: allWaves.length, total: totalWaveCount }) }}
-    </NAlert>
+      <NForm>
+        <NFormItem :label="t('waves.name')">
+          <NInput v-model:value="createForm.name" :placeholder="t('waves.name')" />
+        </NFormItem>
+        <NFormItem :label="t('waves.notes')">
+          <NInput
+            v-model:value="createForm.notes"
+            type="textarea"
+            :placeholder="t('waves.notes')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showCreateModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!createForm.name.trim()"
+            @click="handleCreate"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
 
-    <DataGrid
-      :columns="columns"
-      :rows="filteredRows"
-      row-key="id"
-      :loading="loading"
-      pagination="client"
-      :empty="{ title: t('wavesList.empty.title'), description: t('wavesList.empty.description') }"
-      @row-click="openWorkspace"
-    />
-
-    <CreateWaveDialog v-model:show="showCreate" @created="onCreated" />
-    <RenameWaveDialog
-      v-if="renameTarget"
-      :show="true"
-      :wave="renameTarget"
-      @update:show="onRenameDialogVisibility"
-      @renamed="onRenamed"
-    />
-    <CloseWaveDialog
-      v-if="closeTarget"
-      :show="true"
-      :wave="closeTarget"
-      @update:show="onCloseDialogVisibility"
-      @closed="onClosed"
+    <!-- Close Wave Modal (shared) -->
+    <WaveCloseDialog
+      v-model:show="showCloseModal"
+      :wave="targetCloseWave"
+      @closed="refreshAll"
     />
   </div>
 </template>
@@ -251,14 +358,18 @@ const columns = computed(() => {
   flex-direction: column;
   gap: var(--space-4);
 }
-</style>
 
-<style>
-/* Unscoped: `createColumns`' `actions` render() runs outside this SFC's
-   scoped subtree (same reasoning as DataGrid's skeleton-bar class). */
-.waves-page__row-actions {
-  display: inline-flex;
+.waves-page__empty {
+  padding: var(--space-4) 0;
+}
+
+.waves-page__filter {
+  display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2);
+}
+
+.waves-page__table {
+  width: 100%;
 }
 </style>

@@ -8,43 +8,21 @@ const GLOSSARY_URL = new URL('../src/shared/i18n/glossary.ts', import.meta.url)
 const OUTPUT_URL = new URL('../src/shared/api/generated/enums.ts', import.meta.url)
 
 const GO_ENUM_TO_GLOSSARY_DIMENSION: Readonly<Record<string, string>> = {
-  ProfileType: 'profileType',
   IdentityType: 'identityType',
-  DemandKind: 'demandKind',
-  CaptureMode: 'captureMode',
-  RecipientInputState: 'recipientInputState',
-  RoutingDisposition: 'routingDisposition',
-  FulfillmentLineReason: 'lineReason',
-  SubmissionMode: 'submissionMode',
+  PlatformKind: 'platformKind',
+  InputFactKind: 'inputFactKind',
+  TemplateDirection: 'templateDirection',
+  WaveCloseResult: 'waveCloseResult',
+  EntitlementSelectorType: 'entitlementSelectorType',
+  FulfillmentSourceKind: 'fulfillmentSourceKind',
+  BlockReason: 'blockReason',
   SupplierOrderStatus: 'supplierOrderStatus',
-  ShipmentStatus: 'shipmentStatus',
-  AdjustmentKind: 'adjustmentKind',
-  AllocationState: 'allocationState',
-  AddressState: 'addressState',
-  SupplierState: 'supplierState',
-  ChannelSyncState: 'channelSyncState',
-  LifecycleStage: 'lifecycleStage',
-  ProductKind: 'productKind',
+  DuplicateVerdict: 'duplicateVerdict',
+  WritebackStatus: 'writebackStatus',
+  WorkState: 'workState',
 }
 
-const NON_DOMAIN_GLOSSARY_DIMENSIONS = new Set([
-  'driftSummary',
-  'reviewRequirement',
-  'basisDriftStatus',
-  'allocationSelectorType',
-  'demandMappingBlockedReason',
-  'initialAllocationStrategy',
-  'identityStrategy',
-  'entitlementAuthorityMode',
-  'recipientInputMode',
-  'referenceStrategy',
-  'trackingSyncMode',
-  'closurePolicy',
-  'documentType',
-  'channelSyncJobStatus',
-  'channelSyncItemStatus',
-  'closureDecisionKind',
-])
+const NON_DOMAIN_GLOSSARY_DIMENSIONS = new Set<string>([])
 
 function fail(message: string): never {
   console.error(`gen-enums: ${message}`)

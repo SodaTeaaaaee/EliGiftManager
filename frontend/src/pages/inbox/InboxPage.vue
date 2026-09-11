@@ -1,122 +1,1163 @@
 <script setup lang="ts">
-/**
- * InboxPage — the global demand-inbox page (plan P4 §3.5). Master-detail:
- * `PageHeader` (import CSV / manual entry actions) + the bespoke 3-way
- * assignment toggle (per foundations decision #5, NOT a FilterBar
- * dimension) + the business-surface segmented control (all / membership /
- * retail — folds into the `demandKind` filter via `businessSurface.ts`) +
- * `FilterBar`/`SavedViews` (the `demandKind` + `routingDisposition`
- * dimensions) + `DataGrid` (server-paginated via `useInboxGrid`) + row-click ->
- * `RowDetailPanel` + `#selection-toolbar` -> `BatchActionBar`.
- *
- * Wires together `useInboxGrid` + `inbox-grid/{filter-schema,columns}` with
- * `BatchActionBar` and `RowDetailPanel`, reacting to their `'done'`/
- * `'changed'` emits by calling `mutationDone()` (refetches the current
- * page/filter state in place — no route remount).
- */
-import { computed, ref } from 'vue'
+import { computed, h, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { NButton, NRadioButton, NRadioGroup } from 'naive-ui'
+import {
+  NButton,
+  NDataTable,
+  NForm,
+  NFormItem,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSelect,
+  NSpace,
+  NSpin,
+  NTag,
+} from 'naive-ui'
 import { PageHeader } from '@/shared/ui/shell'
-import { FilterBar, SavedViews } from '@/shared/ui/filter-bar'
-import { DataGrid, createColumns } from '@/shared/ui/data-grid'
-import { useInboxGrid } from './inbox-grid/useInboxGrid'
-import { buildInboxColumns } from './inbox-grid/columns'
-import { kindsFromSurface, surfaceFromKinds, type BusinessSurface } from './inbox-grid/businessSurface'
-import BatchActionBar from './inbox-grid/BatchActionBar.vue'
-import RowDetailPanel from './inbox-grid/RowDetailPanel.vue'
-import ImportFileModal from './ImportFileModal.vue'
-import ManualEntryModal from './ManualEntryModal.vue'
-import type { DemandInboxRow } from '@/entities/demand'
+import { SectionCard } from '@/shared/ui/cards'
+import { EmptyState } from '@/shared/ui/empty-state'
+import { StatusBadge } from '@/shared/ui/status'
+import { useFeedback } from '@/shared/ui/feedback'
+import { TemplatePreviewPanel } from '@/shared/ui/template-preview'
+import DuplicateDecisionList from './DuplicateDecisionList.vue'
+import {
+  applyRevision,
+  assignLines,
+  attachIdentity,
+  dismissRevision,
+  getSemanticDictionary,
+  importFile,
+  ingestDocument,
+  listCustomers,
+  listInboxRows,
+  listPlatforms,
+  listProducts,
+  listTemplates,
+  listWaves,
+  moveLines,
+  pickFile,
+  previewTemplate,
+  updateAlias,
+} from '@/shared/api/bridge'
+import { identityTypeValues, inputFactKindValues } from '@/shared/api/generated/enums'
+import type {
+  CustomerProfile,
+  ImportFileResult,
+  IngestDocumentResult,
+  InboxRow,
+  Platform,
+  ProductItem,
+  TemplateConfig,
+  TemplatePreview,
+  Wave,
+} from '@/entities/models'
 
-const { t } = useI18n({ useScope: 'global' })
+const { t, te } = useI18n()
+const route = useRoute()
+const router = useRouter()
+const feedback = useFeedback()
 
-const { assignment, filters, rows, loading, selectedKeys, selectedRows, page, pageSize, totalCount, onPageChange, onSort, mutationDone } =
-  useInboxGrid()
-
-const columns = computed(() => createColumns(buildInboxColumns(t)))
-
-const businessSurface = computed<BusinessSurface>(() => surfaceFromKinds(filters.state.demandKind))
-
-function handleSurfaceChange(surface: BusinessSurface): void {
-  filters.setEnumValues('demandKind', kindsFromSurface(surface))
+function errMsg(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
 }
 
-function handleSelectedKeysChange(keys: Array<string | number>): void {
-  selectedKeys.value = keys as number[]
+const loading = ref(false)
+const actionLoading = ref(false)
+const rows = ref<InboxRow[]>([])
+const waves = ref<Wave[]>([])
+const customers = ref<CustomerProfile[]>([])
+const platforms = ref<Platform[]>([])
+const templates = ref<TemplateConfig[]>([])
+const products = ref<ProductItem[]>([])
+const selectedLineKeys = ref<number[]>([])
+const selectedDocumentFilter = ref<string>('all')
+
+const showAssignModal = ref(false)
+const selectedWaveId = ref<number | null>(null)
+
+const showAttachModal = ref(false)
+const selectedCustomerId = ref<number | null>(null)
+const targetIdentityId = ref<number | null>(null)
+
+const showIngestModal = ref(false)
+const ingestForm = ref({
+  platformId: null as number | null,
+  originalName: '',
+  kind: 'membership',
+  identityValue: '',
+  identityType: 'platform_uid',
+  membershipLevel: '舰长',
+  externalSku: '',
+  externalTitle: '',
+  quantity: 1,
+})
+const ingestResult = ref<IngestDocumentResult | null>(null)
+
+// ── Move-to-wave (MoveLines) ──
+
+const showMoveModal = ref(false)
+const moveTargetWaveId = ref<number | null>(null)
+const moveLineIds = ref<number[]>([])
+const moveExcludeWaveId = ref<number | null>(null)
+
+// ── File import (ImportFile) ──
+
+const importFileFilters = [{ displayName: 'CSV / Excel', pattern: '*.csv;*.xlsx;*.xls' }]
+const IMPORT_PREVIEW_LIMIT = 20
+const showImportFileModal = ref(false)
+const importForm = ref({
+  platformId: null as number | null,
+  templateId: null as number | null,
+  filePath: '',
+})
+const importResult = ref<ImportFileResult | null>(null)
+const importError = ref('')
+const dictionary = ref<string[]>([])
+
+// Pre-import preview: the confirm button stays locked until PreviewTemplate
+// succeeded for exactly the (template, file) pair currently selected.
+const importPreview = ref<TemplatePreview | null>(null)
+const importPreviewLoading = ref(false)
+const importPreviewError = ref('')
+const importPreviewFor = ref<{ templateId: number; filePath: string } | null>(null)
+
+// ── Align-to-product (UpdateAlias) ──
+
+const showAlignModal = ref(false)
+const targetAliasId = ref<number | null>(null)
+const selectedAlignProductId = ref<number | null>(null)
+
+async function loadData() {
+  loading.value = true
+  try {
+    const [inboxRes, waveRes, custRes, platRes, tmplRes, dictRes] = await Promise.all([
+      listInboxRows(),
+      listWaves(),
+      listCustomers(),
+      listPlatforms(),
+      listTemplates(),
+      getSemanticDictionary(),
+    ])
+    rows.value = inboxRes
+    waves.value = waveRes.filter((w) => w.CloseResult === 'open' || !w.CloseResult)
+    customers.value = custRes
+    platforms.value = platRes
+    templates.value = tmplRes
+    dictionary.value = dictRes
+  } catch (err) {
+    console.error('Failed to load inbox data:', err)
+  } finally {
+    loading.value = false
+  }
 }
 
-// ── Row detail panel ──
+onMounted(() => {
+  void loadData()
+  // Duplicate observations have no inbox row view; the deep link falls back
+  // to the four decision-pending row categories and says so once.
+  if (homeFilter.value === 'duplicates') {
+    feedback.info(t('inbox.duplicatesFilterHint'))
+  }
+})
 
-const detailRow = ref<DemandInboxRow | null>(null)
-const showDetail = ref(false)
+// ── Home deep-link filter (?filter=…) ──
 
-function handleRowClick(row: DemandInboxRow): void {
-  detailRow.value = row
-  showDetail.value = true
+const homeFilter = computed(() => {
+  const raw = route.query.filter
+  return typeof raw === 'string' ? raw : ''
+})
+
+/** Home bucket cards deep-link one of these filter values; unknown values
+ * keep the safe fallback (no filtering) but hide the tag since there is no
+ * honest bucket name to display. */
+const homeFilterBucketKeys: Record<string, string> = {
+  unassigned: 'home.buckets.unassigned',
+  duplicates: 'home.buckets.duplicateAsk',
+  alignment: 'home.buckets.alignmentConflict',
+  unattached: 'home.buckets.identityUnattached',
+  revisions: 'home.buckets.pendingRevisions',
 }
 
-function handleDetailVisibility(visible: boolean): void {
-  showDetail.value = visible
+const isKnownHomeFilter = computed(() => Boolean(homeFilterBucketKeys[homeFilter.value]))
+
+const deepLinkFilterLabel = computed(() => {
+  const key = homeFilterBucketKeys[homeFilter.value]
+  return key ? t('common.deepLinkFilter', { filter: t(key) }) : ''
+})
+
+function matchesHomeFilter(row: InboxRow): boolean {
+  switch (homeFilter.value) {
+    case 'unassigned':
+      return !row.Assigned && !row.RevisionPending
+    case 'duplicates':
+      return row.RevisionPending || row.Unaligned || row.Unattached || !row.Assigned
+    case 'alignment':
+      return row.Unaligned
+    case 'unattached':
+      return row.Unattached
+    case 'revisions':
+      return row.RevisionPending
+    default:
+      return true
+  }
 }
 
-// ── Import / manual-entry modals ──
+function clearHomeFilter() {
+  void router.replace({ query: { ...route.query, filter: undefined } })
+}
 
-const showImportModal = ref(false)
-const showManualEntryModal = ref(false)
+const documentOptions = computed(() => {
+  const map = new Map<string, string>()
+  for (const r of rows.value) {
+    if (r.Document) {
+      map.set(String(r.Document.ID), r.Document.OriginalName || `Doc #${r.Document.ID}`)
+    }
+  }
+  const opts = [{ label: t('inbox.allDocuments'), value: 'all' }]
+  for (const [id, name] of map.entries()) {
+    opts.push({ label: name, value: id })
+  }
+  return opts
+})
+
+const filteredRows = computed(() => {
+  let list = rows.value
+  if (selectedDocumentFilter.value !== 'all') {
+    list = list.filter(
+      (r) => r.Document && String(r.Document.ID) === selectedDocumentFilter.value,
+    )
+  }
+  if (homeFilter.value) {
+    list = list.filter(matchesHomeFilter)
+  }
+  return list
+})
+
+const waveOptions = computed(() =>
+  waves.value.map((w) => ({
+    label: `${w.WaveNo} - ${w.Name}`,
+    value: w.ID,
+  })),
+)
+
+const moveWaveOptions = computed(() =>
+  waves.value
+    .filter((w) => w.ID !== moveExcludeWaveId.value)
+    .map((w) => ({
+      label: `${w.WaveNo} - ${w.Name}`,
+      value: w.ID,
+    })),
+)
+
+/** Rows currently covered by the table's checkbox selection. */
+const selectedRows = computed(() => {
+  const ids = new Set(selectedLineKeys.value)
+  return rows.value.filter((r) => ids.has(r.Line.ID))
+})
+
+const selectedUnassignedKeys = computed(() =>
+  selectedRows.value.filter((r) => !r.Assigned).map((r) => r.Line.ID),
+)
+
+const selectedAssignedKeys = computed(() =>
+  selectedRows.value.filter((r) => r.Assigned).map((r) => r.Line.ID),
+)
+
+const customerOptions = computed(() =>
+  customers.value.map((c) => ({
+    label: `${c.DisplayName} (ID: ${c.ID})`,
+    value: c.ID,
+  })),
+)
+
+const platformOptions = computed(() =>
+  platforms.value.map((p) => ({
+    label: `${p.Name} (${p.Key})`,
+    value: p.ID,
+  })),
+)
+
+function documentTypeLabel(type: string): string {
+  const key = `templates.documentTypeOptions.${type}`
+  return te(key) ? t(key) : type
+}
+
+/** File import feeds the inbox with membership / order facts, so only source platforms apply. */
+const importPlatformOptions = computed(() =>
+  platforms.value
+    .filter((p) => p.Kind === 'source')
+    .map((p) => ({ label: `${p.Name} (${p.Key})`, value: p.ID })),
+)
+
+/** Active (non-builtin) input templates of the selected platform, labelled 名称 · 单据类型. */
+const importTemplateOptions = computed(() =>
+  templates.value
+    .filter(
+      (tpl) =>
+        !tpl.Builtin &&
+        tpl.Direction === 'input' &&
+        importForm.value.platformId != null &&
+        tpl.PlatformID === importForm.value.platformId,
+    )
+    .map((tpl) => ({
+      label: `${tpl.Name} · ${documentTypeLabel(tpl.DocumentType)}`,
+      value: tpl.ID,
+    })),
+)
+
+const importPlatformHasNoTemplate = computed(
+  () => importForm.value.platformId != null && importTemplateOptions.value.length === 0,
+)
+
+function goToLibraryTemplates() {
+  showImportFileModal.value = false
+  void router.push({ name: 'library-templates' })
+}
+
+const kindOptions = inputFactKindValues.map((kind) => ({
+  label: t(`glossary.inputFactKind.${kind}.label`),
+  value: kind,
+}))
+
+const identityTypeOptions = identityTypeValues.map((type) => ({
+  label: t(`glossary.identityType.${type}.label`),
+  value: type,
+}))
+
+async function handleAssignWave() {
+  if (!selectedWaveId.value || selectedUnassignedKeys.value.length === 0) return
+  actionLoading.value = true
+  try {
+    await assignLines(selectedWaveId.value, selectedUnassignedKeys.value)
+    showAssignModal.value = false
+    selectedLineKeys.value = []
+    selectedWaveId.value = null
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// ── Move-to-wave flow ──
+
+function openMoveModal(lineIds: number[], excludeWaveId: number | null) {
+  if (!lineIds.length) return
+  moveLineIds.value = lineIds
+  moveExcludeWaveId.value = excludeWaveId
+  moveTargetWaveId.value = null
+  showMoveModal.value = true
+}
+
+async function handleMoveLines() {
+  if (!moveTargetWaveId.value || moveLineIds.value.length === 0) return
+  actionLoading.value = true
+  try {
+    await moveLines(moveLineIds.value, moveTargetWaveId.value)
+    showMoveModal.value = false
+    moveLineIds.value = []
+    moveExcludeWaveId.value = null
+    moveTargetWaveId.value = null
+    selectedLineKeys.value = []
+    feedback.success(t('inbox.moveSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// ── Revision decisions (ApplyRevision / DismissRevision) ──
+
+const revisionActingFactId = ref<number | null>(null)
+
+async function handleApplyRevision(row: InboxRow) {
+  if (revisionActingFactId.value !== null) return
+  revisionActingFactId.value = row.Fact.ID
+  try {
+    await applyRevision(row.Fact.ID)
+    feedback.success(t('inbox.applyRevisionSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    revisionActingFactId.value = null
+  }
+}
+
+async function handleDismissRevision(row: InboxRow) {
+  if (revisionActingFactId.value !== null) return
+  revisionActingFactId.value = row.Fact.ID
+  try {
+    await dismissRevision(row.Fact.ID)
+    feedback.success(t('inbox.dismissRevisionSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    revisionActingFactId.value = null
+  }
+}
+
+function openAttachModal(identityId: number) {
+  targetIdentityId.value = identityId
+  selectedCustomerId.value = null
+  showAttachModal.value = true
+}
+
+async function handleAttachIdentity() {
+  if (!targetIdentityId.value || !selectedCustomerId.value) return
+  actionLoading.value = true
+  try {
+    await attachIdentity(targetIdentityId.value, selectedCustomerId.value)
+    showAttachModal.value = false
+    targetIdentityId.value = null
+    selectedCustomerId.value = null
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+function openIngestModal() {
+  ingestResult.value = null
+  showIngestModal.value = true
+}
+
+async function handleIngest() {
+  if (!ingestForm.value.platformId) return
+  actionLoading.value = true
+  try {
+    const res = await ingestDocument(
+      {
+        PlatformID: ingestForm.value.platformId,
+        DocumentType: 'manual_ingest',
+        Direction: 'input',
+        OriginalName: ingestForm.value.originalName || 'Manual Ingest',
+      },
+      [
+        {
+          Kind: ingestForm.value.kind,
+          IdentityType: ingestForm.value.identityType,
+          IdentityValue: ingestForm.value.identityValue,
+          MembershipLevel: ingestForm.value.membershipLevel,
+          Lines: [
+            {
+              SourceLineNo: 1,
+              ExternalSKU: ingestForm.value.externalSku,
+              ExternalTitle: ingestForm.value.externalTitle,
+              ExternalSpec: '',
+              Quantity: ingestForm.value.quantity,
+            },
+          ],
+        },
+      ],
+    )
+    if (res.Duplicates?.length) {
+      // Keep the modal open so the operator can decide the fresh asks.
+      ingestResult.value = res
+    } else {
+      showIngestModal.value = false
+    }
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// ── File import flow ──
+
+function resetImportPreview() {
+  importPreview.value = null
+  importPreviewError.value = ''
+  importPreviewFor.value = null
+}
+
+function openImportFileModal() {
+  importForm.value = {
+    platformId: importPlatformOptions.value[0]?.value ?? null,
+    templateId: null,
+    filePath: '',
+  }
+  importResult.value = null
+  importError.value = ''
+  resetImportPreview()
+  showImportFileModal.value = true
+}
+
+function handleImportPlatformChange() {
+  importForm.value.templateId = null
+}
+
+async function handlePickImportFile() {
+  const path = await pickFile(importFileFilters)
+  if (path) importForm.value.filePath = path
+}
+
+let importPreviewRequest = 0
+
+async function runImportPreview() {
+  const templateId = importForm.value.templateId
+  const filePath = importForm.value.filePath
+  if (!templateId || !filePath) {
+    resetImportPreview()
+    return
+  }
+  // Only the newest request may write state: a slower, older preview must
+  // not overwrite the result for a template/file pair picked afterwards.
+  const request = ++importPreviewRequest
+  importPreviewLoading.value = true
+  importPreviewError.value = ''
+  try {
+    const result = await previewTemplate(templateId, filePath, IMPORT_PREVIEW_LIMIT)
+    if (request !== importPreviewRequest) return
+    importPreview.value = result
+    importPreviewFor.value = { templateId, filePath }
+  } catch (err) {
+    if (request !== importPreviewRequest) return
+    importPreview.value = null
+    importPreviewFor.value = null
+    importPreviewError.value = err instanceof Error ? err.message : String(err)
+  } finally {
+    if (request === importPreviewRequest) importPreviewLoading.value = false
+  }
+}
+
+// Re-preview whenever the template or the file changes; a fresh import
+// receipt also becomes stale, so it is cleared alongside the preview.
+watch(
+  [() => importForm.value.templateId, () => importForm.value.filePath],
+  () => {
+    if (!showImportFileModal.value) return
+    importResult.value = null
+    importError.value = ''
+    resetImportPreview()
+    void runImportPreview()
+  },
+)
+
+const importPreviewReady = computed(
+  () =>
+    importPreviewFor.value != null &&
+    importPreviewFor.value.templateId === importForm.value.templateId &&
+    importPreviewFor.value.filePath === importForm.value.filePath,
+)
+
+const canConfirmImport = computed(
+  () =>
+    Boolean(importForm.value.platformId) &&
+    Boolean(importForm.value.templateId) &&
+    importForm.value.filePath !== '' &&
+    importPreviewReady.value &&
+    !importPreviewLoading.value,
+)
+
+async function handleImportFile() {
+  if (!canConfirmImport.value || !importForm.value.platformId || !importForm.value.templateId) return
+  actionLoading.value = true
+  importError.value = ''
+  try {
+    importResult.value = await importFile(
+      importForm.value.platformId,
+      importForm.value.templateId,
+      importForm.value.filePath,
+    )
+    feedback.success(t('inbox.importFileSuccess'))
+    await loadData()
+  } catch (err) {
+    importResult.value = null
+    importError.value = err instanceof Error ? err.message : String(err)
+    feedback.error(t('feedback.error'), importError.value)
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+// ── Align-to-product flow ──
+
+/** The row view resolves ExternalSKU to an alias id; null rows cannot align. */
+function aliasIdForRow(row: InboxRow): number | null {
+  const aliasID = row.AliasID
+  return typeof aliasID === 'number' && aliasID > 0 ? aliasID : null
+}
+
+async function openAlignModal(row: InboxRow) {
+  const aliasID = aliasIdForRow(row)
+  if (!aliasID) return
+  targetAliasId.value = aliasID
+  selectedAlignProductId.value = null
+  if (!products.value.length) {
+    try {
+      products.value = await listProducts()
+    } catch (err) {
+      feedback.error(t('feedback.error'), errMsg(err))
+    }
+  }
+  showAlignModal.value = true
+}
+
+async function handleAlignToProduct() {
+  if (!targetAliasId.value || !selectedAlignProductId.value) return
+  actionLoading.value = true
+  try {
+    await updateAlias(targetAliasId.value, selectedAlignProductId.value)
+    showAlignModal.value = false
+    targetAliasId.value = null
+    selectedAlignProductId.value = null
+    feedback.success(t('inbox.alignSuccess'))
+    await loadData()
+  } catch (err) {
+    feedback.error(t('feedback.error'), errMsg(err))
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+const columns = [
+  {
+    type: 'selection' as const,
+    // Revision-pending facts must be applied or dismissed before they can
+    // enter a wave (the backend refuses the assignment). Already-assigned
+    // rows stay selectable for move-to-wave.
+    disabled(row: InboxRow) {
+      return row.RevisionPending
+    },
+  },
+  {
+    title: t('inbox.lineNo'),
+    key: 'SourceLineNo',
+    width: 80,
+    render(row: InboxRow) {
+      return `#${row.Line.SourceLineNo}`
+    },
+  },
+  {
+    title: t('inbox.kind'),
+    key: 'Kind',
+    width: 120,
+    render(row: InboxRow) {
+      return h(StatusBadge, {
+        dimension: 'inputFactKind',
+        value: row.Fact.Kind || 'membership',
+      })
+    },
+  },
+  {
+    title: t('inbox.externalInfo'),
+    key: 'ExternalInfo',
+    render(row: InboxRow) {
+      const parts = [
+        row.Line.ExternalTitle,
+        row.Line.ExternalSKU,
+        row.Line.ExternalSpec,
+      ].filter(Boolean)
+      return parts.length ? parts.join(' / ') : '—'
+    },
+  },
+  {
+    title: t('inbox.quantity'),
+    key: 'Quantity',
+    width: 90,
+    render(row: InboxRow) {
+      return row.Line.Quantity
+    },
+  },
+  {
+    title: t('inbox.assigned'),
+    key: 'Assigned',
+    width: 110,
+    render(row: InboxRow) {
+      return row.Assigned
+        ? h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
+        : h(NTag, { type: 'warning', size: 'small' }, { default: () => t('common.no') })
+    },
+  },
+  {
+    title: t('inbox.unaligned'),
+    key: 'Unaligned',
+    width: 200,
+    render(row: InboxRow) {
+      if (!row.Unaligned) {
+        return h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
+      }
+      return h('span', { class: 'inbox-page__unaligned-cell' }, [
+        h(StatusBadge, { dimension: 'blockReason', value: 'unaligned_product' }),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'warning',
+            secondary: true,
+            disabled: !aliasIdForRow(row),
+            onClick: () => openAlignModal(row),
+          },
+          { default: () => t('inbox.alignToProduct') },
+        ),
+      ])
+    },
+  },
+  {
+    title: t('inbox.unattached'),
+    key: 'Unattached',
+    width: 140,
+    render(row: InboxRow) {
+      if (row.Unattached && row.Fact.PlatformIdentityID) {
+        return h(
+          NButton,
+          {
+            size: 'tiny',
+            type: 'warning',
+            secondary: true,
+            onClick: () => openAttachModal(row.Fact.PlatformIdentityID!),
+          },
+          { default: () => t('inbox.attachIdentity') },
+        )
+      }
+      return row.Unattached
+        ? h(StatusBadge, {
+            dimension: 'blockReason',
+            value: 'identity_unattached',
+          })
+        : h(NTag, { type: 'success', size: 'small' }, { default: () => t('common.yes') })
+    },
+  },
+  {
+    title: t('inbox.documentNo'),
+    key: 'Document',
+    render(row: InboxRow) {
+      return row.Document?.OriginalName || row.Fact.SourceDocumentNo || '—'
+    },
+  },
+  {
+    title: t('inbox.revision'),
+    key: 'RevisionPending',
+    width: 110,
+    render(row: InboxRow) {
+      if (!row.RevisionPending) return null
+      return h(
+        NTag,
+        { type: 'warning', size: 'small' },
+        { default: () => t('inbox.revisionPending') },
+      )
+    },
+  },
+  {
+    title: t('common.actions'),
+    key: 'actions',
+    width: 240,
+    render(row: InboxRow) {
+      const buttons = []
+      if (row.RevisionPending) {
+        buttons.push(
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              type: 'primary',
+              secondary: true,
+              loading: revisionActingFactId.value === row.Fact.ID,
+              disabled:
+                revisionActingFactId.value !== null &&
+                revisionActingFactId.value !== row.Fact.ID,
+              onClick: () => void handleApplyRevision(row),
+            },
+            { default: () => t('inbox.applyRevision') },
+          ),
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              type: 'warning',
+              secondary: true,
+              disabled: revisionActingFactId.value !== null,
+              onClick: () => void handleDismissRevision(row),
+            },
+            { default: () => t('inbox.dismissRevision') },
+          ),
+        )
+      }
+      if (row.Assigned) {
+        buttons.push(
+          h(
+            NButton,
+            {
+              size: 'tiny',
+              secondary: true,
+              onClick: () =>
+                openMoveModal([row.Line.ID], row.Line.WaveID ?? null),
+            },
+            { default: () => t('inbox.moveToWave') },
+          ),
+        )
+      }
+      if (!buttons.length) return null
+      return h('span', { class: 'inbox-page__action-cell' }, buttons)
+    },
+  },
+]
 </script>
 
 <template>
   <div class="inbox-page">
     <PageHeader :title="t('inbox.title')" :description="t('inbox.subtitle')">
       <template #actions>
-        <NButton secondary @click="showManualEntryModal = true">{{ t('inbox.manualEntryButton') }}</NButton>
-        <NButton type="primary" @click="showImportModal = true">{{ t('inbox.importFileButton') }}</NButton>
+        <NSpace>
+          <NButton size="small" @click="openIngestModal">
+            {{ t('inbox.importDocument') }}
+          </NButton>
+          <NButton size="small" type="primary" @click="openImportFileModal">
+            {{ t('inbox.importFile') }}
+          </NButton>
+          <NButton
+            size="small"
+            type="primary"
+            :disabled="selectedUnassignedKeys.length === 0"
+            @click="showAssignModal = true"
+          >
+            {{ t('inbox.assignToWave') }} ({{ selectedUnassignedKeys.length }})
+          </NButton>
+          <NButton
+            size="small"
+            :disabled="selectedAssignedKeys.length === 0"
+            @click="openMoveModal(selectedAssignedKeys, null)"
+          >
+            {{ t('inbox.moveToWave') }} ({{ selectedAssignedKeys.length }})
+          </NButton>
+          <NButton size="small" :loading="loading" @click="loadData">
+            {{ t('common.refresh') }}
+          </NButton>
+        </NSpace>
       </template>
     </PageHeader>
 
-    <div class="inbox-page__assignment">
-      <span class="inbox-page__assignment-label">{{ t('inbox.filters.assignment') }}</span>
-      <NRadioGroup v-model:value="assignment">
-        <NRadioButton value="all">{{ t('inbox.assignment.all') }}</NRadioButton>
-        <NRadioButton value="assigned">{{ t('inbox.assignment.assigned') }}</NRadioButton>
-        <NRadioButton value="unassigned">{{ t('inbox.assignment.unassigned') }}</NRadioButton>
-      </NRadioGroup>
-    </div>
-
-    <div class="inbox-page__surface">
-      <span class="inbox-page__assignment-label">{{ t('inbox.filters.businessSurface') }}</span>
-      <NRadioGroup :value="businessSurface" @update:value="handleSurfaceChange">
-        <NRadioButton value="all">{{ t('inbox.surface.all') }}</NRadioButton>
-        <NRadioButton value="membership_entitlement">{{ t('inbox.surface.membership') }}</NRadioButton>
-        <NRadioButton value="retail_order">{{ t('inbox.surface.retail') }}</NRadioButton>
-      </NRadioGroup>
-    </div>
-
-    <SavedViews :filters="filters" scope-id="inbox-grid" />
-    <FilterBar :filters="filters" />
-
-    <DataGrid
-      :columns="columns"
-      :rows="rows"
-      row-key="demandDocumentId"
-      selectable
-      :selected-keys="selectedKeys"
-      :loading="loading"
-      :pagination="{ server: { total: totalCount, page: page, pageSize: pageSize, onChange: onPageChange, onSort } }"
-      :empty="{ title: t('inbox.empty.noRows') }"
-      @update:selected-keys="handleSelectedKeysChange"
-      @row-click="handleRowClick"
-    >
-      <template #selection-toolbar>
-        <BatchActionBar :selected-rows="selectedRows" @done="mutationDone" />
+    <SectionCard :title="t('inbox.title')">
+      <template #actions>
+        <div class="inbox-page__filter">
+          <NTag
+            v-if="isKnownHomeFilter"
+            closable
+            size="small"
+            class="inbox-page__home-filter-tag"
+            @close="clearHomeFilter"
+          >
+            {{ deepLinkFilterLabel }}
+          </NTag>
+          <NSelect
+            v-model:value="selectedDocumentFilter"
+            :options="documentOptions"
+            size="small"
+            style="width: 220px"
+          />
+        </div>
       </template>
-    </DataGrid>
 
-    <RowDetailPanel :row="detailRow" :show="showDetail" @update:show="handleDetailVisibility" @changed="mutationDone" />
+      <NSpin :show="loading">
+        <div v-if="!filteredRows.length" class="inbox-page__empty">
+          <EmptyState :title="t('inbox.empty')" size="sm" />
+        </div>
+        <div v-else class="inbox-page__table">
+          <NDataTable
+            v-model:checked-row-keys="selectedLineKeys"
+            :columns="columns"
+            :data="filteredRows"
+            :row-key="(row: InboxRow) => row.Line.ID"
+            size="small"
+          />
+        </div>
+      </NSpin>
+    </SectionCard>
 
-    <ImportFileModal v-model:show="showImportModal" @imported="mutationDone" />
-    <ManualEntryModal v-model:show="showManualEntryModal" @created="mutationDone" />
+    <!-- Assign to Wave Modal -->
+    <NModal
+      v-model:show="showAssignModal"
+      preset="card"
+      :title="t('inbox.assignToWave')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('inbox.selectWave')">
+          <NSelect
+            v-model:value="selectedWaveId"
+            :options="waveOptions"
+            :placeholder="t('inbox.selectWave')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showAssignModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!selectedWaveId"
+            @click="handleAssignWave"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Attach Identity Modal -->
+    <NModal
+      v-model:show="showAttachModal"
+      preset="card"
+      :title="t('inbox.attachIdentity')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('inbox.selectCustomer')">
+          <NSelect
+            v-model:value="selectedCustomerId"
+            :options="customerOptions"
+            :placeholder="t('inbox.selectCustomer')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showAttachModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!selectedCustomerId"
+            @click="handleAttachIdentity"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Import File Modal -->
+    <NModal
+      v-model:show="showImportFileModal"
+      preset="card"
+      :title="t('inbox.importFile')"
+      class="inbox-page__import-modal"
+    >
+      <NForm label-placement="left" label-width="100">
+        <NFormItem :label="t('inbox.selectPlatform')">
+          <NSelect
+            v-model:value="importForm.platformId"
+            :options="importPlatformOptions"
+            :placeholder="t('common.pleaseSelect')"
+            @update:value="handleImportPlatformChange"
+          />
+        </NFormItem>
+        <NFormItem :label="t('inbox.selectTemplate')">
+          <div class="inbox-page__template-field">
+            <NSelect
+              v-model:value="importForm.templateId"
+              :options="importTemplateOptions"
+              :disabled="!importTemplateOptions.length"
+              :placeholder="importTemplateOptions.length ? t('inbox.selectTemplate') : t('inbox.noTemplateForPlatform')"
+            />
+            <div v-if="importPlatformHasNoTemplate" class="inbox-page__template-hint">
+              <span>{{ t('inbox.noTemplateHint') }}</span>
+              <NButton size="tiny" type="primary" secondary @click="goToLibraryTemplates">
+                {{ t('inbox.goToLibraryTemplates') }}
+              </NButton>
+            </div>
+          </div>
+        </NFormItem>
+        <NFormItem :label="t('inbox.filePath')">
+          <div class="inbox-page__file-row">
+            <NButton size="small" @click="handlePickImportFile">
+              {{ importForm.filePath ? t('inbox.changeFile') : t('inbox.pickFile') }}
+            </NButton>
+            <span v-if="importForm.filePath" class="inbox-page__file-path">{{ importForm.filePath }}</span>
+            <span v-else class="inbox-page__file-hint">{{ t('inbox.noFileSelected') }}</span>
+          </div>
+        </NFormItem>
+      </NForm>
+
+      <div v-if="importForm.templateId && importForm.filePath && !importResult" class="inbox-page__preview">
+        <h5 class="inbox-page__receipt-title">{{ t('inbox.importPreview') }}</h5>
+        <p class="inbox-page__receipt-hint">{{ t('inbox.importPreviewHint') }}</p>
+        <TemplatePreviewPanel
+          :preview="importPreview"
+          :loading="importPreviewLoading"
+          :error="importPreviewError"
+          :key-order="dictionary"
+        />
+      </div>
+
+      <p v-if="importError" class="inbox-page__error">{{ importError }}</p>
+
+      <div v-if="importResult" class="inbox-page__receipt">
+        <h5 class="inbox-page__receipt-title">{{ t('inbox.importResult') }}</h5>
+        <div class="inbox-page__receipt-stats">
+          <span>{{ t('inbox.factsCreated') }}: {{ importResult.FactsCreated }}</span>
+          <span>{{ t('inbox.linesCreated') }}: {{ importResult.LinesCreated }}</span>
+          <span>{{ t('inbox.duplicates') }}: {{ importResult.Duplicates.length }}</span>
+          <span>{{ t('inbox.issues') }}: {{ importResult.Issues.length }}</span>
+        </div>
+        <p class="inbox-page__receipt-hint">{{ t('inbox.duplicatesHint') }}</p>
+        <div v-if="importResult.Duplicates.length" class="inbox-page__receipt-block">
+          <div class="inbox-page__receipt-subtitle">{{ t('inbox.duplicates') }}</div>
+          <DuplicateDecisionList
+            :duplicates="importResult.Duplicates"
+            @decided="() => void loadData()"
+          />
+        </div>
+        <div v-if="importResult.Issues.length" class="inbox-page__receipt-block">
+          <div class="inbox-page__receipt-subtitle">{{ t('inbox.issues') }}</div>
+          <ul class="inbox-page__issue-list">
+            <li v-for="(issue, index) in importResult.Issues" :key="index" class="inbox-page__issue-row">
+              <span class="inbox-page__issue-line">#{{ issue.LineNo }}</span>
+              <span class="inbox-page__issue-key">{{ issue.Key }}</span>
+              <span>{{ issue.Message }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showImportFileModal = false">{{ t('common.close') }}</NButton>
+          <NButton
+            v-if="!importResult"
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!canConfirmImport"
+            @click="handleImportFile"
+          >
+            {{ t('inbox.confirmImport') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Move to Wave Modal -->
+    <NModal
+      v-model:show="showMoveModal"
+      preset="card"
+      :title="t('inbox.moveToWave')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('inbox.selectWave')">
+          <NSelect
+            v-model:value="moveTargetWaveId"
+            :options="moveWaveOptions"
+            :placeholder="t('inbox.selectWave')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showMoveModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!moveTargetWaveId"
+            @click="handleMoveLines"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Align to Product Modal -->
+    <NModal
+      v-model:show="showAlignModal"
+      preset="card"
+      :title="t('inbox.alignToProduct')"
+      style="width: 480px"
+    >
+      <NForm>
+        <NFormItem :label="t('library.productName')">
+          <NSelect
+            v-model:value="selectedAlignProductId"
+            :options="
+              products.map((p) => ({
+                label: `${p.Name} (${p.FactorySKU})`,
+                value: p.ID,
+              }))
+            "
+            :placeholder="t('library.productName')"
+          />
+        </NFormItem>
+      </NForm>
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showAlignModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!selectedAlignProductId"
+            @click="handleAlignToProduct"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
+
+    <!-- Ingest Document Modal -->
+    <NModal
+      v-model:show="showIngestModal"
+      preset="card"
+      :title="t('inbox.importDocument')"
+      style="width: 520px"
+    >
+      <NForm label-placement="left" label-width="100">
+        <NFormItem :label="t('inbox.selectPlatform')">
+          <NSelect v-model:value="ingestForm.platformId" :options="platformOptions" />
+        </NFormItem>
+        <NFormItem :label="t('library.documentType')">
+          <NInput v-model:value="ingestForm.originalName" />
+        </NFormItem>
+        <NFormItem :label="t('inbox.kind')">
+          <NSelect v-model:value="ingestForm.kind" :options="kindOptions" />
+        </NFormItem>
+        <NFormItem :label="t('inbox.identityType')">
+          <NSelect v-model:value="ingestForm.identityType" :options="identityTypeOptions" />
+        </NFormItem>
+        <NFormItem :label="t('library.identities')">
+          <NInput v-model:value="ingestForm.identityValue" />
+        </NFormItem>
+        <NFormItem :label="t('library.productName')">
+          <NInput v-model:value="ingestForm.externalTitle" />
+        </NFormItem>
+        <NFormItem :label="t('inbox.quantity')">
+          <NInputNumber v-model:value="ingestForm.quantity" :min="1" />
+        </NFormItem>
+      </NForm>
+
+      <div v-if="ingestResult && ingestResult.Duplicates.length" class="inbox-page__receipt">
+        <h5 class="inbox-page__receipt-title">{{ t('inbox.importResult') }}</h5>
+        <p class="inbox-page__receipt-hint">{{ t('inbox.duplicatesHint') }}</p>
+        <DuplicateDecisionList
+          :duplicates="ingestResult.Duplicates"
+          @decided="() => void loadData()"
+        />
+      </div>
+
+      <template #footer>
+        <NSpace justify="end">
+          <NButton @click="showIngestModal = false">{{ t('common.cancel') }}</NButton>
+          <NButton
+            type="primary"
+            :loading="actionLoading"
+            :disabled="!ingestForm.platformId"
+            @click="handleIngest"
+          >
+            {{ t('common.confirm') }}
+          </NButton>
+        </NSpace>
+      </template>
+    </NModal>
   </div>
 </template>
 
@@ -127,17 +1168,153 @@ const showManualEntryModal = ref(false)
   gap: var(--space-4);
 }
 
-.inbox-page__assignment,
-.inbox-page__surface {
+.inbox-page__filter {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
-.inbox-page__assignment-label {
-  font-family: var(--font-body);
+.inbox-page__home-filter-tag {
+  flex-shrink: 0;
+}
+
+.inbox-page__empty {
+  padding: var(--space-4) 0;
+}
+
+.inbox-page__table {
+  width: 100%;
+}
+
+.inbox-page__unaligned-cell,
+.inbox-page__action-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.inbox-page__import-modal {
+  width: min(920px, 94vw);
+}
+
+.inbox-page__import-modal :deep(.n-card__content) {
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.inbox-page__template-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.inbox-page__template-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.inbox-page__preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.inbox-page__file-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.inbox-page__file-path {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  word-break: break-all;
+}
+
+.inbox-page__file-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.inbox-page__error {
+  margin: 0;
+  color: var(--status-error-fg);
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+}
+
+.inbox-page__receipt {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.inbox-page__receipt-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.inbox-page__receipt-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+}
+
+.inbox-page__receipt-hint {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.inbox-page__receipt-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.inbox-page__receipt-subtitle {
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-secondary);
+}
+
+.inbox-page__issue-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+}
+
+.inbox-page__issue-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.inbox-page__issue-line {
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+  min-width: 40px;
+}
+
+.inbox-page__issue-key {
   color: var(--color-text-secondary);
 }
 </style>
