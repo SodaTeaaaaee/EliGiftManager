@@ -15,8 +15,10 @@
 //                        (wails v3 generated bindings — runtime AND type
 //                        imports alike, no type-only exemption; runtime calls
 //                        go through src/shared/api/bridge.ts, types through
-//                        the @/entities facade) and must not import Naive UI
-//                        layout/feedback components directly (shared/ui).
+//                        the @/entities facade), must not import the
+//                        deprecated wails v2 `wailsjs/` generated tree, and
+//                        must not import Naive UI layout/feedback components
+//                        directly (shared/ui).
 //   no-missing-locale-key  every t('...') literal in src/.vue/.ts must
 //                        resolve to a key in zh-CN.ts (en-US.ts is kept in
 //                        lockstep via AppMessageSchema typing) or to a
@@ -389,44 +391,131 @@ interface ImportStatement {
   raw: string;
   isTypeOnly: boolean;
   specifier: string;
-  names: string[]; // named-import identifiers (original exported name, alias resolved away)
+  // Named-clause identifiers (original exported name, alias resolved away).
+  // A pure default import contributes its default identifier; namespace,
+  // bare, dynamic and re-export-star forms bind no named exports.
+  names: string[];
   index: number;
 }
 
+const NAME_PART = String.raw`[\w$]+`;
+const NAMED_CLAUSE = String.raw`\{[^{}]*\}`;
+
+/**
+ * Extracts every import form Vite/vue-tsc can statically resolve: named,
+ * default, namespace (`import * as ns`), mixed (`import d, { x }`),
+ * type-only (statement- and element-level), bare side-effect
+ * (`import '...'`), re-exports (`export { x } from`,
+ * `export * (as ns)? from`) and dynamic `import('...')` with a literal.
+ * Dynamic specifiers computed at runtime (`import(variable)`, template
+ * literals with substitutions) are not statically checkable and stay out
+ * of scope.
+ */
 function extractImportStatements(scriptContent: string): ImportStatement[] {
   const out: ImportStatement[] = [];
-  const importRe =
-    /import\s+(type\s+)?(\{[\s\S]*?\}|[\w$]+)\s+from\s+['"]([^'"]+)['"]/g;
+
+  // `import (type )?X(, (* as ns | { named }))? from 'spec'` and its
+  // namespace / named-only variants.
+  const clauseRe = new RegExp(
+    String.raw`\bimport\s+(type\s+)?(?:\*(?:\s+as\s+(${NAME_PART}))?|(${NAME_PART})(?:\s*,\s*(?:\*(?:\s+as\s+(${NAME_PART}))?|(${NAMED_CLAUSE})))?|(${NAMED_CLAUSE}))\s+from\s+(['"])((?:\\.|(?!\7).)*)\7`,
+    "g",
+  );
+  // Bare side-effect `import 'spec'`.
+  const bareRe = /\bimport\s*(['"])([^'"\n]+)\1/g;
+  // Dynamic `import('spec')`; the backtick form is matched too and filtered
+  // below when it carries substitutions.
+  const dynamicRe = /\bimport\s*\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g;
+  // Re-export `export (type )?(* (as ns)? | { named }) from 'spec'`.
+  const reexportRe = new RegExp(
+    String.raw`\bexport\s+(?:type\s+)?(?:\*(?:\s+as\s+(${NAME_PART}))?|(${NAMED_CLAUSE}))\s+from\s+(['"])((?:\\.|(?!\3).)*)\3`,
+    "g",
+  );
+
+  const parseNamedClause = (clause: string): string[] =>
+    clause
+      .slice(1, -1)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((s) => s.replace(/^type\s+/, "").split(/\s+as\s+/)[0].trim());
+
   let m: RegExpExecArray | null;
-  while ((m = importRe.exec(scriptContent)) !== null) {
+  clauseRe.lastIndex = 0;
+  while ((m = clauseRe.exec(scriptContent)) !== null) {
     const isTypeOnly = Boolean(m[1]);
-    const clause = m[2];
-    const specifier = m[3];
-    let names: string[] = [];
-    if (clause.startsWith("{")) {
-      names = clause
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((s) => s.replace(/^type\s+/, "").split(/\s+as\s+/)[0].trim());
-    } else {
-      names = [clause.trim()];
-    }
-    out.push({ raw: m[0], isTypeOnly, specifier, names, index: m.index });
+    const defaultName = m[3];
+    const namedClause = m[5] ?? m[6];
+    // Mixed statements expose only their named clause, so no-unused-export
+    // never mistakes a default binding for an imported export name; a pure
+    // default import keeps its identifier in `names` for the naive-ui
+    // named-import check.
+    const names = namedClause
+      ? parseNamedClause(namedClause)
+      : defaultName && !m[2] && !m[4]
+      ? [defaultName]
+      : [];
+    out.push({
+      raw: m[0],
+      isTypeOnly,
+      specifier: m[8],
+      names,
+      index: m.index,
+    });
   }
+
+  bareRe.lastIndex = 0;
+  while ((m = bareRe.exec(scriptContent)) !== null) {
+    out.push({
+      raw: m[0],
+      isTypeOnly: false,
+      specifier: m[2],
+      names: [],
+      index: m.index,
+    });
+  }
+
+  dynamicRe.lastIndex = 0;
+  while ((m = dynamicRe.exec(scriptContent)) !== null) {
+    if (m[1] === "`" && m[2].includes("${")) continue; // computed — skip
+    out.push({
+      raw: m[0],
+      isTypeOnly: false,
+      specifier: m[2],
+      names: [],
+      index: m.index,
+    });
+  }
+
+  reexportRe.lastIndex = 0;
+  while ((m = reexportRe.exec(scriptContent)) !== null) {
+    out.push({
+      raw: m[0],
+      isTypeOnly: /^export\s+type\s/.test(m[0]),
+      specifier: m[4],
+      names: m[2] ? parseNamedClause(m[2]) : [],
+      index: m.index,
+    });
+  }
+
   return out;
 }
 
 /**
  * True when a raw import specifier, resolved from the importing file under
- * src/**, lands in frontend/bindings/. Covers every shape that can physically
- * reach the generated bindings from a page: relative climbs
- * (`../../bindings/...`), Vite root-absolute paths (`/bindings/...`, the
- * leading `/` resolves from the frontend project root) and `@/..` escapes
- * (`@` aliases to `src`, so `@/../bindings` escapes to the project root).
- * Bare specifiers cannot reach it (bindings is not an npm package and has no
- * alias), so they are rejected outright.
+ * src/**, lands in frontend/bindings/. Covered specifier shapes — the ones
+ * Vite/vue-tsc can physically resolve from a page:
+ *   - relative climbs:            `../../bindings/...`
+ *   - Vite root-absolute paths:   `/bindings/...` (the leading `/` resolves
+ *     from the frontend project root)
+ *   - `@/` escapes:               `@` aliases to `src`, so `@/../bindings`
+ *     escapes to the project root
+ * Segment comparison is case-insensitive (Windows filesystems resolve
+ * `Bindings` like `bindings`), and climbs that leave src/ and re-enter
+ * through the frontend root (`@/../../frontend/bindings/...`,
+ * `../../../../frontend/bindings/...`) normalize to a
+ * `["frontend", "bindings", ...]` stack and are caught as well.
+ * Bare specifiers cannot reach it (bindings is not an npm package and has
+ * no alias), so they are rejected outright.
  */
 function resolvesUnderBindings(specifier: string, relFile: string): boolean {
   let path: string;
@@ -448,7 +537,10 @@ function resolvesUnderBindings(specifier: string, relFile: string): boolean {
     }
     stack.push(part);
   }
-  return stack[0] === "bindings";
+  const first = stack[0]?.toLowerCase();
+  if (first === "bindings") return true;
+  // Re-entry through the frontend root after climbing past src/.
+  return first === "frontend" && stack[1]?.toLowerCase() === "bindings";
 }
 
 function scanImportsInPages(
@@ -468,6 +560,19 @@ function scanImportsInPages(
         rule: "no-restricted-import",
         message:
           `page imports "${imp.specifier}" directly — route runtime calls through src/shared/api/bridge.ts and types through @/entities (frontend/bindings is banned in src/pages, no type-only exemption)`,
+        snippet: snippetOf(imp.raw),
+      });
+    }
+
+    // wails v2 generated tree — deprecated by the wails v3 migration.
+    // Kept as a tripwire even after frontend/wailsjs/ is deleted.
+    if (imp.specifier.toLowerCase().includes("wailsjs")) {
+      violations.push({
+        file: relFile,
+        line,
+        rule: "no-restricted-import",
+        message:
+          `page imports "${imp.specifier}" — wailsjs (wails v2) generated artifacts are deprecated; route runtime calls through src/shared/api/bridge.ts and types through @/entities`,
         snippet: snippetOf(imp.raw),
       });
     }
