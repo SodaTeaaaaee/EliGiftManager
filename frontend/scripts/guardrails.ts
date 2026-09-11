@@ -1003,7 +1003,7 @@ function checkGeneratedEnumDomains(): void {
         line: 1,
         rule: "stale-generated-enums",
         message:
-          `expected generated TS enum ${enumName} not found — rerun wails3 generate bindings`,
+          `expected generated TS enum ${enumName} not found — rerun wails3 task common:generate:bindings`,
         snippet: BINDINGS_DOMAIN_MODELS_PATH,
       });
       continue;
@@ -1029,7 +1029,7 @@ function checkGeneratedEnumDomains(): void {
         line: parsed.line,
         rule: "stale-generated-enums",
         message:
-          `enum ${enumName} domain out of sync with ${GENERATED_ENUMS_PATH} ${mirror.arrayName}: bindings declare [${bindingValues.join(", ")}] but the mirror lists [${mirror.values.join(", ")}] — rerun wails3 generate bindings and/or deno task gen:enums`,
+          `enum ${enumName} domain out of sync with ${GENERATED_ENUMS_PATH} ${mirror.arrayName}: bindings declare [${bindingValues.join(", ")}] but the mirror lists [${mirror.values.join(", ")}] — rerun wails3 task common:generate:bindings and/or deno task gen:enums`,
         snippet: `export enum ${enumName} { ... }`,
       });
     }
