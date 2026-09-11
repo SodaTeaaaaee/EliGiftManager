@@ -15,3 +15,8 @@
 - 控制器注册为 v3 services，删除 `SetAppContext` 包级上下文 hack。
 
 事件系统本次不启用。何时为长耗时导入推送进度是独立的产品决策，届时另行记录。
+
+迁移后两条已知无害怪癖，账本记录于此：
+
+- WebView2 默认用户数据目录为 `%APPDATA%\<可执行名>.exe\EBWebView`：v3 默认 UserDataFolder 以二进制名加 `.exe` 命名，本项目未自定义；属历史遗留目录，无业务数据。
+- dev 链中 `deno install` 因任务命名空间各跑一次：幂等，仅增启动耗时。

@@ -11,14 +11,21 @@
 //   - wire handling: what the bridge rebuilds before the UI sees it
 //     (inspectSampleFile) versus what it deliberately passes through
 //     untouched (listResultViews, getHomeBuckets), where the Go side carries
-//     the non-null guarantee instead.
+//     the non-null guarantee instead;
+//   - cancel contract: pickFile maps both user-cancel rejection shapes to
+//     null — the wails wrapper prefix wrapping a zh-CN OS cancel message
+//     (no "cancel" substring to match) and the runtime's English
+//     "canceled" message — and rethrows genuine failures untouched.
 //
-// The generated controller modules are mocked wholesale, so the real
-// @wailsio/runtime Call machinery is never reached. The runtime module
-// itself still loads (bridge.ts imports Dialogs) but stays inert in a DOM
-// without a host bridge. The mock records are created in vi.hoisted and
-// referenced from the vi.mock factories so this file never imports
-// frontend/bindings directly — that stays bridge.ts's exclusive privilege.
+// The generated controller modules and the @wailsio/runtime package are
+// mocked wholesale (hoisted mock records + vi.mock factories), so no real
+// Wails machinery ever loads; the runtime mock is what lets the
+// cancel-contract cases drive Dialogs.OpenFile rejections. Mocking the
+// runtime package whole (rather than spying on the real module) is
+// deliberate: `Dialogs` is an ES module namespace object whose exports are
+// non-writable, so a vi.spyOn could throw. This file never imports
+// frontend/bindings directly — that stays bridge.ts's exclusive privilege
+// (vi.mock specifiers are function arguments, not import statements).
 
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
@@ -82,6 +89,16 @@ vi.mock(
   '../../../bindings/github.com/SodaTeaaaaee/EliGiftManager/internal/controller/filesystemcontroller',
   () => controllerMocks.filesystem,
 )
+
+// bridge.ts binds `import { Dialogs } from '@wailsio/runtime'` by name, so
+// the factory below only has to provide the Dialogs namespace with an
+// OpenFile spy for the pickFile cancel-contract cases.
+const runtimeMocks = vi.hoisted(() => {
+  const dialogs: Record<string, Mock> = { OpenFile: vi.fn() }
+  return { dialogs }
+})
+
+vi.mock('@wailsio/runtime', () => ({ Dialogs: runtimeMocks.dialogs }))
 
 // happy-dom provides a DOM but no wails host objects, which is precisely the
 // degraded environment the bridge guard must handle. Installing a fake
@@ -149,6 +166,7 @@ describe('bridge degradation without a wails host', () => {
 
   it('pickFile() resolves null without touching the runtime dialogs API', async () => {
     await expect(pickFile()).resolves.toBeNull()
+    expect(runtimeMocks.dialogs['OpenFile']).not.toHaveBeenCalled()
   })
 
   it('createPlatform() rejects with the guard error before reaching the binding', async () => {
@@ -226,5 +244,32 @@ describe('bridge pass-through with a wails host', () => {
       Total: 5,
     })
     expect(controllerMocks.workspace['InspectSampleFile']).toHaveBeenCalledWith('sample.csv', '', 10)
+  })
+
+  it('pickFile maps a zh-CN OS cancel (wrapper prefix + localized text) to null', async () => {
+    // Windows describes the cancel HRESULT in the system locale, so the
+    // message carries no "cancel" substring; only the locale-free wails
+    // wrapper prefix can match here.
+    runtimeMocks.dialogs['OpenFile'].mockRejectedValueOnce(
+      new Error('Invalid dialog call: Dialog.OpenFile failed, error getting selection: 操作已被用户取消。'),
+    )
+
+    await expect(pickFile()).resolves.toBeNull()
+  })
+
+  it('pickFile maps the runtime English cancel message to null', async () => {
+    runtimeMocks.dialogs['OpenFile'].mockRejectedValueOnce(
+      new Error('The operation was canceled by the user.'),
+    )
+
+    await expect(pickFile()).resolves.toBeNull()
+  })
+
+  it('pickFile rethrows a genuine dialog failure untouched', async () => {
+    runtimeMocks.dialogs['OpenFile'].mockRejectedValueOnce(
+      new Error('some real failure'),
+    )
+
+    await expect(pickFile()).rejects.toThrow('some real failure')
   })
 })
