@@ -1,0 +1,53 @@
+# This file contains the configuration for this project.
+version: '3'
+
+# This information is used to generate the build assets.
+info:
+  companyName: "SodaTeaaaaee"
+  productName: "EliGiftManager"
+  productIdentifier: "com.sodateaaaaee.eligiftmanager"
+  description: "Creator fulfillment workspace"
+  copyright: "(c) SodaTeaaaaee"
+  comments: "Creator fulfillment workspace"
+  version: "2.0.0-alpha" # 版本号升级需同步四处：internal/config/config.go、此处、build/windows/info.json、build/windows/wails.exe.manifest
+
+# Dev mode configuration
+dev_mode:
+  root_path: .
+  log_level: warn
+  debounce: 1000
+  ignore:
+    dir:
+      - .git
+      - node_modules
+      - frontend
+      - build
+      - data
+      - .cache
+    file:
+      - .DS_Store
+      - .gitignore
+      - .gitkeep
+      - "*_test.go"
+    watched_extension:
+      - "*.go"
+      - "*.js" # Watch for changes to JS/TS files included using the //wails:include directive.
+      - "*.ts" # The frontend directory will be excluded entirely by the setting above.
+    git_ignore: true
+  executes:
+    # Pre-generate bindings before the vite dev server starts: `generate
+    # bindings -clean=true` deletes and recreates frontend/bindings/, which
+    # races with the background vite watcher (the Deno-backed fs watcher
+    # crashes on the deleted directory and kills the dev chain).
+    # The full `windows:common:` namespace must match the task path used
+    # inside `wails3 build DEV=true` so the shared checksum
+    # (.task/checksum/windows-common-generate-bindings) lets the build step
+    # below skip generation as up-to-date.
+    - cmd: wails3 task windows:common:generate:bindings
+      type: blocking
+    - cmd: wails3 task common:dev:frontend
+      type: background
+    - cmd: wails3 build DEV=true
+      type: blocking
+    - cmd: wails3 task run
+      type: primary

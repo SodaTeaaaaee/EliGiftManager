@@ -52,3 +52,5 @@
 ## 实现边界
 
 实体与基数、语义字典、画面与操作已经写在 [TARGET-DOMAIN-AND-PRODUCT-MODEL.md](./TARGET-DOMAIN-AND-PRODUCT-MODEL.md)。实现时其余字段（时间戳、备注、扩展 JSON）跟实体走，不再单独拍板。当前代码不是目标。不按旧 Demand / FulfillmentLine 模型开工。多写步骤用例的事务边界放在 app 层用例方法上，Store 即 UnitOfWork，controller 不碰事务；单写步骤用例不强制包事务，见 [ADR 0070](./adr/0070-write-use-cases-wrap-transactions.md)
+
+技术栈为 Go + Wails v3（跟随最新 beta，落地为精确 pin，升级是显式事件），升级即 CLI 与 `go.mod` 同步升级、重新生成绑定并跑冒烟清单，见 [ADR 0072](./adr/0072-migrate-to-wails-v3-beta.md)。前端绑定由 `wails3` 生成于 `frontend/bindings/` 并提交；所有运行时 Wails 调用仍只经 `frontend/src/shared/api/bridge.ts`，v3 下 bridge 是薄墙（re-export 生成调用、runtime 可用性守卫、少量参数整形），`entities/models.ts` 是生成模型的类型门面（re-export 加前端专有类型）。

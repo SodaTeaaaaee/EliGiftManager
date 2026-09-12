@@ -1,43 +1,101 @@
+// Type facade over the Wails v3 generated models.
+//
+// Source of truth: the generated bindings under frontend/bindings/, imported
+// exclusively by src/shared/api/bridge.ts, which re-exports their types with a
+// `Wire` suffix (see bridge.ts). This facade narrows those wire shapes into
+// the names the UI already uses, so pages keep importing from
+// '@/entities/models' and never touch the generated modules (guardrails
+// enforces that for all of src/, exempting bridge.ts itself).
+//
+// Deliberate deviations from the raw generated shapes — each kept because the
+// existing UI contract depends on it:
+//   - Go nil slices/maps serialize as `null`, so the generator types them
+//     `T | null`. The bridge normalizes those to empty containers before they
+//     reach the UI, so the facade declares them non-null.
+//   - Enum fields keep the string-literal unions from
+//     @/shared/api/generated/enums: pages and the i18n glossary compare raw
+//     literals (`view.WorkState === 'blocked'`). The generated TS enum objects
+//     (BlockReason/WorkState with $zero members) are intentionally NOT
+//     re-exported to avoid a duplicate-identifier clash with those unions.
+//   - A few timestamp/ID fields stay optional so pages can construct literals
+//     (e.g. the settings form, quantity-split components pending backend ids).
+
 import type {
-  IdentityType,
-  PlatformKind,
-  InputFactKind,
-  TemplateDirection,
-  WaveCloseResult,
-  EntitlementSelectorType,
-  FulfillmentSourceKind,
-  BlockReason,
-  SupplierOrderStatus,
-  DuplicateVerdict,
-  WritebackStatus,
-  WorkState,
-} from '@/shared/api/generated/enums'
+  AppSettingsWire,
+  DuplicateObservationWire,
+  ExportFileResultWire,
+  GenerateFactoryOrderResultWire,
+  HomeBucketsWire,
+  ImportCarrierMappingsResultWire,
+  ImportFileResultWire,
+  ImportShipmentFileResultWire,
+  IngestDocumentResultWire,
+  ParseIssueWire,
+  PreviewRowWire,
+  QuantitySplitRuleWire,
+  ResultViewWire,
+  SampleFileInfoWire,
+  ShipmentWire,
+  SkippedShipmentWire,
+  SupplierOrderLineWire,
+  TemplatePreviewWire,
+  WaveWire,
+} from '@/shared/api/bridge'
 
-export interface Platform {
-  ID: number
-  Key: string
-  Name: string
-  Kind: PlatformKind | string
-  Notes?: string
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
+import type { BlockReason, WorkState } from '@/shared/api/generated/enums'
 
-export interface CustomerProfile {
-  ID: number
-  DisplayName: string
-  Notes?: string
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
+// ── Domain entities: pure re-exports of the generated wire types ──
 
+export type {
+  AddressSnapshotWire as AddressSnapshot,
+  CarrierMappingWire as CarrierMapping,
+  ChannelWritebackItemWire as ChannelWritebackItem,
+  CustomerProfileWire as CustomerProfile,
+  DuplicateObservationWire as DuplicateObservation,
+  EntitlementExceptionWire as EntitlementException,
+  EntitlementRuleWire as EntitlementRule,
+  EntitlementSelectorWire as EntitlementSelector,
+  FulfillmentResultWire as FulfillmentResult,
+  InputDocumentWire as InputDocument,
+  InputFactWire as InputFact,
+  InputFactLineWire as InputFactLine,
+  PlatformWire as Platform,
+  ProductAliasWire as ProductAlias,
+  ProductBundleComponentWire as ProductBundleComponent,
+  ProductItemWire as ProductItem,
+  RecipientAddressWire as RecipientAddress,
+  ShipmentWire as Shipment,
+  SupplierOrderWire as SupplierOrder,
+  SupplierOrderLineWire as SupplierOrderLine,
+  TemplateConfigWire as TemplateConfig,
+  WaveWire as Wave,
+} from '@/shared/api/bridge'
+
+// ── App DTOs: pure re-exports of the generated wire types ──
+
+export type {
+  DocumentTypeInfoWire as DocumentTypeInfo,
+  ExceptionViewWire as ExceptionView,
+  IngestFactInputWire as IngestFactInput,
+  IngestLineWire as IngestLine,
+  InboxRowWire as InboxRow,
+  InstanceViewWire as InstanceView,
+  ProductTotalWire as ProductTotal,
+  ParseIssueWire as ParseIssue,
+  SkippedShipmentWire as SkippedShipment,
+} from '@/shared/api/bridge'
+
+// ── Frontend-only types (no generated counterpart) ──
+
+/**
+ * Platform identity rows are not returned by any bound method, so the v3
+ * generator never emits them; kept as a frontend view for identity display.
+ */
 export interface PlatformIdentity {
   ID: number
   CustomerProfileID?: number | null
   PlatformID: number
-  IdentityType: IdentityType | string
+  IdentityType: string
   IdentityValue: string
   NormalizedValue?: string
   ExtraData?: string
@@ -45,71 +103,17 @@ export interface PlatformIdentity {
   UpdatedAt?: string
 }
 
-export interface RecipientAddress {
-  ID: number
-  CustomerProfileID: number
-  Label?: string
-  RecipientName: string
-  Phone?: string
-  Country?: string
-  Province?: string
-  City?: string
-  District?: string
-  AddressLine1: string
-  AddressLine2?: string
-  PostalCode?: string
-  IsDefault: boolean
-  ExtraData?: string
-  CreatedAt?: string
+// ── Bridge-normalized views over the generated wire types ──
+// Go nil-slice `| null` unions are stripped where the bridge rebuilds the
+// result; optionality is kept where the UI constructs partial literals.
+
+/** Settings form shape: ID/timestamps are backend-assigned and often absent. */
+export interface AppSettings extends Omit<AppSettingsWire, 'ID' | 'UpdatedAt'> {
+  ID?: number
   UpdatedAt?: string
 }
 
-export interface AddressSnapshot {
-  source_address_id?: number | null
-  recipient_name: string
-  phone?: string
-  country?: string
-  province?: string
-  city?: string
-  district?: string
-  address_line1: string
-  address_line2?: string
-  postal_code?: string
-}
-
-export interface ProductItem {
-  ID: number
-  Name: string
-  FactoryPlatformID: number
-  FactorySKU: string
-  Notes?: string
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface ProductAlias {
-  ID: number
-  ProductItemID: number
-  PlatformID: number
-  ExternalProductID: string
-  Title: string
-  Spec?: string
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface ProductBundleComponent {
-  ID: number
-  AliasID: number
-  ProductItemID: number
-  Quantity: number
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-/** One split component of a wave-scoped quantity split rule. */
+/** Split components are constructed client-side before the backend assigns ids. */
 export interface QuantitySplitComponent {
   ID: number
   RuleID: number
@@ -119,383 +123,74 @@ export interface QuantitySplitComponent {
   UpdatedAt?: string
 }
 
-/** Splits one (wave, platform, external key) quantity into internal products. */
-export interface QuantitySplitRule {
-  ID: number
-  WaveID: number
-  PlatformID: number
-  ExternalKey: string
+/** Quantity split rule with non-null components (backend always materializes them). */
+export interface QuantitySplitRule extends Omit<QuantitySplitRuleWire, 'Components'> {
   Components: QuantitySplitComponent[]
-  CreatedAt?: string
-  UpdatedAt?: string
 }
 
-export interface TemplateConfig {
-  ID: number
-  PlatformID: number
-  DocumentType: string
-  Direction: TemplateDirection | string
-  Name: string
-  Version: number
-  Builtin: boolean
-  MappingJSON?: string
-  LayoutJSON?: string
-  Notes?: string
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
+/** Home counters with a non-null recent-wave list (backend sends []). */
+export interface HomeBuckets extends Omit<HomeBucketsWire, 'RecentWaves'> {
+  RecentWaves: WaveWire[]
 }
 
-export interface CarrierMapping {
-  ID: number
-  PlatformID: number
-  ExternalCode: string
-  InternalCode: string
-  InternalName: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface InputDocument {
-  ID: number
-  PlatformID: number
-  DocumentType: string
-  Direction: TemplateDirection | string
-  OriginalName: string
-  RawPayload?: string
-  TemplateID?: number | null
-  TemplateVersion: number
-  ImportedAt?: string
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface InputFact {
-  ID: number
-  DocumentID?: number | null
-  PlatformID: number
-  Kind: InputFactKind | string
-  StableExternalID?: string
-  CustomerProfileID?: number | null
-  PlatformIdentityID?: number | null
-  MembershipLevel?: string
-  SourceDocumentNo?: string
-  SourceCreatedAt?: string | null
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface InputFactLine {
-  ID: number
-  FactID: number
-  SourceLineNo: number
-  ExternalSKU?: string
-  ExternalTitle?: string
-  ExternalSpec?: string
-  ProductItemID?: number | null
-  Quantity: number
-  WaveID?: number | null
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface DuplicateObservation {
-  ID: number
-  DocumentID: number
-  ExistingFactID: number
-  Verdict: DuplicateVerdict | string
-  Reason?: string
-  Decided: boolean
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface Wave {
-  ID: number
-  WaveNo: string
-  Name: string
-  Notes?: string
-  CloseResult: WaveCloseResult | string
-  CloseNote?: string
-  ClosedAt?: string | null
-  ReopenedAt?: string | null
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface EntitlementSelector {
-  type: EntitlementSelectorType | string
-  platform_id?: number
-  level?: string
-  instance_id?: number | null
-}
-
-export interface EntitlementRule {
-  ID: number
-  WaveID: number
-  ProductID: number
-  Selector: EntitlementSelector
-  Quantity: number
-  Active: boolean
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-/** One person's per-instance entitlement delta (internal/app EntitlementException). */
-export interface EntitlementException {
-  ID: number
-  WaveID: number
-  ProductID: number
-  InstanceID: number
-  Quantity: number
-  Note?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface FulfillmentResult {
-  ID: number
-  WaveID: number
-  SourceKind: FulfillmentSourceKind | string
-  EntitlementInstanceID?: number | null
-  InputFactLineID?: number | null
-  InputFactID?: number | null
-  CustomerProfileID?: number | null
-  ProductItemID?: number | null
-  Quantity: number
-  Address: AddressSnapshot
-  Frozen: boolean
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface SupplierOrder {
-  ID: number
-  WaveID: number
-  FactoryPlatformID: number
-  Status: SupplierOrderStatus | string
-  ExportedAt?: string | null
-  VoidedAt?: string | null
-  ExportPayload?: string
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface SupplierOrderLine {
-  ID: number
-  SupplierOrderID: number
-  ProductItemID: number
-  FactorySKU: string
-  Quantity: number
-  TrackingID: string
-  TrackingRetired: boolean
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface Shipment {
-  ID: number
-  TrackingID: string
-  CarrierCode: string
-  CarrierName: string
-  TrackingNo: string
-  ShippedAt?: string | null
-  Quantity: number
-  ExtraData?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-export interface ChannelWritebackItem {
-  ID: number
-  InputFactID: number
-  ShipmentID: number
-  TrackingNo: string
-  CarrierCode: string
-  Quantity: number
-  Status: WritebackStatus | string
-  TemplateID?: number
-  TemplateVersion?: number
-  RetryCount: number
-  ErrorMessage?: string
-  Payload?: string
-  CreatedAt?: string
-  UpdatedAt?: string
-}
-
-/** One entitlement exception joined with customer and product display names (internal/app ExceptionView). */
-export interface ExceptionView {
-  ID: number
-  InstanceID: number
-  CustomerName: string
-  ProductItemID: number
-  ProductName: string
-  Quantity: number
-  Note?: string
-}
-
-/** One entitlement instance with member-facing display fields (internal/app InstanceView). */
-export interface InstanceView {
-  ID: number
-  CustomerName: string
-  PlatformIdentity: string
-  MembershipLevel?: string
-}
-
-export interface AppSettings {
-  ID?: number
-  Locale: string
-  Theme: string
-  Density: string
-  DuplicateRecordMinutes: number
-  DuplicateAskDays: number
-  UpdatedAt?: string
-}
-
-export interface HomeBuckets {
-  Unassigned: number
-  DuplicateAsk: number
-  AlignmentConflict: number
-  IdentityUnattached: number
-  PendingRevisions: number
-  BlockedResults: number
-  WritebackFailed: number
-  ResidualClose: number
-  RevisionFrozenConflicts: number
-  RecentWaves: Wave[]
-}
-
-export interface InboxRow {
-  Line: InputFactLine
-  Fact: InputFact
-  Document?: InputDocument | null
-  Assigned: boolean
-  Unaligned: boolean
-  Unattached: boolean
-  RevisionPending: boolean
-  AliasID?: number | null
-}
-
-export interface ResultView {
-  Result: FulfillmentResult
+/**
+ * Fulfillment responsibility view. WorkState/Blocks keep the string-literal
+ * unions (see module header); the backend always sends a Blocks array.
+ */
+export interface ResultView extends Omit<ResultViewWire, 'WorkState' | 'Blocks'> {
   WorkState: WorkState
   Blocks: BlockReason[]
-  InFactory: boolean
-  Shipped: boolean
-  WritebackFailed: boolean
 }
 
-export interface ProductTotal {
-  ProductID: number
-  Name: string
-  Quantity: number
+/** Import receipt with normalized (non-null) duplicate/issue lists. */
+export interface ImportFileResult extends Omit<ImportFileResultWire, 'Duplicates' | 'Issues'> {
+  Duplicates: DuplicateObservationWire[]
+  Issues: ParseIssueWire[]
 }
 
-export interface IngestLine {
-  SourceLineNo: number
-  ExternalSKU: string
-  ExternalTitle: string
-  ExternalSpec: string
-  Quantity: number
+/** Manual-ingest receipt with a normalized duplicate list. */
+export interface IngestDocumentResult extends Omit<IngestDocumentResultWire, 'Duplicates'> {
+  Duplicates: DuplicateObservationWire[]
 }
 
-export interface IngestFactInput {
-  Kind: string
-  StableExternalID?: string
-  IdentityType: string
-  IdentityValue: string
-  MembershipLevel?: string
-  SourceDocumentNo?: string
-  SourceCreatedAt?: string | null
-  CustomerProfileID?: number | null
-  Lines: IngestLine[]
+/** Carrier-table import receipt with a normalized issue list. */
+export interface ImportCarrierMappingsResult
+  extends Omit<ImportCarrierMappingsResultWire, 'Issues'> {
+  Issues: ParseIssueWire[]
 }
 
-export interface IngestDocumentResult {
-  Document: InputDocument
-  Duplicates: DuplicateObservation[]
+/** Shipment-return import receipt with normalized lists. */
+export interface ImportShipmentFileResult
+  extends Omit<ImportShipmentFileResultWire, 'Skipped' | 'Shipments' | 'Issues'> {
+  Skipped: SkippedShipmentWire[]
+  Shipments: ShipmentWire[]
+  Issues: ParseIssueWire[]
 }
 
-export interface GenerateFactoryOrderResult {
-  Order: SupplierOrder
-  Lines: SupplierOrderLine[]
+/** Factory-order submission result with a normalized line list. */
+export interface GenerateFactoryOrderResult
+  extends Omit<GenerateFactoryOrderResultWire, 'Lines'> {
+  Lines: SupplierOrderLineWire[]
 }
 
-/** One non-fatal parse problem (alignment.ParseIssue). */
-export interface ParseIssue {
-  LineNo: number
-  Key: string
-  Message: string
-}
-
-export interface ImportFileResult {
-  Document: InputDocument
-  FactsCreated: number
-  LinesCreated: number
-  Duplicates: DuplicateObservation[]
-  Issues: ParseIssue[]
-}
-
-/** One parsed sample row (alignment.PreviewRow): semantic values plus the duplicate fingerprint. */
-export interface PreviewRow {
-  LineNo: number
-  SourceRow: number
-  Values: Record<string, string>
-  Fingerprint: string
-}
-
-export interface TemplatePreview {
-  Rows: PreviewRow[]
-  Issues: ParseIssue[]
-  TotalRows: number
-  DroppedRows: number
-}
-
-/** Raw first rows of a sample file (app.SampleFileInfo); Records[0] is the candidate header. */
-export interface SampleFileInfo {
-  Format: 'csv' | 'xlsx' | 'xls' | string
-  Sheets: string[]
-  Records: string[][]
-  Total: number
-}
-
-/** One closed-set document type with its locked direction and owning platform kind (app.DocumentTypeInfo). */
-export interface DocumentTypeInfo {
-  Key: string
-  Direction: TemplateDirection | string
-  PlatformKind: PlatformKind | string
-}
-
-export interface ImportCarrierMappingsResult {
-  Created: number
-  Updated: number
-  Skipped: number
-  Issues: ParseIssue[]
-}
-
-export interface ExportFileResult {
-  Order: SupplierOrder
-  Path: string
+/** Rendered export receipt with a normalized row list. */
+export interface ExportFileResult extends Omit<ExportFileResultWire, 'Rows'> {
   Rows: Record<string, string>[]
 }
 
-export interface SkippedShipment {
-  LineNo: number
-  TrackingID: string
-  Reason: string
+/** One parsed sample row with non-null semantic values. */
+export interface PreviewRow extends Omit<PreviewRowWire, 'Values'> {
+  Values: Record<string, string>
 }
 
-export interface ImportShipmentFileResult {
-  Imported: number
-  Skipped: SkippedShipment[]
-  Shipments: Shipment[]
-  Issues: ParseIssue[]
+/** Template test preview with normalized row/issue lists. */
+export interface TemplatePreview extends Omit<TemplatePreviewWire, 'Rows' | 'Issues'> {
+  Rows: PreviewRow[]
+  Issues: ParseIssueWire[]
+}
+
+/** Raw sample-file inspection with normalized sheet/record lists. */
+export interface SampleFileInfo extends Omit<SampleFileInfoWire, 'Sheets' | 'Records'> {
+  Sheets: string[]
+  Records: string[][]
 }

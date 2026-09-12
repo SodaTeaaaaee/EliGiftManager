@@ -17,3 +17,7 @@ pnpm-lock.yaml
 yarn.lock
 .eslintcache
 .stylelintcache
+
+# Wails bindings: only generated .ts is committed. The bare `wails3 generate
+# bindings` (without -ts) emits .js next to it — keep that out of the tree.
+bindings/**/*.js

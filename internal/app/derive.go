@@ -93,6 +93,12 @@ func (ws *Workspace) inspectResult(ctx context.Context, r domain.FulfillmentResu
 	default:
 		view.WorkState = domain.WorkStateReady
 	}
+	// A block-free view must still carry a non-nil Blocks slice: the wire
+	// contract (generated TS types, bridge facade) models Blocks as an array,
+	// and a nil slice would serialize as JSON null.
+	if view.Blocks == nil {
+		view.Blocks = []domain.BlockReason{}
+	}
 	return view, nil
 }
 

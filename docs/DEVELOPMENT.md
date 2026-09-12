@@ -6,7 +6,7 @@
 
 ## 1. 技术栈
 
-- **后端**：Go + Wails v2 + GORM + SQLite (WAL mode)
+- **后端**：Go + Wails v3（beta，跟随最新，见 [ADR 0072](./adr/0072-migrate-to-wails-v3-beta.md)）+ GORM + SQLite (WAL mode)
 - **前端**：Vue 3 + TypeScript + Vite + Pinia + vue-i18n + Naive UI + token/skin CSS
 - **前端工具链**：Deno（唯一允许的包管理器，禁止 npm/yarn/pnpm）
 - **桌面**：Wails 原生窗口生命周期
@@ -24,7 +24,7 @@ cd frontend && deno install && cd ..
 
 | 命令 | 用途 |
 |------|------|
-| `wails dev` | 桌面开发模式（含前端 dev server） |
+| `wails3 dev` | 桌面开发模式（含前端 dev server） |
 | `cd frontend && deno task dev` | 仅前端 Vite dev server (`127.0.0.1:5173`) |
 | `cd frontend && deno task typecheck` | vue-tsc 类型检查 |
 | `cd frontend && deno task test` | Vitest 单元测试 |
@@ -32,7 +32,12 @@ cd frontend && deno install && cd ..
 | `cd frontend && deno task gen:enums` | 从 Go domain 枚举生成 TypeScript 契约 |
 | `cd frontend && deno task lint:guardrails` | UI/import guardrails 与生成枚举一致性检查 |
 | `go test ./...` | 后端测试 |
-| `wails build` | 桌面打包 |
+| `wails3 build` | 桌面打包 |
+| `wails3 task common:generate:bindings` | 变更绑定的服务方法后重新生成前端绑定（`frontend/bindings/`，已提交）。等价全参数形式为 `wails3 generate bindings -clean=true -ts -i`；不带参数的裸命令会删光已提交的 `.ts` 并改产出 `.js`，不要运行 |
+
+`wails3 dev` 会话中重新生成 bindings（编辑 `.go` 触发或手工执行生成任务）时，`frontend/bindings/` 会被删除重建；dev server 的 watch 已忽略该目录，vite 不会热更新，需手动刷新页面或重启 dev 会话以加载新绑定。
+
+版本号升级需同步四处：`internal/config/config.go`、`build/config.yml`、`build/windows/info.json`、`build/windows/wails.exe.manifest`。
 
 ## 4. 代码风格
 
@@ -69,7 +74,7 @@ frontend/src/skins/        静态 skin 包
 frontend/scripts/          guardrails 与枚举生成器
 ```
 
-所有运行时 Wails 调用必须通过 `frontend/src/shared/api/bridge.ts`。其他模块不得直接导入 `wailsjs/go/controller/*` 或 `wailsjs/go/main/*`；仅用于类型的 `wailsjs/go/models` import 可以保留。
+所有运行时 Wails 调用必须通过 `frontend/src/shared/api/bridge.ts`。其他模块不得直接导入 `frontend/bindings`；类型经 `frontend/src/entities/models.ts` 获取。bridge 在 v3 下是薄墙：re-export 生成调用、runtime 可用性守卫与少量参数整形；`entities/models.ts` 是生成模型的类型门面（re-export 加前端专有类型）。
 
 ## 6. 运行时数据路径
 
@@ -81,6 +86,8 @@ frontend/scripts/          guardrails 与枚举生成器
 
 使用 `service.ResolveDataDir()` / `service.ResolveAssetsDir()` 获取路径。
 
+注意：便携模式（`.portable`）的验证必须用 `wails3 build` 的 production 产物——非 production 标签的二进制一律按开发模式落工作目录 `data/`，`.portable` 对其不生效。
+
 ## 7. 测试与验证
 
 - 后端改动：补聚焦的回归测试，执行 `go test ./...`
@@ -91,7 +98,7 @@ frontend/scripts/          guardrails 与枚举生成器
 
 | 路径 | 状态 |
 |------|------|
-| `frontend/wailsjs/` | 生成桥接（已提交） |
+| `frontend/bindings/` | wails3 生成的前端绑定（已提交） |
 | `frontend/src/shared/api/generated/enums.ts` | Go domain 枚举生成文件（已提交） |
 | `frontend/dist/`、`build/bin/` | 构建产物（已忽略） |
 | `frontend/node_modules/` | Deno npm 兼容层（已忽略） |
@@ -103,14 +110,14 @@ frontend/scripts/          guardrails 与枚举生成器
 - `internal/app/library.go`
 - `frontend/src/pages/library/templates/`
 - `frontend/src/shared/api/bridge.ts`
-- `frontend/wailsjs/go/controller/WorkspaceController.*`
+- `frontend/bindings/`（wails3 生成的 `WorkspaceController` 绑定）
 
 ## 10. 开发判断原则
 
 - 领域实体用当前业务语言命名（`CustomerProfile`、`FulfillmentResult`、`SupplierOrderLine`），不要使用旧术语（`Demand`、`FulfillmentLine` 等）
 - 业务逻辑在 `internal/app/` 用例层，不要堆在控制器
 - 不要绕过 `path_service` 自己拼运行时目录
-- 不要在页面里直接散落 `wailsjs` 调用
+- 不要在页面里直接 import `frontend/bindings`，运行时调用一律经 `bridge.ts`
 - 不要把 TODO 文档或旧分支思路当作当前产品真相
 - 问题在删库从零开始后仍然存在，视为真实问题；仅在旧库升级中出现的，默认不作为高优先级
 
