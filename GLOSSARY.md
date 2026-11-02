@@ -18,7 +18,10 @@ _Avoid_: Demand、需求超类型。
 来源平台内用于锚定同一业务事实的标识。文件导入也可能用行指纹合成该标识，这种标识的稳定性依赖指纹配置。
 
 **重复观察（DuplicateObservation）**：
-一次输入与既有事实重复或疑似重复的判定记录，可表示仅记录、待运营决定或新增责任。
+一次输入与既有事实重复或疑似重复的判定记录。判定结果（DuplicateVerdict）为严格三态闭集：
+- `record_only`（仅记录 / identical_pass）：在静默窗口期内（默认 10 分钟）内容指纹完全一致，系统仅记录重复观察，不生成新事实且不打扰运营；
+- `ask_operator`（待运营决定 / partial_duplicate / 潜在冲突）：在询问窗口期内（默认 10 天）出现重复输入，系统进入待办工作桶等待人工裁决采用或丢弃；
+- `new_responsibility`（新增责任 / conflict_duplicate）：超过时间窗口或运营裁定为新的独立业务事实，生成新的输入事实并进入履约流转。
 
 **输入修订**：
 相同稳定标识携带不同内容时产生、尚待采用或丢弃的新事实版本。
@@ -26,6 +29,10 @@ _Avoid_: Demand、需求超类型。
 **客户档案（CustomerProfile）**：
 承接平台身份和收件地址的内部人物主档。同一个档案可关联多个独立平台身份。
 _Avoid_: Supporter 主档、会员专属客户、零售专属客户。
+
+**客户收件地址（RecipientAddress）**：
+客户档案下持久化的多地址记录（对应实体 `RecipientAddress`，含 CustomerProfileID、Label、RecipientName、Phone、Country、Province、City、District、AddressLine1、AddressLine2、PostalCode、IsDefault 默认标记及 ExtraData）。一个客户档案可保存多条地址，作为履约结果选取并生成收件信息快照（AddressSnapshot）的来源。
+_Avoid_: 临时地址、未归档散乱收件信息。
 
 **平台身份（PlatformIdentity）**：
 来源平台内按身份类型与身份值识别的身份，可挂到客户档案上。
@@ -58,8 +65,9 @@ _Avoid_: DemandProduct、隐含多个生产来源的商品主档。
 **权益规则（EntitlementRule）**：
 波次内从会员身份条件到某商品数量贡献的规则。
 
-**个人例外（PersonException）**：
-波次内针对客户、权益实例或输入事实行的商品数量增减。
+**个人例外／权益例外（EntitlementException）**：
+波次内针对特定会员权益实例（EntitlementInstance）的商品数量增减调整（代码实体统一为 `EntitlementException`，字段包括 WaveID、ProductID、InstanceID、Quantity 及 Note）。规则和个人例外的数量可正可负，仅在波次规则面生效并重算未进入工厂订单的权益结果。
+_Avoid_: PersonException（旧命名）、直接篡改原始会员事实。
 
 **权益选择器**：
 权益规则所选的会员实例范围，包括会员等级、波次内全部实例和指定实例。
@@ -82,9 +90,20 @@ _Avoid_: FulfillmentLine、DemandLine、聚合后替代来源的总责任行。
 
 **履约工作态（WorkState）**：
 由阻断、冻结、执行关联、发货和回写情况派生的操作视图，表示当前应关注的工作。
+在履约结果（FulfillmentResult）层级，系统定义封闭的标准状态集合（`internal/domain/enums.go`）：
+- `blocked`（阻断）：存在商品未对齐、地址缺失等阻断原因，暂不可提交；
+- `ready`（就绪 / 可提交）：校验通过且未冻结，可参与生成工厂订单；
+- `in_factory`（工厂处理中 / 已冻结）：已进入工厂订单行并生成内部追踪标识；
+- `shipped`（已发货）：工厂已回传物流单号与发货信息；
+- `writeback_failed`（回写失败）：向来源平台回写包裹物流信息失败，待重试或人工处理。
+在业务流转与事实行全流程视图中，生命周期对应未归属（unassigned）、已入波次（in_wave）、已导出（exported）、已发货（shipped）及异常阻断（exception）等工作阶段。
 
 **阻断原因（BlockReason）**：
-使某个履约结果暂不能进入工厂订单的校验事实，例如商品未对齐、地址缺失或拆分数量不相等。
+使某个履约结果暂不能进入工厂订单的校验事实。系统定义封闭的 4 项枚举（闭集）：
+- `unaligned_product`（商品未对齐）：外部商品标识未映射到统一商品事实或存在冲突；
+- `unusable_address`（收件信息不可用）：缺少必要收件人姓名、电话或有效地址；
+- `identity_unattached`（身份未挂靠）：来源平台身份未挂靠到内部客户档案；
+- `quantity_split_not_summing`（数量拆分未凑满）：波次数量拆分映射组件数量之和不等于输入事实行原始数量。
 
 **完整关闭（clean）**：
 运营将波次登记为无需继续处理的关闭结果。当前后端不自动验证全部责任已经清空。
@@ -155,8 +174,16 @@ _Avoid_: 可重放的配置历史、不可变配置快照。
 **履约结果工作面**：
 波次内筛选与编组来源级履约结果、处理阻断和工厂执行的操作页面。
 
-**待办工作桶**：
-首页按操作问题汇总的投影，例如待归属输入、履约阻断和回写失败。各桶计数单位按所代表的工作对象确定。
+**待办工作桶（Pending Buckets）**：
+首页按操作问题汇总的工作队列投影，帮助运营快速定位待处理事项。系统默认包含 7 大标准工作桶（未提交不作为故障桶）：
+1. **未归属（unassigned）**：收件箱内尚未分配到任何波次的输入事实行；
+2. **待决策重复（duplicateAsk）**：落在判定窗口内、待运营人工裁决（采用或丢弃）的重复观察记录；
+3. **商品对齐冲突（alignmentConflict）**：外部商品标识未映射或存在多义指向、阻碍生成履约结果的事实行；
+4. **身份未挂靠（identityUnattached）**：来源平台身份尚未关联至内部客户档案的输入事实行；
+5. **阻塞的履约结果（blockedResults）**：波次内由于商品未对齐、收件信息缺失等阻断原因无法进入工厂订单的履约结果；
+6. **回写失败（writebackFailed）**：向外部来源平台回传发货物流状态失败的记录；
+7. **可带残留关闭（residualClose）**：包含未清空责任或问题、被运营登记为带残留关闭的波次。
+（注：另有修订待处理 pendingRevisions 作为扩展提醒，在存在已冻结行冲突时标红预警）。各桶计数单位按所代表的工作对象确定。
 
 **数量拆分映射（QuantitySplitRule）**：
 在特定波次、来源平台和外部商品键范围内生效的例外规则。用于将单行零售订单数量按绝对数量分摊到多个统一商品事实，优先级高于全局商品别名与组合映射；规则组成项数量总和必须严格等于订单行数量，否则产生数量不符阻断（BlockQuantitySplitNotSumming）。
