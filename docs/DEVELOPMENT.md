@@ -6,7 +6,7 @@
 
 ## 1. 技术栈
 
-- **后端**：Go + Wails v3（beta，跟随最新，见 [ADR 0072](./adr/0072-migrate-to-wails-v3-beta.md)）+ GORM + SQLite (WAL mode)
+- **后端**：Go + Wails v3 + GORM + SQLite (WAL mode)。桌面与绑定边界见 [ADR 0013](./adr/0013-migrate-to-wails-v3-beta.md)，精确版本见 `go.mod` 与前端依赖配置。
 - **前端**：Vue 3 + TypeScript + Vite + Pinia + vue-i18n + Naive UI + token/skin CSS
 - **前端工具链**：Deno（唯一允许的包管理器，禁止 npm/yarn/pnpm）
 - **桌面**：Wails 原生窗口生命周期

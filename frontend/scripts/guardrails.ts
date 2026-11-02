@@ -365,7 +365,7 @@ function scanTemplate(
 
 // ---------------------------------------------------------------------------
 // Rule: no-restricted-import — the bindings wall covers ALL of src/**, with
-// src/shared/api/bridge.ts as the single exempt entry (ADR 0072: bridge.ts
+// src/shared/api/bridge.ts as the single exempt entry (ADR 0013: bridge.ts
 // is the only file in the whole frontend allowed to import the generated
 // bindings modules). bridge.test.ts needs no exemption of its own: its
 // bindings references are vi.mock() specifiers, which are function-call
